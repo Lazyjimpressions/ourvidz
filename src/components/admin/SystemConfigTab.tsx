@@ -35,13 +35,13 @@ interface SystemConfig {
   maxJobsPerUser: number;
   maxJobsPerHour: number;
   jobTimeoutMinutes: number;
-  
+
   // Model Settings
   defaultImageModel: string;
   defaultVideoModel: string;
   enableNSFWDetection: boolean;
   nsfwThreshold: number;
-  
+
   // Worker Configuration
   workerUrl: string;
   workerUrlUpdatedAt: string;
@@ -49,6 +49,7 @@ interface SystemConfig {
   registrationMethod?: string;
   detectionMethod?: string;
   lastRegistrationAttempt?: string;
+  enableLocalModelHealthCheck?: boolean;  // Toggle for local model health checks
   
   // Storage Settings
   maxFileSizeMB: number;
@@ -87,6 +88,7 @@ export const SystemConfigTab = () => {
     nsfwThreshold: 0.7,
     workerUrl: '',
     workerUrlUpdatedAt: '',
+    enableLocalModelHealthCheck: false,  // Default OFF since local workers not always running
     maxFileSizeMB: 50,
     maxStoragePerUserGB: 10,
     enableCompression: true,
@@ -452,6 +454,21 @@ export const SystemConfigTab = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div>
+              <Label htmlFor="enableLocalModelHealthCheck">Enable Local Model Health Checks</Label>
+              <p className="text-sm text-gray-500">
+                When disabled, local models (Qwen, SDXL) are hidden and no health check polling occurs.
+                Enable only when running local RunPod workers.
+              </p>
+            </div>
+            <Switch
+              id="enableLocalModelHealthCheck"
+              checked={config.enableLocalModelHealthCheck ?? false}
+              onCheckedChange={(checked) => updateConfig('enableLocalModelHealthCheck', checked)}
+            />
+          </div>
+
           <div>
             <Label htmlFor="workerUrl">Worker URL</Label>
             <div className="flex gap-2">

@@ -1,369 +1,321 @@
 # Roleplay Development Status - Consolidated
 
-**Last Updated:** January 2, 2026
-**Status:** ✅ **Mobile UX Improvements Phase - Complete**
+**Last Updated:** January 4, 2026
+**Status:** **85% Complete - Production Ready**
 **Purpose:** Single source of truth for roleplay development status, implementation details, and next steps
 
-**Current Phase:** Mobile UX improvements and progressive enhancement
-**Previous Phase:** Simple Mobile-First Refactor - Completed
+---
 
-## **🎯 Current Implementation Status**
+## Current Implementation Status
 
-### **✅ Mobile UX Improvements Phase (January 2026)**
-**Goal:** Improve mobile UX across chat experience, navigation, and settings accessibility
+### Production Ready (85% Complete)
 
-**Completed Changes:**
-- ✅ Created simplified MobileChatHeader component (56px height, consolidated menu)
-- ✅ Added ChatBottomNav with primary actions (Character Info, Generate Scene, Settings)
-- ✅ Created QuickSettingsDrawer (bottom sheet for mobile-friendly settings)
-- ✅ Simplified MobileChatInput (removed inline generate button, optional emoji tray)
-- ✅ Added useKeyboardVisible hook for mobile keyboard detection
-- ✅ Created useRoleplaySettings hook for shared settings state
-- ✅ Created DesktopChatLayout for side-by-side desktop layouts
-- ✅ Improved ChatMessage with relative timestamps and image loading skeletons
-- ✅ Integrated responsive header (mobile vs desktop variants)
-- ✅ Added safe area handling for iOS devices
+**Core Features:**
+- Mobile-first pages: MobileRoleplayDashboard.tsx, MobileRoleplayChat.tsx
+- Character selection with immediate chat start (no modal blockers)
+- Chat interface with streaming responses
+- Scene generation with image consistency
+- Non-blocking drawers for settings and character info
+- 3rd party API integration (OpenRouter, Replicate, fal.ai)
 
-**Status:** Implementation complete, ready for testing
-
-### **✅ Previous: Simple Mobile-First Refactor (December 2025)**
-**Goal:** Eliminate modal blockers, enable immediate chat start, fix dark screen issues
-
-**Completed Changes:**
-- ✅ Removed preview modal as required step
-- ✅ Enabled direct navigation: Click card → Chat starts immediately
-- ✅ Auto-select scenes or allow no scene
-- ✅ Converted modals to non-blocking drawers
-- ✅ Fixed dark screen overlay persistence issues
-
-**Status:** Complete
-
-### **✅ Completed Implementation (Pre-Refactor - 85% Complete)**
-- **Mobile-first pages**: MobileRoleplayDashboard.tsx, MobileRoleplayChat.tsx
-- **Mobile components**: MobileCharacterCard.tsx, MobileChatInput.tsx, MobileCharacterSheet.tsx
-- **Dashboard components**: CharacterGrid.tsx, QuickStartSection.tsx, SearchAndFilters.tsx ✅ **IMPLEMENTED**
-- **Chat interface**: ChatMessage.tsx, ContextMenu.tsx
-- **Image consistency**: ImageConsistencyService.ts implemented
-- **Edge functions**: roleplay-chat edge function working
-- **Database integration**: Basic conversation and message handling
-- **Image generation**: ✅ **MAJOR ACHIEVEMENT - WORKING**
-  - Character image generation via "Generate Image" button
-  - SDXL worker integration via `queue-job` edge function
-  - Job callback updates character records with generated images
-  - Real-time UI updates via Supabase subscriptions
-  - Mobile-optimized button with touch support
-- **Utility integration**: ✅ **NEW - INTEGRATED**
-  - `buildCharacterPortraitPrompt` integrated for optimized prompts
-  - `characterImageUtils.ts` created for user_library integration
-  - `extractReferenceMetadata` available for consistency
-  - `modifyOriginalPrompt` available for prompt editing
-- **Character Preview Modal**: ✅ **MAJOR ACHIEVEMENT - IMPLEMENTED**
-  - Complete modal with character details and stats
-  - Scene selection UI (ready for integration)
-  - Action buttons with proper UX
-  - Real data integration (no mock data)
-  - Proper scrolling and responsive design
-
-### **❌ Missing Implementation (15% Remaining)**
-- **Memory system**: Three-tier memory (conversation, character, profile)
-- **Database schema**: Character table enhancements not executed
-- **Library integration**: Roleplay content categorization
-- **Performance optimization**: Mobile performance and caching
-- **Character scene templates**: Scene selection integration
-- **Dynamic greeting generation**: AI-powered character greetings
-- **Prompt template integration**: Database template usage
+**Missing (15% Remaining):**
+- Three-tier memory system (conversation, character, profile)
+- Character scene templates integration
+- Dynamic greeting generation
+- Advanced character creation wizard
+- Scenario setup wizard
 
 ---
 
-## **📁 Current File Status**
+## Model Routing Architecture
 
-### **Pages (2 files)**
+### Health Check System
+
+The roleplay feature uses a health check system to conditionally show local models (Qwen chat, SDXL image) only when workers are available.
+
+**Hook:** `useLocalModelHealth` (`src/hooks/useLocalModelHealth.ts`)
+
+**Health Status Structure:**
+```typescript
+{
+  chatWorker: {
+    isAvailable: boolean,    // Worker is healthy AND has URL configured
+    isHealthy: boolean,       // Health check passed
+    lastChecked: string,      // ISO timestamp
+    responseTimeMs: number,   // Response time in milliseconds
+    error: string | null      // Error message if unhealthy
+  },
+  wanWorker: {
+    isAvailable: boolean,
+    isHealthy: boolean,
+    lastChecked: string,
+    responseTimeMs: number,
+    error: string | null
+  }
+}
+```
+
+### Model Provider Matrix
+
+| Modality | Primary (Cloud) | Fallback | Local (when available) |
+|----------|-----------------|----------|------------------------|
+| **Chat** | OpenRouter (Dolphin) | OpenRouter defaults | Qwen 2.5-7B |
+| **Images** | Replicate, fal.ai | Seedream, RV5.1 | SDXL Lustify |
+| **Video** | fal.ai (WAN I2V) | - | WAN 2.1 |
+
+### Routing Strategy
+
+- **Default to cloud models** for reliability
+- Local models only used when:
+  1. Admin enables health check toggle
+  2. Health check confirms worker availability
+  3. User explicitly selects local model
+- Automatic fallback to cloud on local failure
+
+### Database Configuration
+
+**Required Tables:**
+- `api_models` - Stores API model configurations (modality: 'roleplay' | 'image')
+- `api_providers` - Stores provider information (openrouter, replicate, fal)
+- `system_config` - Stores worker health cache in `config.workerHealthCache`
+
+---
+
+## File Structure
+
+### Pages (2 files)
 ```
 src/pages/
-├── MobileRoleplayDashboard.tsx (138 lines) - ✅ IMPLEMENTED
-└── MobileRoleplayChat.tsx (632 lines) - ✅ IMPLEMENTED
+├── MobileRoleplayDashboard.tsx (138 lines) - Character selection dashboard
+└── MobileRoleplayChat.tsx (632 lines) - Chat interface
 ```
 
-### **Components (16 active files, 11 archived)**
+### Components (16 active files)
 ```
 src/components/roleplay/
-├── MobileCharacterCard.tsx - ✅ IMPLEMENTED
-├── MobileChatInput.tsx - ✅ UPDATED (simplified, emoji tray optional)
-├── MobileCharacterSheet.tsx - ✅ IMPLEMENTED
-├── MobileChatHeader.tsx - ✅ NEW (simplified mobile header)
-├── ChatBottomNav.tsx - ✅ NEW (bottom navigation)
-├── QuickSettingsDrawer.tsx - ✅ NEW (mobile settings bottom sheet)
-├── DesktopChatLayout.tsx - ✅ NEW (side-by-side desktop layout)
-├── ChatMessage.tsx - ✅ UPDATED (relative timestamps, image skeletons)
-├── ContextMenu.tsx - ✅ IMPLEMENTED
-├── CharacterGrid.tsx - ✅ IMPLEMENTED
-├── QuickStartSection.tsx - ✅ IMPLEMENTED
-├── SearchAndFilters.tsx - ✅ IMPLEMENTED
-├── CharacterPreviewModal.tsx - ✅ IMPLEMENTED
-├── RoleplayHeader.tsx - ✅ IMPLEMENTED (desktop header)
-├── RoleplaySettingsModal.tsx - ✅ IMPLEMENTED (full settings modal)
-└── CharacterInfoDrawer.tsx - ✅ IMPLEMENTED
+├── MobileCharacterCard.tsx - Character cards with stats
+├── MobileChatInput.tsx - Simplified chat input
+├── MobileCharacterSheet.tsx - Character details
+├── MobileChatHeader.tsx - 56px mobile header
+├── ChatBottomNav.tsx - Bottom navigation bar
+├── QuickSettingsDrawer.tsx - Mobile settings sheet
+├── DesktopChatLayout.tsx - Side-by-side desktop layout
+├── ChatMessage.tsx - Message display with timestamps
+├── ContextMenu.tsx - Message context menu
+├── CharacterGrid.tsx - Dashboard grid
+├── QuickStartSection.tsx - Dashboard quick start
+├── SearchAndFilters.tsx - Dashboard search/filters
+├── CharacterPreviewModal.tsx - Character preview (optional)
+├── RoleplayHeader.tsx - Desktop header
+├── RoleplaySettingsModal.tsx - Full settings modal
+└── CharacterInfoDrawer.tsx - Character info sheet
 ```
 
-### **New Hooks (2 files)**
+### Hooks (4 key files)
 ```
 src/hooks/
-├── useKeyboardVisible.ts - ✅ NEW (keyboard detection for mobile)
-└── useRoleplaySettings.ts - ✅ NEW (shared settings state)
+├── useLocalModelHealth.ts - Worker health monitoring
+├── useRoleplayModels.ts - Chat model loading
+├── useKeyboardVisible.ts - Mobile keyboard detection
+└── useRoleplaySettings.ts - Shared settings state
 ```
 
-### **Services (2 files implemented)**
+### Services (2 files)
 ```
 src/services/
-├── ImageConsistencyService.ts (200 lines) - ✅ IMPLEMENTED
-└── MemoryManager.ts - ❌ NOT IMPLEMENTED
-```
-
-### **Utilities (2 files implemented)**
-```
-src/utils/
-├── characterImageUtils.ts (150 lines) - ✅ IMPLEMENTED
-└── characterPromptBuilder.ts (100 lines) - ✅ IMPLEMENTED
-```
-
-### **Types (1 file implemented)**
-```
-src/types/
-└── roleplay.ts (100 lines) - ✅ NEW - IMPLEMENTED
-```
-
-### **Archived Components (10 files)**
-```
-src/components/roleplay/ARCHIVED/
-├── RoleplayLeftSidebar.tsx - ✅ ARCHIVED
-├── RoleplaySidebar.tsx - ✅ ARCHIVED
-├── MultiCharacterSceneCard.tsx - ✅ ARCHIVED
-├── SceneContextHeader.tsx - ✅ ARCHIVED
-├── SectionHeader.tsx - ✅ ARCHIVED
-├── UnifiedSceneCard.tsx - ✅ ARCHIVED
-├── UserCharacterSetup.tsx - ✅ ARCHIVED
-├── CharacterEditModal.tsx - ✅ ARCHIVED
-├── CharacterMultiSelector.tsx - ✅ ARCHIVED
-└── RoleplayPromptInput.tsx - ✅ ARCHIVED
+├── ImageConsistencyService.ts - i2i reference system
+└── MemoryManager.ts - NOT IMPLEMENTED
 ```
 
 ---
 
-## **🔧 PRD Requirements vs. Current Implementation**
+## UI/UX Implementation
 
-### **Core User Flow Status**
-```
-PRD Required (Updated): Login → Dashboard → Immediate Chat Start → Optional Drawers
-Previous: Login → Dashboard ✅ → Character Selection ✅ → Preview Modal → Chat ✅
-Refactor Target: Login → Dashboard → Chat (immediate) → Optional Drawers
-```
+### Mobile-First Components
 
-**Gap Analysis:**
-- **Dashboard**: 100% complete - all components implemented and working
-- **Character Selection**: 95% complete - CharacterPreviewModal implemented, scene selection ready
-- **Chat Interface**: 95% complete - fully functional with real data
-- **Scene Integration**: 60% complete - basic scene generation working, selection UI ready
+**MobileChatHeader (56px height)**
+- Pattern: `[< Back] [Avatar + Name] [... Menu]`
+- Consolidated menu: Reset, Settings, Character Info, Share, Report
 
-### **Mobile-First Design Status**
-- **PRD**: Mobile-first with touch-optimized interface
-- **Current**: ✅ **IMPLEMENTED** - Mobile-first design complete
-- **Gap**: **MINIMAL** - All mobile components implemented
-- **Impact**: Low - mobile experience is working well
+**ChatBottomNav (56px height)**
+- Pattern: `[Character Info] [Generate Scene] [Settings]`
+- 44px touch targets, hides when keyboard visible
 
-### **Character Consistency Status**
-- **PRD**: 70%+ visual consistency with i2i reference system
-- **Current**: ✅ **IMPLEMENTED** - ImageConsistencyService working
-- **Gap**: **MINIMAL** - i2i reference system implemented
-- **Impact**: Low - consistency system is functional
+**QuickSettingsDrawer**
+- Slide-up bottom sheet with common settings
+- Chat model, Image model, Scene style, Advanced settings link
 
-### **Memory System Status**
-- **PRD**: Three-tier memory system (conversation, character, profile)
-- **Current**: ❌ **NOT IMPLEMENTED** - Basic conversation only
-- **Gap**: **HIGH** - Memory system not implemented
-- **Impact**: Medium - affects user experience but not core functionality
+### Best Practices Implemented
 
----
+**Accessibility:**
+- Touch targets minimum 44px x 44px
+- Proper ARIA labels via shadcn/ui
+- Keyboard navigation support
 
-## **🎯 IMPLEMENTATION PLAN & STATUS**
+**Performance:**
+- Lazy loading of images
+- Efficient re-renders with memoization
+- Optimized model loading
 
-### **PHASE 1: Edge Function Integration ✅ COMPLETE**
-**Priority: CRITICAL** - Core functionality implemented
-- ✅ **Day 1**: Updated `roleplay-chat` edge function with database-driven prompts
-- ✅ **Day 2**: Updated `enhance-prompt` edge function and SDXL improvements
-- ✅ **Day 3**: Character voice integration and response sanitization
+**User Experience:**
+- Clear visual feedback for all actions
+- Loading states for async operations
+- Error states with recovery options
+- Consistent design language
 
-**Key Achievements:**
-- Database-driven prompt templates fully integrated
-- Character voice examples and forbidden phrases working
-- Scene-specific rules and starters from database
-- Enhanced SDXL NSFW template for male character generation
-- Character caching system implemented (5-minute TTL)
-- Enhanced response sanitization using database phrases
+### Industry Comparison
 
-### **PHASE 2: Frontend Integration ✅ COMPLETE**
-**Priority: HIGH** - User experience improvements
-- ✅ **Day 4**: Scene selection UI and character voice display
-- ✅ **Day 5**: Character preview modal enhancements
-- ✅ **Day 6**: Mobile optimization and responsive design
-
-**Key Achievements:**
-- Enhanced character preview modal with voice examples
-- Added forbidden phrases display with warning styling
-- Improved scene selection with enhanced information
-- Updated character types and interfaces throughout
-- Enhanced mobile character cards with voice indicators
-- Integrated voice information in dashboard and chat
-
-### **PHASE 3: Testing & Validation ✅ COMPLETE**
-**Priority: MEDIUM** - Quality assurance completed
-- ✅ **Day 7**: Edge function testing and validation
-- ✅ **Day 8**: Prompt quality testing and optimization
-- ✅ **Day 9**: Performance testing and caching improvements
-
-**Key Achievements:**
-- Comprehensive testing suite implemented with 3 test components
-- Edge function validation for database integration and voice data
-- Performance testing with caching validation and benchmarking
-- Prompt quality analysis with voice integration scoring
-- Quality scoring system (90%+ = Excellent, 80-89% = Good)
-- Performance benchmarks (<500ms = Excellent, 500-1000ms = Good)
-- Detailed test reporting and troubleshooting documentation
-- Automated test runner with comprehensive result analysis
-
-### **PHASE 4: Performance Optimization 🚧 NEXT**
-**Priority: LOW** - Final optimization and deployment
-- **Day 10**: Response time optimization
-- **Day 11**: Advanced caching strategies
-- **Day 12**: Final testing and deployment
+| Feature | Character.ai | Janitor.ai | OurVidz |
+|---------|-------------|------------|---------|
+| Model selection | Yes | Yes | Yes |
+| Message actions | Yes | Yes | Yes |
+| NSFW support | No | Yes | Yes |
+| Character stats | No | Yes | Yes |
+| Scene generation | No | No | Yes |
 
 ---
 
-## **📊 SUCCESS METRICS & VALIDATION**
+## Production Readiness Checklist
 
-### **User Experience Metrics**
-- **Flow Completion Rate**: Target 95%+ from login to chat (improved from 90%) 🔄 **REFACTOR TARGET**
-- **Character Selection Time**: Target <5 seconds (improved from <30s) 🔄 **REFACTOR TARGET**
-- **Chat Initiation Time**: Target <1 second (improved from <10s) 🔄 **REFACTOR TARGET**
-- **Session Duration**: Target 15+ minutes average 🔄 **IN PROGRESS**
+### Implementation Complete
+- [x] Direct navigation on character card click
+- [x] Removed preview modal requirement
+- [x] Auto-scene selection when available
+- [x] CharacterInfoDrawer (Sheet-based)
+- [x] Settings converted to Sheet (non-blocking)
+- [x] Health check hook created
+- [x] Conditional local model availability
+- [x] UI indicators (Available/Unavailable badges)
+- [x] Real-time health updates via subscriptions
 
-### **Technical Performance**
-- **Page Load Time**: Target <3 seconds on mobile ✅ **ACHIEVED**
-- **Image Generation Time**: Target <5 seconds ✅ **ACHIEVED**
-- **Memory Usage**: Target <100MB on mobile ✅ **ACHIEVED**
-- **API Response Time**: Target <2 seconds ✅ **ACHIEVED**
+### Database Verification
+- [x] Roleplay models in `api_models` table
+- [x] Image models in `api_models` table
+- [x] Providers in `api_providers` table
+- [x] Default models configured
 
-### **New Roleplay Metrics (Phase 2)**
+### Known Issues Fixed
+1. **Dark Screen Issue:** Fixed by removing setTimeout delays and modal blockers
+2. **Subscription Errors:** Fixed by proper channel cleanup and unique channel names
+3. **Local Models Always Shown:** Fixed by health check integration
+4. **No Availability Indicators:** Fixed by adding badges and disabled states
+
+---
+
+## Testing Guide
+
+### Quick Start Commands
+```bash
+npm run test:roleplay           # All roleplay tests
+npm run test:roleplay:character # Character selection tests
+npm run test:roleplay:chat      # Chat interaction tests
+npm run test:roleplay:prompts   # System prompt tests
+npm run test:roleplay:database  # Database state tests
+```
+
+### Test Coverage
+
+| Category | Status |
+|----------|--------|
+| Character Selection & Navigation | Implemented |
+| Chat Interaction Paths | Implemented |
+| System Prompt & Template Testing | Implemented |
+| Database State Verification | Implemented |
+| Memory Tier Testing | Planned |
+| Image Generation Testing | Planned |
+| Model Selection Testing | Planned |
+
+### AI Response Quality Checks
+
+For each chat interaction, verify:
+1. **First Person**: Response uses "I" statements
+2. **No Assistant Language**: No "How can I help" phrases
+3. **Character Personality**: Traits reflected in response
+4. **Voice Examples**: Speaking style matches examples
+5. **Scene Context**: Scene referenced if applicable
+6. **Forbidden Phrases**: Avoided if specified
+7. **NSFW Content**: Allowed if content_tier = 'nsfw'
+
+### Performance Benchmarks
+- Chat response time: < 15 seconds
+- Scene generation time: < 60 seconds
+- Page load time: < 3 seconds
+- Database queries: < 1 second
+
+---
+
+## Success Metrics
+
+### User Experience
+- **Flow Completion Rate**: Target 95%+ from login to chat
+- **Character Selection Time**: Target <5 seconds
+- **Chat Initiation Time**: Target <1 second
+- **Session Duration**: Target 15+ minutes average
+
+### Technical Performance
+- **Page Load Time**: Target <3 seconds on mobile - Achieved
+- **Image Generation Time**: Target <5 seconds - Achieved
+- **Memory Usage**: Target <100MB on mobile - Achieved
+- **API Response Time**: Target <2 seconds - Achieved
+
+### Roleplay Quality
 - **Character Voice Consistency**: Target 95%+ responses maintain character voice
 - **Anti-Assistant Language**: Target 0% responses contain forbidden phrases
 - **Scene-Specific Behavior**: Target 90%+ responses reference scene context
-- **Response Quality**: Target 4.5+ star rating for character responses
 
 ---
 
-## **🎯 COMPREHENSIVE NEXT STEPS PLAN**
+## Upcoming Features (Q1 2026)
 
-### **Week 3: Edge Function Integration & Frontend (September 1-7)**
-**Goal**: Complete edge function integration and frontend enhancements
+### Phase 2: Enhanced Character Creation
+- Structured character wizard with 6 layers (identity, personality, appearance, voice, role, constraints)
+- AI suggestions ("Sprinkle") for traits, voice, appearance
+- Content rating toggle with NSFW default
+- Character templates for quick creation
 
-#### **Day 1-3: Edge Function Integration (CRITICAL)**
-- [ ] Update `roleplay-chat` edge function with database-driven prompts
-- [ ] Integrate character voice examples and forbidden phrases
-- [ ] Apply scene-specific rules and starters
-- [ ] Implement response sanitization
-- [ ] Update `enhance-prompt` edge function
-- [ ] Test and validate edge function changes
+### Phase 2: Scenario Setup Wizard
+- 8-screen guided flow per wireframe spec
+- 5 scenario types: Stranger, Relationship, Power Dynamic, Fantasy, Slow Burn
+- AI-generated hooks and opening suggestions
+- Quick Start mode for minimal setup
 
-#### **Day 4-6: Frontend Integration (HIGH PRIORITY)**
-- [ ] Enhance `CharacterPreviewModal.tsx` with scene loading
-- [ ] Add scene selection UI to preview modal
-- [ ] Update `MobileRoleplayChat.tsx` to handle scene context
-- [ ] Integrate enhanced character preview in dashboard
-- [ ] Test frontend integration end-to-end
-
-### **Week 4: Advanced Features & Testing (September 8-14)**
-**Goal**: Complete advanced features and comprehensive testing
-
-#### **Day 7-9: Advanced Features**
-- [ ] Create `CharacterGreetingService.ts`
-- [ ] Implement AI-powered greeting generation
-- [ ] Create `PromptTemplateService.ts`
-- [ ] Implement database template loading
-- [ ] Build memory system foundation
-
-#### **Day 10-12: Testing & Validation**
-- [ ] Character voice consistency testing
-- [ ] Scene integration testing
-- [ ] End-to-end user flow testing
-- [ ] Performance validation
-- [ ] Error handling verification
-
-#### **Day 13-14: Performance & Polish**
-- [ ] Performance optimization
-- [ ] Code cleanup and documentation
-- [ ] Final testing and validation
-- [ ] Production readiness
+### Phase 3: Advanced Features
+- Multi-character scenarios
+- Memory anchors (key facts characters remember)
+- Scenario templates (save and reuse configurations)
+- Three-tier memory system
 
 ---
 
-## **🚨 RISK MITIGATION**
+## Troubleshooting
 
-### **Technical Risks**
-- **Breaking Changes**: Gradual migration with feature flags ✅ **MITIGATED**
-- **Data Loss**: Comprehensive backup before refactoring ✅ **MITIGATED**
-- **Performance Regression**: Continuous performance monitoring ✅ **MITIGATED**
-- **User Disruption**: Beta testing with power users ✅ **MITIGATED**
+### Local Models Not Showing
+1. Check `system_config.workerHealthCache` in database
+2. Verify worker URLs are configured
+3. Check worker `/health` endpoints are accessible
+4. Review console for health check errors
 
-### **Development Risks**
-- **Scope Creep**: Strict adherence to implementation plan ✅ **MITIGATED**
-- **Timeline Overrun**: Phased approach with clear milestones ✅ **MITIGATED**
-- **Quality Issues**: Comprehensive testing at each phase ✅ **MITIGATED**
-- **Integration Problems**: Thorough integration testing ✅ **MITIGATED**
+### Models Not Loading
+1. Verify `api_models` table has active models
+2. Check `modality` field is correct ('roleplay' or 'image')
+3. Verify `api_providers` relationship exists
+4. Check RLS policies allow read access
 
----
-
-## **📈 FUTURE ENHANCEMENTS (PHASE 3+)**
-
-### **Advanced Features**
-- **Multi-character Roleplay**: Support for multiple characters in conversation
-- **Voice Integration**: Text-to-speech for roleplay responses
-- **Emotion Detection**: Detect and respond to user emotions
-- **Story Continuity**: Maintain story consistency across sessions
-
-### **Integration Opportunities**
-- **Storyboard System**: Generate storyboards from chat conversations
-- **Character Creation**: Create character profiles from chat interactions
-- **Content Generation**: Generate images/videos based on chat scenarios
+### Health Checks Failing
+1. Verify `health-check-workers` edge function is deployed
+2. Check worker URLs in `system_config`
+3. Verify network connectivity to workers
+4. Check worker `/health` endpoint responses
 
 ---
 
-## **📝 IMPLEMENTATION NOTES**
+## Related Documentation
 
-### **Critical Decisions**
-1. **Image Consistency**: ✅ **IMPLEMENTED** - i2i reference method as default
-2. **Memory System**: 🔄 **IN PROGRESS** - Three-tier memory with user controls
-3. **Mobile Priority**: ✅ **IMPLEMENTED** - Design mobile-first with desktop enhancement
-4. **Performance**: ✅ **IMPLEMENTED** - Optimize for speed over advanced features initially
-
-### **Technical Considerations**
-- **API Integration**: ✅ **IMPLEMENTED** - Support multiple image generation APIs
-- **Storage Optimization**: ✅ **IMPLEMENTED** - Implement efficient image storage and caching
-- **Error Handling**: ✅ **IMPLEMENTED** - Comprehensive error recovery and user feedback
-- **Security**: ✅ **IMPLEMENTED** - Proper user data protection and privacy controls
-
-### **Development Guidelines**
-- **Component Reusability**: ✅ **IMPLEMENTED** - Design components for reuse across pages
-- **State Management**: ✅ **IMPLEMENTED** - Use consistent state management patterns
-- **Testing**: 🔄 **IN PROGRESS** - Comprehensive testing at each development phase
-- **Documentation**: ✅ **IMPLEMENTED** - Maintain up-to-date documentation throughout
+- **PRD:** [docs/01-PAGES/07_ROLEPLAY_PURPOSE.md](07_ROLEPLAY_PURPOSE.md)
+- **Character Creation Guide:** [docs/09-REFERENCE/Roleplay_Character.md](../09-REFERENCE/Roleplay_Character.md)
+- **Scenario Frameworks:** [docs/09-REFERENCE/Roleplay_Scenario.md](../09-REFERENCE/Roleplay_Scenario.md)
+- **Scenario Wizard Wireframe:** [docs/06-DEVELOPMENT/WIREFRAME_UI/roleplay_scenario_setupwizard_ui.md](../06-DEVELOPMENT/WIREFRAME_UI/roleplay_scenario_setupwizard_ui.md)
 
 ---
 
-**Next Steps**: 
-1. Implement Simple Mobile-First refactor (see refactor plan)
-2. Eliminate modal blockers and enable immediate chat start
-3. Convert modals to non-blocking drawers
-4. Fix dark screen overlay issues
-
-**Refactor Plan Reference**: `.cursor/plans/roleplay_refactor_-_simple_mobile-first_16bb523a.plan.md`
-
-**Document Purpose**: This is the consolidated development status document that provides a single source of truth for implementation progress, next steps, and success metrics.
+**Document Purpose:** This is the consolidated development status document that provides a single source of truth for implementation progress, model routing, UI/UX patterns, and testing procedures. All previous separate documents (UI/UX Audit, Model Health System, Production Readiness, Verification Results, Testing Guide, Best Practices) have been merged here.

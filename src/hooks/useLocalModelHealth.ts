@@ -17,6 +17,7 @@ export interface LocalModelHealth {
     error: string | null;
   };
   isLoading: boolean;
+  isEnabled: boolean;  // Whether local model health checks are enabled in admin settings
 }
 
 /**
@@ -39,7 +40,8 @@ export const useLocalModelHealth = () => {
       responseTimeMs: null,
       error: null
     },
-    isLoading: true
+    isLoading: true,
+    isEnabled: false  // Default to disabled
   });
 
   const fetchHealthStatus = async () => {
@@ -57,16 +59,43 @@ export const useLocalModelHealth = () => {
       }
 
       const config = data.config as any;
+
+      // Check if local model health checks are enabled
+      const isEnabled = config?.enableLocalModelHealthCheck === true;
+
+      // If disabled, return early with unavailable status
+      if (!isEnabled) {
+        setHealth({
+          chatWorker: {
+            isAvailable: false,
+            isHealthy: false,
+            lastChecked: null,
+            responseTimeMs: null,
+            error: null
+          },
+          sdxlWorker: {
+            isAvailable: false,
+            isHealthy: false,
+            lastChecked: null,
+            responseTimeMs: null,
+            error: null
+          },
+          isLoading: false,
+          isEnabled: false
+        });
+        return;
+      }
+
       const workerHealthCache = config?.workerHealthCache || {};
 
       // Chat worker health (for local chat models like Qwen)
       const chatWorkerHealth = workerHealthCache.chatWorker || {};
-      const chatWorkerAvailable = chatWorkerHealth.isHealthy === true && 
+      const chatWorkerAvailable = chatWorkerHealth.isHealthy === true &&
                                    chatWorkerHealth.workerUrl !== null;
 
       // SDXL worker health (for local image generation)
       const wanWorkerHealth = workerHealthCache.wanWorker || {};
-      const sdxlWorkerAvailable = wanWorkerHealth.isHealthy === true && 
+      const sdxlWorkerAvailable = wanWorkerHealth.isHealthy === true &&
                                   wanWorkerHealth.workerUrl !== null;
 
       setHealth({
@@ -84,7 +113,8 @@ export const useLocalModelHealth = () => {
           responseTimeMs: wanWorkerHealth.responseTimeMs || null,
           error: wanWorkerHealth.healthError || null
         },
-        isLoading: false
+        isLoading: false,
+        isEnabled: true
       });
     } catch (error) {
       console.error('Error fetching local model health:', error);
@@ -93,6 +123,9 @@ export const useLocalModelHealth = () => {
   };
 
   const triggerHealthCheck = async () => {
+    // Don't trigger health checks if not enabled
+    if (!health.isEnabled) return;
+
     try {
       // Trigger health check edge function (fire and forget)
       supabase.functions.invoke('health-check-workers').then(() => {
@@ -113,12 +146,13 @@ export const useLocalModelHealth = () => {
     let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
 
     const initialize = async () => {
-      // Initial fetch
+      // Initial fetch to check if health checks are enabled
       if (mounted) {
         await fetchHealthStatus();
       }
 
       // Set up real-time subscription for system_config updates
+      // This runs regardless of isEnabled, so we can detect when toggle changes
       if (mounted) {
         const channelName = `local-model-health-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         channel = supabase
@@ -137,27 +171,13 @@ export const useLocalModelHealth = () => {
               }
             }
           );
-        
+
         // Subscribe only once
         channel.subscribe((status) => {
           if (status === 'SUBSCRIBED' && mounted) {
             console.log('✅ Local model health subscription active');
           }
         });
-
-        // Auto-refresh every 30 seconds
-        interval = setInterval(() => {
-          if (mounted) {
-            fetchHealthStatus();
-          }
-        }, 30000);
-
-        // Run health check every 60 seconds
-        healthCheckInterval = setInterval(() => {
-          if (mounted) {
-            triggerHealthCheck();
-          }
-        }, 60000);
       }
     };
 
@@ -172,6 +192,29 @@ export const useLocalModelHealth = () => {
       }
     };
   }, []);
+
+  // Set up polling intervals only when enabled
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+    if (health.isEnabled) {
+      // Auto-refresh every 30 seconds
+      interval = setInterval(() => {
+        fetchHealthStatus();
+      }, 30000);
+
+      // Run health check every 60 seconds
+      healthCheckInterval = setInterval(() => {
+        triggerHealthCheck();
+      }, 60000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+      if (healthCheckInterval) clearInterval(healthCheckInterval);
+    };
+  }, [health.isEnabled]);
 
   return {
     ...health,

@@ -27,9 +27,10 @@ import { CharacterInfoDrawer } from '@/components/roleplay/CharacterInfoDrawer';
 import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsModal';
 import { QuickSettingsDrawer } from '@/components/roleplay/QuickSettingsDrawer';
 import { ModelSelector } from '@/components/roleplay/ModelSelector';
+import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
 import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
-import { Character, Message, CharacterScene, SceneStyle } from '@/types/roleplay';
+import { Character, Message, CharacterScene, SceneStyle, ScenarioSessionPayload } from '@/types/roleplay';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -63,6 +64,8 @@ const MobileRoleplayChat: React.FC = () => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
+  const [showScenarioWizard, setShowScenarioWizard] = useState(false);
+  const [activeScenario, setActiveScenario] = useState<ScenarioSessionPayload | null>(null);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
   
@@ -1471,7 +1474,26 @@ const MobileRoleplayChat: React.FC = () => {
           onSaveToLibrary={handleSaveToLibrary}
           onEditCharacter={handleEditCharacter}
           onReportCharacter={handleReportCharacter}
+          onNewScenario={() => setShowScenarioWizard(true)}
           canEditCharacter={false} // TODO: Check if user owns character
+        />
+
+        {/* Scenario Setup Wizard */}
+        <ScenarioSetupWizard
+          isOpen={showScenarioWizard}
+          onClose={() => setShowScenarioWizard(false)}
+          onComplete={(scenarioPayload) => {
+            setActiveScenario(scenarioPayload);
+            setShowScenarioWizard(false);
+            // Scenario settings are now stored in activeScenario
+            // and can be used in sendMessage and other handlers
+            console.log('🎬 Scenario configured:', scenarioPayload);
+            toast({
+              title: 'Scenario Ready',
+              description: `${scenarioPayload.type.replace('_', ' ')} scenario with ${scenarioPayload.consent.intensity} intensity configured!`
+            });
+          }}
+          preselectedCharacterId={characterId}
         />
       </div>
     </OurVidzDashboardLayout>

@@ -51,7 +51,7 @@ Create an accessible, user-friendly platform that democratizes adult content cre
 - ✅ **Worker System**: Triple worker architecture (SDXL, WAN, Chat)
 - ✅ **Base Functionality**: Image generation, video generation, chat, roleplay
 - ✅ **I2I System**: Image-to-image modification and exact copying
-- ✅ **3rd Party APIs**: Replicate RV5.1 integration, OpenRouter planned
+- ✅ **3rd Party APIs**: OpenRouter, Replicate, fal.ai active with fallback
 - 🔄 **In Development**: Library page enhancements, storyboard functionality
 - 🚧 **Planned**: Video stitching, character consistency, 30-second videos
 
@@ -129,9 +129,9 @@ Create an accessible, user-friendly platform that democratizes adult content cre
 ### **3.1 System Overview**
 
 **Frontend**: React + TypeScript with shared component architecture
-**Backend**: Supabase (PostgreSQL, Auth, Storage, Edge Functions)
+**Backend**: Supabase Online(PostgreSQL, Auth, Storage, Edge Functions)
 **AI Workers**: Triple worker system (SDXL, WAN, Chat) on RunPod RTX 6000 ADA
-**3rd Party APIs**: Replicate (RV5.1), OpenRouter (Chat alternatives)
+**3rd Party APIs**: Replicate (RV5.1), OpenRouter (Chat alternatives), FAL.ai
 **Storage**: Staging-first workflow (workspace-temp → user-library)
 
 ### **3.2 Key Systems**
@@ -148,10 +148,16 @@ Create an accessible, user-friendly platform that democratizes adult content cre
 - **Architecture**: Edge function control, no worker overrides
 - **Usage**: All pages (Workspace, Playground, Storyboard, etc.)
 
-#### **Roleplay System** (Planned: `03-SYSTEMS/ROLEPLAY_SYSTEM.md`)
-- **Status**: 🚧 Planned - Shared across pages
-- **Features**: Character consistency, scenario management
-- **Usage**: Playground, Storyboard, Workspace pages
+#### **Roleplay System** (`03-SYSTEMS/ROLEPLAY_SYSTEM.md`)
+- **Status**: ✅ Active - 85% complete, production ready
+- **Features**:
+  - Character-consistent chat with AI models
+  - Scene generation with image consistency
+  - Three-tier memory system (conversation, character, profile)
+  - 3rd party API fallback (OpenRouter, Replicate, fal.ai)
+- **Model Routing**: Default to cloud models unless health check confirms local availability
+- **Providers**: OpenRouter (chat), Replicate/fal.ai (images), local Qwen/SDXL (when available)
+- **Usage**: Playground, Roleplay pages (mobile-first)
 
 ### **3.3 Component Architecture**
 

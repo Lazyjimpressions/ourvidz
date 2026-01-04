@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { 
-  MoreVertical, 
-  Trash2, 
-  Download, 
-  Share2, 
-  Copy, 
+import {
+  MoreVertical,
+  Trash2,
+  Download,
+  Share2,
+  Copy,
   Settings,
   Image as ImageIcon,
   FileText,
   Flag,
-  Edit
+  Edit,
+  Sparkles
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 
@@ -25,6 +26,7 @@ interface ContextMenuProps {
   onSaveToLibrary: () => void;
   onEditCharacter?: () => void;
   onReportCharacter: () => void;
+  onNewScenario?: () => void;
   canEditCharacter?: boolean;
 }
 
@@ -38,6 +40,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   onSaveToLibrary,
   onEditCharacter,
   onReportCharacter,
+  onNewScenario,
   canEditCharacter = false
 }) => {
   const { isMobile } = useMobileDetection();
@@ -62,6 +65,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   if (!isOpen) return null;
 
   const menuItems = [
+    ...(onNewScenario ? [{
+      icon: Sparkles,
+      label: 'New Scenario',
+      onClick: onNewScenario,
+      variant: 'default' as const
+    }] : []),
     {
       icon: Trash2,
       label: 'Clear Conversation',

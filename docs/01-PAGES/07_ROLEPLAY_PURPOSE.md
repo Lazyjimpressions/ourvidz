@@ -1,7 +1,7 @@
 # Roleplay Purpose & PRD (Product Requirements Document)
 
-**Last Updated:** December 17, 2025  
-**Status:** 🚧 **PRD Refactor Phase - Simple Mobile-First**  
+**Last Updated:** January 4, 2026
+**Status:** ✅ **85% Complete - Production Ready**
 **Priority:** **HIGH** - Core MVP Feature
 
 ## **🎯 Purpose Statement**
@@ -69,6 +69,28 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 - **Pinch-to-Zoom**: Image viewing and scene preview (Phase 2)
 - **Swipe Gestures**: Advanced navigation gestures (Phase 2)
 
+## **🔌 3rd Party API Integration (Active)**
+
+### **Model Providers**
+| Modality | Primary (Cloud) | Fallback | Local (when available) |
+|----------|-----------------|----------|------------------------|
+| **Chat** | OpenRouter (Dolphin, etc.) | OpenRouter defaults | Qwen 2.5-7B |
+| **Images** | Replicate, fal.ai | Seedream, RV5.1 | SDXL Lustify |
+| **Video** | fal.ai (WAN I2V) | - | WAN 2.1 |
+
+### **Routing Strategy**
+- **Default to cloud models** for reliability
+- Local models only used when:
+  1. Admin enables health check toggle
+  2. Health check confirms worker availability
+  3. User explicitly selects local model
+- Automatic fallback to cloud on local failure
+
+### **Content Rating**
+- All roleplay defaults to **NSFW** content tier
+- SFW option available for users who prefer it
+- Content rating affects: prompt templates, voice examples, scene suggestions
+
 ## **🔧 Technical Requirements**
 
 ### **Performance Requirements**
@@ -79,9 +101,9 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 
 ### **Integration Requirements**
 - **Database**: Leverage existing `characters`, `conversations`, `messages`, `scenes` tables
-- **Edge Functions**: Use existing `queue-job`, `replicate-image`, create new `roleplay-chat`
+- **Edge Functions**: Use existing `queue-job`, `replicate-image`, `roleplay-chat`
 - **Storage**: Use existing `user_library` table with roleplay category
-- **Workers**: Chat Worker (local), SDXL Worker (images), API integrations
+- **Workers**: Chat Worker (local), SDXL Worker (images), API integrations (OpenRouter, Replicate, fal.ai)
 
 ## **📊 Success Criteria & Metrics**
 
@@ -193,6 +215,27 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 
 ---
 
-**Status**: PRD updated to reflect Simple Mobile-First refactor. This document serves as the strategic foundation for all roleplay development decisions and success metrics.
+## **🚀 Upcoming Features (Q1 2026)**
+
+### **Phase 2: Enhanced Character Creation**
+- **Structured character wizard**: 6-layer character creation (identity, personality, appearance, voice, role, constraints)
+- **AI suggestions ("Sprinkle")**: AI-generated suggestions for traits, voice, appearance
+- **Content rating toggle**: SFW/NSFW with NSFW default
+- **Character templates**: Pre-built character archetypes
+
+### **Phase 2: Scenario Setup Wizard**
+- **8-screen guided flow**: Mode select → Age gate → Scenario type → Characters → Setting → Consent → Style → Hook
+- **5 scenario types**: Stranger, Relationship, Power Dynamic, Fantasy, Slow Burn
+- **AI-generated hooks**: Scenario opening suggestions based on character/type
+- **Quick Start mode**: Minimal setup for fast session start
+
+### **Phase 3: Advanced Features**
+- **Multi-character scenarios**: Support for multiple AI characters
+- **Memory anchors**: Key facts characters remember across sessions
+- **Scenario templates**: Save and reuse scenario configurations
+
+---
+
+**Status**: PRD updated January 2026. 85% complete, production ready. This document serves as the strategic foundation for all roleplay development decisions and success metrics.
 
 **Document Purpose**: This is the definitive Product Requirements Document (PRD) that defines the business goals, user requirements, and success criteria for the roleplay feature. It serves as the strategic foundation for all development decisions.
