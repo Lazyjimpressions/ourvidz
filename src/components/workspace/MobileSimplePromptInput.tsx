@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -22,6 +22,10 @@ export interface MobileSimplePromptInputProps {
   quality: 'fast' | 'high';
   onQualityChange: (quality: 'fast' | 'high') => void;
   onReferenceImageSet?: (file: File, type: 'single' | 'start' | 'end') => void;
+  onReferenceImageRemove?: (type: 'single' | 'start' | 'end') => void;
+  referenceImage?: File | null; // NEW: Sync with hook state
+  beginningRefImage?: File | null; // NEW: Sync with hook state
+  endingRefImage?: File | null; // NEW: Sync with hook state
   contentType?: 'sfw' | 'nsfw';
   onContentTypeChange?: (type: 'sfw' | 'nsfw') => void;
   aspectRatio?: '16:9' | '1:1' | '9:16';
@@ -41,26 +45,23 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   quality,
   onQualityChange,
   onReferenceImageSet,
+  onReferenceImageRemove,
+  referenceImage, // NEW: Use hook state instead of local state
+  beginningRefImage, // NEW: Use hook state
+  endingRefImage, // NEW: Use hook state
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
   onAspectRatioChange,
   onCollapsedChange
 }) => {
-  const [referenceImages, setReferenceImages] = useState<{
-    single?: File;
-    start?: File;
-    end?: File;
-  }>({});
+  // Use hook state for reference images instead of local state
+  const hasReferenceImage = !!referenceImage;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(
-    !!referenceImages.single  // NEW: Pass reference state for dynamic filtering
+    hasReferenceImage  // Pass reference state for dynamic filtering
   );
   const { data: videoModels, isLoading: videoModelsLoading } = useVideoModels();
   const [isExpanded, setIsExpanded] = useState(false);
-  
-  const singleFileRef = useRef<HTMLInputElement>(null);
-  const startFileRef = useRef<HTMLInputElement>(null);
-  const endFileRef = useRef<HTMLInputElement>(null);
 
   const handleExpandedChange = (expanded: boolean) => {
     setIsExpanded(expanded);
@@ -74,20 +75,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        setReferenceImages(prev => ({ ...prev, [type]: file }));
         onReferenceImageSet?.(file, type);
-        toast.success(`${type} reference image selected`);
+        toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
       }
     };
     input.click();
   };
 
   const removeReferenceImage = (type: 'single' | 'start' | 'end') => {
-    setReferenceImages(prev => {
-      const updated = { ...prev };
-      delete updated[type];
-      return updated;
-    });
+    onReferenceImageRemove?.(type);
+    toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image removed`);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -99,8 +96,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     onGenerate(prompt.trim(), { 
       mode: currentMode,
       selectedModel,
-      quality,
-      referenceImages 
+      quality
     });
   };
 
@@ -305,7 +301,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                     <Upload className="h-4 w-4" />
                     Reference Image
                   </Button>
-                  {referenceImages.single && (
+                  {referenceImage && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -330,7 +326,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       <Image className="h-4 w-4" />
                       Start Frame
                     </Button>
-                    {referenceImages.start && (
+                    {beginningRefImage && (
                       <Button
                         type="button"
                         variant="ghost"
@@ -352,7 +348,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       <Image className="h-4 w-4" />
                       End Frame
                     </Button>
-                    {referenceImages.end && (
+                    {endingRefImage && (
                       <Button
                         type="button"
                         variant="ghost"

@@ -33,6 +33,9 @@ const MobileSimplifiedWorkspace = () => {
     selectedModel,
     contentType,
     aspectRatio,
+    referenceImage, // NEW: Get reference image state from hook
+    beginningRefImage, // NEW: Get beginning ref image state
+    endingRefImage, // NEW: Get ending ref image state
     // Actions
     updateMode,
     setPrompt,
@@ -70,6 +73,24 @@ const MobileSimplifiedWorkspace = () => {
         break;
     }
   }, [setReferenceImage, setBeginningRefImage, setEndingRefImage]);
+
+  const handleReferenceImageRemove = useCallback((type: 'single' | 'start' | 'end') => {
+    console.log('🖼️ MOBILE: Removing reference image:', type);
+    
+    switch (type) {
+      case 'single':
+        setReferenceImage(null);
+        setReferenceMetadata(null);
+        setExactCopyMode(false);
+        break;
+      case 'start':
+        setBeginningRefImage(null);
+        break;
+      case 'end':
+        setEndingRefImage(null);
+        break;
+    }
+  }, [setReferenceImage, setBeginningRefImage, setEndingRefImage, setReferenceMetadata, setExactCopyMode]);
 
   const handleGenerate = async (inputPrompt: string, options?: any) => {
     console.log('📸 MOBILE WORKSPACE: Starting generation with prompt:', inputPrompt);
@@ -249,6 +270,10 @@ const MobileSimplifiedWorkspace = () => {
           quality={quality}
           onQualityChange={setQuality}
           onReferenceImageSet={handleReferenceImageSet}
+          onReferenceImageRemove={handleReferenceImageRemove}
+          referenceImage={referenceImage}
+          beginningRefImage={beginningRefImage}
+          endingRefImage={endingRefImage}
           contentType={contentType}
           onContentTypeChange={setContentType}
           aspectRatio={aspectRatio}
