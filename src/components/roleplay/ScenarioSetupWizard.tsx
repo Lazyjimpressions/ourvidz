@@ -35,7 +35,9 @@ import type {
   DialogueWeight,
   ConversationInitiator,
   ScenarioHookTemplate,
-  ContentRating,
+  ContentRating
+} from '@/types/roleplay';
+import {
   SCENARIO_TYPE_METADATA,
   SCENARIO_HOOK_TEMPLATES
 } from '@/types/roleplay';
