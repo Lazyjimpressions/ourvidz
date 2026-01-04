@@ -1223,11 +1223,46 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
       if (error) {
         console.error('❌ Generation error:', error);
+        console.error('❌ Error details:', {
+          message: error.message,
+          context: (error as any).context,
+          status: (error as any).status,
+          body: (error as any).body
+        });
+        
+        // Enhanced error message for missing reference image
+        let errorDescription = error.message || "Failed to generate content";
+        if (error.message?.includes('image_urls') || error.message?.includes('image_url')) {
+          errorDescription = "Reference image is required but was not found. Please select a reference image and try again.";
+        } else if ((error as any).status === 422) {
+          errorDescription = "Invalid request. Please check that your reference image is properly loaded.";
+        }
+        
         toast({
           title: "Generation Failed",
-          description: error.message || "Failed to generate content",
+          description: errorDescription,
           variant: "destructive",
         });
+        setIsGenerating(false);
+        return;
+      }
+      
+      // Check for error in response data (non-2xx status codes)
+      if (data && typeof data === 'object' && 'error' in data) {
+        console.error('❌ Generation failed with error in response:', data);
+        const errorData = data as any;
+        let errorDescription = errorData.error || errorData.details || "Generation failed";
+        
+        if (errorDescription.includes('image_urls') || errorDescription.includes('image_url')) {
+          errorDescription = "Reference image is required but was not found. Please select a reference image and try again.";
+        }
+        
+        toast({
+          title: "Generation Failed",
+          description: errorDescription,
+          variant: "destructive",
+        });
+        setIsGenerating(false);
         return;
       }
 

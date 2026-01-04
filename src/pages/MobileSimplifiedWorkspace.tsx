@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
 import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
+import { MobileDebugPanel } from '@/components/workspace/MobileDebugPanel';
 import { SharedGrid } from '@/components/shared/SharedGrid';
 import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
@@ -16,6 +17,7 @@ import { useImageModels } from '@/hooks/useApiModels';
 const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isControlsExpanded, setIsControlsExpanded] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const processedRef = useRef(false);
@@ -34,6 +36,7 @@ const MobileSimplifiedWorkspace = () => {
     contentType,
     aspectRatio,
     referenceImage, // NEW: Get reference image state from hook
+    referenceImageUrl, // NEW: Get reference image URL state from hook
     beginningRefImage, // NEW: Get beginning ref image state
     endingRefImage, // NEW: Get ending ref image state
     // Actions
@@ -123,8 +126,17 @@ const MobileSimplifiedWorkspace = () => {
       hasReferenceImage: !!referenceImage,
       referenceImageName: referenceImage?.name,
       referenceImageSize: referenceImage?.size,
-      referenceImageType: referenceImage?.type
+      referenceImageType: referenceImage?.type,
+      referenceImageIsFile: referenceImage instanceof File,
+      referenceImageIsValid: referenceImage && referenceImage.size > 0 && referenceImage.type.startsWith('image/')
     });
+    
+    // Validate reference image if I2I model is selected
+    if (selectedModel?.type === 'fal' && mode === 'image' && !referenceImage) {
+      console.error('❌ MOBILE WORKSPACE: I2I model selected but no reference image');
+      toast.error('Please select a reference image for I2I generation');
+      return;
+    }
     
     // Set the prompt first, then generate
     setPrompt(inputPrompt);
@@ -285,8 +297,22 @@ const MobileSimplifiedWorkspace = () => {
           />
         </div>
 
-        {/* Fixed Bottom Input */}
-        <MobileSimplePromptInput
+                {/* Debug Panel - Only show in development or when enabled */}
+                {(process.env.NODE_ENV === 'development' || showDebugPanel) && (
+                  <div className="p-2 border-t bg-muted/30">
+                    <MobileDebugPanel
+                      referenceImage={referenceImage}
+                      referenceImageUrl={referenceImageUrl || null}
+                      selectedModel={selectedModel}
+                      mode={mode}
+                      isOpen={showDebugPanel}
+                      onToggle={() => setShowDebugPanel(!showDebugPanel)}
+                    />
+                  </div>
+                )}
+
+                {/* Fixed Bottom Input */}
+                <MobileSimplePromptInput
           prompt={prompt}
           onPromptChange={setPrompt}
           onGenerate={handleGenerate}

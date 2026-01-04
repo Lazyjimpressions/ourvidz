@@ -25,6 +25,14 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('🖼️ MOBILE PREVIEW: File changed:', {
+      hasFile: !!file,
+      fileName: file?.name,
+      fileSize: file?.size,
+      fileType: file?.type,
+      isFileInstance: file instanceof File
+    });
+    
     if (!file) {
       // Clean up preview URL when file is cleared
       if (previewUrl) {

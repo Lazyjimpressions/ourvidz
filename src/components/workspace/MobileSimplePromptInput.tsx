@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useVideoModels } from '@/hooks/useApiModels';
 import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
+import { MobileReferenceImagePreview } from './MobileReferenceImagePreview';
 
 export interface MobileSimplePromptInputProps {
   prompt: string;
@@ -158,7 +159,14 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       }
 
       // Only set file if validation succeeded
+      console.log('✅ MOBILE: File validated and ready to set:', {
+        fileName: processedFile.name,
+        fileSize: processedFile.size,
+        fileType: processedFile.type,
+        type: type
+      });
       onReferenceImageSet?.(processedFile, type);
+      console.log('✅ MOBILE: File set callback called');
       toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
     };
     input.click();
