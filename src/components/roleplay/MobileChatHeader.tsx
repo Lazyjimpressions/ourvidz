@@ -9,7 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ChevronLeft, MoreVertical, RotateCcw, Settings, User, Info, Share2, Flag } from 'lucide-react';
+import { ChevronLeft, MoreVertical, RotateCcw, Settings, User, Info, Share2, Flag, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface MobileChatHeaderProps {
@@ -21,6 +21,7 @@ interface MobileChatHeaderProps {
   onResetClick?: () => void;
   onShareClick?: () => void;
   onReportClick?: () => void;
+  onNewScenario?: () => void;
   className?: string;
 }
 
@@ -33,6 +34,7 @@ export const MobileChatHeader: React.FC<MobileChatHeaderProps> = ({
   onResetClick,
   onShareClick,
   onReportClick,
+  onNewScenario,
   className
 }) => {
   const navigate = useNavigate();
@@ -94,6 +96,12 @@ export const MobileChatHeader: React.FC<MobileChatHeaderProps> = ({
             <DropdownMenuItem onClick={() => { onCharacterInfoClick(); setMenuOpen(false); }}>
               <Info className="w-4 h-4 mr-2" />
               Character Info
+            </DropdownMenuItem>
+          )}
+          {onNewScenario && (
+            <DropdownMenuItem onClick={() => { onNewScenario(); setMenuOpen(false); }}>
+              <Sparkles className="w-4 h-4 mr-2" />
+              New Scenario
             </DropdownMenuItem>
           )}
           {onSettingsClick && (

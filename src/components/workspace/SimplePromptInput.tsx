@@ -8,7 +8,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
-import { useImageModels, useVideoModels } from '@/hooks/useApiModels';
+import { useImageModels } from '@/hooks/useImageModels';
+import { useVideoModels } from '@/hooks/useApiModels';
 import { useToast } from '@/hooks/use-toast';
 import { NegativePromptPresets } from '@/components/ui/negative-prompt-presets';
 
@@ -318,7 +319,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onTargetGarmentsChange
 }) => {
   // Fetch available image and video models from API
-  const { data: imageModels = [], isLoading: modelsLoading } = useImageModels();
+  const { imageModels = [], isLoading: modelsLoading } = useImageModels(
+    !!referenceImage || !!referenceImageUrl  // NEW: Pass reference state for dynamic filtering
+  );
   const { data: videoModels = [], isLoading: videoModelsLoading } = useVideoModels();
 
   // Base negative prompt hook - use 'sdxl' for both model types to ensure consistency  
@@ -711,7 +714,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                               onClick={() => {
                                 onSelectedModelChange?.({
                                   id: model.id,
-                                  type: model.api_providers.name as 'replicate' | 'fal',
+                                  type: model.provider_name as 'replicate' | 'fal',
                                   display_name: model.display_name
                                 });
                                 setShowModelPopup(false);

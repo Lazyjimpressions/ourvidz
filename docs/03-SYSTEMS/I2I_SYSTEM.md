@@ -23,7 +23,7 @@ The I2I system enables users to modify existing images while preserving subject/
 |----------|------|----------|
 | Local SDXL (RunPod) | Primary | Fast, private, cost-effective |
 | Replicate API | Fallback/Alternative | Cloud-based, multiple models |
-| fal.ai | Planned | SFW/suggestive content, editing |
+| fal.ai Seedream v4.5 Edit | Primary I2I | High-quality image editing |
 
 **Note:** OpenRouter is for chat/roleplay only - it does NOT support image generation.
 

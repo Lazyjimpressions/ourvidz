@@ -22,6 +22,9 @@ export interface UserCharacter {
   role: string;
   content_rating: string;
   gender?: string;
+  voice_examples?: string[];
+  forbidden_phrases?: string[];
+  scene_behavior_rules?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -73,20 +76,50 @@ export const useUserCharacters = () => {
     }
   };
 
-  const createUserCharacter = async (characterData: Pick<UserCharacter, 'name' | 'description' | 'traits' | 'appearance_tags' | 'persona' | 'image_url' | 'gender'>) => {
+  const createUserCharacter = async (characterData: Partial<Omit<UserCharacter, 'id' | 'user_id' | 'created_at' | 'updated_at'>> & Pick<UserCharacter, 'name' | 'description'>) => {
     if (!user?.id) throw new Error('User not authenticated');
-    
+
     try {
+      // Extract known fields, let the rest pass through
+      const {
+        name,
+        description,
+        traits,
+        appearance_tags,
+        persona,
+        image_url,
+        gender,
+        voice_tone,
+        mood,
+        content_rating,
+        reference_image_url,
+        ...rest
+      } = characterData;
+
       const { data, error } = await supabase
         .from('characters')
         .insert({
-          ...characterData,
+          name,
+          description,
+          traits,
+          appearance_tags,
+          persona,
+          image_url,
+          gender,
+          voice_tone,
+          mood,
+          reference_image_url,
+          content_rating: content_rating || 'nsfw', // Default to NSFW per plan
           user_id: user.id,
           role: 'user',
           is_public: false,
           likes_count: 0,
           interaction_count: 0,
-          content_rating: 'sfw'
+          // Include scene_behavior_rules if present
+          ...(rest.scene_behavior_rules && { scene_behavior_rules: rest.scene_behavior_rules }),
+          // Include voice_examples and forbidden_phrases if present
+          ...(rest.voice_examples && { voice_examples: rest.voice_examples }),
+          ...(rest.forbidden_phrases && { forbidden_phrases: rest.forbidden_phrases })
         })
         .select()
         .single();

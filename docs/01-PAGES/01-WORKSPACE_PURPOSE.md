@@ -826,6 +826,14 @@ Provide a responsive workspace for generating, staging, previewing, iterating, a
 - ✅ Workspace UI: `src/components/workspace/MobileSimplePromptInput.tsx`
 - ✅ Shared components: `src/components/shared/SharedGrid.tsx`, `src/components/shared/SharedLightbox.tsx`
 
+### Dynamic Model Filtering
+
+When a reference image is set, the model dropdown automatically filters to show only I2I-capable models:
+- Seedream v4.5 Edit (recommended for high-quality edits)
+- Seedream v4 Edit
+- Replicate models with I2I support
+- Local SDXL (always available)
+
 ### Next Steps
 - 🧪 **Comprehensive Testing** of i2i functionality
 - 📊 **Performance Monitoring** in production

@@ -225,7 +225,14 @@ consider:
   * scene evolution
   * clothing changes
   * pose changes
-* Define **when the UI should offer “Generate Image” vs “Update Image”**
+* Define **when the UI should offer "Generate Image" vs "Update Image"**
 * Map **token → image cost expectations**
 
+---
 
+## Integration Status
+
+- ✅ Seedream v4.5/edit model exists in database
+- ✅ Dynamic model filtering active
+- ✅ Recommended for workspace I2I edits
+- ✅ Automatically appears when reference image is set

@@ -19,8 +19,10 @@ export interface ImageModel {
     speed?: string;
     cost?: string;
     quality?: string;
-    reference_images?: boolean;
+    reference_images?: boolean;  // Keep for backward compatibility
+    supports_i2i?: boolean;      // NEW: Primary I2I indicator
     seed_control?: boolean;
+    char_limit?: number;         // For fal.ai models
   };
 }
 
@@ -32,7 +34,7 @@ export interface ImageModelOption {
   capabilities?: ImageModel['capabilities'];
 }
 
-export const useImageModels = () => {
+export const useImageModels = (hasReferenceImage?: boolean) => {
   const [imageModels, setImageModels] = useState<ImageModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,12 +69,26 @@ export const useImageModels = () => {
           throw error;
         }
 
-        const formattedModels = data.map(model => ({
-          ...model,
-          provider_name: model.api_providers.name,
-          provider_display_name: model.api_providers.display_name,
-          capabilities: model.capabilities as ImageModel['capabilities'] || {}
-        }));
+        const formattedModels = data
+          .map(model => ({
+            ...model,
+            provider_name: model.api_providers.name,
+            provider_display_name: model.api_providers.display_name,
+            capabilities: model.capabilities as ImageModel['capabilities'] || {}
+          }))
+          // NEW: Filter by I2I capability when reference image exists
+          .filter(model => {
+            if (hasReferenceImage) {
+              // Show models that explicitly support I2I
+              const supportsI2I = model.capabilities?.supports_i2i === true;
+              // Also include models with reference_images capability (backward compat)
+              const hasReferenceImages = model.capabilities?.reference_images === true;
+              // Include local SDXL (always supports I2I)
+              return supportsI2I || hasReferenceImages;
+            }
+            // T2I mode: show all models (no filtering)
+            return true;
+          });
 
         setImageModels(formattedModels);
       } catch (err) {
@@ -84,7 +100,7 @@ export const useImageModels = () => {
     };
 
     loadImageModels();
-  }, []);
+  }, [hasReferenceImage]);  // NEW: Dependency on reference image
 
   // Create model options for UI components
   // Include local SDXL model (always listed, but marked unavailable if worker is down)
@@ -100,6 +116,7 @@ export const useImageModels = () => {
         cost: 'free',
         quality: 'high',
         reference_images: true,
+        supports_i2i: true,  // Local SDXL always supports I2I
         seed_control: true
       }
     }

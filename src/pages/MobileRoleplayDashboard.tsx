@@ -11,12 +11,14 @@ import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useCharacterSessions } from '@/hooks/useCharacterSessions';
 import { MobileCharacterCard } from '@/components/roleplay/MobileCharacterCard';
+import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 
 const MobileRoleplayDashboard = () => {
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [showAddCharacterModal, setShowAddCharacterModal] = useState(false);
 
   // ✅ REAL DATA: Use database characters instead of mock data
   const { characters, isLoading, error, loadPublicCharacters } = usePublicCharacters();
@@ -59,7 +61,12 @@ const MobileRoleplayDashboard = () => {
   };
 
   const handleCreateCharacter = () => {
-    navigate('/roleplay/create');
+    setShowAddCharacterModal(true);
+  };
+
+  const handleCharacterAdded = (character: any) => {
+    // Refresh the characters list after adding a new one
+    loadPublicCharacters();
   };
 
   const filteredCharacters = displayCharacters.filter((character: any) => {
@@ -179,7 +186,7 @@ const MobileRoleplayDashboard = () => {
 
         {/* Create Character Button */}
         <div className="mt-6 text-center">
-          <Button 
+          <Button
             onClick={handleCreateCharacter}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
           >
@@ -187,6 +194,13 @@ const MobileRoleplayDashboard = () => {
             Create Character
           </Button>
         </div>
+
+        {/* Add Character Modal */}
+        <AddCharacterModal
+          isOpen={showAddCharacterModal}
+          onClose={() => setShowAddCharacterModal(false)}
+          onCharacterAdded={handleCharacterAdded}
+        />
       </div>
     </OurVidzDashboardLayout>
   );

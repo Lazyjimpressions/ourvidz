@@ -230,7 +230,12 @@ serve(async (req) => {
       contentMode,
       generationMode,
       hasReferenceImage,
-      model_key: apiModel.model_key
+      model_key: apiModel.model_key,
+      // Debug I2I detection
+      input_image_url: body.input?.image_url ? 'present' : 'missing',
+      input_image: body.input?.image ? 'present' : 'missing',
+      metadata_referenceImage: body.metadata?.referenceImage ? 'present' : 'missing',
+      metadata_reference_image_url: body.metadata?.reference_image_url ? 'present' : 'missing'
     });
 
     // Create job record
@@ -284,6 +289,110 @@ serve(async (req) => {
       modelInput.enable_safety_checker = true;
     }
 
+    // I2I specific: reference image and strength (must be handled BEFORE other input overrides)
+    // This needs to run even if body.input is empty, as long as hasReferenceImage is true
+    if (hasReferenceImage) {
+        const imageUrl = body.input.image_url || body.input.image || body.metadata?.referenceImage || body.metadata?.reference_image_url;
+
+        // Validate that image URL exists and is not empty for I2I requests
+        if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.trim() === '')) {
+          console.error('❌ I2I request detected but no valid image URL provided:', {
+            input_image_url: body.input?.image_url,
+            input_image: body.input?.image,
+            metadata_referenceImage: body.metadata?.referenceImage,
+            metadata_reference_image_url: body.metadata?.reference_image_url
+          });
+          return new Response(
+            JSON.stringify({ 
+              error: 'I2I request requires a valid reference image URL',
+              details: 'Please provide image_url in input, or reference_image_url in metadata. The URL cannot be empty.'
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+
+        // Sign URL if it's a Supabase storage path
+        let finalImageUrl = imageUrl;
+        if (typeof imageUrl === 'string' && !imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
+          const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+          const parts = imageUrl.split('/');
+          let bucket = '';
+          let path = '';
+          if (knownBuckets.includes(parts[0])) {
+            bucket = parts[0];
+            path = parts.slice(1).join('/');
+          } else {
+            bucket = 'user-library';
+            path = imageUrl;
+          }
+          const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+          if (!signError && signed?.signedUrl) {
+            finalImageUrl = signed.signedUrl;
+            console.log(`🔏 Signed i2i image URL for bucket "${bucket}"`);
+          } else {
+            console.warn(`⚠️ Failed to sign image URL for bucket "${bucket}":`, signError);
+            // Continue with original URL - might be already signed or external
+          }
+        }
+
+        // Validate final image URL before setting
+        if (!finalImageUrl || finalImageUrl.trim() === '') {
+          console.error('❌ Final image URL is empty after processing');
+          return new Response(
+            JSON.stringify({ 
+              error: 'Invalid reference image URL',
+              details: 'Image URL could not be resolved or signed'
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+
+        // Validate URL format (must be http/https or data URI)
+        if (!finalImageUrl.startsWith('http://') && !finalImageUrl.startsWith('https://') && !finalImageUrl.startsWith('data:')) {
+          console.error('❌ Invalid image URL format:', finalImageUrl.substring(0, 100));
+          return new Response(
+            JSON.stringify({ 
+              error: 'Invalid reference image URL format',
+              details: 'Image URL must be a valid HTTP/HTTPS URL or data URI'
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+
+        // Seedream edit models (v4/edit, v4.5/edit) require image_urls (plural, array)
+        // Other models use image_url (singular, string)
+        const modelKeyLower = (apiModel.model_key || '').toLowerCase();
+        const isSeedreamEdit = modelKeyLower.includes('seedream') && modelKeyLower.includes('edit');
+        
+        console.log('🔍 I2I parameter detection:', {
+          model_key: apiModel.model_key,
+          model_key_lower: modelKeyLower,
+          is_seedream_edit: isSeedreamEdit,
+          will_use_image_urls: isSeedreamEdit
+        });
+        
+        if (isSeedreamEdit) {
+          modelInput.image_urls = [finalImageUrl];
+          // Remove image_url if it was set by input_defaults
+          delete modelInput.image_url;
+          console.log(`✅ I2I image_urls (array) set for Seedream edit model: ${finalImageUrl.substring(0, 60)}...`);
+        } else {
+          modelInput.image_url = finalImageUrl;
+          // Remove image_urls if it was set by input_defaults
+          delete modelInput.image_urls;
+          console.log(`✅ I2I image_url (string) set: ${finalImageUrl.substring(0, 60)}...`);
+        }
+
+        // Strength for i2i (default to 0.5 if not provided for modify mode)
+        if (body.input?.strength !== undefined) {
+          modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
+        } else {
+          // Default strength for I2I if not specified
+          modelInput.strength = 0.5;
+          console.log('📊 Using default I2I strength: 0.5');
+        }
+      }
+
     // Apply user input overrides
     if (body.input) {
       // Image size
@@ -311,39 +420,6 @@ serve(async (req) => {
       // Seed
       if (body.input.seed !== undefined) {
         modelInput.seed = body.input.seed;
-      }
-
-      // I2I specific: reference image and strength
-      if (hasReferenceImage) {
-        const imageUrl = body.input.image_url || body.input.image || body.metadata?.referenceImage || body.metadata?.reference_image_url;
-
-        // Sign URL if it's a Supabase storage path
-        let finalImageUrl = imageUrl;
-        if (typeof imageUrl === 'string' && !imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
-          const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
-          const parts = imageUrl.split('/');
-          let bucket = '';
-          let path = '';
-          if (knownBuckets.includes(parts[0])) {
-            bucket = parts[0];
-            path = parts.slice(1).join('/');
-          } else {
-            bucket = 'user-library';
-            path = imageUrl;
-          }
-          const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-          if (!signError && signed?.signedUrl) {
-            finalImageUrl = signed.signedUrl;
-            console.log(`🔏 Signed i2i image URL for bucket "${bucket}"`);
-          }
-        }
-
-        modelInput.image_url = finalImageUrl;
-
-        // Strength for i2i
-        if (body.input.strength !== undefined) {
-          modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
-        }
       }
 
       // Video-specific params
@@ -375,6 +451,48 @@ serve(async (req) => {
       }
     }
 
+    // Final check: For Seedream edit models, ensure image_urls is set and image_url is removed
+    // This MUST run before sending to fal.ai API
+    const modelKeyLower = (apiModel.model_key || '').toLowerCase();
+    const isSeedreamEdit = modelKeyLower.includes('seedream') && modelKeyLower.includes('edit');
+    
+    console.log('🔍 FINAL CHECK - Model detection:', {
+      model_key: apiModel.model_key,
+      model_key_lower: modelKeyLower,
+      is_seedream_edit: isSeedreamEdit,
+      has_reference_image: hasReferenceImage,
+      current_image_url: modelInput.image_url ? 'present' : 'missing',
+      current_image_urls: modelInput.image_urls ? `present (${Array.isArray(modelInput.image_urls) ? modelInput.image_urls.length : 'not array'})` : 'missing'
+    });
+    
+    if (isSeedreamEdit && hasReferenceImage) {
+      // If we have a reference image but image_urls isn't set, try to get it from image_url
+      if (!modelInput.image_urls && modelInput.image_url) {
+        modelInput.image_urls = [modelInput.image_url];
+        console.log('🔄 Converted image_url to image_urls for Seedream edit model');
+      }
+      // Always remove image_url for Seedream edit models (even if image_urls is missing, we'll error later)
+      if (modelInput.image_url) {
+        delete modelInput.image_url;
+        console.log('🗑️ Removed image_url for Seedream edit model');
+      }
+      // Ensure image_urls is an array
+      if (modelInput.image_urls && !Array.isArray(modelInput.image_urls)) {
+        modelInput.image_urls = [modelInput.image_urls];
+        console.log('🔄 Converted image_urls to array');
+      }
+    } else if (!isSeedreamEdit && hasReferenceImage) {
+      // For non-Seedream models, ensure image_url is set and image_urls is removed
+      if (!modelInput.image_url && modelInput.image_urls && Array.isArray(modelInput.image_urls) && modelInput.image_urls.length > 0) {
+        modelInput.image_url = modelInput.image_urls[0];
+        console.log('🔄 Converted image_urls to image_url for non-Seedream model');
+      }
+      if (modelInput.image_urls) {
+        delete modelInput.image_urls;
+        console.log('🗑️ Removed image_urls for non-Seedream model');
+      }
+    }
+
     // Remove null/undefined keys
     Object.keys(modelInput).forEach((key) => {
       if (modelInput[key] === null || modelInput[key] === undefined) {
@@ -382,7 +500,15 @@ serve(async (req) => {
       }
     });
 
-    console.log('🔧 fal.ai input configuration:', modelInput);
+    console.log('🔧 fal.ai input configuration (FINAL):', {
+      model_key: apiModel.model_key,
+      is_seedream_edit: isSeedreamEdit,
+      has_reference_image: hasReferenceImage,
+      // Mask sensitive URLs in logs
+      image_url: modelInput.image_url ? `${modelInput.image_url.substring(0, 60)}...` : (modelInput.image_urls ? 'present (array)' : 'missing'),
+      image_urls: modelInput.image_urls ? `[${modelInput.image_urls.length} URL(s)]` : 'missing',
+      prompt_preview: modelInput.prompt ? `${modelInput.prompt.substring(0, 100)}...` : 'missing'
+    });
 
     // Update job status to processing
     await supabase
@@ -418,24 +544,46 @@ serve(async (req) => {
 
       if (!falResponse.ok) {
         const errorText = await falResponse.text();
+        let errorDetails;
+        try {
+          errorDetails = JSON.parse(errorText);
+        } catch {
+          errorDetails = { message: errorText };
+        }
+        
         console.error('❌ fal.ai API error:', {
           status: falResponse.status,
           statusText: falResponse.statusText,
-          body: errorText
+          error: errorDetails,
+          request_preview: {
+            model_key: apiModel.model_key,
+            has_image_url: !!modelInput.image_url,
+            image_url_preview: modelInput.image_url ? modelInput.image_url.substring(0, 60) : 'missing',
+            has_prompt: !!modelInput.prompt,
+            prompt_length: modelInput.prompt?.length || 0,
+            strength: modelInput.strength,
+            image_size: modelInput.image_size
+          }
         });
 
         await supabase
           .from('jobs')
           .update({
             status: 'failed',
-            error_message: `fal.ai API error: ${falResponse.status} - ${errorText.slice(0, 500)}`
+            error_message: `fal.ai API error: ${falResponse.status} - ${errorDetails.message || errorText.slice(0, 500)}`
           })
           .eq('id', jobData.id);
 
         return new Response(JSON.stringify({
           error: 'fal.ai API request failed',
-          details: errorText,
-          status: falResponse.status
+          details: errorDetails.message || errorText,
+          status: falResponse.status,
+          debug: falResponse.status === 422 ? {
+            model_key: apiModel.model_key,
+            has_image_url: !!modelInput.image_url,
+            has_prompt: !!modelInput.prompt,
+            input_keys: Object.keys(modelInput)
+          } : undefined
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: falResponse.status,

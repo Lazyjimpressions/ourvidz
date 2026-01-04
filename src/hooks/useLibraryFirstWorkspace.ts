@@ -798,7 +798,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         selectedModel,
         edgeFunction,
         job_type: generationRequest.job_type,
-        enhancementModel: generationRequest.metadata?.enhancement_model
+        enhancementModel: generationRequest.metadata?.enhancement_model,
+        // Debug reference image for I2I
+        hasReferenceImage: !!effRefUrl,
+        referenceImageUrl: effRefUrl ? `${effRefUrl.substring(0, 60)}...` : 'none',
+        referenceStrength: computedReferenceStrength
       });
       
       let requestPayload;
@@ -876,6 +880,18 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
         // Build fal.ai-specific payload (supports both image and video)
         const isFalVideo = mode === 'video';
+        
+        // Validate reference image URL for I2I requests
+        if (!isFalVideo && !effRefUrl) {
+          console.error('❌ I2I request to fal.ai but no reference image URL available');
+          toast({
+            title: "Reference Image Required",
+            description: "Please select or upload a reference image for I2I generation",
+            variant: "destructive",
+          });
+          return;
+        }
+        
         requestPayload = {
           prompt: finalPrompt,
           apiModelId: selectedModel.id,
@@ -889,7 +905,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             negative_prompt: negativePrompt,
             seed: lockSeed && finalSeed ? finalSeed : undefined,
             // I2I parameters for reference images (image mode)
-            image_url: !isFalVideo ? (effRefUrl || undefined) : undefined,
+            // Ensure image_url is always a valid string for I2I requests
+            image_url: !isFalVideo && effRefUrl ? effRefUrl : undefined,
             strength: !isFalVideo && effRefUrl ? computedReferenceStrength : undefined,
             // Video-specific parameters
             ...(isFalVideo && {

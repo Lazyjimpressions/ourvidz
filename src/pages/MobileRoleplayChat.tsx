@@ -1317,6 +1317,7 @@ const MobileRoleplayChat: React.FC = () => {
             characterImage={signedCharacterImage || '/placeholder.svg'}
             onCharacterInfoClick={() => setShowCharacterInfo(true)}
             onSettingsClick={() => setShowSettingsModal(true)}
+            onNewScenario={() => setShowScenarioWizard(true)}
             onResetClick={handleClearConversation}
             onShareClick={handleShareConversation}
             onReportClick={handleReportCharacter}
@@ -1326,7 +1327,7 @@ const MobileRoleplayChat: React.FC = () => {
             backTo="/roleplay"
             characterName={character.name}
             characterImage={signedCharacterImage || '/placeholder.svg'}
-            onMenuClick={() => setShowCharacterInfo(true)}
+            onMenuClick={() => setShowContextMenu(true)}
             onSettingsClick={() => setShowSettingsModal(true)}
             onResetClick={handleClearConversation}
           />

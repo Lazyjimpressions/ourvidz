@@ -7,7 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Camera, Video, Upload, X, Image, ChevronUp, ChevronDown, Settings } from 'lucide-react';
 import { toast } from 'sonner';
-import { useImageModels, useVideoModels } from '@/hooks/useApiModels';
+import { useImageModels } from '@/hooks/useImageModels';
+import { useVideoModels } from '@/hooks/useApiModels';
 
 export interface MobileSimplePromptInputProps {
   prompt: string;
@@ -46,13 +47,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onAspectRatioChange,
   onCollapsedChange
 }) => {
-  const { data: imageModels, isLoading: modelsLoading } = useImageModels();
-  const { data: videoModels, isLoading: videoModelsLoading } = useVideoModels();
   const [referenceImages, setReferenceImages] = useState<{
     single?: File;
     start?: File;
     end?: File;
   }>({});
+  const { imageModels = [], isLoading: modelsLoading } = useImageModels(
+    !!referenceImages.single  // NEW: Pass reference state for dynamic filtering
+  );
+  const { data: videoModels, isLoading: videoModelsLoading } = useVideoModels();
   const [isExpanded, setIsExpanded] = useState(false);
   
   const singleFileRef = useRef<HTMLInputElement>(null);
@@ -211,7 +214,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       if (apiModel) {
                         onModelChange({
                           id: apiModel.id,
-                          type: apiModel.api_providers.name as 'replicate' | 'fal',
+                          type: apiModel.provider_name as 'replicate' | 'fal',
                           display_name: apiModel.display_name
                         });
                       }
