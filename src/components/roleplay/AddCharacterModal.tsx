@@ -332,15 +332,27 @@ export const AddCharacterModal = ({
     }
 
     try {
-      // Build the character data including new fields
+      // Build the character data, excluding internal-only fields
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { character_layers, ...cleanFormData } = formData;
+
       const characterData = {
-        ...formData,
+        ...cleanFormData,
         content_rating: formData.content_rating,
         // Store structured layers in scene_behavior_rules
-        scene_behavior_rules: Object.keys(formData.character_layers).length > 0
-          ? { characterLayers: formData.character_layers }
+        scene_behavior_rules: Object.keys(character_layers).length > 0
+          ? { characterLayers: character_layers }
           : undefined
       };
+
+      console.log('📝 Creating character with data:', {
+        name: characterData.name,
+        description: characterData.description?.substring(0, 50) + '...',
+        content_rating: characterData.content_rating,
+        hasImage: !!characterData.image_url,
+        traitsCount: characterData.traits?.split(',').length || 0,
+        appearanceTagsCount: characterData.appearance_tags?.length || 0
+      });
 
       const newCharacter = await createUserCharacter(characterData);
 
@@ -353,10 +365,11 @@ export const AddCharacterModal = ({
       onClose();
       resetForm();
     } catch (error) {
-      console.error('Failed to create character:', error);
+      console.error('❌ Failed to create character:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: "Creation Failed",
-        description: "Failed to create character. Please try again.",
+        description: `Failed to create character: ${errorMessage}`,
         variant: "destructive",
       });
     }

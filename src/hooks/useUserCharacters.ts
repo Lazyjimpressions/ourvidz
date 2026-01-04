@@ -96,43 +96,61 @@ export const useUserCharacters = () => {
         ...rest
       } = characterData;
 
+      // Helper to convert empty strings to undefined (use DB defaults)
+      const emptyToUndefined = (val: string | undefined) => val && val.trim() ? val : undefined;
+
       const { data, error } = await supabase
         .from('characters')
         .insert({
           name,
           description,
-          traits,
-          appearance_tags,
-          persona,
-          image_url,
-          gender,
-          voice_tone,
-          mood,
-          reference_image_url,
+          traits: emptyToUndefined(traits),
+          appearance_tags: appearance_tags?.length ? appearance_tags : undefined,
+          persona: emptyToUndefined(persona),
+          image_url: emptyToUndefined(image_url),
+          gender: emptyToUndefined(gender),
+          voice_tone: emptyToUndefined(voice_tone),
+          mood: emptyToUndefined(mood),
+          reference_image_url: emptyToUndefined(reference_image_url),
           content_rating: content_rating || 'nsfw', // Default to NSFW per plan
           user_id: user.id,
           role: 'user',
           is_public: false,
           likes_count: 0,
           interaction_count: 0,
-          // Include scene_behavior_rules if present
-          ...(rest.scene_behavior_rules && { scene_behavior_rules: rest.scene_behavior_rules }),
-          // Include voice_examples and forbidden_phrases if present
-          ...(rest.voice_examples && { voice_examples: rest.voice_examples }),
-          ...(rest.forbidden_phrases && { forbidden_phrases: rest.forbidden_phrases })
+          // Include scene_behavior_rules if present and non-empty
+          ...(rest.scene_behavior_rules && Object.keys(rest.scene_behavior_rules).length > 0
+            ? { scene_behavior_rules: rest.scene_behavior_rules }
+            : {}),
+          // Include voice_examples and forbidden_phrases if present and non-empty
+          ...(rest.voice_examples && rest.voice_examples.length > 0
+            ? { voice_examples: rest.voice_examples }
+            : {}),
+          ...(rest.forbidden_phrases && rest.forbidden_phrases.length > 0
+            ? { forbidden_phrases: rest.forbidden_phrases }
+            : {})
         })
         .select()
         .single();
 
-      if (error) throw error;
-      
+      if (error) {
+        console.error('❌ Supabase character insert error:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        });
+        throw new Error(error.message || 'Failed to insert character');
+      }
+
       if (data) {
         setCharacters(prev => [data, ...prev]);
       }
-      
+
+      console.log('✅ Character created successfully:', data?.id);
       return data;
     } catch (err) {
-      console.error('Error creating character:', err);
+      console.error('❌ Error creating character:', err);
       throw err;
     }
   };
