@@ -58,6 +58,7 @@ import {
   CreateSceneInput,
   UpdateSceneInput,
 } from '@/types/storyboard';
+import { ClipWorkspace } from '@/components/storyboard';
 
 const StoryboardEditor = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -438,67 +439,14 @@ const StoryboardEditor = () => {
                   <span>Duration: {activeScene.target_duration_seconds}s</span>
                 </div>
 
-                {/* Clips */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Clips
-                    </h3>
-                    <Button size="sm" className="h-7 text-xs gap-1">
-                      <Plus className="w-3 h-3" />
-                      Add Clip
-                    </Button>
-                  </div>
-
-                  {activeScene.clips && activeScene.clips.length > 0 ? (
-                    <div className="grid grid-cols-3 gap-3">
-                      {activeScene.clips.map((clip, index) => (
-                        <div
-                          key={clip.id}
-                          className="bg-gray-900/50 border border-gray-800 rounded-lg overflow-hidden hover:border-gray-700 transition-all cursor-pointer"
-                        >
-                          <div className="aspect-video bg-gray-950 flex items-center justify-center">
-                            {clip.thumbnail_url ? (
-                              <img
-                                src={clip.thumbnail_url}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <Film className="w-6 h-6 text-gray-700" />
-                            )}
-                          </div>
-                          <div className="p-2">
-                            <p className="text-[10px] text-gray-400 truncate">
-                              {clip.prompt}
-                            </p>
-                            <div className="flex items-center justify-between mt-1">
-                              <span className="text-[10px] text-gray-600">
-                                Clip {index + 1}
-                              </span>
-                              <span className={`text-[10px] capitalize ${
-                                clip.status === 'completed' ? 'text-green-500' :
-                                clip.status === 'generating' ? 'text-yellow-500' :
-                                clip.status === 'failed' ? 'text-red-500' :
-                                'text-gray-500'
-                              }`}>
-                                {clip.status}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 border border-dashed border-gray-800 rounded-lg">
-                      <Film className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-                      <p className="text-xs text-gray-500 mb-3">No clips in this scene</p>
-                      <Button size="sm" className="h-7 text-xs gap-1">
-                        <Plus className="w-3 h-3" />
-                        Generate First Clip
-                      </Button>
-                    </div>
-                  )}
+                {/* Clip Workspace */}
+                <div className="border border-gray-800 rounded-lg overflow-hidden bg-gray-900/30 h-[500px]">
+                  <ClipWorkspace
+                    scene={activeScene}
+                    clips={activeScene.clips || []}
+                    aspectRatio={activeProject.aspect_ratio}
+                    onClipsChange={() => loadProject(projectId!)}
+                  />
                 </div>
 
                 {/* AI Suggestions */}
