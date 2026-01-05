@@ -17,7 +17,7 @@ import { useImageModels } from '@/hooks/useImageModels';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { supabase } from '@/integrations/supabase/client';
 import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
-import { UnifiedUrlService } from '@/lib/services/UnifiedUrlService';
+import { getSignedUrl } from '@/lib/storage';
 import { Plus, Save, Users, Sparkles, X, Wand2, Loader2, ImageIcon, RefreshCw, User } from 'lucide-react';
 import type { ContentRating, CharacterLayers, VoiceTone } from '@/types/roleplay';
 
@@ -76,13 +76,13 @@ export const AddCharacterModal = ({
   const { characters: publicCharacters, isLoading: loadingPublic } = usePublicCharacters();
   const { toast } = useToast();
   const { generateContent, isGenerating, currentJob, generationProgress } = useGeneration();
-  const { imageModels, defaultImageModel } = useImageModels();
+  const { imageModels, defaultModel: defaultImageModel } = useImageModels();
   const { allModelOptions: roleplayModels, defaultModel: defaultRoleplayModel } = useRoleplayModels();
 
   // Set default image model when available
   useEffect(() => {
     if (defaultImageModel && !selectedImageModel) {
-      setSelectedImageModel(defaultImageModel.id);
+      setSelectedImageModel(defaultImageModel.value);
     }
   }, [defaultImageModel, selectedImageModel]);
 
@@ -101,14 +101,14 @@ export const AddCharacterModal = ({
 
       if (imageUrl && bucket) {
         try {
-          // Get signed URL for the generated image
-          const signedUrl = await UnifiedUrlService.getSignedUrl(bucket, imageUrl, 3600);
-          if (signedUrl) {
-            setGeneratedImageUrl(signedUrl);
+          // Get signed URL for the generated image using storage helper
+          const { data, error } = await getSignedUrl(bucket, imageUrl, 3600);
+          if (!error && data?.signedUrl) {
+            setGeneratedImageUrl(data.signedUrl);
             setFormData(prev => ({
               ...prev,
-              image_url: signedUrl,
-              reference_image_url: signedUrl
+              image_url: data.signedUrl,
+              reference_image_url: data.signedUrl
             }));
             toast({
               title: 'Image Generated',

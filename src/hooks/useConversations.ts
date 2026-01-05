@@ -5,10 +5,10 @@ import { useAuth } from '@/contexts/AuthContext';
 export interface ConversationUserCharacter {
   id: string;
   name: string;
-  gender: 'male' | 'female' | 'other';
-  appearance_tags: string[];
-  persona?: string;
-  image_url?: string;
+  gender: string | null;
+  appearance_tags: string[] | null;
+  persona?: string | null;
+  image_url?: string | null;
 }
 
 export interface ConversationInfo {

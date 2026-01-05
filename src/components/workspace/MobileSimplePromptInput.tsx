@@ -138,7 +138,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       try {
         const previewUrl = URL.createObjectURL(processedFile);
         // Test if image actually loads
-        const img = new Image();
+        const img = new window.Image();
         await new Promise<void>((resolve, reject) => {
           img.onload = () => {
             URL.revokeObjectURL(previewUrl);
@@ -180,7 +180,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       const reader = new FileReader();
       
       reader.onload = (e) => {
-        const img = new Image();
+        const img = new window.Image();
         let timeoutId: NodeJS.Timeout;
         
         img.onload = () => {

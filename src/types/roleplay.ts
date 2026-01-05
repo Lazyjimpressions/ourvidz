@@ -19,6 +19,7 @@ export interface Character {
   voice_tone?: string;
   mood?: string;
   creator_id?: string;
+  created_by?: string;
   likes_count?: number;
   interaction_count?: number;
   reference_image_url?: string;
@@ -42,6 +43,7 @@ export interface Message {
   sender: 'user' | 'character';
   timestamp: string;
   scene_image?: string;
+  imageUrl?: string;
   consistency_method?: string;
   job_id?: string;
   metadata?: {
@@ -54,6 +56,7 @@ export interface Message {
     isError?: boolean;
     sceneError?: boolean;
     canRetryScene?: boolean;
+    usedFallback?: boolean;
   };
 }
 
@@ -84,8 +87,8 @@ export interface CharacterScene {
 export interface UserCharacter {
   id: string;
   name: string;
-  gender: 'male' | 'female' | 'other';
-  appearance_tags: string[];
+  gender?: string;
+  appearance_tags?: string[];
   persona?: string;
   image_url?: string;
 }

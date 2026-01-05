@@ -36,13 +36,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const { allModelOptions, isLoading } = useRoleplayModels();
   const { isMobile } = useMobileDetection();
 
-  // Safe fallback for currentModelOption
-  const currentModelOption = allModelOptions?.find(m => m.value === currentModel) || allModelOptions?.[0] || {
+  const currentModelOption: ModelOption = allModelOptions?.find(m => m.value === currentModel) || allModelOptions?.[0] || {
     value: currentModel || 'qwen-local',
     label: currentModel || 'Qwen 2.5-7B-Instruct (Local)',
     description: 'Local model - fast & private',
     provider: 'Local',
-    isLocal: true
+    isLocal: true,
+    isAvailable: true
   };
 
   const getModelCapabilities = (model: ModelOption | null | undefined) => {
