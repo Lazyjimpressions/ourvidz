@@ -185,6 +185,16 @@ const MobileRoleplayChat: React.FC = () => {
       });
     }
   }, [roleplayModelsLoading, imageModelsLoading, roleplayModelOptions, imageModelOptions, defaultCharacterId]);
+
+  // Reload template when model changes
+  useEffect(() => {
+    if (modelProvider && !roleplayModelsLoading) {
+      loadPromptTemplate(modelProvider, 'nsfw').then(template => {
+        setPromptTemplate(template);
+        console.log('📝 Template reloaded for model:', modelProvider, template?.template_name || 'none');
+      });
+    }
+  }, [modelProvider, roleplayModelsLoading]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sceneJobId, setSceneJobId] = useState<string | null>(null);
   const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
@@ -295,26 +305,45 @@ const MobileRoleplayChat: React.FC = () => {
     updateConversationUserCharacter();
   }, [selectedUserCharacterId, conversationId, user?.id]);
 
-  // Load prompt template for roleplay
-  const loadPromptTemplate = async (contentTier: string) => {
+  // Load prompt template for roleplay - model-specific with fallback to universal
+  const loadPromptTemplate = async (modelKey: string, contentTier: string) => {
     try {
-      const { data, error } = await supabase
+      // First try model-specific template
+      const { data: modelSpecific, error: modelError } = await supabase
         .from('prompt_templates')
         .select('*')
+        .eq('target_model', modelKey)
         .eq('use_case', 'character_roleplay')
         .eq('content_mode', contentTier)
         .eq('is_active', true)
         .order('version', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error) {
-        console.error('Error loading prompt template:', error);
-        return null;
+      if (!modelError && modelSpecific) {
+        console.log('✅ Loaded model-specific template:', modelSpecific.template_name, 'for model:', modelKey);
+        return modelSpecific;
       }
 
-      console.log('✅ Loaded prompt template:', data.template_name);
-      return data;
+      // Fallback to universal template (target_model IS NULL)
+      const { data: universal, error: universalError } = await supabase
+        .from('prompt_templates')
+        .select('*')
+        .is('target_model', null)
+        .eq('use_case', 'character_roleplay')
+        .eq('content_mode', contentTier)
+        .eq('is_active', true)
+        .order('version', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!universalError && universal) {
+        console.log('⚠️ No model-specific template found, using universal template:', universal.template_name);
+        return universal;
+      }
+
+      console.error('❌ No template found for model:', modelKey, 'content tier:', contentTier);
+      return null;
     } catch (error) {
       console.error('Error in loadPromptTemplate:', error);
       return null;
@@ -431,8 +460,8 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
-        // Load prompt template for roleplay
-        const loadedPromptTemplate = await loadPromptTemplate('nsfw');
+        // Load prompt template for roleplay - use current modelProvider
+        const loadedPromptTemplate = await loadPromptTemplate(modelProvider, 'nsfw');
         setPromptTemplate(loadedPromptTemplate);
         console.log('📝 Loaded prompt template:', loadedPromptTemplate?.template_name || 'none');
 
@@ -1106,6 +1135,11 @@ const MobileRoleplayChat: React.FC = () => {
       // Cache new conversation ID
       localStorage.setItem(cacheKey, newConversation.id);
 
+      // Reload template for current model before kickoff
+      const currentTemplate = await loadPromptTemplate(modelProvider, 'nsfw');
+      setPromptTemplate(currentTemplate);
+      console.log('📝 Reloaded template for cleared conversation:', currentTemplate?.template_name || 'none');
+
       // Reset messages and do kickoff again
       setIsLoading(true);
       setMessages([{
@@ -1131,7 +1165,10 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Pass consistency settings from UI
-          consistency_settings: consistencySettings
+          consistency_settings: consistencySettings,
+          // ✅ Pass template ID (edge function will use model-specific selection if not provided)
+          prompt_template_id: currentTemplate?.id || null,
+          prompt_template_name: currentTemplate?.template_name || null
         }
       });
 
