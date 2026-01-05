@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
+import { looksLikeImage } from '@/utils/imageTypeDetection';
 import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
 import { MobileDebugPanel } from '@/components/workspace/MobileDebugPanel';
 import { SharedGrid } from '@/components/shared/SharedGrid';
@@ -63,17 +64,20 @@ const MobileSimplifiedWorkspace = () => {
   } = useLibraryFirstWorkspace();
 
   const handleReferenceImageSet = useCallback((file: File, type: 'single' | 'start' | 'end') => {
+    // Use robust validation that handles empty file.type on iOS
+    const isValidImage = file.type.startsWith('image/') || looksLikeImage(file);
+    
     console.log('🖼️ MOBILE: Setting reference image:', type, {
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type,
       lastModified: file.lastModified,
-      isValidImage: file.type.startsWith('image/')
+      isValidImage
     });
     
-    // Additional validation
-    if (!file.type.startsWith('image/')) {
-      console.error('❌ MOBILE: Invalid file type, not an image:', file.type);
+    // Robust validation - accept if type is image/* OR looks like image by extension
+    if (!isValidImage) {
+      console.error('❌ MOBILE: Invalid file type, not an image:', file.type, file.name);
       toast.error('Selected file is not an image');
       return;
     }
