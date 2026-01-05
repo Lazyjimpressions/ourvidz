@@ -43,45 +43,46 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
     
     if (!file) {
       // Clean up preview URL when file is cleared
-      if (previewUrl) {
-        URL.revokeObjectURL(previewUrl);
-        setPreviewUrl(null);
-      }
+      setPreviewUrl(null);
       setIsLoading(false);
       setHasError(false);
       setErrorMessage(null);
       return;
     }
 
-    // Create object URL for preview
-    let objectUrl: string | null = null;
     let isMounted = true;
     
     setIsLoading(true);
     setHasError(false);
     setErrorMessage(null);
 
-    try {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        throw new Error('Selected file is not an image');
+    // Use FileReader to create a data URL instead of blob URL
+    // Data URLs don't expire on iOS Safari (unlike blob URLs which can expire after ~1 minute)
+    const reader = new FileReader();
+    
+    reader.onload = (event) => {
+      if (!isMounted) return;
+      
+      const dataUrl = event.target?.result as string;
+      if (!dataUrl) {
+        setIsLoading(false);
+        setHasError(true);
+        setErrorMessage('Failed to read file');
+        onErrorRef.current?.(new Error('Failed to read file data'));
+        return;
       }
-
-      // Create object URL
-      objectUrl = URL.createObjectURL(file);
-      setPreviewUrl(objectUrl);
-
+      
       // Test if image actually loads
       const img = new window.Image();
       img.onload = () => {
         if (isMounted) {
+          setPreviewUrl(dataUrl);
           setIsLoading(false);
           setHasError(false);
         }
       };
       img.onerror = () => {
         if (isMounted) {
-          URL.revokeObjectURL(objectUrl!);
           setPreviewUrl(null);
           setIsLoading(false);
           setHasError(true);
@@ -89,25 +90,33 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
           onErrorRef.current?.(new Error('Image file is corrupted or unsupported'));
         }
       };
-      img.src = objectUrl;
-    } catch (error) {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
+      img.src = dataUrl;
+    };
+    
+    reader.onerror = () => {
+      if (isMounted) {
+        setPreviewUrl(null);
+        setIsLoading(false);
+        setHasError(true);
+        setErrorMessage('Failed to read file');
+        onErrorRef.current?.(new Error('Failed to read file'));
       }
-      setPreviewUrl(null);
+    };
+    
+    // Validate file type before reading
+    if (!file.type.startsWith('image/')) {
       setIsLoading(false);
       setHasError(true);
-      const err = error instanceof Error ? error : new Error('Failed to create preview');
-      setErrorMessage(err.message);
-      onErrorRef.current?.(err);
+      setErrorMessage('Selected file is not an image');
+      onErrorRef.current?.(new Error('Selected file is not an image'));
+      return;
     }
+    
+    reader.readAsDataURL(file);
 
     // Cleanup function
     return () => {
       isMounted = false;
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
     };
   }, [file]); // Only depend on file, not onError
 

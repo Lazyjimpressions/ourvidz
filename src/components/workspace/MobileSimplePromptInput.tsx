@@ -7,10 +7,14 @@ import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Camera, Video, Upload, X, Image, ChevronUp, ChevronDown, Settings } from 'lucide-react';
 import { toast } from 'sonner';
+import heic2any from 'heic2any';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useVideoModels } from '@/hooks/useApiModels';
 import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
 import { MobileReferenceImagePreview } from './MobileReferenceImagePreview';
+
+// Detect iOS Safari for special handling
+const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
 
 export interface MobileSimplePromptInputProps {
   prompt: string;
@@ -79,7 +83,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   const handleFileSelect = async (type: 'single' | 'start' | 'end') => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    // iOS: prefer JPEG/PNG to avoid HEIC conversion issues
+    input.accept = isIOS ? 'image/jpeg,image/png,image/webp,image/heic,image/heif' : 'image/*';
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
@@ -88,7 +93,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         name: file.name,
         type: file.type,
         size: file.size,
-        lastModified: file.lastModified
+        lastModified: file.lastModified,
+        isIOS
       });
 
       // Check if it's a HEIC/HEIF file (iPhone format)
@@ -100,9 +106,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       let processedFile: File = file;
 
       if (isHeic) {
-        console.log('🔄 MOBILE: Converting HEIC/HEIF to JPEG...');
+        console.log('🔄 MOBILE: Converting HEIC/HEIF to JPEG using heic2any...');
         try {
-          // Convert HEIC to JPEG using canvas
           const convertedFile = await convertHeicToJpeg(file);
           processedFile = convertedFile;
           console.log('✅ MOBILE: HEIC converted to JPEG:', {
@@ -113,7 +118,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           toast.success('Image converted from HEIC to JPEG');
         } catch (error) {
           console.error('❌ MOBILE: Failed to convert HEIC:', error);
-          toast.error('Failed to convert HEIC image. Please try a JPEG or PNG image.');
+          if (isIOS) {
+            toast.error('iOS tip: Try selecting a JPEG or PNG photo instead of HEIC');
+          } else {
+            toast.error('Failed to convert HEIC image. Please try a JPEG or PNG image.');
+          }
           return;
         }
       }
@@ -134,121 +143,87 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         return;
       }
 
-      // CRITICAL: Validate file is readable by creating preview
+      // CRITICAL FOR iOS: Read file data immediately and persist it
+      // iOS Safari blob URLs can expire after ~1 minute
       try {
-        const previewUrl = URL.createObjectURL(processedFile);
-        // Test if image actually loads
+        console.log('📱 MOBILE: Persisting file data for iOS compatibility...');
+        
+        // Read file into ArrayBuffer immediately
+        const arrayBuffer = await processedFile.arrayBuffer();
+        
+        // Create a new Blob from the ArrayBuffer (this persists in memory)
+        const persistedBlob = new Blob([arrayBuffer], { type: processedFile.type });
+        
+        // Create a new File from the Blob to ensure data persistence
+        const persistedFile = new File([persistedBlob], processedFile.name, {
+          type: processedFile.type,
+          lastModified: Date.now()
+        });
+
+        // Validate the persisted file loads correctly
+        const testUrl = URL.createObjectURL(persistedFile);
         const img = new window.Image();
         await new Promise<void>((resolve, reject) => {
           img.onload = () => {
-            URL.revokeObjectURL(previewUrl);
+            URL.revokeObjectURL(testUrl);
             resolve();
           };
           img.onerror = () => {
-            URL.revokeObjectURL(previewUrl);
+            URL.revokeObjectURL(testUrl);
             reject(new Error('Image failed to load'));
           };
-          img.src = previewUrl;
+          img.src = testUrl;
         });
         
-        console.log('✅ MOBILE: File validated - image loads successfully');
+        console.log('✅ MOBILE: File persisted and validated:', {
+          fileName: persistedFile.name,
+          fileSize: persistedFile.size,
+          fileType: persistedFile.type,
+          type: type
+        });
+        
+        onReferenceImageSet?.(persistedFile, type);
+        console.log('✅ MOBILE: File set callback called with persisted file');
+        toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
       } catch (error) {
-        console.error('❌ MOBILE: File validation failed:', error);
-        toast.error('Invalid image file. The file may be corrupted or unsupported. Please try another image.');
+        console.error('❌ MOBILE: File persistence/validation failed:', error);
+        if (isIOS) {
+          toast.error('Failed to load image on iOS. Try a different photo or format.');
+        } else {
+          toast.error('Invalid image file. The file may be corrupted or unsupported.');
+        }
         return;
       }
-
-      // Only set file if validation succeeded
-      console.log('✅ MOBILE: File validated and ready to set:', {
-        fileName: processedFile.name,
-        fileSize: processedFile.size,
-        fileType: processedFile.type,
-        type: type
-      });
-      onReferenceImageSet?.(processedFile, type);
-      console.log('✅ MOBILE: File set callback called');
-      toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
     };
     input.click();
   };
 
-  // Helper function to convert HEIC/HEIF to JPEG
-  // Note: Browser support for HEIC is limited, so this may not work for all HEIC files
-  // If conversion fails, user will need to convert the image manually
+  // Helper function to convert HEIC/HEIF to JPEG using heic2any library
+  // This is more reliable on iOS than the canvas-based approach
   const convertHeicToJpeg = async (file: File): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
+    try {
+      const result = await heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.92
+      });
       
-      reader.onload = (e) => {
-        const img = new window.Image();
-        let timeoutId: NodeJS.Timeout;
-        
-        img.onload = () => {
-          clearTimeout(timeoutId);
-          try {
-            // Create canvas and draw image
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-              reject(new Error('Failed to get canvas context'));
-              return;
-            }
-            
-            ctx.drawImage(img, 0, 0);
-            
-            // Convert to blob (JPEG)
-            canvas.toBlob((blob) => {
-              if (!blob) {
-                reject(new Error('Failed to convert image to blob'));
-                return;
-              }
-              
-              // Create new File object with JPEG extension
-              const jpegFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), {
-                type: 'image/jpeg',
-                lastModified: file.lastModified
-              });
-              
-              console.log('✅ MOBILE: HEIC successfully converted to JPEG');
-              resolve(jpegFile);
-            }, 'image/jpeg', 0.95); // 95% quality
-          } catch (error) {
-            reject(error);
-          }
-        };
-        
-        img.onerror = (error) => {
-          clearTimeout(timeoutId);
-          console.error('❌ MOBILE: Image load error:', error);
-          reject(new Error('Browser cannot decode HEIC image. Please convert to JPEG or PNG first.'));
-        };
-        
-        // Set timeout for image loading (10 seconds)
-        timeoutId = setTimeout(() => {
-          reject(new Error('Image conversion timed out. The HEIC file may not be supported by your browser.'));
-        }, 10000);
-        
-        // Try to load the image
-        const dataUrl = e.target?.result as string;
-        if (!dataUrl) {
-          clearTimeout(timeoutId);
-          reject(new Error('Failed to read file data'));
-          return;
+      const blob = Array.isArray(result) ? result[0] : result;
+      const jpegFile = new File(
+        [blob], 
+        file.name.replace(/\.(heic|heif)$/i, '.jpg'), 
+        {
+          type: 'image/jpeg',
+          lastModified: Date.now()
         }
-        
-        img.src = dataUrl;
-      };
+      );
       
-      reader.onerror = (error) => {
-        console.error('❌ MOBILE: FileReader error:', error);
-        reject(new Error('Failed to read file'));
-      };
-      
-      reader.readAsDataURL(file);
-    });
+      console.log('✅ MOBILE: HEIC successfully converted to JPEG via heic2any');
+      return jpegFile;
+    } catch (error) {
+      console.error('❌ MOBILE: heic2any conversion failed:', error);
+      throw new Error('Failed to convert HEIC image');
+    }
   };
 
   const removeReferenceImage = (type: 'single' | 'start' | 'end') => {
