@@ -103,12 +103,22 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
       }
     };
     
-    // Validate file type before reading
-    if (!file.type.startsWith('image/')) {
+    console.info('📷 Reference image selected', {
+      name: file.name,
+      type: file.type,
+      size: file.size
+    });
+
+    // Validate file type before reading (iOS Safari may provide an empty MIME type)
+    const looksLikeImage = file.type
+      ? file.type.startsWith('image/')
+      : /\.(png|jpe?g|webp|gif|heic|heif)$/i.test(file.name);
+
+    if (!looksLikeImage) {
       setIsLoading(false);
       setHasError(true);
-      setErrorMessage('Selected file is not an image');
-      onErrorRef.current?.(new Error('Selected file is not an image'));
+      setErrorMessage('Selected file is not a supported image');
+      onErrorRef.current?.(new Error('Selected file is not a supported image'));
       return;
     }
     
@@ -162,7 +172,7 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
             onError={() => {
               setHasError(true);
               setErrorMessage('Image failed to display');
-              onError?.(new Error('Image display failed'));
+              onErrorRef.current?.(new Error('Image display failed'));
             }}
           />
           {onRemove && (
