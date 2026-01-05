@@ -101,9 +101,45 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
           const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
           const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
           setSignedImageUrl(signed);
-        } catch (error) {
+        } catch (error: any) {
           console.error('Failed to sign image URL:', error);
-          setSignedImageUrl(imageUrl); // Fallback to original
+          
+          // Check if error is "Object not found" or similar storage error
+          const errorMessage = error?.message || error?.toString() || '';
+          const isNotFoundError = errorMessage.includes('Object not found') || 
+                                 errorMessage.includes('not found') ||
+                                 errorMessage.includes('404') ||
+                                 errorMessage.includes('No such object');
+          
+          if (isNotFoundError) {
+            console.log('🔧 Broken image detected, clearing character image URLs for:', character.name);
+            
+            // Automatically clear broken image URLs from character record
+            try {
+              const { error: updateError } = await supabase
+                .from('characters')
+                .update({
+                  image_url: null,
+                  reference_image_url: null,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', character.id);
+
+              if (!updateError) {
+                console.log('✅ Cleared broken image URLs for character:', character.name);
+                // Clear local state to show "Generate" button
+                setSignedImageUrl('');
+              } else {
+                console.error('Failed to clear broken image URLs:', updateError);
+                setSignedImageUrl(imageUrl); // Fallback to original
+              }
+            } catch (clearError) {
+              console.error('Error clearing broken image URLs:', clearError);
+              setSignedImageUrl(imageUrl); // Fallback to original
+            }
+          } else {
+            setSignedImageUrl(imageUrl); // Fallback to original for other errors
+          }
         }
       } else {
         setSignedImageUrl(imageUrl); // Use as-is for public URLs
@@ -111,7 +147,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
     };
 
     signImageUrl();
-  }, [imageUrl]);
+  }, [imageUrl, character.id, character.name]);
 
   const displayImageUrl = signedImageUrl || imageUrl;
 

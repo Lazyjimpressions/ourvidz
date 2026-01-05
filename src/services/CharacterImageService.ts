@@ -18,7 +18,7 @@ export interface CharacterImageGenerationParams {
 export class CharacterImageService {
   /**
    * Generate a character portrait image using the optimized prompt builder
-   * Routes to fal-image (cloud) for reliable generation
+   * Routes dynamically to fal-image, replicate-image, or queue-job based on selected model
    */
   static async generateCharacterPortrait(params: CharacterImageGenerationParams) {
     try {
@@ -32,20 +32,33 @@ export class CharacterImageService {
         gender: params.gender
       });
 
-      // Use fal-image edge function for cloud model generation
-      // This is more reliable than queue-job which requires local SDXL worker
-      const { data: jobData, error: jobError } = await supabase.functions.invoke('fal-image', {
-        body: {
+      // Determine which edge function to use based on model type
+      let edgeFunction = 'fal-image'; // Default fallback
+      let requestBody: any = {
+        prompt: characterPrompt,
+        quality: 'high',
+        metadata: {
+          destination: 'character_portrait',
+          character_id: params.characterId,
+          character_name: params.characterName,
+          consistency_method: params.consistencyMethod || 'i2i_reference',
+          reference_strength: params.referenceImageUrl ? 0.35 : undefined,
+          reference_image_url: params.referenceImageUrl,
+          base_prompt: characterPrompt,
+          seed_locked: params.seedLocked || false,
+          contentType: 'sfw' // Character portraits are SFW by default
+        }
+      };
+
+      // If no model specified, use default (fal-image)
+      if (!params.apiModelId) {
+        console.log('🎨 No model specified, using default fal-image');
+      } else if (params.apiModelId === 'sdxl') {
+        // Local SDXL model - use queue-job
+        edgeFunction = 'queue-job';
+        requestBody = {
           prompt: characterPrompt,
-          apiModelId: params.apiModelId, // Use selected model or fal-image will use default
-          quality: 'high',
-          input: {
-            // Reference image for I2I if provided
-            image_url: params.referenceImageUrl,
-            seed: params.seedLocked,
-            // Strength for I2I (lower = more like original)
-            strength: params.referenceImageUrl ? 0.65 : undefined
-          },
+          format: 'sdxl_image_high',
           metadata: {
             destination: 'character_portrait',
             character_id: params.characterId,
@@ -55,9 +68,93 @@ export class CharacterImageService {
             reference_image_url: params.referenceImageUrl,
             base_prompt: characterPrompt,
             seed_locked: params.seedLocked || false,
-            contentType: 'sfw' // Character portraits are SFW by default
+            contentType: 'sfw'
+          },
+          referenceImageUrl: params.referenceImageUrl,
+          seed: params.seedLocked
+        };
+      } else {
+        // Query api_models to get provider type
+        const { data: modelData, error: modelError } = await supabase
+          .from('api_models')
+          .select(`
+            id,
+            model_key,
+            api_providers!inner(name)
+          `)
+          .eq('id', params.apiModelId)
+          .eq('is_active', true)
+          .single();
+
+        if (modelError || !modelData) {
+          console.warn('⚠️ Model not found, using default fal-image:', modelError);
+          // Fallback to fal-image with apiModelId
+          requestBody.apiModelId = params.apiModelId;
+        } else {
+          const providerName = modelData.api_providers.name;
+          console.log('🎨 Routing to provider:', providerName, 'for model:', modelData.model_key);
+
+          if (providerName === 'replicate') {
+            edgeFunction = 'replicate-image';
+            requestBody = {
+              prompt: characterPrompt,
+              apiModelId: params.apiModelId,
+              quality: 'high',
+              input: {
+                negative_prompt: '', // Will be fetched by replicate-image if needed
+                num_outputs: 1,
+                steps: 20,
+                guidance_scale: 7.5,
+                seed: params.seedLocked,
+                width: 1024,
+                height: 1024
+              },
+              metadata: {
+                destination: 'character_portrait',
+                character_id: params.characterId,
+                character_name: params.characterName,
+                consistency_method: params.consistencyMethod || 'i2i_reference',
+                reference_strength: params.referenceImageUrl ? 0.35 : undefined,
+                reference_image_url: params.referenceImageUrl,
+                base_prompt: characterPrompt,
+                seed_locked: params.seedLocked || false,
+                contentType: 'sfw'
+              }
+            };
+          } else if (providerName === 'fal') {
+            edgeFunction = 'fal-image';
+            requestBody = {
+              prompt: characterPrompt,
+              apiModelId: params.apiModelId,
+              quality: 'high',
+              input: {
+                image_url: params.referenceImageUrl,
+                seed: params.seedLocked,
+                strength: params.referenceImageUrl ? 0.65 : undefined
+              },
+              metadata: {
+                destination: 'character_portrait',
+                character_id: params.characterId,
+                character_name: params.characterName,
+                consistency_method: params.consistencyMethod || 'i2i_reference',
+                reference_strength: params.referenceImageUrl ? 0.35 : undefined,
+                reference_image_url: params.referenceImageUrl,
+                base_prompt: characterPrompt,
+                seed_locked: params.seedLocked || false,
+                contentType: 'sfw'
+              }
+            };
+          } else {
+            // Unknown provider, default to fal-image
+            console.warn('⚠️ Unknown provider:', providerName, 'defaulting to fal-image');
+            requestBody.apiModelId = params.apiModelId;
           }
         }
+      }
+
+      console.log('🚀 Calling edge function:', edgeFunction, 'for character:', params.characterName);
+      const { data: jobData, error: jobError } = await supabase.functions.invoke(edgeFunction, {
+        body: requestBody
       });
 
       if (jobError) {

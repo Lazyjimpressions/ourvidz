@@ -6,7 +6,7 @@ import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Clock, Settings, Sparkles, User, Globe, Shield } from 'lucide-react';
+import { Plus, Clock, Settings, Sparkles, User, Globe, Shield, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -15,7 +15,9 @@ import { MobileCharacterCard } from '@/components/roleplay/MobileCharacterCard';
 import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 import { DashboardSettings } from '@/components/roleplay/DashboardSettings';
 import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
-import type { ScenarioSessionPayload } from '@/types/roleplay';
+import type { ScenarioSessionPayload, SceneStyle } from '@/types/roleplay';
+import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
+import { supabase } from '@/integrations/supabase/client';
 
 const MobileRoleplayDashboard = () => {
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
@@ -36,6 +38,12 @@ const MobileRoleplayDashboard = () => {
   const [contentFilter, setContentFilter] = useState<'all' | 'nsfw' | 'sfw'>(() =>
     (localStorage.getItem('roleplay_content_filter') as 'all' | 'nsfw' | 'sfw') || 'all'
   );
+  const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>(() =>
+    (localStorage.getItem('roleplay_memory_tier') as 'conversation' | 'character' | 'profile') || 'conversation'
+  );
+  const [sceneStyle, setSceneStyle] = useState<SceneStyle>(() =>
+    (localStorage.getItem('roleplay_scene_style') as SceneStyle) || 'character_only'
+  );
 
   // Persist settings to localStorage
   useEffect(() => {
@@ -50,6 +58,14 @@ const MobileRoleplayDashboard = () => {
     localStorage.setItem('roleplay_content_filter', contentFilter);
   }, [contentFilter]);
 
+  useEffect(() => {
+    localStorage.setItem('roleplay_memory_tier', memoryTier);
+  }, [memoryTier]);
+
+  useEffect(() => {
+    localStorage.setItem('roleplay_scene_style', sceneStyle);
+  }, [sceneStyle]);
+
   // Load both public characters AND user's own characters
   const { characters: publicCharacters, isLoading: publicLoading, error: publicError, loadPublicCharacters } = usePublicCharacters();
   const {
@@ -61,6 +77,41 @@ const MobileRoleplayDashboard = () => {
     deleteUserCharacter
   } = useUserCharacters();
   const { sessions: ongoingSessions, isLoading: sessionsLoading } = useCharacterSessions();
+
+  // Subscribe to character image updates
+  useCharacterImageUpdates();
+
+  // Subscribe to character table updates for image_url changes
+  // This ensures character cards update when images are generated
+  useEffect(() => {
+    const channel = supabase
+      .channel(`character-image-updates-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'characters'
+        },
+        (payload) => {
+          const character = payload.new as any;
+          // Refresh if image_url is present (indicates image was added/updated)
+          if (character.image_url) {
+            console.log('🖼️ Character updated, refreshing lists:', character.id);
+            // Debounce rapid updates
+            setTimeout(() => {
+              loadPublicCharacters();
+              loadUserCharacters();
+            }, 500);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadPublicCharacters, loadUserCharacters]);
 
   // Handle character deletion
   const handleDeleteCharacter = async (characterId: string) => {
@@ -202,6 +253,18 @@ const MobileRoleplayDashboard = () => {
             <p className="text-sm text-muted-foreground">Chat with AI characters</p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                loadPublicCharacters();
+                loadUserCharacters();
+              }}
+              className="h-8 w-8 p-0"
+              title="Refresh characters"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -367,6 +430,10 @@ const MobileRoleplayDashboard = () => {
           onChatModelChange={setSelectedChatModel}
           contentFilter={contentFilter}
           onContentFilterChange={setContentFilter}
+          memoryTier={memoryTier}
+          onMemoryTierChange={setMemoryTier}
+          sceneStyle={sceneStyle}
+          onSceneStyleChange={setSceneStyle}
         />
 
         {/* Scenario Setup Wizard */}
