@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Image as ImageIcon, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -23,15 +23,23 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Track the current file to prevent re-processing the same file
+  const currentFileRef = useRef<File | null>(null);
+  const onErrorRef = useRef(onError);
+  
+  // Keep onError ref updated without triggering re-renders
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   useEffect(() => {
-    console.log('🖼️ MOBILE PREVIEW: File changed:', {
-      hasFile: !!file,
-      fileName: file?.name,
-      fileSize: file?.size,
-      fileType: file?.type,
-      isFileInstance: file instanceof File
-    });
+    // Skip if this is the same file we already processed
+    if (file === currentFileRef.current) {
+      return;
+    }
+    
+    currentFileRef.current = file;
     
     if (!file) {
       // Clean up preview URL when file is cleared
@@ -47,6 +55,8 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
 
     // Create object URL for preview
     let objectUrl: string | null = null;
+    let isMounted = true;
+    
     setIsLoading(true);
     setHasError(false);
     setErrorMessage(null);
@@ -64,19 +74,20 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
       // Test if image actually loads
       const img = new window.Image();
       img.onload = () => {
-        setIsLoading(false);
-        setHasError(false);
-        console.log('✅ MOBILE PREVIEW: Image loaded successfully');
+        if (isMounted) {
+          setIsLoading(false);
+          setHasError(false);
+        }
       };
       img.onerror = () => {
-        URL.revokeObjectURL(objectUrl!);
-        setPreviewUrl(null);
-        setIsLoading(false);
-        setHasError(true);
-        setErrorMessage('Image failed to load');
-        const error = new Error('Image file is corrupted or unsupported');
-        onError?.(error);
-        console.error('❌ MOBILE PREVIEW: Image failed to load');
+        if (isMounted) {
+          URL.revokeObjectURL(objectUrl!);
+          setPreviewUrl(null);
+          setIsLoading(false);
+          setHasError(true);
+          setErrorMessage('Image failed to load');
+          onErrorRef.current?.(new Error('Image file is corrupted or unsupported'));
+        }
       };
       img.src = objectUrl;
     } catch (error) {
@@ -88,17 +99,17 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
       setHasError(true);
       const err = error instanceof Error ? error : new Error('Failed to create preview');
       setErrorMessage(err.message);
-      onError?.(err);
-      console.error('❌ MOBILE PREVIEW: Error creating preview:', error);
+      onErrorRef.current?.(err);
     }
 
     // Cleanup function
     return () => {
+      isMounted = false;
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [file, onError]);
+  }, [file]); // Only depend on file, not onError
 
   if (!file) {
     return null;
