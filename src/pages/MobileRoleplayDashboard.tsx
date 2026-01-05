@@ -317,7 +317,7 @@ const MobileRoleplayDashboard = () => {
                   {/* Private/Public indicator */}
                   {!character.is_public && (
                     <div className="absolute top-2 right-8 z-10">
-                      <Shield className="w-3.5 h-3.5 text-yellow-400" title="Private" />
+                      <Shield className="w-3.5 h-3.5 text-yellow-400" />
                     </div>
                   )}
                 </div>

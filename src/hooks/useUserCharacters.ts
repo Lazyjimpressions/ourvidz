@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 
+import type { Json } from '@/integrations/supabase/types';
+
 export interface UserCharacter {
   id: string;
   user_id: string;
@@ -24,7 +26,7 @@ export interface UserCharacter {
   gender?: string;
   voice_examples?: string[];
   forbidden_phrases?: string[];
-  scene_behavior_rules?: Record<string, unknown>;
+  scene_behavior_rules?: Json;
   created_at: string;
   updated_at: string;
 }

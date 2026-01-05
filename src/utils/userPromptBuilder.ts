@@ -38,8 +38,13 @@ export function buildUserVisualDescriptionFromCharacter(
 ): string | null {
   if (!userCharacter) return null;
 
+  // Cast gender to UserGender (default to 'other' if not recognized)
+  const gender = (['male', 'female', 'other'].includes(userCharacter.gender || '') 
+    ? userCharacter.gender 
+    : 'other') as UserGender;
+  
   return buildUserVisualDescription(
-    userCharacter.gender,
+    gender,
     userCharacter.appearance_tags || []
   );
 }

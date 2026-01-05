@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Image, X, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface MobileReferenceImagePreviewProps {
@@ -62,7 +62,7 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
       setPreviewUrl(objectUrl);
 
       // Test if image actually loads
-      const img = new Image();
+      const img = new window.Image();
       img.onload = () => {
         setIsLoading(false);
         setHasError(false);

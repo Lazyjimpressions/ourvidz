@@ -502,8 +502,10 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     // Use model-specific aspect ratios if available, otherwise default
     const availableRatios = videoModelSettings?.settings?.aspectRatioOptions || ['16:9', '1:1', '9:16'];
     // Filter to only valid ratios for our type
-    const validRatios = availableRatios.filter(r => ['16:9', '1:1', '9:16'].includes(r)) as ('16:9' | '1:1' | '9:16')[];
-    const ratios = validRatios.length > 0 ? validRatios : ['16:9', '1:1', '9:16'];
+    const validRatios = availableRatios.filter((r): r is '16:9' | '1:1' | '9:16' => 
+      r === '16:9' || r === '1:1' || r === '9:16'
+    );
+    const ratios: ('16:9' | '1:1' | '9:16')[] = validRatios.length > 0 ? validRatios : ['16:9', '1:1', '9:16'];
     const currentIndex = ratios.indexOf(aspectRatio);
     const nextIndex = (currentIndex + 1) % ratios.length;
     onAspectRatioChange?.(ratios[nextIndex]);

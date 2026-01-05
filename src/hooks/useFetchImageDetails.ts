@@ -95,7 +95,9 @@ export const useFetchImageDetails = () => {
               templateName: !!templateName,
               jobType,
               hasJobMetadata: !!jobData.metadata,
-              hasReplicateValidation: !!(jobData.metadata?.replicate_actual_input || jobData.metadata?.replicate_actual_output)
+              hasReplicateValidation: !!(jobData.metadata && typeof jobData.metadata === 'object' && 
+                ((jobData.metadata as Record<string, unknown>).replicate_actual_input || 
+                 (jobData.metadata as Record<string, unknown>).replicate_actual_output))
             });
           }
         }
