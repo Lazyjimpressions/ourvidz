@@ -406,31 +406,43 @@ serve(async (req) => {
         }
 
         // Strength for i2i (default to 0.5 if not provided for modify mode)
-        if (body.input?.strength !== undefined) {
-          modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
-        } else {
-          // Default strength for I2I if not specified
-          modelInput.strength = 0.5;
-          console.log('📊 Using default I2I strength: 0.5');
+        // Skip strength for WAN 2.1 i2v - it doesn't use this parameter
+        const isWanI2VForStrength = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+        if (!isWanI2VForStrength) {
+          if (body.input?.strength !== undefined) {
+            modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
+          } else {
+            // Default strength for I2I if not specified
+            modelInput.strength = 0.5;
+            console.log('📊 Using default I2I strength: 0.5');
+          }
         }
       }
 
     // Apply user input overrides
     if (body.input) {
-      // Image size
-      if (body.input.image_size) {
-        modelInput.image_size = body.input.image_size;
-      } else if (body.input.width && body.input.height) {
-        modelInput.image_size = { width: body.input.width, height: body.input.height };
+      // Image size (skip for WAN 2.1 i2v - it uses aspect_ratio instead)
+      const isWanI2VCheck = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+      if (!isWanI2VCheck) {
+        if (body.input.image_size) {
+          modelInput.image_size = body.input.image_size;
+        } else if (body.input.width && body.input.height) {
+          modelInput.image_size = { width: body.input.width, height: body.input.height };
+        }
       }
 
-      // Steps / inference steps
+      // Steps / inference steps (only set for non-WAN i2v or if explicitly provided for WAN)
       if (body.input.num_inference_steps !== undefined) {
-        modelInput.num_inference_steps = Math.min(Math.max(body.input.num_inference_steps, 1), 50);
+        if (isWanI2VCheck) {
+          // For WAN 2.1 i2v, only set if explicitly provided (default is 30)
+          modelInput.num_inference_steps = Math.min(Math.max(body.input.num_inference_steps, 1), 50);
+        } else {
+          modelInput.num_inference_steps = Math.min(Math.max(body.input.num_inference_steps, 1), 50);
+        }
       }
 
-      // Guidance scale
-      if (body.input.guidance_scale !== undefined) {
+      // Guidance scale (skip for WAN 2.1 i2v - it uses guide_scale instead)
+      if (!isWanI2VCheck && body.input.guidance_scale !== undefined) {
         modelInput.guidance_scale = Math.min(Math.max(body.input.guidance_scale, 1), 20);
       }
 
@@ -489,13 +501,18 @@ serve(async (req) => {
           }
           
           // Guide scale (motion intensity can map to this)
+          // WAN 2.1 i2v guide_scale range is 1-10 (not 1-20)
           if (body.input?.guide_scale !== undefined) {
-            modelInput.guide_scale = body.input.guide_scale;
+            // Clamp to valid range 1-10
+            modelInput.guide_scale = Math.min(Math.max(body.input.guide_scale, 1), 10);
           } else if (body.metadata?.motion_intensity !== undefined) {
-            // Map motion intensity to guide_scale (0-1 -> 1-20, default 5)
+            // Map motion intensity to guide_scale (0-1 -> 1-10, default 5)
             const motionIntensity = body.metadata.motion_intensity;
-            const guideScale = 1 + (motionIntensity * 19); // Map 0-1 to 1-20
-            modelInput.guide_scale = Math.round(guideScale * 10) / 10; // Round to 1 decimal
+            const guideScale = 1 + (motionIntensity * 9); // Map 0-1 to 1-10
+            modelInput.guide_scale = Math.min(Math.max(Math.round(guideScale * 10) / 10, 1), 10); // Round to 1 decimal and clamp
+          } else {
+            // Use default from input_defaults or fallback to 5
+            modelInput.guide_scale = Math.min(Math.max(modelInput.guide_scale || 5, 1), 10);
           }
           
           // WAN 2.1 i2v uses image_url (not image) for reference - REQUIRED
@@ -558,6 +575,29 @@ serve(async (req) => {
           
           modelInput.image_url = finalWanImageUrl;
           console.log(`✅ WAN I2V: Set image_url: ${finalWanImageUrl.substring(0, 60)}...`);
+          
+          // CRITICAL: Remove invalid parameters that WAN 2.1 i2v doesn't accept
+          // These parameters are set in general processing but WAN 2.1 i2v doesn't use them
+          if (modelInput.strength !== undefined) {
+            delete modelInput.strength;
+            console.log('🗑️ WAN I2V: Removed invalid parameter: strength');
+          }
+          if (modelInput.image_size !== undefined) {
+            delete modelInput.image_size;
+            console.log('🗑️ WAN I2V: Removed invalid parameter: image_size (uses aspect_ratio instead)');
+          }
+          if (modelInput.guidance_scale !== undefined) {
+            delete modelInput.guidance_scale;
+            console.log('🗑️ WAN I2V: Removed invalid parameter: guidance_scale (uses guide_scale instead)');
+          }
+          // num_inference_steps is valid but only set if explicitly provided (default is 30)
+          if (modelInput.num_inference_steps === undefined && apiModel.input_defaults?.num_inference_steps) {
+            // Keep default from input_defaults
+          } else if (modelInput.num_inference_steps !== undefined && !body.input?.num_inference_steps) {
+            // Only keep if explicitly set in input, otherwise remove to use API default
+            delete modelInput.num_inference_steps;
+            console.log('🗑️ WAN I2V: Removed num_inference_steps to use API default (30)');
+          }
         } else {
           // Other video models (non-WAN i2v)
           if (body.input.num_frames !== undefined) {
@@ -687,17 +727,40 @@ serve(async (req) => {
       }
     });
 
-    // FINAL VALIDATION: WAN 2.1 i2v MUST have image_url
+    // FINAL VALIDATION: WAN 2.1 i2v parameter validation
     const finalIsWanI2V = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
-    if (isVideo && finalIsWanI2V && !modelInput.image_url) {
-      console.error('❌ FINAL VALIDATION: WAN 2.1 i2v requires image_url but it is missing!');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Reference image required for WAN 2.1 i2v',
-          details: 'WAN 2.1 i2v is an image-to-video model and requires a reference image. Please provide image_url in input or reference_image_url/start_reference_url in metadata.'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    if (isVideo && finalIsWanI2V) {
+      // Validate required image_url
+      if (!modelInput.image_url) {
+        console.error('❌ FINAL VALIDATION: WAN 2.1 i2v requires image_url but it is missing!');
+        return new Response(
+          JSON.stringify({ 
+            error: 'Reference image required for WAN 2.1 i2v',
+            details: 'WAN 2.1 i2v is an image-to-video model and requires a reference image. Please provide image_url in input or reference_image_url/start_reference_url in metadata.'
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+      
+      // Validate and clamp guide_scale to 1-10 range
+      if (modelInput.guide_scale !== undefined) {
+        const originalGuideScale = modelInput.guide_scale;
+        modelInput.guide_scale = Math.min(Math.max(modelInput.guide_scale, 1), 10);
+        if (originalGuideScale !== modelInput.guide_scale) {
+          console.warn(`⚠️ FINAL VALIDATION: guide_scale clamped from ${originalGuideScale} to ${modelInput.guide_scale} (valid range: 1-10)`);
+        }
+      }
+      
+      // Final check for invalid parameters (should already be removed, but double-check)
+      const invalidParams: string[] = [];
+      if (modelInput.strength !== undefined) invalidParams.push('strength');
+      if (modelInput.image_size !== undefined) invalidParams.push('image_size');
+      if (modelInput.guidance_scale !== undefined) invalidParams.push('guidance_scale');
+      
+      if (invalidParams.length > 0) {
+        console.warn(`⚠️ FINAL VALIDATION: Invalid parameters detected for WAN 2.1 i2v: ${invalidParams.join(', ')}. Removing...`);
+        invalidParams.forEach(param => delete modelInput[param]);
+      }
     }
     
     console.log('🔧 fal.ai input configuration (FINAL):', {

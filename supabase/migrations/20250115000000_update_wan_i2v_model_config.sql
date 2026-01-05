@@ -21,7 +21,7 @@ SET
       'fps_range', jsonb_build_object('min', 5, 'max', 24, 'default', 16),
       'resolutions', jsonb_build_array('480p', '720p'),
       'aspect_ratios', jsonb_build_array('auto', '16:9', '9:16', '1:1'),
-      'guide_scale_range', jsonb_build_object('min', 1, 'max', 20, 'default', 5)
+          'guide_scale_range', jsonb_build_object('min', 1, 'max', 10, 'default', 5) -- NOTE: API only accepts 1-10, not 1-20
     )
   )
 WHERE model_key = 'fal-ai/wan-i2v';

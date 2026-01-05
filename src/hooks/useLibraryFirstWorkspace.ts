@@ -1186,10 +1186,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               inputObj.image_url = refImageUrl; // WAN 2.1 i2v uses image_url
             }
             
-            // Map motion intensity to guide_scale (0-1 -> 1-20, default 5)
+            // Map motion intensity to guide_scale (0-1 -> 1-10, default 5)
+            // WAN 2.1 i2v guide_scale range is 1-10 (not 1-20)
             if (motionIntensity !== undefined) {
-              const guideScale = 1 + (motionIntensity * 19); // Map 0-1 to 1-20
-              inputObj.guide_scale = Math.round(guideScale * 10) / 10; // Round to 1 decimal
+              const guideScale = 1 + (motionIntensity * 9); // Map 0-1 to 1-10
+              inputObj.guide_scale = Math.min(Math.max(Math.round(guideScale * 10) / 10, 1), 10); // Round to 1 decimal and clamp
             }
             
             // Don't set duration here - edge function will calculate num_frames and fps

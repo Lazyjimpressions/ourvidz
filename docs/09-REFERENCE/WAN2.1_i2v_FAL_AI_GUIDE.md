@@ -34,7 +34,8 @@ If you need **first+last frame** style control, you’ll want a different endpoi
 * `num_inference_steps` *(integer)*
   Default: `30`
 * `guide_scale` *(float)*
-  Default: `5` (higher = more prompt adherence, can reduce naturalness)
+  **Range: 1-10**. Default: `5` (higher = more prompt adherence, can reduce naturalness)
+  > **Important**: The API enforces a maximum of 10.0. Values above 10 will cause 422 errors.
 * `shift` *(float)*
   Default: `5`
 * `seed` *(integer)*
@@ -46,6 +47,7 @@ If you need **first+last frame** style control, you’ll want a different endpoi
   If `true`, safety checker enabled.
 * `enable_prompt_expansion` *(boolean)*
   If `true`, fal expands the prompt (often increases descriptiveness; reduces predictability).
+  > **Recommendation**: Keep `false` for NSFW/content where control is important. Enable only when you want the model to add more descriptive details automatically.
 * `acceleration` *(enum)*
   `"none"` or `"regular"`. Default: `"regular"`
   (More acceleration = faster, lower quality; fal recommends `regular`.)
@@ -133,10 +135,20 @@ Common negatives:
 * `frames_per_second: 16`
 * `resolution: "720p"`
 * `num_inference_steps: 30`
-* `guide_scale: 5`
+* `guide_scale: 5` (range: 1-10)
 * `acceleration: "regular"`
 * `aspect_ratio: "auto"`
-* `enable_prompt_expansion: false` (turn on only if you want the model to “embellish”)
+* `enable_prompt_expansion: false` (turn on only if you want the model to "embellish")
+
+### Invalid Parameters (Do NOT Send)
+
+WAN 2.1 i2v does **not** accept these parameters and will cause errors if sent:
+
+* `strength` - Not used by WAN 2.1 i2v (this is for I2I models)
+* `image_size` - Not used (use `aspect_ratio` instead)
+* `guidance_scale` - Not used (use `guide_scale` instead)
+
+> **Note**: These parameters may be set in general processing but must be removed before sending to WAN 2.1 i2v endpoint.
 
 ---
 
@@ -156,9 +168,17 @@ This produces smoother continuity than trying to force big story jumps in a sing
 
 ### Output ignores prompt
 
-* Raise `guide_scale` slightly (e.g., 5 → 6.5)
-* Disable `enable_prompt_expansion` if it’s drifting
+* Raise `guide_scale` slightly (e.g., 5 → 6.5, but stay within 1-10 range)
+* Disable `enable_prompt_expansion` if it's drifting
 * Make the prompt more concrete: specify motion + camera explicitly
+
+### 422 Unprocessable Entity Errors
+
+Common causes:
+
+* `guide_scale` exceeds 10.0 - **Maximum is 10.0, not 20**
+* Invalid parameters sent (`strength`, `image_size`, `guidance_scale`) - Remove these for WAN 2.1 i2v
+* Missing required `image_url` - Ensure reference image URL is provided and accessible
 
 ### Too many artifacts / identity drift
 
