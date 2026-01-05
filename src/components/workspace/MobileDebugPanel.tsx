@@ -83,8 +83,11 @@ export const MobileDebugPanel: React.FC<MobileDebugPanelProps> = ({
             </div>
             
             {referenceImage && (
-              <div className="pl-4 text-[10px] text-muted-foreground">
-                File: {referenceImage.name} ({(referenceImage.size / 1024).toFixed(0)}KB)
+              <div className="pl-4 text-[10px] text-muted-foreground space-y-0.5">
+                <div>Name: {referenceImage.name}</div>
+                <div>Size: {(referenceImage.size / 1024).toFixed(0)}KB</div>
+                <div>Type: {referenceImage.type || <span className="text-yellow-600">(empty - iOS)</span>}</div>
+                <div>Ext: {referenceImage.name.split('.').pop()?.toLowerCase() || 'none'}</div>
               </div>
             )}
             
