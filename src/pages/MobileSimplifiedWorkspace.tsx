@@ -422,8 +422,8 @@ const MobileSimplifiedWorkspace = () => {
           />
         </div>
 
-                {/* Debug Panel - Always visible on mobile for troubleshooting */}
-                <div className="p-2 border-t bg-muted/30">
+                {/* Debug Panel - Collapsed by default, can be expanded */}
+                <div className="p-1 border-t bg-muted/20">
                   <MobileDebugPanel
                     referenceImage={referenceImage}
                     referenceImageUrl={referenceImageUrl || null}

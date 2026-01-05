@@ -29,26 +29,28 @@ export const MobileDebugPanel: React.FC<MobileDebugPanelProps> = ({
   const shouldHaveReference = isI2IModel;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={onToggle}>
-      <CollapsibleTrigger asChild>
-        <Button variant="outline" size="sm" className="w-full text-xs">
-          {isOpen ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-          Debug Info
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
-        <div className="mt-2 p-3 bg-muted/50 rounded text-xs space-y-2 border">
-          {/* Always show critical state at top, even when collapsed */}
-          <div className="flex items-center justify-between p-2 bg-background rounded border">
-            <span className="font-semibold">Status:</span>
-            {shouldHaveReference && hasReferenceImage ? (
-              <span className="text-green-600 font-medium">✅ Ready</span>
-            ) : shouldHaveReference && !hasReferenceImage ? (
-              <span className="text-red-600 font-medium">❌ Missing Ref</span>
-            ) : (
-              <span className="text-muted-foreground">T2I Mode</span>
-            )}
-          </div>
+    <div className="w-full">
+      {/* Status indicator - always visible */}
+      <div className="flex items-center justify-between p-1.5 bg-background/50 rounded text-xs border mb-1">
+        <span className="font-semibold">Status:</span>
+        {shouldHaveReference && hasReferenceImage ? (
+          <span className="text-green-600 font-medium">✅ Ready</span>
+        ) : shouldHaveReference && !hasReferenceImage ? (
+          <span className="text-red-600 font-medium">❌ Missing Ref</span>
+        ) : (
+          <span className="text-muted-foreground">T2I Mode</span>
+        )}
+      </div>
+      
+      <Collapsible open={isOpen} onOpenChange={onToggle}>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" size="sm" className="w-full text-xs">
+            {isOpen ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+            Debug Info
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="mt-2 p-3 bg-muted/50 rounded text-xs space-y-2 border">
           <div className="flex items-center gap-2">
             <span className="font-medium">Model:</span>
             <span>{selectedModel?.display_name || 'None'}</span>
@@ -106,9 +108,10 @@ export const MobileDebugPanel: React.FC<MobileDebugPanelProps> = ({
               Ready for I2I generation
             </div>
           )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
   );
 };
 
