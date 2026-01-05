@@ -37,6 +37,16 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 4. **Memory System** - Three-tier memory (conversation, character, profile)
 5. **Image Consistency** - Hybrid approach using i2i reference (70%+ consistency)
 6. **Non-Blocking UI** - Drawers for character info, scenes, and settings (no modal blockers)
+7. **Model Selection** - Dynamic model selection from `api_models` table with health-based availability
+
+**Model Selection Details:**
+- **Settings Drawer**: Quick access to model selection in chat interface
+- **Model Selection Modal**: Full-featured modal (`ModelSelectionModal` component) with model details, capabilities, and provider information
+- **Model Selector Component**: Inline selector (`ModelSelector` component) for settings and configuration
+- **Dynamic Loading**: Models loaded from `api_models` table filtered by `is_active = true`
+- **Template Integration**: Selected model triggers appropriate prompt template selection via `target_model` field matching
+- **Health-Based Availability**: Local models conditionally available based on worker health checks
+- **Default Selection**: Always uses non-local default model for reliability
 
 ### **Secondary Features (Phase 2)**
 1. **Custom Character Creation** - Character builder with real-time preview
@@ -72,11 +82,11 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 ## **🔌 3rd Party API Integration (Active)**
 
 ### **Model Providers**
-| Modality | Primary (Cloud) | Fallback | Local (when available) |
-|----------|-----------------|----------|------------------------|
-| **Chat** | OpenRouter (Dolphin, etc.) | OpenRouter defaults | Qwen 2.5-7B |
-| **Images** | Replicate, fal.ai | Seedream, RV5.1 | SDXL Lustify |
-| **Video** | fal.ai (WAN I2V) | - | WAN 2.1 |
+| Modality | Primary (Cloud) | Fallback | Local (when available) | Edge Function |
+|----------|-----------------|----------|------------------------|---------------|
+| **Chat** | OpenRouter (Dolphin, etc.) | OpenRouter defaults | Qwen 2.5-7B | `roleplay-chat` |
+| **Images** | Replicate, fal.ai | Seedream, RV5.1 | SDXL Lustify | `replicate-image`, `fal-image` |
+| **Video** | fal.ai (WAN 2.1 I2V) | - | WAN 2.1 | `fal-image` |
 
 ### **Routing Strategy**
 - **Default to cloud models** for reliability
@@ -85,6 +95,32 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
   2. Health check confirms worker availability
   3. User explicitly selects local model
 - Automatic fallback to cloud on local failure
+- Models dynamically loaded from `api_models` table with `is_active = true` filter
+
+### **Model Selection UI**
+
+The roleplay system provides dynamic model selection through the following UI components:
+
+**Components:**
+- **`ModelSelectionModal`**: Modal dialog for selecting chat/roleplay models. Displays local models (Qwen) and API models (OpenRouter) loaded from `api_models` table. Shows model capabilities (speed, cost, quality, NSFW support) and provider information.
+
+- **`ModelSelector`**: Inline model selector component used in settings drawers. Dynamically loads models based on modality (roleplay, image, video) and filters by `is_active = true`.
+
+**Hooks:**
+- **`useRoleplayModels`**: Loads roleplay models from `api_models` table where `modality = 'roleplay'` and `is_active = true`. Combines local models (Qwen) with API models (OpenRouter). Exposes `chatWorkerHealthy` status for local model availability. Always returns a non-local default model for reliability.
+
+- **`useImageModels`**: Loads image/video models from `api_models` table where `modality IN ('image', 'video')` and `is_active = true`. Supports both Replicate and fal.ai models. Used for scene generation and workspace media creation.
+
+**Model Availability:**
+- Models are only displayed in UI dropdowns when `is_active = true` in `api_models` table
+- Local models (Qwen) are conditionally available based on health check status
+- API models are always available when `is_active = true`
+- Default model selection prioritizes non-local models for reliability
+
+**Video Model Selection:**
+- Users can choose between local WAN 2.1 (when healthy) and fal.ai WAN 2.1 I2V
+- Selection stored in user settings and applied to workspace video generation
+- fal.ai WAN 2.1 I2V routed through `fal-image` edge function
 
 ### **Content Rating**
 - All roleplay defaults to **NSFW** content tier
@@ -101,9 +137,79 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 
 ### **Integration Requirements**
 - **Database**: Leverage existing `characters`, `conversations`, `messages`, `scenes` tables
-- **Edge Functions**: Use existing `queue-job`, `replicate-image`, `roleplay-chat`
+- **Edge Functions**: Use existing `queue-job`, `replicate-image`, `roleplay-chat`, `fal-image`
 - **Storage**: Use existing `user_library` table with roleplay category
 - **Workers**: Chat Worker (local), SDXL Worker (images), API integrations (OpenRouter, Replicate, fal.ai)
+- **API Models Table**: Dynamic model configuration via `api_models` table with `is_active` flag controlling UI availability
+
+**API Models Table Structure:**
+- `api_models.model_key`: Unique identifier matching provider's model (e.g., `cognitivecomputations/dolphin-mistral-24b-venice-edition:free`)
+- `api_models.provider_id`: Links to `api_providers` table for provider configuration
+- `api_models.modality`: Determines which edge function to use (`roleplay`, `image`, `video`)
+- `api_models.is_active`: Controls dropdown availability in UI
+- `api_models.capabilities`: JSONB field with model capabilities (speed, cost, quality, NSFW support)
+
+**Template Integration:**
+- `api_models.model_key` → `prompt_templates.target_model` for model-specific templates
+- When user selects model, system looks up template where `target_model = api_models.model_key`
+- Falls back to universal template (`target_model IS NULL`) if no model-specific template exists
+- Template selection happens in edge functions (`roleplay-chat`, `fal-image`, `replicate-image`)
+
+## **Model Selection & Configuration**
+
+### **Database-Driven Model Management**
+
+The roleplay system uses the `api_models` table to dynamically configure and display available models:
+
+**Table Structure:**
+- `model_key`: Unique identifier matching provider's model identifier (e.g., `cognitivecomputations/dolphin-mistral-24b-venice-edition:free`)
+- `display_name`: User-friendly name shown in UI
+- `modality`: Model type (`roleplay`, `image`, `video`)
+- `provider_id`: Foreign key to `api_providers` table
+- `is_active`: Boolean flag controlling dropdown availability
+- `is_default`: Boolean flag for default model selection
+- `priority`: Integer for sorting order in UI
+- `capabilities`: JSONB field storing model capabilities (speed, cost, quality, NSFW support)
+
+### **UI Model Display**
+
+**Local vs API Models:**
+- **Local Models**: Hardcoded in UI components (e.g., Qwen 2.5-7B), conditionally available based on health checks
+- **API Models**: Dynamically loaded from `api_models` table, always available when `is_active = true`
+- Models are grouped by provider in UI (Local, OpenRouter, fal.ai, Replicate)
+
+**Health Check Integration:**
+- Local models (Qwen, SDXL, WAN) check health status via `system_config.workerHealthCache`
+- Unhealthy local models are marked unavailable but still shown in UI with status indicator
+- Automatic fallback to API models when local models are unhealthy
+
+**Default Model Selection:**
+- Default model is always a non-local (API) model to ensure reliability
+- Selected from `api_models` where `is_default = true` and `is_active = true`
+- Falls back to first active API model if no default is set
+- Prevents user experience issues when local workers are down
+
+### **Template Selection Integration**
+
+When a user selects a model:
+1. Model `model_key` is used to lookup template in `prompt_templates` table
+2. Template lookup: `target_model = api_models.model_key`
+3. If model-specific template found: Use it
+4. If not found: Use universal template (`target_model IS NULL`)
+5. Template variables (character name, personality, etc.) are substituted server-side
+6. Final prompt sent to selected model via appropriate edge function
+
+**Edge Function Routing:**
+- Chat models → `roleplay-chat` edge function → OpenRouter or local worker
+- Image models → `replicate-image` or `fal-image` edge function → Provider API
+- Video models → `fal-image` edge function → fal.ai API
+
+### **Settings Drawer Integration**
+
+Model selection is accessible via:
+- **Settings Drawer**: Quick access to model selection in chat interface
+- **Model Selection Modal**: Full-featured modal with model details and capabilities
+- **Settings Persistence**: Selected models stored in localStorage and user preferences
 
 ## **📊 Success Criteria & Metrics**
 

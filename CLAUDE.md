@@ -32,11 +32,11 @@ The system supports two model pathways that must ALWAYS have fallback/alternativ
 
 ### Model Providers
 
-| Modality | Local (RunPod) | Closed (Cloud) |
-|----------|----------------|----------------|
-| **Chat** | Qwen (`qwen-local` via `chat_worker`) | OpenRouter (Dolphin, etc.) |
-| **Images** | SDXL (via `wan` worker) | Replicate, fal.ai (Seedream) |
-| **Video** | WAN 2.1 + Qwen 7B | fal.ai (WAN I2V) |
+| Modality | Local (RunPod) | Closed (Cloud) | Edge Function |
+|----------|----------------|----------------|--------------|
+| **Chat** | Qwen (`qwen-local` via `chat_worker`) | OpenRouter (Dolphin, etc.) | `roleplay-chat` |
+| **Images** | SDXL (via local worker) | Replicate, fal.ai (Seedream) | `replicate-image`, `fal-image` |
+| **Video** | WAN 2.1 + Qwen 7B | fal.ai (WAN 2.1 I2V) | `fal-image` |
 
 ### Routing Best Practice
 
@@ -50,20 +50,21 @@ The system supports two model pathways that must ALWAYS have fallback/alternativ
 ### Key Files for Model Routing
 
 - `src/hooks/useRoleplayModels.ts` - Chat model loading, combines local + API models
-- `src/hooks/useImageModels.ts` - Image model loading from `api_models` table
+- `src/hooks/useImageModels.ts` - Image/video model loading from `api_models` table
 - `src/hooks/useLocalModelHealth.ts` - Polls health from `system_config.workerHealthCache`
-- `supabase/functions/roleplay-chat/index.ts` - Chat routing switch (lines 273-319)
-- `supabase/functions/replicate-image/index.ts` - Image routing (requires `apiModelId`)
+- `supabase/functions/roleplay-chat/index.ts` - Chat routing (OpenRouter or local worker)
+- `supabase/functions/replicate-image/index.ts` - Replicate image routing (requires `apiModelId`)
+- `supabase/functions/fal-image/index.ts` - fal.ai image/video routing (Seedream, WAN 2.1 I2V)
 - `supabase/functions/health-check-workers/index.ts` - Health check edge function
 - `supabase/functions/get-active-worker-url/index.ts` - Worker URL resolution with fallbacks
 
 ### Known Routing Issues to Address
 
-1. **Incomplete provider support**: `callModelWithConfig()` only supports `openrouter`, throws for others
-2. **No image fallback**: `replicate-image` requires explicit `apiModelId`, fails hard without it
-3. **Inconsistent model identifiers**: Chat uses `model_key` (string), Images use `id` (UUID)
-4. **Hard-coded chat worker params**: Temperature, max_tokens not configurable per session
-5. **Dead code paths**: `callClaude()`, `callGPT()` declared but unimplemented
+1. **Incomplete provider support**: `callModelWithConfig()` in `roleplay-chat` only supports `openrouter`, throws for others (fal.ai, Replicate handled by separate edge functions)
+2. **Image fallback**: `replicate-image` requires explicit `apiModelId`, `fal-image` has default model fallback
+3. **Model identifiers**: Chat uses `model_key` (string), Images use `id` (UUID) - both stored in `api_models` table
+4. **Hard-coded chat worker params**: Temperature, max_tokens configurable via `api_models.input_defaults`
+5. **Dead code paths**: `callClaude()`, `callGPT()` declared but unimplemented (use `api_models` table instead)
 
 ### When Modifying Model Routing
 
