@@ -7,13 +7,20 @@ import {
   Sparkles, 
   MessageCircle,
   X,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ChevronDown,
+  ChevronUp,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { supabase } from '@/integrations/supabase/client';
 import { CharacterScene } from '@/types/roleplay';
 import { Character } from '@/types/roleplay';
+import { SceneEditModal } from './SceneEditModal';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
 
 interface CharacterInfoDrawerProps {
   character: Character | null;
@@ -35,6 +42,29 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
   const [characterScenes, setCharacterScenes] = useState<CharacterScene[]>([]);
   const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
   const [isLoadingScenes, setIsLoadingScenes] = useState(false);
+  const [expandedScenes, setExpandedScenes] = useState<Set<string>>(new Set());
+  const [sceneToEdit, setSceneToEdit] = useState<CharacterScene | null>(null);
+  const { user } = useAuth();
+
+  // Check if user is admin
+  const { data: isAdmin } = useQuery({
+    queryKey: ['user-admin-role', user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .single();
+      return !!data;
+    },
+    enabled: !!user,
+  });
+
+  // Check if user can manage scenes (owner OR admin)
+  const isOwner = !!user && !!character?.user_id && character.user_id === user.id;
+  const canManageScenes = isOwner || !!isAdmin;
 
   if (!character) {
     return null;
@@ -237,28 +267,76 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
                       key={scene.id}
                       onClick={() => handleSceneSelect(scene)}
                       className={`
-                        text-xs text-gray-300 p-3 rounded border cursor-pointer transition-colors
+                        text-xs text-gray-300 p-3 rounded border cursor-pointer transition-colors relative
                         ${selectedScene?.id === scene.id 
                           ? 'bg-blue-600/20 border-blue-500/50 text-blue-200' 
                           : 'border-gray-600 hover:bg-gray-800/50 hover:border-gray-500'
                         }
                       `}
                     >
-                      {/* Scene Name and Description */}
-                      <div className="mb-2">
-                        <div className="font-medium text-gray-200">
-                          {scene.scene_name || 'Unnamed Scene'}
+                      {/* Scene Name and Description with Edit/Delete Buttons */}
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-200">
+                            {scene.scene_name || 'Unnamed Scene'}
+                          </div>
+                          {scene.scene_description && (
+                            <div className={`text-gray-400 mt-1 ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
+                              {scene.scene_description}
+                            </div>
+                          )}
                         </div>
-                        {scene.scene_description && (
-                          <div className="text-gray-400 mt-1 line-clamp-2">
-                            {scene.scene_description}
+                        {canManageScenes && (
+                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSceneToEdit(scene);
+                              }}
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-gray-500 hover:text-blue-400 hover:bg-blue-600/10 flex-shrink-0"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
                           </div>
                         )}
                       </div>
                       
-                      {/* Scene Prompt */}
-                      <div className="line-clamp-2 leading-tight">
-                        {scene.scene_prompt}
+                      {/* Scene Prompt - Expandable */}
+                      <div>
+                        <div className={`text-gray-300 text-xs leading-tight ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
+                          {scene.scene_prompt}
+                        </div>
+                        {scene.scene_prompt.length > 100 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedScenes(prev => {
+                                const next = new Set(prev);
+                                if (next.has(scene.id)) {
+                                  next.delete(scene.id);
+                                } else {
+                                  next.add(scene.id);
+                                }
+                                return next;
+                              });
+                            }}
+                            className="text-blue-400 hover:text-blue-300 text-xs mt-1 flex items-center gap-1"
+                          >
+                            {expandedScenes.has(scene.id) ? (
+                              <>
+                                <ChevronUp className="w-3 h-3" />
+                                Show less
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-3 h-3" />
+                                Show more
+                              </>
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -315,6 +393,22 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
           </div>
         </div>
       </SheetContent>
+
+      {/* Scene Edit Modal */}
+      <SceneEditModal
+        isOpen={!!sceneToEdit}
+        onClose={() => setSceneToEdit(null)}
+        scene={sceneToEdit}
+        onSceneUpdated={(updatedScene) => {
+          // Update local state
+          setCharacterScenes(prev => prev.map(s => s.id === updatedScene.id ? updatedScene : s));
+          // Update selected scene if it was the edited one
+          if (selectedScene?.id === updatedScene.id) {
+            setSelectedScene(updatedScene);
+          }
+          setSceneToEdit(null);
+        }}
+      />
     </Sheet>
   );
 };

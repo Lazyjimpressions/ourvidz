@@ -67,11 +67,37 @@ export const useCharacterScenes = (characterId?: string) => {
     }
   }, [characterId]);
 
+  const updateScene = async (sceneId: string, updates: Partial<CharacterScene>) => {
+    try {
+      const { data, error } = await supabase
+        .from('character_scenes')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sceneId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      if (data) {
+        setScenes(prev => prev.map(s => s.id === sceneId ? data : s));
+      }
+      
+      return data;
+    } catch (err) {
+      console.error('Error updating scene:', err);
+      throw err;
+    }
+  };
+
   return {
     scenes,
     isLoading,
     error,
     loadScenes,
-    createScene
+    createScene,
+    updateScene
   };
 };

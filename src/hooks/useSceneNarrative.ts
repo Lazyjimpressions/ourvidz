@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { usePlayground } from '@/contexts/PlaygroundContext';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CharacterParticipant {
   id: string;
@@ -17,6 +18,8 @@ interface SceneNarrativeOptions {
   characterId?: string;
   conversationId?: string;
   userCharacterId?: string;
+  sceneName?: string;
+  sceneDescription?: string;
 }
 
 export const useSceneNarrative = () => {
@@ -26,13 +29,53 @@ export const useSceneNarrative = () => {
     scenePrompt: string,
     characters: CharacterParticipant[] = [],
     options: SceneNarrativeOptions = {}
-  ) => {
+  ): Promise<string | undefined> => {
     if (!scenePrompt.trim()) {
       toast.error('Please provide a scene description');
       return;
     }
 
+    if (!options.sceneName?.trim()) {
+      toast.error('Please provide a scene name');
+      return;
+    }
+
+    if (!options.characterId) {
+      toast.error('Character ID is required');
+      return;
+    }
+
     try {
+      // Create scene record first with name and description
+      const { data: sceneRecord, error: sceneError } = await supabase
+        .from('character_scenes')
+        .insert({
+          character_id: options.characterId,
+          conversation_id: options.conversationId || null,
+          scene_name: options.sceneName.trim(),
+          scene_description: options.sceneDescription?.trim() || null,
+          scene_prompt: scenePrompt.trim(),
+          system_prompt: null,
+          priority: 0,
+          generation_metadata: {
+            scene_type: 'narrative_scene',
+            characters: characters.map(c => ({ id: c.id, name: c.name, role: c.role })),
+            include_narrator: options.includeNarrator || false,
+            include_user_character: options.includeUserCharacter || false
+          }
+        })
+        .select('id')
+        .single();
+
+      if (sceneError || !sceneRecord) {
+        console.error('Failed to create scene record:', sceneError);
+        toast.error('Failed to create scene record');
+        throw sceneError || new Error('Failed to create scene record');
+      }
+
+      const sceneId = sceneRecord.id;
+      console.log('✅ Scene record created with ID:', sceneId);
+
       // Build the enhanced scene prompt with proper markers for detection
       let enhancedPrompt = `[SCENE_GENERATION] ${scenePrompt}`;
       
@@ -50,6 +93,9 @@ export const useSceneNarrative = () => {
         enhancedPrompt += ` [CONTEXT: ${context.join(',')}]`;
       }
 
+      // Add scene ID to the prompt so the edge function can link it
+      enhancedPrompt += ` [SCENE_ID: ${sceneId}]`;
+
       console.log('Sending scene generation prompt:', enhancedPrompt);
 
       // Send the scene generation request
@@ -62,6 +108,7 @@ export const useSceneNarrative = () => {
         description: 'The scene will appear in your conversation shortly'
       });
 
+      return sceneId;
     } catch (error) {
       console.error('Scene narrative generation failed:', error);
       toast.error('Failed to generate scene narrative');

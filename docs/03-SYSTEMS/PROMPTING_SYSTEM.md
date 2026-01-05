@@ -248,47 +248,129 @@ The prompting system integrates with three third-party API providers, each handl
 **Routing Logic by Modality:**
 
 1. **Chat/Roleplay Routing:**
-   - User selects model → Check if local (`chat_worker` or `qwen-local`)
-   - If local: Health check → Use local worker if healthy, else fallback to OpenRouter
-   - If API model: Lookup in `api_models` → Get model config → Route via `roleplay-chat` to OpenRouter
-   - Template selection: Model-specific template (by `target_model` matching `api_models.model_key`) or universal template
+   - User selects model from UI dropdown (filtered by `api_models.is_active = true`)
+   - Check if model is local (`chat_worker` or `qwen-local`)
+   - **If local:**
+     - Health check via `system_config.workerHealthCache.chatWorker`
+     - If healthy: Use local worker via `chat_worker` endpoint
+     - If unhealthy/unknown: Automatic fallback to default OpenRouter model
+   - **If API model:**
+     - Lookup in `api_models` table (where `is_active = true`)
+     - Get model config (provider, `model_key`, `input_defaults`, `capabilities`)
+     - Route via `roleplay-chat` edge function to OpenRouter API
+   - **Template selection:**
+     - Model-specific template: `target_model = api_models.model_key`
+     - Fallback to universal template: `target_model IS NULL`
+     - Fallback to hardcoded template (emergency only)
 
 2. **Image Generation Routing:**
-   - User selects model → Check if local SDXL
-   - If local: Health check → Use local worker via `queue-job`
-   - If API model: Lookup in `api_models` → Get provider
+   - User selects model from UI dropdown (filtered by `api_models.is_active = true` and `modality = 'image'`)
+   - Check if model is local SDXL
+   - **If local:**
+     - Health check via `system_config.workerHealthCache.sdxlWorker` (if available)
+     - If healthy: Use local worker via `queue-job` edge function
+     - If unhealthy: Fallback to API models
+   - **If API model:**
+     - Lookup in `api_models` table → Get provider
      - If `replicate`: Route to `replicate-image` edge function
      - If `fal`: Route to `fal-image` edge function
-   - Template and negative prompts fetched based on model type and content mode
+   - **Template and negative prompts:**
+     - Fetched from `prompt_templates` based on model type and content mode
+     - Negative prompts from `negative_prompts` table by `model_type`, `content_mode`, `generation_mode`
 
 3. **Video Generation Routing:**
-   - User selects model → Check if local WAN
-   - If local: Health check → Use local worker via `queue-job`
-   - If fal.ai WAN 2.1 I2V: Route to `fal-image` edge function
-   - Video-specific templates used for prompt enhancement
+   - User selects model from UI dropdown (filtered by `api_models.is_active = true` and `modality = 'video'`)
+   - Check if model is local WAN
+   - **If local:**
+     - Health check via `system_config.workerHealthCache.wanWorker`
+     - If healthy: Use local worker via `queue-job` edge function
+     - If unhealthy: Fallback to fal.ai WAN 2.1 I2V
+   - **If fal.ai WAN 2.1 I2V:**
+     - Route to `fal-image` edge function
+     - Video-specific templates used for prompt enhancement
 
 **Model-to-Template Mapping:**
 
-Templates are selected using the `target_model` field in `prompt_templates` table, which matches `api_models.model_key`:
+Templates are selected using the `target_model` field in `prompt_templates` table, which matches `api_models.model_key`. The system uses a three-tier fallback chain:
 
-```sql
--- Example: Find model-specific template for OpenRouter Dolphin model
-SELECT * FROM prompt_templates
-WHERE target_model = 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free'
-  AND use_case = 'character_roleplay'
-  AND content_mode = 'nsfw'
-  AND is_active = true;
-```
+1. **Model-Specific Template** (Priority 1):
+   ```sql
+   -- Example: Find model-specific template for OpenRouter Dolphin model
+   SELECT * FROM prompt_templates
+   WHERE target_model = 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free'
+     AND use_case = 'character_roleplay'
+     AND content_mode = 'nsfw'
+     AND is_active = true
+     ORDER BY version DESC
+     LIMIT 1;
+   ```
 
-If no model-specific template is found, the system falls back to universal templates (where `target_model IS NULL`).
+2. **Universal Template** (Priority 2 - Fallback):
+   ```sql
+   -- Universal template works for all models of the same use_case
+   SELECT * FROM prompt_templates
+   WHERE target_model IS NULL
+     AND use_case = 'character_roleplay'
+     AND content_mode = 'nsfw'
+     AND is_active = true
+     ORDER BY version DESC
+     LIMIT 1;
+   ```
+
+3. **Hardcoded Template** (Priority 3 - Emergency Fallback):
+   - Defined in edge function code
+   - Used only when database queries fail
+   - Logged for monitoring and debugging
+
+**Model Availability in UI:**
+- Models are only displayed in dropdowns when `api_models.is_active = true`
+- Local models are conditionally available based on health check status
+- Default model selection prioritizes non-local (API) models for reliability
+- Health status checked via `useLocalModelHealth` hook polling `system_config.workerHealthCache`
 
 **Edge Function Responsibilities:**
 
-- **`roleplay-chat`**: Handles all chat/roleplay requests, routes to OpenRouter or local worker based on model selection and health status
-- **`fal-image`**: Handles fal.ai image and video generation, supports Seedream models and WAN 2.1 I2V
-- **`replicate-image`**: Handles Replicate image generation, supports RV5.1 and SDXL models
-- **`character-suggestions`**: Uses OpenRouter for AI-generated character suggestions
-- **`enhance-prompt`**: Used by all providers for prompt enhancement before generation
+- **`roleplay-chat`**: 
+  - Handles all chat/roleplay requests
+  - Routes to OpenRouter API or local worker based on model selection and health status
+  - Uses `callModelWithConfig()` for database-driven model configuration
+  - Template selection via `getModelSpecificTemplate()` with fallback chain
+  - Supports character variable substitution and scene context integration
+
+- **`fal-image`**: 
+  - Handles fal.ai image and video generation
+  - Supports Seedream v4/v4.5 (images) and WAN 2.1 I2V (video)
+  - Fetches model configuration from `api_models` table
+  - Validates character limits (8,000-12,000 for Seedream, 1,000-2,000 for video)
+  - Supports I2I with reference images and workspace video generation
+
+- **`replicate-image`**: 
+  - Handles Replicate image generation
+  - Supports RV5.1 and SDXL models
+  - Requires explicit `apiModelId` from `api_models` table
+  - Fetches negative prompts from `negative_prompts` table by `model_type`, `content_mode`, `generation_mode`
+  - Validates CLIP token limits (77 tokens hard limit)
+
+- **`character-suggestions`**: 
+  - Uses OpenRouter for AI-generated character suggestions
+  - Fetches model config from `api_models` table
+  - Calls OpenRouter API with database-driven parameters
+
+- **`enhance-prompt`**: 
+  - Used by all providers for prompt enhancement before generation
+  - Fetches template by criteria `(target_model, enhancer_model, job_type, use_case, content_mode)`
+  - Builds `messages` array and calls worker `/enhance` with pure inference payload
+  - Supports SFW/NSFW content detection and automatic template selection
+
+**Health Check Integration:**
+
+- Health status stored in `system_config.config.workerHealthCache`:
+  - `chatWorker`: Local Qwen chat worker health
+  - `wanWorker`: Local WAN video worker health
+  - `sdxlWorker`: Local SDXL image worker health (if tracked)
+- Health checks performed via `health-check-workers` edge function
+- Frontend polls health via `useLocalModelHealth` hook
+- Unhealthy local models automatically fallback to API models
 
 ## Performance
 
@@ -400,7 +482,13 @@ const result = await res.json();
 
 ## Negative Prompt Integration
 
-The `negative_prompts` table provides model-specific negative prompt templates for image generation, ensuring quality and content safety across different providers.
+The `negative_prompts` table provides model-specific negative prompt templates for image generation, ensuring quality and content safety across different providers. Negative prompts are fetched dynamically based on the selected model and generation mode.
+
+**Integration with Third-Party APIs:**
+
+- **Replicate (`replicate-image`)**: Fetches negative prompts by `model_type` (e.g., `sdxl`, `replicate-sdxl`, `rv51`), `content_mode` (sfw/nsfw), and `generation_mode` (txt2img/i2i)
+- **fal.ai (`fal-image`)**: Some models support negative prompts via API; check `api_models.capabilities` for support
+- **Local SDXL (`queue-job`)**: Fetches negative prompts for `model_type = 'sdxl'` with generation mode optimization
 
 ### Database Structure
 

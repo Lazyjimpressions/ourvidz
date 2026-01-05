@@ -26,7 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { SceneCard } from './SceneCard';
 import { MultiCharacterSceneCard } from './ARCHIVED/MultiCharacterSceneCard';
 import { SceneGenerationModal } from './SceneGenerationModal';
-import { CharacterEditModal } from './ARCHIVED/CharacterEditModal';
+import { CharacterEditModal } from './CharacterEditModal';
 import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
 import { uploadGeneratedImageToAvatars } from '@/utils/avatarUtils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -53,7 +53,7 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false);
   const { character, isLoading, likeCharacter, loadCharacter } = useCharacterData(characterId);
-  const { scenes, isLoading: scenesLoading, createScene } = useCharacterScenes(characterId);
+  const { scenes, isLoading: scenesLoading, createScene, loadScenes } = useCharacterScenes(characterId);
   const { startSceneChat } = useSceneNavigation();
   const { generateContent, isGenerating, cancelGeneration } = useGeneration();
   const { toast } = useToast();
@@ -612,6 +612,17 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
         onClose={() => setShowSceneModal(false)}
         characterId={characterId}
         character={character}
+        onSceneCreated={async (sceneId) => {
+          // Reload scenes to include the new one
+          if (characterId) {
+            await loadScenes(characterId);
+          }
+          // Auto-select the new scene and navigate to chat
+          if (character) {
+            startSceneChat(sceneId, [{ id: characterId, name: character.name }], characterId);
+          }
+          setShowSceneModal(false);
+        }}
       />
       
       <CharacterEditModal

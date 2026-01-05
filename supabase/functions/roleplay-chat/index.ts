@@ -2150,12 +2150,32 @@ const sceneContext = analyzeSceneContent(response);
     // ✅ FIX: Create scene record in character_scenes table before generating image
     let sceneId: string | null = null;
     try {
+      // Extract scene name and description from scenePrompt if provided in metadata
+      // Format: [SCENE_NAME: name] [SCENE_DESC: description] actual prompt
+      let sceneName: string | null = null;
+      let sceneDescription: string | null = null;
+      let cleanScenePrompt = scenePrompt;
+      
+      const nameMatch = scenePrompt.match(/\[SCENE_NAME:\s*(.+?)\]/);
+      const descMatch = scenePrompt.match(/\[SCENE_DESC:\s*(.+?)\]/);
+      
+      if (nameMatch) {
+        sceneName = nameMatch[1].trim();
+        cleanScenePrompt = cleanScenePrompt.replace(/\[SCENE_NAME:\s*.+?\]/, '').trim();
+      }
+      if (descMatch) {
+        sceneDescription = descMatch[1].trim();
+        cleanScenePrompt = cleanScenePrompt.replace(/\[SCENE_DESC:\s*.+?\]/, '').trim();
+      }
+
       const { data: sceneRecord, error: sceneError } = await supabase
         .from('character_scenes')
         .insert({
           character_id: characterId,
           conversation_id: conversationId || null,
-          scene_prompt: scenePrompt,
+          scene_name: sceneName,
+          scene_description: sceneDescription,
+          scene_prompt: cleanScenePrompt || scenePrompt,
           system_prompt: null,
           generation_metadata: {
             model_used: selectedImageModel ? 'api_model' : 'sdxl',

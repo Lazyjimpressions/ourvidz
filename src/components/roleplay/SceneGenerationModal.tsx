@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { useSceneNarrative } from '@/hooks/useSceneNarrative';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -24,6 +26,7 @@ interface SceneGenerationModalProps {
   characterId?: string;
   conversationId?: string;
   character?: any;
+  onSceneCreated?: (sceneId: string) => void;
 }
 
 export const SceneGenerationModal = ({ 
@@ -31,8 +34,11 @@ export const SceneGenerationModal = ({
   onClose, 
   characterId, 
   conversationId,
-  character 
+  character,
+  onSceneCreated
 }: SceneGenerationModalProps) => {
+  const [sceneName, setSceneName] = useState('');
+  const [sceneDescription, setSceneDescription] = useState('');
   const [prompt, setPrompt] = useState('');
   const [includeNarrator, setIncludeNarrator] = useState(true);
   const [selectedUserCharacter, setSelectedUserCharacter] = useState<string>('');
@@ -47,6 +53,9 @@ export const SceneGenerationModal = ({
   // Reset defaults when opened
   React.useEffect(() => {
     if (isOpen) {
+      setSceneName('');
+      setSceneDescription('');
+      setPrompt('');
       setSelectedAICharacter1(characterId || '');
       setSelectedAICharacter2('');
       setSelectedUserCharacter('');
@@ -55,7 +64,23 @@ export const SceneGenerationModal = ({
   }, [isOpen, characterId]);
 
   const handleGenerateScene = async () => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide a scene description.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!sceneName.trim()) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide a scene name.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       // Build character list for the scene
@@ -90,15 +115,23 @@ export const SceneGenerationModal = ({
         }
       }
 
-      await generateSceneNarrative(prompt, selectedCharacters, {
+      const sceneId = await generateSceneNarrative(prompt, selectedCharacters, {
         includeNarrator,
         includeUserCharacter: !!selectedUserCharacter && selectedUserCharacter !== 'none',
         characterId,
         conversationId,
-        userCharacterId: selectedUserCharacter && selectedUserCharacter !== 'none' ? selectedUserCharacter : undefined
+        userCharacterId: selectedUserCharacter && selectedUserCharacter !== 'none' ? selectedUserCharacter : undefined,
+        sceneName: sceneName.trim(),
+        sceneDescription: sceneDescription.trim() || undefined
       });
 
+      if (sceneId && onSceneCreated) {
+        onSceneCreated(sceneId);
+      }
+
       onClose();
+      setSceneName('');
+      setSceneDescription('');
       setPrompt('');
     } catch (error) {
       console.error('Scene generation failed:', error);
@@ -113,17 +146,44 @@ export const SceneGenerationModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground max-w-md max-h-[80vh] overflow-y-auto">
+      <DialogContent className="bg-background border-border text-foreground max-w-sm max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg">Generate Scene</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
           <div>
-            <label className="text-sm font-medium mb-1 block">
-              Scene Description
-            </label>
+            <Label htmlFor="scene-name" className="text-sm font-medium mb-1">
+              Scene Name <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="scene-name"
+              value={sceneName}
+              onChange={(e) => setSceneName(e.target.value)}
+              placeholder="Enter scene name..."
+              className="text-sm"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="scene-description" className="text-sm font-medium mb-1">
+              Scene Description (Optional)
+            </Label>
             <Textarea
+              id="scene-description"
+              value={sceneDescription}
+              onChange={(e) => setSceneDescription(e.target.value)}
+              placeholder="Brief description of the scene..."
+              className="min-h-[50px] text-sm"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="scene-prompt" className="text-sm font-medium mb-1">
+              Scene Prompt <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="scene-prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Describe the scene..."
@@ -216,7 +276,7 @@ export const SceneGenerationModal = ({
             </Button>
             <Button
               onClick={handleGenerateScene}
-              disabled={!prompt.trim() || isGenerating}
+              disabled={!prompt.trim() || !sceneName.trim() || isGenerating}
               className="flex-1 h-8 text-sm"
             >
               {isGenerating ? 'Generating...' : 'Generate'}

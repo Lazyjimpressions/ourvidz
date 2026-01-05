@@ -34,10 +34,12 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 1. **Character Selection Dashboard** - Mobile-first grid, immediate chat start
 2. **Chat Interface** - Responsive chat with character avatars and streaming
 3. **Scene Integration** - Auto-selected scenes, optional manual selection in chat
-4. **Memory System** - Three-tier memory (conversation, character, profile)
-5. **Image Consistency** - Hybrid approach using i2i reference (70%+ consistency)
-6. **Non-Blocking UI** - Drawers for character info, scenes, and settings (no modal blockers)
-7. **Model Selection** - Dynamic model selection from `api_models` table with health-based availability
+4. **Scene Builder** - Create, edit, and manage character scenes with name, description, and prompts
+5. **Character & Scene Editing** - Full editing capabilities for owners and admins
+6. **Memory System** - Three-tier memory (conversation, character, profile)
+7. **Image Consistency** - Hybrid approach using i2i reference (70%+ consistency)
+8. **Non-Blocking UI** - Drawers for character info, scenes, and settings (no modal blockers)
+9. **Model Selection** - Dynamic model selection from `api_models` table with health-based availability
 
 **Model Selection Details:**
 - **Settings Drawer**: Quick access to model selection in chat interface
@@ -210,6 +212,139 @@ Model selection is accessible via:
 - **Settings Drawer**: Quick access to model selection in chat interface
 - **Model Selection Modal**: Full-featured modal with model details and capabilities
 - **Settings Persistence**: Selected models stored in localStorage and user preferences
+
+## **Scene/Scenario Builder System**
+
+### **Overview**
+
+The scene/scenario builder allows users to create, edit, and manage character scenes that provide context for roleplay conversations. Scenes are stored in the `character_scenes` table and linked to characters and conversations.
+
+### **Scene Creation**
+
+**UI Components:**
+- **`SceneGenerationModal`**: Condensed modal (`max-w-sm`) for creating new scenes
+  - Scene name field (required)
+  - Scene description field (optional)
+  - Scene prompt field (required)
+  - Character selection (AI characters, user character, narrator)
+  - Auto-navigation to chat after creation
+
+**Database Schema:**
+- `character_scenes.scene_name`: User-friendly name for the scene
+- `character_scenes.scene_description`: Optional description providing context
+- `character_scenes.scene_prompt`: The actual prompt used for scene generation
+- `character_scenes.scene_rules`: Optional rules or constraints
+- `character_scenes.scene_starters`: Array of conversation starter prompts
+- `character_scenes.priority`: Integer for sorting (higher = first)
+
+**Creation Flow:**
+1. User opens `SceneGenerationModal` from character detail pane
+2. Enters scene name, description, and prompt
+3. Selects participants (characters, narrator, user character)
+4. Scene record created in database via `useSceneNarrative` hook
+5. Scene ID returned and passed to `onSceneCreated` callback
+6. Parent component auto-selects new scene and navigates to chat
+7. Scene context applied to conversation via `roleplay-chat` edge function
+
+### **Scene Display & Management**
+
+**UI Components:**
+- **`CharacterPreviewModal`**: Shows scenes in expandable cards
+  - Scene name and description displayed
+  - Expandable scene prompt (removes `line-clamp-2` restriction)
+  - Edit and delete buttons (owner/admin only)
+  - Scene selection for chat start
+
+- **`CharacterInfoDrawer`**: Side drawer with scene list
+  - Similar expandable scene display
+  - Edit functionality for owners/admins
+  - Scene selection integration
+
+**Scene Display Features:**
+- Expandable/collapsible scene prompts (for prompts > 100 characters)
+- Full scene description visible when expanded
+- Scene image thumbnails (if available)
+- Scene rules and starters displayed
+- Priority-based sorting
+
+### **Scene Editing**
+
+**UI Components:**
+- **`SceneEditModal`**: Full-featured editing modal
+  - Edit scene name, description, prompt
+  - Edit scene rules and starters
+  - Update scene priority
+  - Permission checks (owner OR admin)
+
+**Permission Logic:**
+```typescript
+const isOwner = user.id === scene.character.user_id;
+const isAdmin = user.role === 'admin';
+const canEdit = isOwner || isAdmin;
+```
+
+**Editing Flow:**
+1. User clicks edit button on scene card
+2. `SceneEditModal` opens with current scene data
+3. User modifies fields
+4. Update saved to `character_scenes` table via `useCharacterScenes.updateScene()`
+5. Local state updated, scene list refreshed
+6. Selected scene updated if it was the edited one
+
+### **Character Editing**
+
+**UI Components:**
+- **`CharacterEditModal`**: Comprehensive character editing
+  - Edit name, description, persona, traits
+  - Edit appearance tags, voice tone, mood
+  - Edit content rating, gender, role
+  - Update character image (upload or generate)
+  - Toggle public/private visibility
+  - Admin can edit all characters (public and private)
+  - Owner can edit their own characters
+
+**Permission Logic:**
+```typescript
+const isOwner = user.id === character.user_id;
+const isAdmin = user.role === 'admin';
+const canEdit = isOwner || isAdmin;
+```
+
+**Editing Flow:**
+1. User clicks edit button in character preview or detail pane
+2. `CharacterEditModal` opens with current character data
+3. User modifies fields
+4. For owners: Update via `useUserCharacters.updateUserCharacter()`
+5. For admins: Direct Supabase update to allow editing any character
+6. Character data refreshed in UI
+
+### **Scene Selection & Navigation**
+
+**Auto-Selection After Creation:**
+- New scene automatically selected after creation
+- Navigation to chat with scene ID in URL
+- Scene context applied to conversation
+- Scene displayed in character preview modal
+
+**Scene Selection in Chat:**
+- Scene ID passed via URL parameter (`?scene=<id>`)
+- Scene context loaded in `MobileRoleplayChat`
+- Scene prompt and system prompt applied to conversation
+- Scene image displayed if available
+
+### **Database Tables**
+
+**`character_scenes` Table:**
+- Primary table for roleplay scenes
+- Linked to `characters` and `conversations`
+- Supports scene name, description, prompt, rules, starters
+- Stores generation metadata (model used, consistency settings, etc.)
+
+**`scenes` Table:**
+- Separate table linked to `projects` (storyboard functionality)
+- Not used for roleplay (0 rows currently)
+- Reserved for future storyboard/project features
+- Documented separately from `character_scenes`
 
 ## **📊 Success Criteria & Metrics**
 

@@ -15,7 +15,11 @@ import {
   X,
   Image,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Edit
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
@@ -24,6 +28,7 @@ import { CharacterScene } from '@/types/roleplay';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
+import { SceneEditModal } from './SceneEditModal';
 
 interface Character {
   id: string;
@@ -77,6 +82,8 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [sceneToDelete, setSceneToDelete] = useState<string | null>(null);
   const [isDeletingScene, setIsDeletingScene] = useState(false);
+  const [expandedScenes, setExpandedScenes] = useState<Set<string>>(new Set());
+  const [sceneToEdit, setSceneToEdit] = useState<CharacterScene | null>(null);
 
   // Check if user is admin
   const { data: isAdmin } = useQuery({
@@ -458,26 +465,70 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                                 {scene.scene_name || 'Unnamed Scene'}
                               </div>
                               {scene.scene_description && (
-                                <div className="text-gray-400 mt-1 line-clamp-2">
+                                <div className={`text-gray-400 mt-1 ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
                                   {scene.scene_description}
                                 </div>
                               )}
                             </div>
                             {canManageScenes && (
-                              <Button
-                                onClick={(e) => handleDeleteSceneClick(scene.id, e)}
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-600/10 flex-shrink-0"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
+                              <div className="flex gap-1">
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSceneToEdit(scene);
+                                  }}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-gray-500 hover:text-blue-400 hover:bg-blue-600/10 flex-shrink-0"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  onClick={(e) => handleDeleteSceneClick(scene.id, e)}
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-600/10 flex-shrink-0"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
                             )}
                           </div>
 
-                          {/* Scene Prompt */}
-                          <div className="line-clamp-2 leading-tight mb-2">
-                            {scene.scene_prompt}
+                          {/* Scene Prompt - Expandable */}
+                          <div className="mb-2">
+                            <div className={`text-gray-300 text-xs leading-tight ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
+                              {scene.scene_prompt}
+                            </div>
+                            {scene.scene_prompt.length > 100 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedScenes(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(scene.id)) {
+                                      next.delete(scene.id);
+                                    } else {
+                                      next.add(scene.id);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                className="text-blue-400 hover:text-blue-300 text-xs mt-1 flex items-center gap-1"
+                              >
+                                {expandedScenes.has(scene.id) ? (
+                                  <>
+                                    <ChevronUp className="w-3 h-3" />
+                                    Show less
+                                  </>
+                                ) : (
+                                  <>
+                                    <ChevronDown className="w-3 h-3" />
+                                    Show more
+                                  </>
+                                )}
+                              </button>
+                            )}
                           </div>
 
                           {/* Scene Rules */}
@@ -632,6 +683,22 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           )}
         </div>
       </DialogContent>
+
+      {/* Scene Edit Modal */}
+      <SceneEditModal
+        isOpen={!!sceneToEdit}
+        onClose={() => setSceneToEdit(null)}
+        scene={sceneToEdit}
+        onSceneUpdated={(updatedScene) => {
+          // Update local state
+          setCharacterScenes(prev => prev.map(s => s.id === updatedScene.id ? updatedScene : s));
+          // Update selected scene if it was the edited one
+          if (selectedScene?.id === updatedScene.id) {
+            setSelectedScene(updatedScene);
+          }
+          setSceneToEdit(null);
+        }}
+      />
     </Dialog>
   );
 };

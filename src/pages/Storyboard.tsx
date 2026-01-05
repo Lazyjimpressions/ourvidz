@@ -1,63 +1,147 @@
+/**
+ * Storyboard Page
+ *
+ * Main storyboard page showing project list with compact card grid.
+ * Follows UI/UX best practices: sleek, clean, professional.
+ */
 
 import React, { useState } from 'react';
-import { StoryboardLayout } from "@/components/StoryboardLayout";
-// StoryboardConceptSection removed - simplified implementation
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ArrowLeft, ArrowRight, WandSparkles, FileText, Upload, Plus, Edit } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from 'react-router-dom';
+import { StoryboardLayout } from '@/components/StoryboardLayout';
+import { ProjectCard, NewProjectDialog } from '@/components/storyboard';
+import { useStoryboard } from '@/hooks/useStoryboard';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Plus,
+  Search,
+  Film,
+  Loader2,
+  FolderOpen,
+  Grid3X3,
+  List,
+} from 'lucide-react';
+import { StoryboardProject, ProjectStatus, CreateProjectInput } from '@/types/storyboard';
+
+type ViewMode = 'grid' | 'list';
+type SortBy = 'updated' | 'created' | 'title';
+type FilterStatus = 'all' | ProjectStatus;
 
 const Storyboard = () => {
-  const [activeStep, setActiveStep] = useState('concept');
-  const [concept, setConcept] = useState('');
-  const [projectName, setProjectName] = useState('A Night at the Bar');
-  const [aspectRatio, setAspectRatio] = useState('16:9');
-  const [videoStyle, setVideoStyle] = useState('Cinematic');
-  const [cinematicInspiration, setCinematicInspiration] = useState('');
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const {
+    projects,
+    projectsLoading,
+    projectsError,
+    createProject,
+    deleteProject,
+    isCreatingProject,
+  } = useStoryboard();
 
-  const wordCount = concept.split(' ').filter(word => word.length > 0).length;
+  // UI State
+  const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [sortBy, setSortBy] = useState<SortBy>('updated');
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+  const [projectToDelete, setProjectToDelete] = useState<StoryboardProject | null>(null);
 
-  const videoStyles = [
-    { id: 'none', name: 'None', image: 'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=120&h=80&fit=crop' },
-    { id: 'cinematic', name: 'Cinematic', image: 'https://images.unsplash.com/photo-1489599162946-648229275a2c?w=120&h=80&fit=crop' },
-    { id: 'vintage', name: 'Vintage', image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=120&h=80&fit=crop' },
-    { id: 'lowkey', name: 'Low Key', image: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=120&h=80&fit=crop' }
-  ];
+  // Filter and sort projects
+  const filteredProjects = React.useMemo(() => {
+    let result = [...projects];
 
-  const handleNext = () => {
-    if (activeStep === 'concept') {
-      setActiveStep('storyline');
-    } else if (activeStep === 'storyline') {
-      setActiveStep('settings');
-    } else if (activeStep === 'settings') {
-      setActiveStep('breakdown');
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.title.toLowerCase().includes(query) ||
+          p.description?.toLowerCase().includes(query)
+      );
+    }
+
+    // Filter by status
+    if (filterStatus !== 'all') {
+      result = result.filter((p) => p.status === filterStatus);
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'title':
+          return a.title.localeCompare(b.title);
+        case 'created':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'updated':
+        default:
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      }
+    });
+
+    return result;
+  }, [projects, searchQuery, filterStatus, sortBy]);
+
+  // Handlers
+  const handleCreateProject = async (input: CreateProjectInput) => {
+    const project = await createProject(input);
+    setIsNewProjectOpen(false);
+    // Navigate to the new project editor
+    navigate(`/storyboard/${project.id}`);
+  };
+
+  const handleOpenProject = (project: StoryboardProject) => {
+    navigate(`/storyboard/${project.id}`);
+  };
+
+  const handleDeleteProject = async () => {
+    if (projectToDelete) {
+      await deleteProject(projectToDelete.id);
+      setProjectToDelete(null);
     }
   };
 
-  const handleBack = () => {
-    if (activeStep === 'breakdown') {
-      setActiveStep('settings');
-    } else if (activeStep === 'settings') {
-      setActiveStep('storyline');
-    } else if (activeStep === 'storyline') {
-      setActiveStep('concept');
-    }
-  };
-
-  if (activeStep === 'concept') {
+  // Loading state
+  if (authLoading || projectsLoading) {
     return (
       <StoryboardLayout>
-        <div className="text-center py-8">
-          <h2 className="text-xl text-white mb-4">Storyboard Concept</h2>
-          <p className="text-gray-400 mb-4">This feature will be implemented soon</p>
-          <Button onClick={handleNext} className="gap-2">
-            Next
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-gray-500 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">Loading projects...</p>
+          </div>
+        </div>
+      </StoryboardLayout>
+    );
+  }
+
+  // Error state
+  if (projectsError) {
+    return (
+      <StoryboardLayout>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <p className="text-sm text-red-400 mb-2">Failed to load projects</p>
+            <p className="text-xs text-gray-500">{projectsError.message}</p>
+          </div>
         </div>
       </StoryboardLayout>
     );
@@ -65,216 +149,214 @@ const Storyboard = () => {
 
   return (
     <StoryboardLayout>
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Progress Steps */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8 pt-4">
-          <span className={activeStep === 'concept' ? 'text-primary font-medium' : 'cursor-pointer hover:text-foreground'} onClick={() => setActiveStep('concept')}>CONCEPT</span>
-          <span className="text-muted-foreground/50">{'>'}</span>
-          <span className={activeStep === 'storyline' ? 'text-primary font-medium' : 'cursor-pointer hover:text-foreground'} onClick={() => setActiveStep('storyline')}>STORYLINE</span>
-          <span className="text-muted-foreground/50">{'>'}</span>
-          <span className={activeStep === 'settings' ? 'text-primary font-medium' : 'cursor-pointer hover:text-foreground'} onClick={() => setActiveStep('settings')}>SETTINGS & CAST</span>
-          <span className="text-muted-foreground/50">{'>'}</span>
-          <span className={activeStep === 'breakdown' ? 'text-primary font-medium' : 'cursor-pointer hover:text-foreground'} onClick={() => setActiveStep('breakdown')}>BREAKDOWN</span>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-lg font-semibold text-gray-100">Storyboards</h1>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {projects.length} project{projects.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+
+          <Button
+            onClick={() => setIsNewProjectOpen(true)}
+            className="h-8 text-xs gap-1.5"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Project
+          </Button>
         </div>
 
-        {/* Storyline Step */}
-        {activeStep === 'storyline' && (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold mb-8">Storyline Development</h1>
-            <div className="text-center py-20">
-              <p className="text-muted-foreground">Storyline step content will be implemented next</p>
-            </div>
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={handleBack} className="gap-2">
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button>
-              <Button onClick={handleNext} className="gap-2">
-                Next
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
+        {/* Toolbar */}
+        <div className="flex items-center gap-3 mb-4">
+          {/* Search */}
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search projects..."
+              className="h-8 pl-8 text-xs bg-gray-900 border-gray-800"
+            />
           </div>
-        )}
 
-        {/* Settings & Cast Step */}
-        {activeStep === 'settings' && (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold mb-8">Settings & Cast</h1>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Settings Pane */}
-              <div className="space-y-6">
-                <h3 className="text-xl font-semibold">Settings</h3>
-                
-                {/* Project Name */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Project Name</label>
-                  <Input
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="border-border focus:border-primary"
-                  />
+          {/* Status filter */}
+          <Select
+            value={filterStatus}
+            onValueChange={(v) => setFilterStatus(v as FilterStatus)}
+          >
+            <SelectTrigger className="h-8 w-32 text-xs bg-gray-900 border-gray-800">
+              <SelectValue placeholder="All status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All status</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="rendering">Rendering</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Sort */}
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
+            <SelectTrigger className="h-8 w-32 text-xs bg-gray-900 border-gray-800">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="updated">Last updated</SelectItem>
+              <SelectItem value="created">Date created</SelectItem>
+              <SelectItem value="title">Title</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* View mode toggle */}
+          <div className="flex items-center border border-gray-800 rounded-md overflow-hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 rounded-none ${
+                viewMode === 'grid' ? 'bg-gray-800' : ''
+              }`}
+              onClick={() => setViewMode('grid')}
+            >
+              <Grid3X3 className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-8 w-8 p-0 rounded-none ${
+                viewMode === 'list' ? 'bg-gray-800' : ''
+              }`}
+              onClick={() => setViewMode('list')}
+            >
+              <List className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Project Grid/List */}
+        {filteredProjects.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            {projects.length === 0 ? (
+              <>
+                <div className="w-16 h-16 rounded-full bg-gray-900 flex items-center justify-center mb-4">
+                  <Film className="w-8 h-8 text-gray-600" />
+                </div>
+                <h3 className="text-sm font-medium text-gray-300 mb-1">
+                  No projects yet
+                </h3>
+                <p className="text-xs text-gray-500 mb-4 text-center max-w-xs">
+                  Create your first storyboard project to start building longer-form video content with AI assistance.
+                </p>
+                <Button
+                  onClick={() => setIsNewProjectOpen(true)}
+                  className="h-8 text-xs gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Create Project
+                </Button>
+              </>
+            ) : (
+              <>
+                <FolderOpen className="w-10 h-10 text-gray-600 mb-3" />
+                <p className="text-sm text-gray-500">No projects match your filters</p>
+              </>
+            )}
+          </div>
+        ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {filteredProjects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                onOpen={handleOpenProject}
+                onEdit={handleOpenProject}
+                onDelete={setProjectToDelete}
+              />
+            ))}
+          </div>
+        ) : (
+          // List view
+          <div className="space-y-2">
+            {filteredProjects.map((project) => (
+              <div
+                key={project.id}
+                className="flex items-center gap-4 p-3 rounded-lg bg-gray-900/50 border border-gray-800 hover:bg-gray-900 hover:border-gray-700 cursor-pointer transition-all"
+                onClick={() => handleOpenProject(project)}
+              >
+                {/* Thumbnail */}
+                <div className="w-20 h-12 bg-gray-950 rounded overflow-hidden flex-shrink-0">
+                  {project.final_video_url ? (
+                    <img
+                      src={project.final_video_url}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Film className="w-5 h-5 text-gray-700" />
+                    </div>
+                  )}
                 </div>
 
-                {/* Aspect Ratio */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Aspect Ratio</label>
-                  <ToggleGroup 
-                    type="single" 
-                    value={aspectRatio} 
-                    onValueChange={(value) => value && setAspectRatio(value)}
-                    className="justify-start"
-                  >
-                    <ToggleGroupItem value="16:9" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                      16:9
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="1:1" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                      1:1
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="9:16" className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
-                      9:16
-                    </ToggleGroupItem>
-                  </ToggleGroup>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-gray-100 truncate">
+                    {project.title}
+                  </h3>
+                  {project.description && (
+                    <p className="text-xs text-gray-500 truncate">
+                      {project.description}
+                    </p>
+                  )}
                 </div>
 
-                {/* Video Style */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Video Style</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {videoStyles.map((style) => (
-                      <Card 
-                        key={style.id}
-                        className={`cursor-pointer transition-all ${
-                          videoStyle.toLowerCase() === style.id 
-                            ? 'border-primary bg-primary/10' 
-                            : 'border-border hover:border-border/80'
-                        }`}
-                        onClick={() => setVideoStyle(style.name)}
-                      >
-                        <CardContent className="p-3">
-                          <img 
-                            src={style.image} 
-                            alt={style.name} 
-                            className="w-full h-16 object-cover rounded mb-2"
-                          />
-                          <p className="text-sm font-medium text-center">{style.name}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Style Reference */}
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Style Reference</label>
-                  <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-border/80 transition-colors cursor-pointer">
-                    <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-muted-foreground text-sm">Drag & drop or click to upload</p>
-                  </div>
-                </div>
-
-                {/* Cinematic Inspiration */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Cinematic Inspiration</label>
-                  <Input
-                    value={cinematicInspiration}
-                    onChange={(e) => setCinematicInspiration(e.target.value)}
-                    placeholder="e.g., Blade Runner, Casablanca..."
-                    className="border-border focus:border-primary"
-                  />
+                {/* Metadata */}
+                <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <span>{project.aspect_ratio}</span>
+                  <span>{project.target_duration_seconds}s</span>
+                  <span className="capitalize">{project.status.replace('_', ' ')}</span>
                 </div>
               </div>
-
-              {/* Cast Pane */}
-              <div className="space-y-6">
-                <h3 className="text-xl font-semibold">Cast</h3>
-                
-                <div className="flex gap-4">
-                  <Button variant="outline" className="flex-1 gap-2">
-                    <Plus className="w-4 h-4" />
-                    Add character
-                  </Button>
-                  
-                  <Card className="border-border flex-1">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <img 
-                          src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop&crop=face" 
-                          alt="James Carter" 
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                        <div className="flex-1">
-                          <h4 className="font-medium">James Carter</h4>
-                          <Button variant="ghost" size="sm" className="text-primary hover:text-primary/80 p-0 h-auto gap-1">
-                            <Edit className="w-3 h-3" />
-                            Edit
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-between mt-8">
-              <Button variant="outline" onClick={handleBack} className="gap-2">
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button>
-              <Button onClick={handleNext} className="gap-2">
-                Next
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Breakdown Step */}
-        {activeStep === 'breakdown' && (
-          <div className="space-y-6">
-            <h1 className="text-3xl font-bold mb-8">Story Breakdown</h1>
-            
-            {/* Synopsis */}
-            <Card className="border-border">
-              <CardContent className="p-6">
-                <h4 className="font-medium mb-3">Synopsis</h4>
-                <p className="text-muted-foreground leading-relaxed">
-                  James Carter, a weary businessman, enters a dimly lit bar after a long day. The atmosphere is heavy with jazz music and cigarette smoke. He approaches the bartender, seeking not just a drink, but a moment of respite from his troubled life. As he sits at the bar, the weight of his decisions begins to surface in this intimate setting.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Scene Breakdown */}
-            <Card className="border-border">
-              <CardContent className="p-6">
-                <h4 className="font-medium mb-4">Scene 1 - James Enters the Bar</h4>
-                <p className="text-muted-foreground mb-4 leading-relaxed">
-                  The heavy wooden door creaks open as James Carter steps into the smoky interior of the bar. Warm amber light spills across his tired face, revealing the stress lines that mark a man who has seen too much. The jazz trio in the corner provides a melancholic soundtrack to his entrance.
-                </p>
-                
-                <div className="bg-muted/50 rounded-lg p-4">
-                  <h5 className="text-muted-foreground font-medium mb-2 uppercase tracking-wider text-sm">Scene Description</h5>
-                  <p className="text-muted-foreground">
-                    <span className="text-primary">@James Carter</span> enters through the main door, his silhouette framed against the street lights behind him. Camera follows him in a slow tracking shot as he surveys the bar, taking in the atmosphere. His expression shows fatigue mixed with determination as he approaches the bar counter.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-between mt-8">
-              <Button variant="outline" onClick={handleBack} className="gap-2">
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </Button>
-              <Button className="px-8">
-                Start Generation
-              </Button>
-            </div>
+            ))}
           </div>
         )}
       </div>
+
+      {/* New Project Dialog */}
+      <NewProjectDialog
+        open={isNewProjectOpen}
+        onOpenChange={setIsNewProjectOpen}
+        onSubmit={handleCreateProject}
+        isLoading={isCreatingProject}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={!!projectToDelete}
+        onOpenChange={(open) => !open && setProjectToDelete(null)}
+      >
+        <AlertDialogContent className="max-w-sm bg-gray-950 border-gray-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base">Delete Project</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs">
+              Are you sure you want to delete "{projectToDelete?.title}"? This action
+              cannot be undone and will remove all scenes and clips.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-8 text-xs">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProject}
+              className="h-8 text-xs bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </StoryboardLayout>
   );
 };

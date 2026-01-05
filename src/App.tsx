@@ -15,6 +15,7 @@ import SimplifiedWorkspace from "@/pages/SimplifiedWorkspace";
 import MobileSimplifiedWorkspace from "@/pages/MobileSimplifiedWorkspace";
 import { Admin } from "@/pages/Admin";
 import Storyboard from "@/pages/Storyboard";
+import StoryboardEditor from "@/pages/StoryboardEditor";
 import Profile from "@/pages/Profile";
 import Pricing from "@/pages/Pricing";
 import Playground from "@/pages/Playground";
@@ -58,6 +59,7 @@ function App() {
               <Route path="/workspace" element={<ProtectedRoute><WorkspaceWithMobileDetection /></ProtectedRoute>} />
               <Route path="/library" element={<ProtectedRoute><UpdatedOptimizedLibrary /></ProtectedRoute>} />
               <Route path="/storyboard" element={<ProtectedRoute><Storyboard /></ProtectedRoute>} />
+              <Route path="/storyboard/:projectId" element={<ProtectedRoute><StoryboardEditor /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
               <Route path="/auth" element={<Auth />} />

@@ -1204,6 +1204,366 @@ export type Database = {
           },
         ]
       }
+      storyboard_clips: {
+        Row: {
+          api_model_id: string | null
+          clip_order: number
+          created_at: string | null
+          duration_seconds: number | null
+          extracted_frame_url: string | null
+          extraction_percentage: number | null
+          extraction_timestamp_ms: number | null
+          generation_metadata: Json
+          id: string
+          job_id: string | null
+          model_used: string | null
+          prompt: string
+          reference_image_source: string | null
+          reference_image_url: string | null
+          scene_id: string
+          status: string
+          thumbnail_url: string | null
+          updated_at: string | null
+          video_url: string | null
+        }
+        Insert: {
+          api_model_id?: string | null
+          clip_order?: number
+          created_at?: string | null
+          duration_seconds?: number | null
+          extracted_frame_url?: string | null
+          extraction_percentage?: number | null
+          extraction_timestamp_ms?: number | null
+          generation_metadata?: Json
+          id?: string
+          job_id?: string | null
+          model_used?: string | null
+          prompt: string
+          reference_image_source?: string | null
+          reference_image_url?: string | null
+          scene_id: string
+          status?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          video_url?: string | null
+        }
+        Update: {
+          api_model_id?: string | null
+          clip_order?: number
+          created_at?: string | null
+          duration_seconds?: number | null
+          extracted_frame_url?: string | null
+          extraction_percentage?: number | null
+          extraction_timestamp_ms?: number | null
+          generation_metadata?: Json
+          id?: string
+          job_id?: string | null
+          model_used?: string | null
+          prompt?: string
+          reference_image_source?: string | null
+          reference_image_url?: string | null
+          scene_id?: string
+          status?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storyboard_clips_api_model_id_fkey"
+            columns: ["api_model_id"]
+            isOneToOne: false
+            referencedRelation: "api_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_clips_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_clips_scene_id_fkey"
+            columns: ["scene_id"]
+            isOneToOne: false
+            referencedRelation: "storyboard_scenes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storyboard_frames: {
+        Row: {
+          clip_id: string
+          created_at: string | null
+          extraction_method: string
+          frame_url: string
+          id: string
+          is_chain_frame: boolean
+          metadata: Json
+          quality_score: number | null
+          thumbnail_url: string | null
+          timestamp_ms: number
+          used_in_clip_id: string | null
+        }
+        Insert: {
+          clip_id: string
+          created_at?: string | null
+          extraction_method?: string
+          frame_url: string
+          id?: string
+          is_chain_frame?: boolean
+          metadata?: Json
+          quality_score?: number | null
+          thumbnail_url?: string | null
+          timestamp_ms: number
+          used_in_clip_id?: string | null
+        }
+        Update: {
+          clip_id?: string
+          created_at?: string | null
+          extraction_method?: string
+          frame_url?: string
+          id?: string
+          is_chain_frame?: boolean
+          metadata?: Json
+          quality_score?: number | null
+          thumbnail_url?: string | null
+          timestamp_ms?: number
+          used_in_clip_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storyboard_frames_clip_id_fkey"
+            columns: ["clip_id"]
+            isOneToOne: false
+            referencedRelation: "storyboard_clips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_frames_used_in_clip_id_fkey"
+            columns: ["used_in_clip_id"]
+            isOneToOne: false
+            referencedRelation: "storyboard_clips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storyboard_projects: {
+        Row: {
+          ai_assistance_level: string
+          aspect_ratio: string
+          content_tier: string
+          created_at: string | null
+          description: string | null
+          final_video_duration_seconds: number | null
+          final_video_url: string | null
+          id: string
+          metadata: Json
+          primary_character_id: string | null
+          quality_preset: string
+          secondary_characters: Json
+          source_conversation_id: string | null
+          status: string
+          story_beats: Json
+          story_summary: string | null
+          target_duration_seconds: number
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_assistance_level?: string
+          aspect_ratio?: string
+          content_tier?: string
+          created_at?: string | null
+          description?: string | null
+          final_video_duration_seconds?: number | null
+          final_video_url?: string | null
+          id?: string
+          metadata?: Json
+          primary_character_id?: string | null
+          quality_preset?: string
+          secondary_characters?: Json
+          source_conversation_id?: string | null
+          status?: string
+          story_beats?: Json
+          story_summary?: string | null
+          target_duration_seconds?: number
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_assistance_level?: string
+          aspect_ratio?: string
+          content_tier?: string
+          created_at?: string | null
+          description?: string | null
+          final_video_duration_seconds?: number | null
+          final_video_url?: string | null
+          id?: string
+          metadata?: Json
+          primary_character_id?: string | null
+          quality_preset?: string
+          secondary_characters?: Json
+          source_conversation_id?: string | null
+          status?: string
+          story_beats?: Json
+          story_summary?: string | null
+          target_duration_seconds?: number
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storyboard_projects_primary_character_id_fkey"
+            columns: ["primary_character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_projects_source_conversation_id_fkey"
+            columns: ["source_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_projects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storyboard_renders: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          file_size_bytes: number | null
+          id: string
+          include_transitions: boolean
+          output_duration_seconds: number | null
+          output_url: string | null
+          progress_percentage: number
+          project_id: string
+          render_quality: string
+          started_at: string | null
+          status: string
+          transition_style: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          include_transitions?: boolean
+          output_duration_seconds?: number | null
+          output_url?: string | null
+          progress_percentage?: number
+          project_id: string
+          render_quality?: string
+          started_at?: string | null
+          status?: string
+          transition_style?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          file_size_bytes?: number | null
+          id?: string
+          include_transitions?: boolean
+          output_duration_seconds?: number | null
+          output_url?: string | null
+          progress_percentage?: number
+          project_id?: string
+          render_quality?: string
+          started_at?: string | null
+          status?: string
+          transition_style?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storyboard_renders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "storyboard_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      storyboard_scenes: {
+        Row: {
+          actual_duration_seconds: number | null
+          characters: Json
+          created_at: string | null
+          description: string | null
+          id: string
+          metadata: Json
+          mood: string | null
+          narrative_context: string | null
+          project_id: string
+          scene_order: number
+          setting: string | null
+          status: string
+          suggested_prompts: Json
+          target_duration_seconds: number
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          actual_duration_seconds?: number | null
+          characters?: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          metadata?: Json
+          mood?: string | null
+          narrative_context?: string | null
+          project_id: string
+          scene_order: number
+          setting?: string | null
+          status?: string
+          suggested_prompts?: Json
+          target_duration_seconds?: number
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          actual_duration_seconds?: number | null
+          characters?: Json
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          metadata?: Json
+          mood?: string | null
+          narrative_context?: string | null
+          project_id?: string
+          scene_order?: number
+          setting?: string | null
+          status?: string
+          suggested_prompts?: Json
+          target_duration_seconds?: number
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "storyboard_scenes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "storyboard_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_config: {
         Row: {
           config: Json
