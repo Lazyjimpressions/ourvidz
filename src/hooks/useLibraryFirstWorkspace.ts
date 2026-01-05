@@ -292,22 +292,36 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         }
         
         // If model doesn't support I2I and we have a reference image, clear it
-        if (!modelSupportsI2I && (referenceImage || referenceImageUrl)) {
+        // BUT: Don't clear if this is clearly an I2I model (Seedream edit, etc.)
+        const isClearlyI2IModel = newModel.display_name?.toLowerCase().includes('edit') || 
+                                  newModel.display_name?.toLowerCase().includes('seedream') ||
+                                  newModel.id?.toLowerCase().includes('seedream');
+        
+        if (!modelSupportsI2I && !isClearlyI2IModel && (referenceImage || referenceImageUrl)) {
           console.log('🧹 Clearing reference image - selected model does not support I2I');
           setReferenceImage(null);
           setReferenceImageUrl(null);
           setReferenceMetadata(null);
           setExactCopyMode(false);
+        } else if (isClearlyI2IModel && !modelSupportsI2I) {
+          // Model looks like I2I but database check failed - keep the reference image anyway
+          console.warn('⚠️ Model appears to be I2I but database check failed - keeping reference image');
         }
       } catch (err) {
         console.warn('⚠️ Could not check model capabilities:', err);
-        // On error, assume T2I and clear reference image if present
-        if (referenceImage || referenceImageUrl) {
+        // On error, DON'T clear reference image if model name suggests it's I2I
+        const isClearlyI2IModel = newModel.display_name?.toLowerCase().includes('edit') || 
+                                  newModel.display_name?.toLowerCase().includes('seedream') ||
+                                  newModel.id?.toLowerCase().includes('seedream');
+        
+        if (!isClearlyI2IModel && (referenceImage || referenceImageUrl)) {
           console.log('🧹 Clearing reference image - error checking model capabilities, assuming T2I');
           setReferenceImage(null);
           setReferenceImageUrl(null);
           setReferenceMetadata(null);
           setExactCopyMode(false);
+        } else {
+          console.log('✅ Keeping reference image - model appears to be I2I despite check error');
         }
       }
     })();

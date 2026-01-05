@@ -38,6 +38,17 @@ export const MobileDebugPanel: React.FC<MobileDebugPanelProps> = ({
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="mt-2 p-3 bg-muted/50 rounded text-xs space-y-2 border">
+          {/* Always show critical state at top, even when collapsed */}
+          <div className="flex items-center justify-between p-2 bg-background rounded border">
+            <span className="font-semibold">Status:</span>
+            {shouldHaveReference && hasReferenceImage ? (
+              <span className="text-green-600 font-medium">✅ Ready</span>
+            ) : shouldHaveReference && !hasReferenceImage ? (
+              <span className="text-red-600 font-medium">❌ Missing Ref</span>
+            ) : (
+              <span className="text-muted-foreground">T2I Mode</span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <span className="font-medium">Model:</span>
             <span>{selectedModel?.display_name || 'None'}</span>

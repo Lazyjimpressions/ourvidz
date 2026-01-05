@@ -245,19 +245,20 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       )}
 
       {/* Send to ref icon - always visible top-left for workspace items when no selection */}
+      {/* On mobile, always visible; on desktop, visible on hover */}
       {isWorkspace && actions?.onSendToRef && !selection?.enabled && (
         <div className="absolute top-2 left-2 z-10">
           <Button
             size="sm"
             variant="outline"
-            className="h-5 w-5 p-0 bg-background/90 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
               actions.onSendToRef!(asset);
             }}
-            title="Add to REF (Modify)"
+            title="Use as Reference Image"
           >
-            <ExternalLink className="w-2.5 h-2.5" />
+            <ExternalLink className="w-3 h-3" />
           </Button>
         </div>
       )}

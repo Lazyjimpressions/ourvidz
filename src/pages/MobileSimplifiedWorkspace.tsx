@@ -288,6 +288,73 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [sharedAssets, setWorkspaceLightboxIndex]);
 
+  // Use workspace image as reference (like desktop)
+  const handleUseAsReference = useCallback(async (asset: any) => {
+    try {
+      console.log('🖼️ MOBILE: Use as Reference clicked for asset:', asset);
+      
+      // Get signed URL for the asset
+      let referenceUrl: string | null = null;
+      
+      if (asset.url) {
+        referenceUrl = asset.url;
+      } else if (typeof asset.signOriginal === 'function') {
+        referenceUrl = await asset.signOriginal();
+      } else if (asset.originalPath) {
+        // Fallback: sign the URL directly
+        const signed = signedUrls.get(asset.id);
+        if (signed) {
+          referenceUrl = signed;
+        }
+      }
+      
+      if (!referenceUrl) {
+        console.error('❌ MOBILE: No reference URL available for asset:', asset);
+        toast.error('Could not get URL for this asset');
+        return;
+      }
+      
+      console.log('✅ MOBILE: Got reference URL, converting to File...');
+      
+      // Convert URL to File object (like desktop does)
+      const response = await fetch(referenceUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `reference-${asset.id}.${blob.type.split('/')[1] || 'jpg'}`, {
+        type: blob.type || 'image/jpeg'
+      });
+      
+      console.log('✅ MOBILE: File created from workspace image:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      });
+      
+      // Set as reference image - use both file and URL for maximum compatibility
+      console.log('📝 MOBILE: Setting reference image from workspace asset');
+      setReferenceImage(file);
+      setReferenceImageUrl(referenceUrl);
+      
+      // Clear any existing metadata to start fresh
+      setReferenceMetadata(null);
+      setExactCopyMode(false);
+      
+      // Set prompt if available
+      if (asset.prompt) {
+        setPrompt(asset.prompt);
+      }
+      
+      // Verify state was set (React batches updates, so check in next tick)
+      setTimeout(() => {
+        console.log('✅ MOBILE: Reference image should be set now');
+      }, 0);
+      
+      toast.success('Workspace image set as reference');
+    } catch (error) {
+      console.error('❌ MOBILE: Failed to use workspace image as reference:', error);
+      toast.error('Failed to use image as reference');
+    }
+  }, [setReferenceImage, setReferenceImageUrl, setPrompt, signedUrls]);
+
   // Workspace actions
   const handleSaveToLibrary = useCallback(async (asset: any) => {
     try {
@@ -332,26 +399,40 @@ const MobileSimplifiedWorkspace = () => {
             onPreview={handlePreview}
             actions={{
               onSaveToLibrary: handleSaveToLibrary,
-              onDiscard: handleDiscard
+              onDiscard: handleDiscard,
+              onUseAsReference: (asset) => {
+                // Allow using workspace images as reference (like desktop)
+                if (asset.type === 'image') {
+                  handleUseAsReference(asset);
+                } else {
+                  toast.error('Only images can be used as reference');
+                }
+              },
+              onSendToRef: (asset) => {
+                // Also support onSendToRef for workspace compatibility
+                if (asset.type === 'image') {
+                  handleUseAsReference(asset);
+                } else {
+                  toast.error('Only images can be used as reference');
+                }
+              }
             }}
             isLoading={isGenerating || isUrlLoading}
             registerAssetRef={(element, assetId) => registerAssetRef(assetId, element)}
           />
         </div>
 
-                {/* Debug Panel - Only show in development or when enabled */}
-                {(process.env.NODE_ENV === 'development' || showDebugPanel) && (
-                  <div className="p-2 border-t bg-muted/30">
-                    <MobileDebugPanel
-                      referenceImage={referenceImage}
-                      referenceImageUrl={referenceImageUrl || null}
-                      selectedModel={selectedModel}
-                      mode={mode}
-                      isOpen={showDebugPanel}
-                      onToggle={() => setShowDebugPanel(!showDebugPanel)}
-                    />
-                  </div>
-                )}
+                {/* Debug Panel - Always visible on mobile for troubleshooting */}
+                <div className="p-2 border-t bg-muted/30">
+                  <MobileDebugPanel
+                    referenceImage={referenceImage}
+                    referenceImageUrl={referenceImageUrl || null}
+                    selectedModel={selectedModel}
+                    mode={mode}
+                    isOpen={showDebugPanel}
+                    onToggle={() => setShowDebugPanel(!showDebugPanel)}
+                  />
+                </div>
 
                 {/* Fixed Bottom Input */}
                 <MobileSimplePromptInput
@@ -395,6 +476,7 @@ const MobileSimplifiedWorkspace = () => {
                 asset={asset}
                 onSave={() => handleSaveToLibrary(asset)}
                 onDiscard={() => handleDiscard(asset)}
+                onUseAsReference={() => handleUseAsReference(asset)}
                 onDownload={async () => {
                   try {
                     // Use the same logic as onRequireOriginalUrl
