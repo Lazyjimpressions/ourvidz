@@ -8,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { useSceneNarrative } from '@/hooks/useSceneNarrative';
 import { useToast } from '@/hooks/use-toast';
-import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useScenePromptEnhancement } from '@/hooks/useScenePromptEnhancement';
+import { User, Sparkles, Wand2, Undo2 } from 'lucide-react';
 
 interface CharacterParticipant {
   id: string;
@@ -40,15 +41,15 @@ export const SceneGenerationModal = ({
   const [sceneName, setSceneName] = useState('');
   const [sceneDescription, setSceneDescription] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [originalPrompt, setOriginalPrompt] = useState('');
   const [includeNarrator, setIncludeNarrator] = useState(true);
-  const [selectedUserCharacter, setSelectedUserCharacter] = useState<string>('');
   const [selectedAICharacter1, setSelectedAICharacter1] = useState<string>(characterId || '');
   const [selectedAICharacter2, setSelectedAICharacter2] = useState<string>('');
   
   const { generateSceneNarrative, isGenerating } = useSceneNarrative();
   const { toast } = useToast();
-  const { characters: userCharacters } = useUserCharacters();
   const { characters: aiCharacters } = usePublicCharacters();
+  const { enhancePrompt, isEnhancing } = useScenePromptEnhancement();
 
   // Reset defaults when opened
   React.useEffect(() => {
@@ -56,12 +57,48 @@ export const SceneGenerationModal = ({
       setSceneName('');
       setSceneDescription('');
       setPrompt('');
+      setOriginalPrompt('');
       setSelectedAICharacter1(characterId || '');
       setSelectedAICharacter2('');
-      setSelectedUserCharacter('');
       setIncludeNarrator(true);
     }
   }, [isOpen, characterId]);
+
+  const handleEnhancePrompt = async () => {
+    if (!prompt.trim()) {
+      toast({
+        title: "No Prompt",
+        description: "Please enter a scene prompt first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Save original prompt for undo
+    if (!originalPrompt) {
+      setOriginalPrompt(prompt);
+    }
+
+    const enhanced = await enhancePrompt(prompt);
+    if (enhanced && enhanced !== prompt) {
+      setPrompt(enhanced);
+      toast({
+        title: "Prompt Enhanced",
+        description: "Your scene prompt has been improved. You can undo if needed.",
+      });
+    }
+  };
+
+  const handleUndoPrompt = () => {
+    if (originalPrompt) {
+      setPrompt(originalPrompt);
+      setOriginalPrompt('');
+      toast({
+        title: "Prompt Restored",
+        description: "Original prompt has been restored.",
+      });
+    }
+  };
 
   const handleGenerateScene = async () => {
     if (!prompt.trim()) {
@@ -115,31 +152,44 @@ export const SceneGenerationModal = ({
         }
       }
 
+      // Note: User character identity is set globally in Roleplay Settings
+      // and will be automatically applied during scene generation
       const sceneId = await generateSceneNarrative(prompt, selectedCharacters, {
         includeNarrator,
-        includeUserCharacter: !!selectedUserCharacter && selectedUserCharacter !== 'none',
+        includeUserCharacter: false, // Will be determined from global settings
         characterId,
         conversationId,
-        userCharacterId: selectedUserCharacter && selectedUserCharacter !== 'none' ? selectedUserCharacter : undefined,
+        userCharacterId: undefined, // Will be retrieved from global settings
         sceneName: sceneName.trim(),
         sceneDescription: sceneDescription.trim() || undefined
       });
 
-      if (sceneId && onSceneCreated) {
-        onSceneCreated(sceneId);
-      }
+      if (sceneId) {
+        toast({
+          title: "Scene Created",
+          description: `"${sceneName.trim()}" has been created successfully.`,
+        });
 
-      onClose();
-      setSceneName('');
-      setSceneDescription('');
-      setPrompt('');
+        if (onSceneCreated) {
+          onSceneCreated(sceneId);
+        }
+
+        onClose();
+        setSceneName('');
+        setSceneDescription('');
+        setPrompt('');
+      } else {
+        throw new Error('Scene ID was not returned');
+      }
     } catch (error) {
       console.error('Scene generation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate scene. Please try again.';
       toast({
         title: "Generation Failed",
-        description: "Failed to generate scene. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
+      // Don't close modal on error so user can fix and retry
     }
   };
 
@@ -179,16 +229,57 @@ export const SceneGenerationModal = ({
           </div>
 
           <div>
-            <Label htmlFor="scene-prompt" className="text-sm font-medium mb-1">
-              Scene Prompt <span className="text-red-500">*</span>
-            </Label>
+            <div className="flex items-center justify-between mb-1">
+              <Label htmlFor="scene-prompt" className="text-sm font-medium">
+                Scene Prompt <span className="text-red-500">*</span>
+              </Label>
+              <div className="flex gap-1">
+                {originalPrompt && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleUndoPrompt}
+                    className="h-6 px-2 text-xs"
+                    disabled={isEnhancing}
+                  >
+                    <Undo2 className="w-3 h-3 mr-1" />
+                    Undo
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleEnhancePrompt}
+                  className="h-6 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-600/10"
+                  disabled={!prompt.trim() || isEnhancing || isGenerating}
+                >
+                  <Wand2 className={`w-3 h-3 mr-1 ${isEnhancing ? 'animate-pulse' : ''}`} />
+                  {isEnhancing ? 'Enhancing...' : 'Enhance with AI'}
+                </Button>
+              </div>
+            </div>
             <Textarea
               id="scene-prompt"
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                // Clear original prompt if user manually edits
+                if (originalPrompt && e.target.value !== prompt) {
+                  setOriginalPrompt('');
+                }
+              }}
               placeholder="Describe the scene..."
               className="min-h-[60px] text-sm"
+              disabled={isEnhancing}
             />
+            {isEnhancing && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 animate-pulse" />
+                AI is enhancing your prompt...
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -207,23 +298,11 @@ export const SceneGenerationModal = ({
               </label>
             </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">
-                User Character
-              </label>
-              <Select value={selectedUserCharacter} onValueChange={setSelectedUserCharacter}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select user character" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {userCharacters.map((char) => (
-                    <SelectItem key={char.id} value={char.id}>
-                      {char.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="text-xs text-muted-foreground p-2 bg-muted/30 rounded border border-border/50">
+              <p className="flex items-center gap-1">
+                <User className="w-3 h-3" />
+                <span>Your character identity is set in <strong>Roleplay Settings</strong> and will be used automatically.</span>
+              </p>
             </div>
 
             <div>
@@ -238,7 +317,21 @@ export const SceneGenerationModal = ({
                   <SelectItem value="none">None</SelectItem>
                   {aiCharacters.map((char) => (
                     <SelectItem key={char.id} value={char.id}>
-                      {char.name}
+                      <div className="flex items-center gap-2">
+                        {char.image_url ? (
+                          <img 
+                            src={char.image_url} 
+                            alt={char.name}
+                            className="w-5 h-5 rounded-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <User className="w-5 h-5 text-muted-foreground" />
+                        )}
+                        <span>{char.name}</span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -257,7 +350,21 @@ export const SceneGenerationModal = ({
                   <SelectItem value="none">None</SelectItem>
                   {aiCharacters.filter(char => char.id !== selectedAICharacter1).map((char) => (
                     <SelectItem key={char.id} value={char.id}>
-                      {char.name}
+                      <div className="flex items-center gap-2">
+                        {char.image_url ? (
+                          <img 
+                            src={char.image_url} 
+                            alt={char.name}
+                            className="w-5 h-5 rounded-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <User className="w-5 h-5 text-muted-foreground" />
+                        )}
+                        <span>{char.name}</span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>

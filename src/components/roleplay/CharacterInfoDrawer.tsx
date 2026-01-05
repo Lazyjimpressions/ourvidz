@@ -277,11 +277,28 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
                       {/* Scene Name and Description with Edit/Delete Buttons */}
                       <div className="mb-2 flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-200">
-                            {scene.scene_name || 'Unnamed Scene'}
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="font-medium text-gray-200">
+                              {scene.scene_name || 'Unnamed Scene'}
+                            </div>
+                            {!scene.scene_name && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-600/50 text-yellow-400 bg-yellow-600/10">
+                                Unnamed
+                              </Badge>
+                            )}
+                            {scene.priority !== undefined && scene.priority > 0 && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-600/50 text-blue-400 bg-blue-600/10">
+                                Priority {scene.priority}
+                              </Badge>
+                            )}
+                            {scene.created_at && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gray-600/50 text-gray-400 bg-gray-800/50">
+                                {new Date(scene.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </Badge>
+                            )}
                           </div>
                           {scene.scene_description && (
-                            <div className={`text-gray-400 mt-1 ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
+                            <div className={`text-gray-400 mt-1 text-xs leading-relaxed ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
                               {scene.scene_description}
                             </div>
                           )}

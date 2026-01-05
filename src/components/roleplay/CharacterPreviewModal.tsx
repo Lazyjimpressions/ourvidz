@@ -19,7 +19,8 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  Edit
+  Edit,
+  Plus
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
@@ -29,6 +30,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { SceneEditModal } from './SceneEditModal';
+import { SceneGenerationModal } from './SceneGenerationModal';
 
 interface Character {
   id: string;
@@ -84,6 +86,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   const [isDeletingScene, setIsDeletingScene] = useState(false);
   const [expandedScenes, setExpandedScenes] = useState<Set<string>>(new Set());
   const [sceneToEdit, setSceneToEdit] = useState<CharacterScene | null>(null);
+  const [showSceneGenerationModal, setShowSceneGenerationModal] = useState(false);
 
   // Check if user is admin
   const { data: isAdmin } = useQuery({
@@ -285,6 +288,32 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
     setSelectedScene(scene);
   };
 
+  const handleSceneCreated = async (sceneId: string) => {
+    // Reload scenes to include the new one
+    if (character?.id) {
+      try {
+        const { data: scenes, error } = await supabase
+          .from('character_scenes')
+          .select('*')
+          .eq('character_id', character.id)
+          .order('priority', { ascending: false })
+          .limit(5);
+
+        if (!error && scenes) {
+          setCharacterScenes(scenes);
+          // Auto-select the newly created scene
+          const newScene = scenes.find(s => s.id === sceneId);
+          if (newScene) {
+            setSelectedScene(newScene);
+          }
+        }
+      } catch (error) {
+        console.error('Error reloading scenes:', error);
+      }
+    }
+    setShowSceneGenerationModal(false);
+  };
+
   return (
     <Dialog 
       open={isOpen} 
@@ -297,7 +326,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
     >
       <DialogContent 
         className={`
-          max-w-md w-[95vw] h-[90vh] flex flex-col
+          max-w-lg w-[95vw] h-[90vh] flex flex-col
           bg-card border-border p-0
           ${isMobile ? 'rounded-none' : 'rounded-lg'}
         `}
@@ -408,12 +437,25 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
             </div>
 
             {/* Character Scenes Section - Enhanced with Scene Details */}
-            {characterScenes.length > 0 && (
-              <div>
-                <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-medium text-gray-400 flex items-center gap-1">
                   <Image className="w-3 h-3" />
-                  Scenes ({characterScenes.length})
+                  Scenes {characterScenes.length > 0 && `(${characterScenes.length})`}
                 </h4>
+                {canManageScenes && (
+                  <Button
+                    onClick={() => setShowSceneGenerationModal(true)}
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-600/10"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Create Scene
+                  </Button>
+                )}
+              </div>
+              {characterScenes.length > 0 && (
                 <div className="space-y-2">
                   {characterScenes.map(scene => (
                     <div
@@ -461,11 +503,28 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                           {/* Scene Name and Description with Delete Button */}
                           <div className="mb-2 flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <div className="font-medium text-gray-200">
-                                {scene.scene_name || 'Unnamed Scene'}
+                              <div className="flex items-center gap-2 mb-1">
+                                <div className="font-medium text-gray-200">
+                                  {scene.scene_name || 'Unnamed Scene'}
+                                </div>
+                                {!scene.scene_name && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-yellow-600/50 text-yellow-400 bg-yellow-600/10">
+                                    Unnamed
+                                  </Badge>
+                                )}
+                                {scene.priority !== undefined && scene.priority > 0 && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-600/50 text-blue-400 bg-blue-600/10">
+                                    Priority {scene.priority}
+                                  </Badge>
+                                )}
+                                {scene.created_at && (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gray-600/50 text-gray-400 bg-gray-800/50">
+                                    {new Date(scene.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                  </Badge>
+                                )}
                               </div>
                               {scene.scene_description && (
-                                <div className={`text-gray-400 mt-1 ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
+                                <div className={`text-gray-400 mt-1 text-xs leading-relaxed ${expandedScenes.has(scene.id) ? '' : 'line-clamp-2'}`}>
                                   {scene.scene_description}
                                 </div>
                               )}
@@ -565,8 +624,13 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+              {characterScenes.length === 0 && canManageScenes && (
+                <div className="text-xs text-gray-500 p-3 border border-gray-700 rounded text-center">
+                  No scenes yet. Create one to get started!
+                </div>
+              )}
+            </div>
 
             {/* Loading Scenes Indicator */}
             {isLoadingScenes && (
@@ -658,12 +722,18 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                 {selectedScene ? 'Start Scene' : 'Start Chat'}
               </Button>
 
-              {onEditCharacter && (
+              {(onEditCharacter || (isOwner || !!isAdmin)) && (
                 <Button
-                  onClick={onEditCharacter}
+                  onClick={onEditCharacter || (() => {
+                    toast({
+                      title: "Edit Character",
+                      description: "Edit functionality is available. Please use the settings button.",
+                    });
+                  })}
                   variant="outline"
                   size="lg"
                   className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                  disabled={!onEditCharacter}
                 >
                   <Settings className="w-4 h-4" />
                 </Button>
@@ -698,6 +768,15 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           }
           setSceneToEdit(null);
         }}
+      />
+
+      {/* Scene Generation Modal */}
+      <SceneGenerationModal
+        isOpen={showSceneGenerationModal}
+        onClose={() => setShowSceneGenerationModal(false)}
+        characterId={character?.id}
+        character={character}
+        onSceneCreated={handleSceneCreated}
       />
     </Dialog>
   );

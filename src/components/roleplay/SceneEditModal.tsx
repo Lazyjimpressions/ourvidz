@@ -104,7 +104,7 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground max-w-md max-h-[80vh] overflow-y-auto">
+      <DialogContent className="bg-background border-border text-foreground max-w-sm max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg">Edit Scene</DialogTitle>
         </DialogHeader>
