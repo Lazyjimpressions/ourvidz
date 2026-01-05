@@ -47,6 +47,7 @@ const MobileSimplifiedWorkspace = () => {
     setContentType,
     setAspectRatio,
     setReferenceImage,
+    setReferenceImageUrl,
     setReferenceMetadata,
     setExactCopyMode,
     setBeginningRefImage,

@@ -942,6 +942,7 @@ export type Database = {
           age_verified: boolean | null
           birth_date: string | null
           created_at: string | null
+          default_user_character_id: string | null
           id: string
           subscription_status: string | null
           token_balance: number | null
@@ -953,6 +954,7 @@ export type Database = {
           age_verified?: boolean | null
           birth_date?: string | null
           created_at?: string | null
+          default_user_character_id?: string | null
           id: string
           subscription_status?: string | null
           token_balance?: number | null
@@ -964,13 +966,22 @@ export type Database = {
           age_verified?: boolean | null
           birth_date?: string | null
           created_at?: string | null
+          default_user_character_id?: string | null
           id?: string
           subscription_status?: string | null
           token_balance?: number | null
           updated_at?: string | null
           username?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_default_user_character_id_fkey"
+            columns: ["default_user_character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
@@ -1260,7 +1271,7 @@ export type Database = {
           action: string
           created_at: string | null
           id: string
-          ip_address: unknown | null
+          ip_address: unknown
           metadata: Json | null
           resource_id: string | null
           resource_type: string | null
@@ -1271,7 +1282,7 @@ export type Database = {
           action: string
           created_at?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           metadata?: Json | null
           resource_id?: string | null
           resource_type?: string | null
@@ -1282,7 +1293,7 @@ export type Database = {
           action?: string
           created_at?: string | null
           id?: string
-          ip_address?: unknown | null
+          ip_address?: unknown
           metadata?: Json | null
           resource_id?: string | null
           resource_type?: string | null
@@ -1498,34 +1509,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      clean_orphaned_jobs: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      cleanup_expired_workspace_assets: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      cleanup_old_profile_audit_logs: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
+      clean_orphaned_jobs: { Args: never; Returns: number }
+      cleanup_expired_workspace_assets: { Args: never; Returns: number }
+      cleanup_old_profile_audit_logs: { Args: never; Returns: number }
       create_workspace_session: {
         Args: { p_session_name?: string; p_user_id: string }
         Returns: string
       }
-      get_safe_profile_view: {
-        Args: { profile_id: string }
-        Returns: Json
-      }
-      get_system_stats: {
-        Args: { p_days?: number }
-        Returns: Json
-      }
-      get_user_role_priority: {
-        Args: { _user_id: string }
-        Returns: number
-      }
+      get_safe_profile_view: { Args: { profile_id: string }; Returns: Json }
+      get_system_stats: { Args: { p_days?: number }; Returns: Json }
+      get_user_role_priority: { Args: { _user_id: string }; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1533,10 +1526,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_url_expired: {
-        Args: { expires_at: string }
-        Returns: boolean
-      }
+      is_url_expired: { Args: { expires_at: string }; Returns: boolean }
       log_user_activity: {
         Args: {
           p_action: string
@@ -1549,10 +1539,7 @@ export type Database = {
         }
         Returns: string
       }
-      verify_user_age: {
-        Args: { user_birth_date: string }
-        Returns: boolean
-      }
+      verify_user_age: { Args: { user_birth_date: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "moderator" | "premium_user" | "basic_user" | "guest"
