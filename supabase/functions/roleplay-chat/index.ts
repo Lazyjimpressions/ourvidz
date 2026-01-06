@@ -42,6 +42,8 @@ interface RoleplayChatRequest {
   selected_image_model?: string; // Selected image model for scene generation
   scene_style?: 'character_only' | 'pov' | 'both_characters'; // Scene composition style
   consistency_settings?: ConsistencySettings; // User's consistency settings from UI
+  scene_name?: string; // Scene name for scene generation
+  scene_description?: string; // Scene description for scene generation
 }
 
 // User character interface for scene generation
@@ -190,7 +192,9 @@ serve(async (req) => {
       scene_system_prompt,
       kickoff,
       prompt_template_id,
-      prompt_template_name
+      prompt_template_name,
+      scene_name,
+      scene_description
     } = requestBody;
 
     // Validate required fields (message is optional for kickoff)
@@ -468,7 +472,9 @@ serve(async (req) => {
         requestBody.scene_style || 'character_only',
         requestBody.consistency_settings, // Pass user's consistency settings from UI
         conversation_id, // ✅ FIX: Pass conversation_id to link scene to conversation
-        content_tier // ✅ FIX: Pass content_tier to respect NSFW setting
+        content_tier, // ✅ FIX: Pass content_tier to respect NSFW setting
+        scene_name, // ✅ FIX: Pass scene_name from request body
+        scene_description // ✅ FIX: Pass scene_description from request body
       );
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
@@ -1887,7 +1893,9 @@ async function generateScene(
   sceneStyle: 'character_only' | 'pov' | 'both_characters' = 'character_only',
   consistencySettings?: ConsistencySettings,
   conversationId?: string, // ✅ FIX: Add conversation_id parameter
-  contentTier: 'sfw' | 'nsfw' = 'nsfw' // ✅ FIX: Add content_tier parameter, default NSFW
+  contentTier: 'sfw' | 'nsfw' = 'nsfw', // ✅ FIX: Add content_tier parameter, default NSFW
+  sceneName?: string, // ✅ FIX: Add scene_name parameter
+  sceneDescription?: string // ✅ FIX: Add scene_description parameter
 ): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string }> {
   try {
     console.log('🎬 Starting scene generation:', {
@@ -2150,22 +2158,25 @@ const sceneContext = analyzeSceneContent(response);
     // ✅ FIX: Create scene record in character_scenes table before generating image
     let sceneId: string | null = null;
     try {
-      // Extract scene name and description from scenePrompt if provided in metadata
-      // Format: [SCENE_NAME: name] [SCENE_DESC: description] actual prompt
-      let sceneName: string | null = null;
-      let sceneDescription: string | null = null;
+      // Use scene_name and scene_description from function parameters (passed from request body)
+      // Fallback to extracting from scenePrompt if not provided (for backward compatibility)
+      let finalSceneName: string | null = sceneName || null;
+      let finalSceneDescription: string | null = sceneDescription || null;
       let cleanScenePrompt = scenePrompt;
       
-      const nameMatch = scenePrompt.match(/\[SCENE_NAME:\s*(.+?)\]/);
-      const descMatch = scenePrompt.match(/\[SCENE_DESC:\s*(.+?)\]/);
-      
-      if (nameMatch) {
-        sceneName = nameMatch[1].trim();
-        cleanScenePrompt = cleanScenePrompt.replace(/\[SCENE_NAME:\s*.+?\]/, '').trim();
-      }
-      if (descMatch) {
-        sceneDescription = descMatch[1].trim();
-        cleanScenePrompt = cleanScenePrompt.replace(/\[SCENE_DESC:\s*.+?\]/, '').trim();
+      // Only try to extract from prompt if not provided as parameters
+      if (!finalSceneName || !finalSceneDescription) {
+        const nameMatch = scenePrompt.match(/\[SCENE_NAME:\s*(.+?)\]/);
+        const descMatch = scenePrompt.match(/\[SCENE_DESC:\s*(.+?)\]/);
+        
+        if (nameMatch && !finalSceneName) {
+          finalSceneName = nameMatch[1].trim();
+          cleanScenePrompt = cleanScenePrompt.replace(/\[SCENE_NAME:\s*.+?\]/, '').trim();
+        }
+        if (descMatch && !finalSceneDescription) {
+          finalSceneDescription = descMatch[1].trim();
+          cleanScenePrompt = cleanScenePrompt.replace(/\[SCENE_DESC:\s*.+?\]/, '').trim();
+        }
       }
 
       const { data: sceneRecord, error: sceneError } = await supabase
@@ -2173,8 +2184,8 @@ const sceneContext = analyzeSceneContent(response);
         .insert({
           character_id: characterId,
           conversation_id: conversationId || null,
-          scene_name: sceneName,
-          scene_description: sceneDescription,
+          scene_name: finalSceneName,
+          scene_description: finalSceneDescription,
           scene_prompt: cleanScenePrompt || scenePrompt,
           system_prompt: null,
           generation_metadata: {
