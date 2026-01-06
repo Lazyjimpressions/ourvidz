@@ -44,14 +44,12 @@ export const useScenePromptEnhancement = () => {
           enhancementInstruction = 'Improve and enhance this scene description, making it more engaging and detailed while preserving the original intent.';
       }
 
-      // Call the roleplay-chat edge function for enhancement
-      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+      // Call the enhance-prompt edge function for enhancement
+      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
         body: {
-          message: `[PROMPT_ENHANCEMENT]\n\nOriginal prompt: "${originalPrompt}"\n\nEnhancement instruction: ${enhancementInstruction}\n\nPlease provide an enhanced version of the scene prompt that is more detailed, engaging, and well-crafted while maintaining the original intent and key elements.`,
-          characterId: null, // No specific character needed for enhancement
-          conversationId: null,
-          contentTier: 'nsfw',
-          modelKey: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', // Use a capable model
+          prompt: originalPrompt,
+          contentType: 'scene_description',
+          jobType: 'text_enhancement',
         },
       });
 
@@ -59,26 +57,9 @@ export const useScenePromptEnhancement = () => {
         throw error;
       }
 
-      if (data?.response) {
-        // Extract the enhanced prompt from the response
-        // The response might be wrapped in quotes or have extra text
-        let enhancedPrompt = data.response.trim();
-        
-        // Remove quotes if present
-        if (enhancedPrompt.startsWith('"') && enhancedPrompt.endsWith('"')) {
-          enhancedPrompt = enhancedPrompt.slice(1, -1);
-        }
-        
-        // If the response is very long, try to extract just the prompt part
-        if (enhancedPrompt.length > originalPrompt.length * 3) {
-          // Look for the actual prompt in the response
-          const promptMatch = enhancedPrompt.match(/(?:enhanced|improved|version)[\s:]*["']?([^"']{50,})["']?/i);
-          if (promptMatch && promptMatch[1]) {
-            enhancedPrompt = promptMatch[1].trim();
-          }
-        }
-
-        return enhancedPrompt || originalPrompt;
+      if (data?.enhanced_prompt) {
+        // Return the enhanced prompt directly from the edge function
+        return data.enhanced_prompt.trim();
       }
 
       return originalPrompt;

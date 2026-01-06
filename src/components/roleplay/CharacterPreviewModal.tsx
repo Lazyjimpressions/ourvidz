@@ -31,6 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { SceneEditModal } from './SceneEditModal';
 import { SceneGenerationModal } from './SceneGenerationModal';
+import { CharacterEditModal } from './CharacterEditModal';
 
 interface Character {
   id: string;
@@ -87,6 +88,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   const [expandedScenes, setExpandedScenes] = useState<Set<string>>(new Set());
   const [sceneToEdit, setSceneToEdit] = useState<CharacterScene | null>(null);
   const [showSceneGenerationModal, setShowSceneGenerationModal] = useState(false);
+  const [showCharacterEditModal, setShowCharacterEditModal] = useState(false);
 
   // Check if user is admin
   const { data: isAdmin } = useQuery({
@@ -724,16 +726,10 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 
               {(onEditCharacter || (isOwner || !!isAdmin)) && (
                 <Button
-                  onClick={onEditCharacter || (() => {
-                    toast({
-                      title: "Edit Character",
-                      description: "Edit functionality is available. Please use the settings button.",
-                    });
-                  })}
+                  onClick={onEditCharacter || (() => setShowCharacterEditModal(true))}
                   variant="outline"
                   size="lg"
                   className="border-gray-600 text-gray-300 hover:bg-gray-800"
-                  disabled={!onEditCharacter}
                 >
                   <Settings className="w-4 h-4" />
                 </Button>
@@ -777,6 +773,25 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
         characterId={character?.id}
         character={character}
         onSceneCreated={handleSceneCreated}
+      />
+
+      {/* Character Edit Modal */}
+      <CharacterEditModal
+        isOpen={showCharacterEditModal}
+        onClose={() => setShowCharacterEditModal(false)}
+        character={character}
+        onCharacterUpdated={(updatedCharacter) => {
+          // Character was updated - parent component should refresh
+          if (onEditCharacter) {
+            // If parent provided handler, use it
+            onEditCharacter();
+          }
+          setShowCharacterEditModal(false);
+          toast({
+            title: "Character Updated",
+            description: `${updatedCharacter.name || character?.name} has been updated.`,
+          });
+        }}
       />
     </Dialog>
   );

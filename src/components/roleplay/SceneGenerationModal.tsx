@@ -9,8 +9,10 @@ import { Label } from '@/components/ui/label';
 import { useSceneNarrative } from '@/hooks/useSceneNarrative';
 import { useToast } from '@/hooks/use-toast';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useScenePromptEnhancement } from '@/hooks/useScenePromptEnhancement';
-import { User, Sparkles, Wand2, Undo2 } from 'lucide-react';
+import { User, Sparkles, Wand2, Undo2, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface CharacterParticipant {
   id: string;
@@ -48,8 +50,18 @@ export const SceneGenerationModal = ({
   
   const { generateSceneNarrative, isGenerating } = useSceneNarrative();
   const { toast } = useToast();
-  const { characters: aiCharacters } = usePublicCharacters();
+  const { characters: publicCharacters } = usePublicCharacters();
+  const { characters: userCharacters } = useUserCharacters();
   const { enhancePrompt, isEnhancing } = useScenePromptEnhancement();
+  
+  // Combine public and user characters, removing duplicates
+  const aiCharacters = React.useMemo(() => {
+    const allChars = [...publicCharacters, ...userCharacters];
+    const uniqueChars = allChars.filter((char, index, self) => 
+      index === self.findIndex(c => c.id === char.id)
+    );
+    return uniqueChars;
+  }, [publicCharacters, userCharacters]);
 
   // Reset defaults when opened
   React.useEffect(() => {
@@ -296,6 +308,18 @@ export const SceneGenerationModal = ({
               <label htmlFor="narrator" className="text-sm">
                 Include Narrator
               </label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs max-w-xs">
+                      A narrator provides scene descriptions and context, helping set the atmosphere and guide the story between character interactions.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
             <div className="text-xs text-muted-foreground p-2 bg-muted/30 rounded border border-border/50">

@@ -29,6 +29,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Plus,
   Wand2,
@@ -37,8 +39,13 @@ import {
   ImageIcon,
   Link,
   Sparkles,
+  Upload,
+  User,
+  Image as ImageLucide,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ClipWorkspaceProps {
   scene: StoryboardScene;
@@ -74,6 +81,11 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
   const [frameExtractClip, setFrameExtractClip] = useState<StoryboardClip | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
 
+  // First clip reference image state
+  const [firstClipReferenceUrl, setFirstClipReferenceUrl] = useState<string | null>(null);
+  const [firstClipReferenceSource, setFirstClipReferenceSource] = useState<'uploaded' | 'character_portrait' | null>(null);
+  const [isUploadingReference, setIsUploadingReference] = useState(false);
+
   // Selected clip
   const selectedClip = useMemo(
     () => clips.find((c) => c.id === selectedClipId),
@@ -97,6 +109,61 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
     }
   }, [defaultModel, selectedModelId]);
 
+  // Auto-set character portrait as reference when available and first clip
+  React.useEffect(() => {
+    if (isFirstClip && character?.reference_image_url && !firstClipReferenceUrl) {
+      setFirstClipReferenceUrl(character.reference_image_url);
+      setFirstClipReferenceSource('character_portrait');
+    }
+  }, [isFirstClip, character, firstClipReferenceUrl]);
+
+  // Handle reference image upload for first clip
+  const handleReferenceImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingReference(true);
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `storyboard-references/${fileName}`;
+
+      // Upload to Supabase storage
+      const { error: uploadError } = await supabase.storage
+        .from('workspace-assets')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('workspace-assets')
+        .getPublicUrl(filePath);
+
+      setFirstClipReferenceUrl(urlData.publicUrl);
+      setFirstClipReferenceSource('uploaded');
+    } catch (err) {
+      console.error('Failed to upload reference image:', err);
+    } finally {
+      setIsUploadingReference(false);
+    }
+  };
+
+  // Use character portrait as reference
+  const handleUseCharacterPortrait = () => {
+    if (character?.reference_image_url) {
+      setFirstClipReferenceUrl(character.reference_image_url);
+      setFirstClipReferenceSource('character_portrait');
+    }
+  };
+
+  // Clear first clip reference
+  const handleClearReference = () => {
+    setFirstClipReferenceUrl(null);
+    setFirstClipReferenceSource(null);
+  };
+
   // Generate AI prompt suggestion
   const handleGeneratePrompt = () => {
     const context: PromptContext = {
@@ -115,18 +182,41 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
   const handleGenerate = async () => {
     if (!prompt.trim() || !selectedModelId) return;
 
+    // Determine reference image based on whether this is first clip or chained
+    let referenceImageUrl: string | undefined;
+    let referenceImageSource: 'extracted_frame' | 'uploaded' | 'character_portrait' | undefined;
+
+    if (isFirstClip) {
+      // First clip uses user-selected reference image
+      if (!firstClipReferenceUrl) {
+        console.error('First clip requires a reference image');
+        return;
+      }
+      referenceImageUrl = firstClipReferenceUrl;
+      referenceImageSource = firstClipReferenceSource || 'uploaded';
+    } else if (canChain && previousClip?.extracted_frame_url) {
+      // Chained clips use extracted frame from previous clip
+      referenceImageUrl = previousClip.extracted_frame_url;
+      referenceImageSource = 'extracted_frame';
+    }
+
     try {
       await generateClip({
         sceneId: scene.id,
         prompt: prompt.trim(),
-        referenceImageUrl: canChain ? previousClip?.extracted_frame_url : undefined,
-        referenceImageSource: canChain ? 'extracted_frame' : undefined,
+        referenceImageUrl,
+        referenceImageSource,
         modelId: selectedModelId,
         aspectRatio,
         duration: 5, // Default 5 seconds per clip
       });
 
       setPrompt('');
+      // Clear first clip reference after successful generation
+      if (isFirstClip) {
+        setFirstClipReferenceUrl(null);
+        setFirstClipReferenceSource(null);
+      }
       onClipsChange?.();
     } catch (err) {
       console.error('Generation failed:', err);
@@ -186,15 +276,93 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
       {/* Clip Grid */}
       <div className="flex-1 overflow-auto p-4">
         {clips.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="w-12 h-12 rounded-full bg-gray-800 flex items-center justify-center mb-3">
               <Play className="w-5 h-5 text-gray-500" />
             </div>
-            <h4 className="text-sm font-medium text-gray-300 mb-1">No clips yet</h4>
-            <p className="text-xs text-gray-500 max-w-xs">
-              Generate your first clip using the prompt input below.
-              {character && ' AI will suggest prompts based on your character.'}
+            <h4 className="text-sm font-medium text-gray-300 mb-1">Create Your First Clip</h4>
+            <p className="text-xs text-gray-500 max-w-xs mb-4">
+              WAN 2.1 I2V requires a reference image to generate video. Select or upload an image to get started.
             </p>
+
+            {/* Reference Image Selector for First Clip */}
+            <div className="w-full max-w-sm space-y-3">
+              {/* Current reference preview */}
+              {firstClipReferenceUrl ? (
+                <div className="relative bg-gray-900 rounded-lg p-3 border border-green-500/30">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={firstClipReferenceUrl}
+                      alt="Reference"
+                      className="w-20 h-14 object-cover rounded"
+                    />
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-xs text-green-400 font-medium">Reference Image Set</p>
+                      <p className="text-[10px] text-gray-500 truncate">
+                        {firstClipReferenceSource === 'character_portrait'
+                          ? 'Using character portrait'
+                          : 'Uploaded image'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-gray-500 hover:text-red-400"
+                      onClick={handleClearReference}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-900 rounded-lg p-3 border border-amber-500/30">
+                  <p className="text-xs text-amber-400 mb-3 flex items-center gap-1">
+                    <ImageLucide className="w-3 h-3" />
+                    Reference image required for first clip
+                  </p>
+                  <div className="flex gap-2">
+                    {/* Use character portrait */}
+                    {character?.reference_image_url && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-8 text-[10px] gap-1 border-gray-700"
+                        onClick={handleUseCharacterPortrait}
+                      >
+                        <User className="w-3 h-3" />
+                        Use Character
+                      </Button>
+                    )}
+                    {/* Upload image */}
+                    <Label className="flex-1">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleReferenceImageUpload}
+                        disabled={isUploadingReference}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-8 text-[10px] gap-1 border-gray-700"
+                        asChild
+                        disabled={isUploadingReference}
+                      >
+                        <span>
+                          {isUploadingReference ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Upload className="w-3 h-3" />
+                          )}
+                          Upload Image
+                        </span>
+                      </Button>
+                    </Label>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -331,19 +499,36 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
             </SelectContent>
           </Select>
 
-          {/* Chain status */}
-          {canChain && (
+          {/* Chain status / Reference status */}
+          {isFirstClip ? (
+            firstClipReferenceUrl ? (
+              <div className="flex items-center gap-1 text-[10px] text-green-400">
+                <ImageIcon className="w-3 h-3" />
+                Reference set
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-[10px] text-amber-400">
+                <ImageLucide className="w-3 h-3" />
+                Needs reference
+              </div>
+            )
+          ) : canChain ? (
             <div className="flex items-center gap-1 text-[10px] text-green-400">
               <Link className="w-3 h-3" />
               Will chain
             </div>
-          )}
+          ) : null}
 
           {/* Generate button */}
           <Button
             className="h-8 text-xs gap-1.5 ml-auto"
             onClick={handleGenerate}
-            disabled={!prompt.trim() || !selectedModelId || isGenerating}
+            disabled={
+              !prompt.trim() ||
+              !selectedModelId ||
+              isGenerating ||
+              (isFirstClip && !firstClipReferenceUrl)
+            }
           >
             {isGenerating ? (
               <>
@@ -362,7 +547,9 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
         {/* Help text */}
         <p className="text-[10px] text-gray-600">
           {isFirstClip
-            ? 'First clip: Include full character description, pose, environment, lighting, and mood.'
+            ? firstClipReferenceUrl
+              ? 'First clip: Include full character description, pose, environment, lighting, and mood.'
+              : 'First clip: Select a reference image above to begin. The video will animate from this image.'
             : 'Chained clip: Focus on motion intent. Character identity comes from the reference frame.'}
         </p>
       </div>

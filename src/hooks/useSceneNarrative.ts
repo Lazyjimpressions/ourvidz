@@ -1,7 +1,9 @@
-import { useCallback } from 'react';
-import { usePlayground } from '@/contexts/PlaygroundContext';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+
+// Scene narrative generation hook - directly calls roleplay-chat edge function
 
 interface CharacterParticipant {
   id: string;
@@ -23,7 +25,8 @@ interface SceneNarrativeOptions {
 }
 
 export const useSceneNarrative = () => {
-  const { sendMessage, state } = usePlayground();
+  const { user } = useAuth();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const generateSceneNarrative = useCallback(async (
     scenePrompt: string,
@@ -44,6 +47,8 @@ export const useSceneNarrative = () => {
       toast.error('Character ID is required');
       return;
     }
+
+    setIsGenerating(true);
 
     try {
       // Create scene record first with name and description
@@ -98,14 +103,29 @@ export const useSceneNarrative = () => {
 
       console.log('Sending scene generation prompt:', enhancedPrompt);
 
-      // Send the scene generation request
-      await sendMessage(enhancedPrompt, {
-        characterId: options.characterId,
-        conversationId: options.conversationId
+      // Call roleplay-chat edge function directly for scene generation
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        body: {
+          message: enhancedPrompt,
+          conversation_id: options.conversationId || null,
+          character_id: options.characterId,
+          model_provider: 'openrouter', // Default to openrouter for scene generation
+          memory_tier: 'conversation',
+          content_tier: 'nsfw', // Default to NSFW for scene generation
+          scene_generation: true,
+          user_id: user?.id,
+          scene_name: options.sceneName.trim(),
+          scene_description: options.sceneDescription?.trim() || null,
+        }
       });
 
-      toast.success('Scene narrative being generated...', {
-        description: 'The scene will appear in your conversation shortly'
+      if (error) {
+        console.error('Scene generation request failed:', error);
+        throw error;
+      }
+
+      toast.success('Scene created successfully!', {
+        description: `"${options.sceneName.trim()}" has been created and is ready to use.`
       });
 
       return sceneId;
@@ -113,11 +133,13 @@ export const useSceneNarrative = () => {
       console.error('Scene narrative generation failed:', error);
       toast.error('Failed to generate scene narrative');
       throw error;
+    } finally {
+      setIsGenerating(false);
     }
-  }, [sendMessage]);
+  }, [user?.id]);
 
   return {
     generateSceneNarrative,
-    isGenerating: state.isLoadingMessage
+    isGenerating
   };
 };
