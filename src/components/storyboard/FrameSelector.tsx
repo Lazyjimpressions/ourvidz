@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 
 interface FrameSelectorProps {
   clip: StoryboardClip;
-  onFrameSelected: (frameUrl: string, percentage: number, timestampMs: number) => void;
+  onFrameSelected: (frameUrl: string, percentage: number, timestampMs: number) => Promise<void>;
   onCancel?: () => void;
   isLoading?: boolean;
 }
@@ -69,10 +69,16 @@ export const FrameSelector: React.FC<FrameSelectorProps> = ({
     return () => clearTimeout(timer);
   }, [extractPreview]);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   const handleConfirm = async () => {
-    if (!previewFrame) return;
+    if (!previewFrame || isSaving) return;
+
+    setIsSaving(true);
+    setError(null);
 
     try {
+      console.log('📸 Uploading extracted frame...');
       // Upload the frame to storage
       const frameUrl = await FrameExtractionService.uploadExtractedFrame(
         previewFrame.blob,
@@ -80,11 +86,16 @@ export const FrameSelector: React.FC<FrameSelectorProps> = ({
         percentage
       );
 
-      onFrameSelected(frameUrl, percentage, previewFrame.timestampMs);
+      console.log('✅ Frame uploaded, saving to clip...');
+      // Await the parent callback to properly handle errors
+      await onFrameSelected(frameUrl, percentage, previewFrame.timestampMs);
+      console.log('✅ Frame saved successfully');
     } catch (err) {
-      console.error('Failed to upload frame:', err);
-      setError('Failed to save frame');
+      console.error('❌ Failed to save frame:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save frame');
+      setIsSaving(false);
     }
+    // Don't set isSaving to false on success - let the dialog close naturally
   };
 
   const formatTimestamp = (ms?: number) => {
@@ -204,12 +215,12 @@ export const FrameSelector: React.FC<FrameSelectorProps> = ({
           size="sm"
           className="flex-1 h-8 text-xs gap-1.5"
           onClick={handleConfirm}
-          disabled={!previewFrame || isLoading || isExtracting}
+          disabled={!previewFrame || isLoading || isExtracting || isSaving}
         >
-          {isLoading ? (
+          {isLoading || isSaving ? (
             <>
               <Loader2 className="w-3 h-3 animate-spin" />
-              Saving...
+              {isSaving ? 'Saving...' : 'Loading...'}
             </>
           ) : (
             <>

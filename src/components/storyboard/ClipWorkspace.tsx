@@ -243,10 +243,14 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
     frameUrl: string,
     percentage: number,
     timestampMs: number
-  ) => {
-    if (!frameExtractClip) return;
+  ): Promise<void> => {
+    if (!frameExtractClip) {
+      throw new Error('No clip selected for frame extraction');
+    }
 
+    console.log('🎬 Saving extracted frame to clip:', frameExtractClip.id);
     setIsExtracting(true);
+
     try {
       await updateClip({
         clipId: frameExtractClip.id,
@@ -257,26 +261,36 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
         },
       });
 
+      console.log('✅ Frame saved to clip successfully');
+
+      // Close dialog and clear state only on success
       setShowFrameSelector(false);
       setFrameExtractClip(null);
+      setIsExtracting(false);
+
+      // Trigger refresh after dialog closes
       onClipsChange?.();
     } catch (err) {
-      console.error('Failed to save frame:', err);
-    } finally {
+      console.error('❌ Failed to save frame to clip:', err);
       setIsExtracting(false);
+      // Re-throw so FrameSelector can show the error
+      throw err;
     }
   };
 
   // Handle delete clip
   const handleDeleteClip = async (clipId: string) => {
+    console.log('🗑️ Deleting clip:', clipId);
     try {
       await deleteClip(clipId);
+      console.log('✅ Clip deleted successfully');
       if (selectedClipId === clipId) {
         setSelectedClipId(null);
       }
       onClipsChange?.();
     } catch (err) {
-      console.error('Failed to delete clip:', err);
+      console.error('❌ Failed to delete clip:', err);
+      // Error toast is handled by the hook's onError callback
     }
   };
 

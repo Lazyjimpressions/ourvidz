@@ -193,8 +193,8 @@ export const ClipCard: React.FC<ClipCardProps> = ({
           {clip.prompt.slice(0, 50)}...
         </p>
 
-        {/* Action buttons (show on hover) */}
-        {isHovered && (
+        {/* Action buttons - always show for failed clips, hover for others */}
+        {(isHovered || clip.status === 'failed') && (
           <div className="flex items-center gap-1 pt-1">
             {clip.status === 'failed' && onRetry && (
               <Button
