@@ -98,11 +98,22 @@ The system supports two model pathways that must ALWAYS have fallback/alternativ
 
 **Supabase: NO CLI - Online Only**
 - All edge functions deployed via Supabase online dashboard
-- Use Supabase MCP tools for database operations and schema changes
+- Use Supabase MCP tools for read-only queries; migrations require manual SQL in dashboard
 - Never use `supabase` CLI commands
 - **Account**: `lazyjimpressions` Supabase account
 - **Project**: `ourvidz` (ID: `ulmdmzhcdwfadbvfpckt`)
-- **MCP Tool**: Use `mcp__supabase-lazyjimpressions__*` tools (NOT itmanager1341)
+
+**MCP Server Configuration**
+
+MCP servers are configured in `~/.claude.json` (user-scoped, global to all projects):
+
+| Server Name | Purpose |
+|-------------|---------|
+| `supabase-itmanager1341` | Secondary Supabase account |
+| `supabase-lazyjimpressions` | **ourvidz project** - use this for database queries |
+| `playwright` | Browser automation |
+
+Note: Project-scoped `.mcp.json` files are no longer used for this project. All MCP configs live in `~/.claude.json`.
 
 **Test User**: `pokercpa05` (found via email lookup in `auth.users`)
 

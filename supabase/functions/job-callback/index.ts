@@ -275,6 +275,24 @@ serve(async (req) => {
 
             if (!sceneUpdateError) {
               console.log(`✅ Scene ${sceneId} updated with image URL: ${imageUrl}`);
+
+              // Also update conversation.last_scene_image for "Continue Conversations" thumbnail
+              const conversationId = job.metadata.conversation_id;
+              if (conversationId) {
+                const { error: convUpdateError } = await supabaseClient
+                  .from('conversations')
+                  .update({
+                    last_scene_image: imageUrl,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', conversationId);
+
+                if (!convUpdateError) {
+                  console.log(`✅ Conversation ${conversationId} updated with last_scene_image`);
+                } else {
+                  console.error('Failed to update conversation with last_scene_image:', convUpdateError);
+                }
+              }
             } else {
               console.error('Failed to update scene with image URL:', sceneUpdateError);
             }
@@ -309,6 +327,23 @@ serve(async (req) => {
 
               if (!sceneUpdateError) {
                 console.log(`✅ Found and updated scene ${existingScene.id} with image URL`);
+
+                // Also update conversation.last_scene_image for "Continue Conversations" thumbnail
+                if (conversationId) {
+                  const { error: convUpdateError } = await supabaseClient
+                    .from('conversations')
+                    .update({
+                      last_scene_image: imageUrl,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', conversationId);
+
+                  if (!convUpdateError) {
+                    console.log(`✅ Conversation ${conversationId} updated with last_scene_image`);
+                  } else {
+                    console.error('Failed to update conversation with last_scene_image:', convUpdateError);
+                  }
+                }
               }
             }
           }

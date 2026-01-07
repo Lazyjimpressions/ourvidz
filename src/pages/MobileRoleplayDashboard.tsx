@@ -6,7 +6,7 @@ import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Clock, Settings, Sparkles, User, Globe, Shield, RefreshCw } from 'lucide-react';
+import { Plus, Clock, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -17,6 +17,7 @@ import { DashboardSettings } from '@/components/roleplay/DashboardSettings';
 import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
 import type { ScenarioSessionPayload, SceneStyle } from '@/types/roleplay';
 import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
+import { useUserConversations } from '@/hooks/useUserConversations';
 import { supabase } from '@/integrations/supabase/client';
 
 const MobileRoleplayDashboard = () => {
@@ -77,6 +78,7 @@ const MobileRoleplayDashboard = () => {
     deleteUserCharacter
   } = useUserCharacters();
   const { sessions: ongoingSessions, isLoading: sessionsLoading } = useCharacterSessions();
+  const { conversations: userConversations, isLoading: conversationsLoading } = useUserConversations(10, true);
 
   // Subscribe to character image updates
   useCharacterImageUpdates();
@@ -327,7 +329,55 @@ const MobileRoleplayDashboard = () => {
             </div>
           </div>
         )}
-        
+
+        {/* Continue Conversations Section - Shows last scene image as thumbnail */}
+        {userConversations.filter(c => c.last_scene_image).length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <PlayCircle className="w-4 h-4 text-purple-400" />
+              <h2 className="text-base font-medium text-white">Continue Where You Left Off</h2>
+            </div>
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {userConversations
+                .filter(conv => conv.last_scene_image)
+                .slice(0, 6)
+                .map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    className="relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
+                    onClick={() => navigate(`/roleplay/chat/${conversation.character_id}`)}
+                  >
+                    {/* Scene thumbnail as background */}
+                    <img
+                      src={conversation.last_scene_image!}
+                      alt={conversation.title}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    {/* Gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    {/* Character avatar overlay */}
+                    {conversation.character?.image_url && (
+                      <div className="absolute top-2 left-2 w-8 h-8 rounded-full overflow-hidden border-2 border-white/50">
+                        <img
+                          src={conversation.character.image_url}
+                          alt={conversation.character.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    {/* Character name */}
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <p className="text-white text-sm font-medium truncate">
+                        {conversation.character?.name || 'Unknown'}
+                      </p>
+                      <p className="text-white/60 text-xs truncate">{conversation.title}</p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
         {/* Quick Start Section */}
         <QuickStartSection onCharacterSelect={handleCharacterSelect} />
 

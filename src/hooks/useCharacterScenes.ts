@@ -9,28 +9,45 @@ interface CharacterScene {
   scene_prompt: string;
   generation_metadata: any;
   job_id?: string;
+  scene_type?: 'preset' | 'conversation';
+  scene_name?: string;
+  scene_description?: string;
+  scene_rules?: string;
+  scene_starters?: string[];
+  system_prompt?: string;
   created_at: string;
   updated_at: string;
 }
 
-export const useCharacterScenes = (characterId?: string) => {
+export type SceneFilter = 'all' | 'preset' | 'conversation';
+
+export const useCharacterScenes = (characterId?: string, sceneFilter: SceneFilter = 'all') => {
   const [scenes, setScenes] = useState<CharacterScene[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadScenes = async (id: string) => {
+  const loadScenes = async (id: string, filter: SceneFilter = 'all') => {
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('character_scenes')
         .select('*')
-        .eq('character_id', id)
-        .order('created_at', { ascending: false });
+        .eq('character_id', id);
+
+      // Apply scene_type filter
+      if (filter === 'preset') {
+        query = query.eq('scene_type', 'preset');
+      } else if (filter === 'conversation') {
+        query = query.eq('scene_type', 'conversation');
+      }
+      // 'all' = no filter, returns both types
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       setScenes(data || []);
     } catch (err) {
       console.error('Error loading character scenes:', err);
@@ -63,9 +80,9 @@ export const useCharacterScenes = (characterId?: string) => {
 
   useEffect(() => {
     if (characterId) {
-      loadScenes(characterId);
+      loadScenes(characterId, sceneFilter);
     }
-  }, [characterId]);
+  }, [characterId, sceneFilter]);
 
   const updateScene = async (sceneId: string, updates: Partial<CharacterScene>) => {
     try {

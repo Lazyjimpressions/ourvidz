@@ -51,12 +51,18 @@ export const useSceneNarrative = () => {
     setIsGenerating(true);
 
     try {
+      // Determine scene_type based on context:
+      // - 'preset' = Creator-defined scenario (no conversation_id, public on character card)
+      // - 'conversation' = Generated during active chat (has conversation_id, private)
+      const sceneType = options.conversationId ? 'conversation' : 'preset';
+
       // Create scene record first with name and description
       const { data: sceneRecord, error: sceneError } = await supabase
         .from('character_scenes')
         .insert({
           character_id: options.characterId,
           conversation_id: options.conversationId || null,
+          scene_type: sceneType,
           scene_name: options.sceneName.trim(),
           scene_description: options.sceneDescription?.trim() || null,
           scene_prompt: scenePrompt.trim(),
