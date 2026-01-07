@@ -84,7 +84,7 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
 
   // First clip reference image state
   const [firstClipReferenceUrl, setFirstClipReferenceUrl] = useState<string | null>(null);
-  const [firstClipReferenceSource, setFirstClipReferenceSource] = useState<'uploaded' | 'character_portrait' | 'library' | null>(null);
+  const [firstClipReferenceSource, setFirstClipReferenceSource] = useState<'uploaded' | 'character_portrait' | 'extracted_frame' | null>(null);
   const [isUploadingReference, setIsUploadingReference] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
 
@@ -167,9 +167,9 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
   };
 
   // Handle selecting image from library
-  const handleSelectFromLibrary = (imageUrl: string, source: 'library' | 'workspace') => {
+  const handleSelectFromLibrary = (imageUrl: string, _source: 'library' | 'workspace') => {
     setFirstClipReferenceUrl(imageUrl);
-    setFirstClipReferenceSource('library');
+    setFirstClipReferenceSource('uploaded'); // Library images treated as uploaded for ReferenceImageSource compatibility
     setShowImagePicker(false);
   };
 
@@ -324,9 +324,7 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
                       <p className="text-[10px] text-gray-500 truncate">
                         {firstClipReferenceSource === 'character_portrait'
                           ? 'Using character portrait'
-                          : firstClipReferenceSource === 'library'
-                            ? 'Selected from library'
-                            : 'Uploaded image'}
+                          : 'Selected image'}
                       </p>
                     </div>
                     <Button

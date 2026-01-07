@@ -28,6 +28,7 @@ import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsMod
 import { QuickSettingsDrawer } from '@/components/roleplay/QuickSettingsDrawer';
 import { ModelSelector } from '@/components/roleplay/ModelSelector';
 import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
+import { SceneGenerationModal } from '@/components/roleplay/SceneGenerationModal';
 import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { Character, Message, CharacterScene, SceneStyle, ScenarioSessionPayload } from '@/types/roleplay';
@@ -66,6 +67,7 @@ const MobileRoleplayChat: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [showScenarioWizard, setShowScenarioWizard] = useState(false);
+  const [showSceneGenerationModal, setShowSceneGenerationModal] = useState(false);
   const [activeScenario, setActiveScenario] = useState<ScenarioSessionPayload | null>(null);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
@@ -1453,6 +1455,10 @@ const MobileRoleplayChat: React.FC = () => {
             }
           }}
           selectedSceneId={selectedScene?.id}
+          onCreateScene={() => {
+            setShowCharacterInfo(false);
+            setShowSceneGenerationModal(true);
+          }}
         />
 
         {/* Settings Modal (Desktop) */}
@@ -1521,7 +1527,7 @@ const MobileRoleplayChat: React.FC = () => {
         {isMobile && (
           <ChatBottomNav
             onCharacterInfoClick={() => setShowCharacterInfo(true)}
-            onGenerateSceneClick={handleGenerateScene}
+            onGenerateSceneClick={() => setShowSceneGenerationModal(true)}
             onSettingsClick={() => setShowQuickSettings(true)}
             isGenerating={isLoading}
             isVisible={!isKeyboardVisible}
@@ -1540,7 +1546,21 @@ const MobileRoleplayChat: React.FC = () => {
           onEditCharacter={handleEditCharacter}
           onReportCharacter={handleReportCharacter}
           onNewScenario={() => setShowScenarioWizard(true)}
-          canEditCharacter={false} // TODO: Check if user owns character
+          canEditCharacter={!!(user && character && (character.user_id === user.id || character.creator_id === user.id))}
+        />
+
+        {/* Scene Generation Modal (proper scene creation with name/description) */}
+        <SceneGenerationModal
+          isOpen={showSceneGenerationModal}
+          onClose={() => setShowSceneGenerationModal(false)}
+          characterId={characterId}
+          conversationId={conversationId || undefined}
+          character={character}
+          onSceneCreated={(sceneId) => {
+            console.log('✅ Scene created:', sceneId);
+            setShowSceneGenerationModal(false);
+            // Optionally refresh scenes or navigate
+          }}
         />
 
         {/* Scenario Setup Wizard */}
