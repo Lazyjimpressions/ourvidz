@@ -431,22 +431,30 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
               <div
                 className={cn(
                   'w-36 aspect-video rounded-lg border-2 border-dashed',
-                  'flex flex-col items-center justify-center gap-1 cursor-pointer',
-                  'transition-colors hover:border-gray-600 hover:bg-gray-900/30',
+                  'flex flex-col items-center justify-center gap-1',
+                  'transition-colors',
                   canChain
-                    ? 'border-green-500/30 hover:border-green-500/50'
-                    : 'border-gray-700'
+                    ? 'border-green-500/30 hover:border-green-500/50 cursor-pointer hover:bg-gray-900/30'
+                    : 'border-amber-500/30'
                 )}
-                onClick={() => document.getElementById('prompt-input')?.focus()}
+                onClick={() => canChain && document.getElementById('prompt-input')?.focus()}
               >
                 <Plus className="w-5 h-5 text-gray-500" />
                 <span className="text-[10px] text-gray-500">Add Clip</span>
-                {canChain && (
+                {canChain ? (
                   <span className="text-[10px] text-green-400 flex items-center gap-0.5">
                     <Link className="w-2.5 h-2.5" />
                     Chain ready
                   </span>
-                )}
+                ) : previousClip?.status === 'completed' ? (
+                  <span className="text-[10px] text-amber-400 text-center px-2">
+                    Extract frame first
+                  </span>
+                ) : previousClip?.status === 'generating' ? (
+                  <span className="text-[10px] text-blue-400">
+                    Generating...
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -538,7 +546,12 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
               <Link className="w-3 h-3" />
               Will chain
             </div>
-          ) : null}
+          ) : (
+            <div className="flex items-center gap-1 text-[10px] text-amber-400">
+              <ImageLucide className="w-3 h-3" />
+              Extract frame first
+            </div>
+          )}
 
           {/* Generate button */}
           <Button
@@ -548,7 +561,8 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
               !prompt.trim() ||
               !selectedModelId ||
               isGenerating ||
-              (isFirstClip && !firstClipReferenceUrl)
+              (isFirstClip && !firstClipReferenceUrl) ||
+              (!isFirstClip && !canChain)
             }
           >
             {isGenerating ? (
@@ -571,7 +585,9 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
             ? firstClipReferenceUrl
               ? 'First clip: Include full character description, pose, environment, lighting, and mood.'
               : 'First clip: Select a reference image above to begin. The video will animate from this image.'
-            : 'Chained clip: Focus on motion intent. Character identity comes from the reference frame.'}
+            : canChain
+              ? 'Chained clip: Focus on motion intent. Character identity comes from the reference frame.'
+              : 'Extract a frame from the previous clip first. Click the clip card and select "Extract Frame".'}
         </p>
       </div>
 

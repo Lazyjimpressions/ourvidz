@@ -71,28 +71,50 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   // Sign scene image URL using workspace asset service
   useEffect(() => {
     const signSceneImage = async () => {
-      if (message.metadata?.image_url && !message.metadata.image_url.startsWith('http')) {
-        try {
-          // Create asset-like object for signing
-          const assetLike = {
-            temp_storage_path: message.metadata.image_url,
-            user_id: 'temp' // WorkspaceAssetService handles this internally
-          };
-          
-          const signedUrl = await WorkspaceAssetService.generateSignedUrl(assetLike);
-          setSignedSceneImage(signedUrl);
-          console.log('✅ Scene image signed via WorkspaceAssetService');
-        } catch (error) {
-          console.error('Error signing scene image:', error);
-          setSignedSceneImage(message.metadata?.image_url);
+      const imageUrl = message.metadata?.image_url;
+      if (!imageUrl) {
+        setSignedSceneImage(null);
+        return;
+      }
+
+      // If it's already a full HTTP URL, use it directly
+      if (imageUrl.startsWith('http')) {
+        setSignedSceneImage(imageUrl);
+        return;
+      }
+
+      try {
+        // Normalize the path - remove workspace-temp/ prefix if present
+        let storagePath = imageUrl;
+        if (storagePath.startsWith('workspace-temp/')) {
+          storagePath = storagePath.replace('workspace-temp/', '');
         }
-      } else {
-        setSignedSceneImage(message.metadata?.image_url || null);
+
+        // Create asset-like object for signing
+        const assetLike = {
+          temp_storage_path: storagePath,
+          tempStoragePath: storagePath
+        };
+        
+        const signedUrl = await WorkspaceAssetService.generateSignedUrl(assetLike);
+        if (signedUrl) {
+          setSignedSceneImage(signedUrl);
+          console.log('✅ Scene image signed via WorkspaceAssetService:', signedUrl.substring(0, 100));
+        } else {
+          console.warn('⚠️ Failed to sign scene image, using original path');
+          setSignedSceneImage(imageUrl);
+        }
+      } catch (error) {
+        console.error('❌ Error signing scene image:', error);
+        // Fallback: try to construct a direct URL or use original
+        setSignedSceneImage(imageUrl);
       }
     };
 
     if (hasScene) {
       signSceneImage();
+    } else {
+      setSignedSceneImage(null);
     }
   }, [message.metadata?.image_url, hasScene]);
 
@@ -159,9 +181,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       "mb-4"
     )}>
       <div className={cn(
-        "flex gap-3",
+        "flex gap-2",
         isUser ? 'flex-row-reverse' : 'flex-row',
-        isMobile ? 'max-w-[90%]' : 'max-w-[75%]'
+        isMobile ? 'w-full max-w-full' : 'max-w-[75%]'
       )}>
         {/* Avatar */}
         <div className={cn(
@@ -275,11 +297,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </div>
 
           {/* Scene Image - Optimized for mobile full-width */}
-          {hasScene && signedSceneImage && (
+          {hasScene && (
             <div className={cn(
-              "mt-3",
-              isUser ? 'ml-auto' : 'mr-auto',
-              isMobile ? 'w-full' : 'max-w-md'
+              "mt-3 w-full",
+              isMobile && "-mx-1" // Negative margin to extend to edges on mobile
             )}>
               <Card className="overflow-hidden border-gray-700 bg-gray-900 rounded-xl shadow-xl">
                 <div className="relative group">
@@ -289,17 +310,33 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       <ImageIcon className="w-8 h-8 text-gray-600" />
                     </div>
                   )}
-                  <img
-                    src={signedSceneImage}
-                    alt="Generated scene"
-                    className={cn(
-                      "w-full h-auto object-cover rounded-t-xl transition-opacity duration-300",
-                      isMobile ? "max-h-[60vh]" : "max-h-96",
-                      sceneImageLoading ? "opacity-0 h-0" : "opacity-100"
-                    )}
-                    onLoad={() => setSceneImageLoading(false)}
-                    onError={() => setSceneImageLoading(false)}
-                  />
+                  {signedSceneImage ? (
+                    <img
+                      src={signedSceneImage}
+                      alt="Generated scene"
+                      className={cn(
+                        "w-full h-auto object-cover rounded-t-xl transition-opacity duration-300",
+                        isMobile ? "max-h-[60vh]" : "max-h-96",
+                        sceneImageLoading ? "opacity-0 h-0" : "opacity-100"
+                      )}
+                      onLoad={() => {
+                        setSceneImageLoading(false);
+                        console.log('✅ Scene image loaded successfully');
+                      }}
+                      onError={(e) => {
+                        console.error('❌ Scene image failed to load:', {
+                          src: signedSceneImage?.substring(0, 100),
+                          error: e
+                        });
+                        setSceneImageLoading(false);
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-64 bg-gray-800 rounded-t-xl flex items-center justify-center flex-col gap-2">
+                      <ImageIcon className="w-8 h-8 text-gray-600" />
+                      <p className="text-xs text-gray-500">Loading image...</p>
+                    </div>
+                  )}
                   
                   {/* Scene Actions - Show on hover */}
                   <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

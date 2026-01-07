@@ -1378,7 +1378,7 @@ const MobileRoleplayChat: React.FC = () => {
         <div
           className={cn(
             "flex-1 overflow-y-auto space-y-4",
-            isMobile ? "px-2 py-4" : "p-4"
+            isMobile ? "px-1 py-4" : "p-4" // Reduced horizontal padding on mobile
           )}
           style={{
             paddingBottom: isMobile 

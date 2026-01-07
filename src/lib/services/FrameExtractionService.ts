@@ -146,10 +146,10 @@ export class FrameExtractionService {
 
     const timestamp = Date.now();
     const extension = blob.type === 'image/png' ? 'png' : 'jpg';
-    const fileName = `storyboard-frames/${userData.user.id}/${clipId}/${timestamp}_${Math.round(percentage)}.${extension}`;
+    const fileName = `${userData.user.id}/storyboard-frames/${clipId}_${timestamp}_${Math.round(percentage)}.${extension}`;
 
     const { data, error } = await supabase.storage
-      .from('media')
+      .from('workspace-temp')
       .upload(fileName, blob, {
         contentType: blob.type,
         upsert: true,
@@ -160,12 +160,17 @@ export class FrameExtractionService {
       throw error;
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('media')
-      .getPublicUrl(data.path);
+    // Create signed URL (workspace-temp is private)
+    const { data: signedData, error: signError } = await supabase.storage
+      .from('workspace-temp')
+      .createSignedUrl(data.path, 86400); // 24 hour expiry
 
-    return urlData.publicUrl;
+    if (signError) {
+      console.error('Error creating signed URL:', signError);
+      throw signError;
+    }
+
+    return signedData.signedUrl;
   }
 
   /**
@@ -197,10 +202,24 @@ export class FrameExtractionService {
       return videoPath;
     }
 
+    // Determine bucket from path or default to workspace-temp
+    let bucket = 'workspace-temp';
+    let path = videoPath;
+
+    // Check for known bucket prefixes
+    const knownBuckets = ['workspace-temp', 'user-library', 'videos', 'video_high'];
+    for (const b of knownBuckets) {
+      if (videoPath.startsWith(`${b}/`)) {
+        bucket = b;
+        path = videoPath.substring(b.length + 1);
+        break;
+      }
+    }
+
     // Create signed URL for storage path
     const { data, error } = await supabase.storage
-      .from('media')
-      .createSignedUrl(videoPath, 3600); // 1 hour expiry
+      .from(bucket)
+      .createSignedUrl(path, 3600); // 1 hour expiry
 
     if (error) {
       console.error('Error creating signed URL:', error);
