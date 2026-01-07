@@ -113,10 +113,13 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
 
       setIsLoadingScenes(true);
       try {
+        // Only show preset scenes (creator-defined scenarios)
+        // Conversation-generated scenes are private and not shown here
         const { data: scenes, error } = await supabase
           .from('character_scenes')
           .select('*')
           .eq('character_id', character.id)
+          .eq('scene_type', 'preset')
           .order('priority', { ascending: false })
           .limit(10);
 

@@ -25,6 +25,8 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
   const [sceneDescription, setSceneDescription] = useState('');
   const [scenePrompt, setScenePrompt] = useState('');
   const [sceneRules, setSceneRules] = useState('');
+  const [sceneStarters, setSceneStarters] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
   const [priority, setPriority] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
@@ -35,6 +37,9 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
       setSceneDescription(scene.scene_description || '');
       setScenePrompt(scene.scene_prompt || '');
       setSceneRules(scene.scene_rules || '');
+      // Convert array to newline-separated string for editing
+      setSceneStarters(scene.scene_starters?.join('\n') || '');
+      setSystemPrompt(scene.system_prompt || '');
       setPriority(scene.priority || 0);
     }
   }, [scene, isOpen]);
@@ -62,6 +67,12 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
 
     setIsSaving(true);
     try {
+      // Parse scene_starters from newline-separated string to array
+      const startersArray = sceneStarters
+        .split('\n')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
       const { data, error } = await supabase
         .from('character_scenes')
         .update({
@@ -69,6 +80,8 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
           scene_description: sceneDescription.trim() || null,
           scene_prompt: scenePrompt.trim(),
           scene_rules: sceneRules.trim() || null,
+          scene_starters: startersArray.length > 0 ? startersArray : null,
+          system_prompt: systemPrompt.trim() || null,
           priority: priority,
           updated_at: new Date().toISOString()
         })
@@ -160,6 +173,41 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
               placeholder="Rules or constraints for this scene..."
               className="min-h-[60px] text-sm mt-1"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Behavior rules the AI should follow in this scenario
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-scene-starters" className="text-sm font-medium">
+              Conversation Starters (Optional)
+            </Label>
+            <Textarea
+              id="edit-scene-starters"
+              value={sceneStarters}
+              onChange={(e) => setSceneStarters(e.target.value)}
+              placeholder="Enter one starter per line..."
+              className="min-h-[80px] text-sm mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Opening messages to suggest when starting this scenario (one per line)
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="edit-system-prompt" className="text-sm font-medium">
+              System Prompt Override (Optional)
+            </Label>
+            <Textarea
+              id="edit-system-prompt"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              placeholder="Custom system instructions for this scenario..."
+              className="min-h-[80px] text-sm mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Overrides the character's default system prompt for this scenario
+            </p>
           </div>
 
           <div>

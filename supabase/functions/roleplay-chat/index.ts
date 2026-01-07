@@ -1422,6 +1422,12 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
     
     // Add scene-specific rules if available
     if (character.activeScene) {
+      // If scene has a custom system_prompt override, prepend it
+      if (character.activeScene.system_prompt) {
+        systemPrompt = `${character.activeScene.system_prompt}\\n\\n--- CHARACTER BASE PROMPT ---\\n\\n${systemPrompt}`;
+        console.log('📝 Applied scene system_prompt override');
+      }
+
       if (character.activeScene.scene_rules) {
         systemPrompt += `\\n\\nSCENE BEHAVIOR RULES - MANDATORY:\\n${character.activeScene.scene_rules}\\n`;
       } else {
@@ -2893,7 +2899,7 @@ async function loadCharacterWithVoice(supabase: any, characterId: string): Promi
   console.log('🔄 Loading fresh character data for:', characterId);
   
   try {
-    // Load character with associated scenes
+    // Load character with associated scenes (only preset scenes)
     const { data: character, error: characterError } = await supabase
       .from('characters')
       .select(`
@@ -2901,13 +2907,16 @@ async function loadCharacterWithVoice(supabase: any, characterId: string): Promi
         character_scenes!inner(
           scene_rules,
           scene_starters,
+          system_prompt,
           priority,
           scene_name,
-          scene_description
+          scene_description,
+          scene_type
         )
       `)
       .eq('id', characterId)
       .eq('character_scenes.is_active', true)
+      .eq('character_scenes.scene_type', 'preset')
       .order('character_scenes.priority', { ascending: false });
 
     if (characterError || !character) {
