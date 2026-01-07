@@ -42,12 +42,15 @@ export interface Message {
   content: string;
   sender: 'user' | 'character';
   timestamp: string;
+  /** @deprecated Use metadata.image_url instead. Kept for backward compatibility. */
   scene_image?: string;
+  /** @deprecated Use metadata.image_url instead. Kept for backward compatibility. */
   imageUrl?: string;
   consistency_method?: string;
   job_id?: string;
   metadata?: {
     scene_generated?: boolean;
+    /** Canonical location for scene image URL */
     image_url?: string;
     raw_image_path?: string;
     consistency_method?: string;

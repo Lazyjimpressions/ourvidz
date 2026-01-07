@@ -696,10 +696,10 @@ const MobileRoleplayChat: React.FC = () => {
         if (msg.id === messageId) {
           return {
             ...msg,
-            scene_image: assetData.temp_storage_path,
             content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
             metadata: {
               ...msg.metadata,
+              // metadata.image_url is the canonical location for scene images
               image_url: assetData.temp_storage_path,
               asset_id: assetData.id,
               job_completed: true

@@ -5,12 +5,13 @@ import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  User, 
-  Bot, 
-  Image as ImageIcon, 
+import {
+  User,
+  Bot,
+  Image as ImageIcon,
   Clock,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Character, Message, UserCharacter } from '@/types/roleplay';
@@ -46,6 +47,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [signedSceneImage, setSignedSceneImage] = useState<string | null>(null);
   const [sceneImageLoading, setSceneImageLoading] = useState(true);
+  const [sceneImageError, setSceneImageError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Sign character image URL (use passed prop if available)
   useEffect(() => {
@@ -69,45 +72,68 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }, [character?.image_url, signedCharacterImageUrl, getSignedUrl]);
 
   // Sign scene image URL using workspace asset service
+  // Uses AbortController to prevent state updates on unmounted component
   useEffect(() => {
+    const abortController = new AbortController();
+    let isMounted = true;
+
     const signSceneImage = async () => {
       const imageUrl = message.metadata?.image_url;
+
+      // Reset states when URL changes
+      if (isMounted) {
+        setSceneImageLoading(true);
+        setSceneImageError(null);
+      }
+
       if (!imageUrl) {
-        setSignedSceneImage(null);
+        if (isMounted) {
+          setSignedSceneImage(null);
+          setSceneImageLoading(false);
+        }
         return;
       }
 
       // If it's already a full HTTP URL, use it directly
       if (imageUrl.startsWith('http')) {
-        setSignedSceneImage(imageUrl);
+        if (isMounted) {
+          setSignedSceneImage(imageUrl);
+          // Don't set loading false here - let image onLoad handle it
+        }
         return;
       }
 
       try {
-        // Normalize the path - remove workspace-temp/ prefix if present
-        let storagePath = imageUrl;
-        if (storagePath.startsWith('workspace-temp/')) {
-          storagePath = storagePath.replace('workspace-temp/', '');
-        }
-
         // Create asset-like object for signing
+        // WorkspaceAssetService.generateSignedUrl handles path normalization internally
         const assetLike = {
-          temp_storage_path: storagePath,
-          tempStoragePath: storagePath
+          temp_storage_path: imageUrl,
+          tempStoragePath: imageUrl
         };
-        
+
         const signedUrl = await WorkspaceAssetService.generateSignedUrl(assetLike);
+
+        // Check if component is still mounted and request wasn't aborted
+        if (!isMounted || abortController.signal.aborted) return;
+
         if (signedUrl) {
           setSignedSceneImage(signedUrl);
-          console.log('✅ Scene image signed via WorkspaceAssetService:', signedUrl.substring(0, 100));
+          console.log('✅ Scene image signed via WorkspaceAssetService');
         } else {
-          console.warn('⚠️ Failed to sign scene image, using original path');
-          setSignedSceneImage(imageUrl);
+          // Don't fallback to unsigned URL - show error state instead
+          console.error('❌ Failed to sign scene image - no signed URL returned');
+          setSceneImageError('Failed to load image');
+          setSignedSceneImage(null);
+          setSceneImageLoading(false);
         }
       } catch (error) {
+        // Check if component is still mounted
+        if (!isMounted || abortController.signal.aborted) return;
+
         console.error('❌ Error signing scene image:', error);
-        // Fallback: try to construct a direct URL or use original
-        setSignedSceneImage(imageUrl);
+        setSceneImageError('Failed to load image');
+        setSignedSceneImage(null);
+        setSceneImageLoading(false);
       }
     };
 
@@ -115,8 +141,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       signSceneImage();
     } else {
       setSignedSceneImage(null);
+      setSceneImageError(null);
+      setSceneImageLoading(false);
     }
-  }, [message.metadata?.image_url, hasScene]);
+
+    // Cleanup function to prevent state updates after unmount
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
+  }, [message.metadata?.image_url, hasScene, retryCount]);
 
   // Format timestamp as relative time (e.g., "just now", "2 mins ago")
   const formatRelativeTime = (timestamp: string) => {
@@ -157,11 +191,36 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     }
   };
 
-  const handleDownloadImage = () => {
-    if (message.metadata?.image_url) {
+  const handleDownloadImage = async () => {
+    // Use signed URL for download, not the unsigned storage path
+    const downloadUrl = signedSceneImage || message.metadata?.image_url;
+    if (!downloadUrl) return;
+
+    try {
+      // Fetch the image as a blob to ensure proper download
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error('Failed to fetch image');
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+
       const link = document.createElement('a');
-      link.href = message.metadata.image_url;
+      link.href = blobUrl;
       link.download = `scene-${message.id}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up the blob URL
+      URL.revokeObjectURL(blobUrl);
+      console.log('✅ Scene image downloaded successfully');
+    } catch (error) {
+      console.error('❌ Failed to download scene image:', error);
+      // Fallback: try direct link download (may not work for signed URLs)
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `scene-${message.id}.png`;
+      link.target = '_blank';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -169,8 +228,11 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   const handleShareScene = () => {
-    if (message.metadata?.image_url) {
-      navigator.clipboard.writeText(message.metadata.image_url);
+    // Share the signed URL so it's actually accessible
+    const shareUrl = signedSceneImage || message.metadata?.image_url;
+    if (shareUrl) {
+      navigator.clipboard.writeText(shareUrl);
+      console.log('✅ Scene image URL copied to clipboard');
     }
   };
 
@@ -310,7 +372,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       <ImageIcon className="w-8 h-8 text-gray-600" />
                     </div>
                   )}
-                  {signedSceneImage ? (
+                  {sceneImageError ? (
+                    // Error state with retry option
+                    <div className="w-full h-64 bg-gray-800 rounded-t-xl flex items-center justify-center flex-col gap-3">
+                      <AlertCircle className="w-8 h-8 text-red-400" />
+                      <p className="text-sm text-red-400">{sceneImageError}</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          // Increment retry count to trigger useEffect re-run
+                          setRetryCount(c => c + 1);
+                        }}
+                        className="text-xs"
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Retry
+                      </Button>
+                    </div>
+                  ) : signedSceneImage ? (
                     <img
                       src={signedSceneImage}
                       alt="Generated scene"
@@ -329,14 +409,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                           error: e
                         });
                         setSceneImageLoading(false);
+                        setSceneImageError('Image failed to load');
                       }}
                     />
-                  ) : (
+                  ) : !sceneImageLoading ? (
+                    // No image and not loading - likely an error we haven't caught
                     <div className="w-full h-64 bg-gray-800 rounded-t-xl flex items-center justify-center flex-col gap-2">
-                      <ImageIcon className="w-8 h-8 text-gray-600" />
-                      <p className="text-xs text-gray-500">Loading image...</p>
+                      <AlertCircle className="w-8 h-8 text-amber-400" />
+                      <p className="text-xs text-amber-400">Image unavailable</p>
                     </div>
-                  )}
+                  ) : null}
                   
                   {/* Scene Actions - Show on hover */}
                   <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

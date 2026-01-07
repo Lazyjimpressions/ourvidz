@@ -100,33 +100,6 @@ export class FrameExtractionService {
   }
 
   /**
-   * Extract multiple frames from a video for selection
-   */
-  static async extractMultipleFrames(
-    videoUrl: string,
-    count: number = 5,
-    rangeStart: number = 40,
-    rangeEnd: number = 65,
-    options: FrameExtractionOptions = {}
-  ): Promise<ExtractedFrame[]> {
-    const frames: ExtractedFrame[] = [];
-    const step = (rangeEnd - rangeStart) / (count - 1);
-
-    for (let i = 0; i < count; i++) {
-      const percentage = rangeStart + step * i;
-      try {
-        const frame = await this.extractFrameFromVideo(videoUrl, percentage, options);
-        frames.push(frame);
-      } catch (err) {
-        console.error(`Failed to extract frame at ${percentage}%:`, err);
-        // Continue with other frames
-      }
-    }
-
-    return frames;
-  }
-
-  /**
    * Get optimal extraction range based on clip duration
    */
   static getOptimalRange(durationSeconds: number): { min: number; max: number; default: number } {
@@ -227,51 +200,5 @@ export class FrameExtractionService {
     }
 
     return data.signedUrl;
-  }
-
-  /**
-   * Create thumbnail from frame for display
-   */
-  static createThumbnail(
-    dataUrl: string,
-    maxWidth: number = 200,
-    maxHeight: number = 120
-  ): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-
-        // Calculate scaled dimensions
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth) {
-          height = height * (maxWidth / width);
-          width = maxWidth;
-        }
-
-        if (height > maxHeight) {
-          width = width * (maxHeight / height);
-          height = maxHeight;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Failed to get canvas context'));
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
-      };
-
-      img.onerror = () => reject(new Error('Failed to load image for thumbnail'));
-      img.src = dataUrl;
-    });
   }
 }

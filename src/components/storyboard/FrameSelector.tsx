@@ -5,7 +5,7 @@
  * Used for frame chaining - extracting a frame to use as reference for the next clip.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StoryboardClip } from '@/types/storyboard';
 import { FrameExtractionService, ExtractedFrame } from '@/lib/services/FrameExtractionService';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,15 @@ export const FrameSelector: React.FC<FrameSelectorProps> = ({
   }, [extractPreview]);
 
   const [isSaving, setIsSaving] = useState(false);
+  const isMountedRef = useRef(true);
+
+  // Track component mount state for safe async state updates
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const handleConfirm = async () => {
     if (!previewFrame || isSaving) return;
@@ -90,12 +99,19 @@ export const FrameSelector: React.FC<FrameSelectorProps> = ({
       // Await the parent callback to properly handle errors
       await onFrameSelected(frameUrl, percentage, previewFrame.timestampMs);
       console.log('✅ Frame saved successfully');
+
+      // Reset isSaving on success if still mounted
+      if (isMountedRef.current) {
+        setIsSaving(false);
+      }
     } catch (err) {
       console.error('❌ Failed to save frame:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save frame');
-      setIsSaving(false);
+      // Only update state if still mounted
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err.message : 'Failed to save frame');
+        setIsSaving(false);
+      }
     }
-    // Don't set isSaving to false on success - let the dialog close naturally
   };
 
   const formatTimestamp = (ms?: number) => {
