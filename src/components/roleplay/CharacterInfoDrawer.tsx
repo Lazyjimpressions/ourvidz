@@ -11,7 +11,8 @@ import {
   ChevronDown,
   ChevronUp,
   Edit,
-  Trash2
+  Trash2,
+  Plus
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
@@ -28,6 +29,7 @@ interface CharacterInfoDrawerProps {
   onClose: () => void;
   onSceneSelect?: (scene: CharacterScene) => void;
   selectedSceneId?: string;
+  onCreateScene?: () => void;
 }
 
 export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
@@ -35,7 +37,8 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
   isOpen,
   onClose,
   onSceneSelect,
-  selectedSceneId
+  selectedSceneId,
+  onCreateScene
 }) => {
   const { isMobile } = useMobileDetection();
   const [signedImageUrl, setSignedImageUrl] = useState<string>('');
@@ -255,12 +258,25 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
             </div>
 
             {/* Character Scenes Section */}
-            {characterScenes.length > 0 && (
-              <div>
-                <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-medium text-gray-400 flex items-center gap-1">
                   <ImageIcon className="w-3 h-3" />
                   Scenes ({characterScenes.length})
                 </h4>
+                {canManageScenes && onCreateScene && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onCreateScene}
+                    className="h-6 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-600/10"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Create
+                  </Button>
+                )}
+              </div>
+              {characterScenes.length > 0 && (
                 <div className="space-y-2">
                   {characterScenes.map(scene => (
                     <div 
@@ -365,8 +381,8 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Loading Scenes Indicator */}
             {isLoadingScenes && (

@@ -184,17 +184,21 @@ export function useClipGeneration() {
     try {
       const { data: job, error } = await supabase
         .from('jobs')
-        .select('status, result_url, error_message')
+        .select('status, metadata, error_message')
         .eq('id', jobId)
         .single();
 
       if (error) throw error;
 
-      if (job.status === 'completed' && job.result_url) {
+      // Extract result URL from metadata (fal-image stores it there)
+      const metadata = job.metadata as { result_url?: string } | null;
+      const resultUrl = metadata?.result_url;
+
+      if (job.status === 'completed' && resultUrl) {
         // Update clip with result
         await StoryboardService.updateClip(clipId, {
           status: 'completed',
-          video_url: job.result_url,
+          video_url: resultUrl,
         });
 
         setActiveGenerations((prev) => {

@@ -343,8 +343,8 @@ export function useStoryboard(): UseStoryboardReturn {
   // DERIVED STATE
   // ==========================================================================
 
-  // Extract scenes from active project
-  const scenes = activeProject?.scenes || [];
+  // Extract scenes from active project (enriched by getProject with includeScenes=true)
+  const scenes = (activeProject as (StoryboardProject & { scenes?: StoryboardScene[] }) | null)?.scenes || [];
 
   // Extract clips from active scene
   const clips = activeScene?.clips || [];

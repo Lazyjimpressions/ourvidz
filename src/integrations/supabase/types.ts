@@ -201,6 +201,8 @@ export type Database = {
           image_url: string | null
           job_id: string | null
           priority: number | null
+          scene_description: string | null
+          scene_name: string | null
           scene_prompt: string
           scene_rules: string | null
           scene_starters: string[] | null
@@ -216,6 +218,8 @@ export type Database = {
           image_url?: string | null
           job_id?: string | null
           priority?: number | null
+          scene_description?: string | null
+          scene_name?: string | null
           scene_prompt: string
           scene_rules?: string | null
           scene_starters?: string[] | null
@@ -231,6 +235,8 @@ export type Database = {
           image_url?: string | null
           job_id?: string | null
           priority?: number | null
+          scene_description?: string | null
+          scene_name?: string | null
           scene_prompt?: string
           scene_rules?: string | null
           scene_starters?: string[] | null
@@ -1213,7 +1219,7 @@ export type Database = {
           extracted_frame_url: string | null
           extraction_percentage: number | null
           extraction_timestamp_ms: number | null
-          generation_metadata: Json
+          generation_metadata: Json | null
           id: string
           job_id: string | null
           model_used: string | null
@@ -1221,7 +1227,7 @@ export type Database = {
           reference_image_source: string | null
           reference_image_url: string | null
           scene_id: string
-          status: string
+          status: string | null
           thumbnail_url: string | null
           updated_at: string | null
           video_url: string | null
@@ -1234,7 +1240,7 @@ export type Database = {
           extracted_frame_url?: string | null
           extraction_percentage?: number | null
           extraction_timestamp_ms?: number | null
-          generation_metadata?: Json
+          generation_metadata?: Json | null
           id?: string
           job_id?: string | null
           model_used?: string | null
@@ -1242,7 +1248,7 @@ export type Database = {
           reference_image_source?: string | null
           reference_image_url?: string | null
           scene_id: string
-          status?: string
+          status?: string | null
           thumbnail_url?: string | null
           updated_at?: string | null
           video_url?: string | null
@@ -1255,7 +1261,7 @@ export type Database = {
           extracted_frame_url?: string | null
           extraction_percentage?: number | null
           extraction_timestamp_ms?: number | null
-          generation_metadata?: Json
+          generation_metadata?: Json | null
           id?: string
           job_id?: string | null
           model_used?: string | null
@@ -1263,7 +1269,7 @@ export type Database = {
           reference_image_source?: string | null
           reference_image_url?: string | null
           scene_id?: string
-          status?: string
+          status?: string | null
           thumbnail_url?: string | null
           updated_at?: string | null
           video_url?: string | null
@@ -1296,11 +1302,11 @@ export type Database = {
         Row: {
           clip_id: string
           created_at: string | null
-          extraction_method: string
+          extraction_method: string | null
           frame_url: string
           id: string
-          is_chain_frame: boolean
-          metadata: Json
+          is_chain_frame: boolean | null
+          metadata: Json | null
           quality_score: number | null
           thumbnail_url: string | null
           timestamp_ms: number
@@ -1309,11 +1315,11 @@ export type Database = {
         Insert: {
           clip_id: string
           created_at?: string | null
-          extraction_method?: string
+          extraction_method?: string | null
           frame_url: string
           id?: string
-          is_chain_frame?: boolean
-          metadata?: Json
+          is_chain_frame?: boolean | null
+          metadata?: Json | null
           quality_score?: number | null
           thumbnail_url?: string | null
           timestamp_ms: number
@@ -1322,11 +1328,11 @@ export type Database = {
         Update: {
           clip_id?: string
           created_at?: string | null
-          extraction_method?: string
+          extraction_method?: string | null
           frame_url?: string
           id?: string
-          is_chain_frame?: boolean
-          metadata?: Json
+          is_chain_frame?: boolean | null
+          metadata?: Json | null
           quality_score?: number | null
           thumbnail_url?: string | null
           timestamp_ms?: number
@@ -1351,67 +1357,67 @@ export type Database = {
       }
       storyboard_projects: {
         Row: {
-          ai_assistance_level: string
-          aspect_ratio: string
-          content_tier: string
+          ai_assistance_level: string | null
+          aspect_ratio: string | null
+          content_tier: string | null
           created_at: string | null
           description: string | null
           final_video_duration_seconds: number | null
           final_video_url: string | null
           id: string
-          metadata: Json
+          metadata: Json | null
           primary_character_id: string | null
-          quality_preset: string
-          secondary_characters: Json
+          quality_preset: string | null
+          secondary_characters: Json | null
           source_conversation_id: string | null
-          status: string
-          story_beats: Json
+          status: string | null
+          story_beats: Json | null
           story_summary: string | null
-          target_duration_seconds: number
+          target_duration_seconds: number | null
           title: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
-          ai_assistance_level?: string
-          aspect_ratio?: string
-          content_tier?: string
+          ai_assistance_level?: string | null
+          aspect_ratio?: string | null
+          content_tier?: string | null
           created_at?: string | null
           description?: string | null
           final_video_duration_seconds?: number | null
           final_video_url?: string | null
           id?: string
-          metadata?: Json
+          metadata?: Json | null
           primary_character_id?: string | null
-          quality_preset?: string
-          secondary_characters?: Json
+          quality_preset?: string | null
+          secondary_characters?: Json | null
           source_conversation_id?: string | null
-          status?: string
-          story_beats?: Json
+          status?: string | null
+          story_beats?: Json | null
           story_summary?: string | null
-          target_duration_seconds?: number
-          title: string
+          target_duration_seconds?: number | null
+          title?: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
-          ai_assistance_level?: string
-          aspect_ratio?: string
-          content_tier?: string
+          ai_assistance_level?: string | null
+          aspect_ratio?: string | null
+          content_tier?: string | null
           created_at?: string | null
           description?: string | null
           final_video_duration_seconds?: number | null
           final_video_url?: string | null
           id?: string
-          metadata?: Json
+          metadata?: Json | null
           primary_character_id?: string | null
-          quality_preset?: string
-          secondary_characters?: Json
+          quality_preset?: string | null
+          secondary_characters?: Json | null
           source_conversation_id?: string | null
-          status?: string
-          story_beats?: Json
+          status?: string | null
+          story_beats?: Json | null
           story_summary?: string | null
-          target_duration_seconds?: number
+          target_duration_seconds?: number | null
           title?: string
           updated_at?: string | null
           user_id?: string
@@ -1447,15 +1453,15 @@ export type Database = {
           error_message: string | null
           file_size_bytes: number | null
           id: string
-          include_transitions: boolean
+          include_transitions: boolean | null
           output_duration_seconds: number | null
           output_url: string | null
-          progress_percentage: number
+          progress_percentage: number | null
           project_id: string
-          render_quality: string
+          render_quality: string | null
           started_at: string | null
-          status: string
-          transition_style: string
+          status: string | null
+          transition_style: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -1463,15 +1469,15 @@ export type Database = {
           error_message?: string | null
           file_size_bytes?: number | null
           id?: string
-          include_transitions?: boolean
+          include_transitions?: boolean | null
           output_duration_seconds?: number | null
           output_url?: string | null
-          progress_percentage?: number
+          progress_percentage?: number | null
           project_id: string
-          render_quality?: string
+          render_quality?: string | null
           started_at?: string | null
-          status?: string
-          transition_style?: string
+          status?: string | null
+          transition_style?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -1479,15 +1485,15 @@ export type Database = {
           error_message?: string | null
           file_size_bytes?: number | null
           id?: string
-          include_transitions?: boolean
+          include_transitions?: boolean | null
           output_duration_seconds?: number | null
           output_url?: string | null
-          progress_percentage?: number
+          progress_percentage?: number | null
           project_id?: string
-          render_quality?: string
+          render_quality?: string | null
           started_at?: string | null
-          status?: string
-          transition_style?: string
+          status?: string | null
+          transition_style?: string | null
         }
         Relationships: [
           {
@@ -1502,55 +1508,55 @@ export type Database = {
       storyboard_scenes: {
         Row: {
           actual_duration_seconds: number | null
-          characters: Json
+          characters: Json | null
           created_at: string | null
           description: string | null
           id: string
-          metadata: Json
+          metadata: Json | null
           mood: string | null
           narrative_context: string | null
           project_id: string
           scene_order: number
           setting: string | null
-          status: string
-          suggested_prompts: Json
-          target_duration_seconds: number
+          status: string | null
+          suggested_prompts: Json | null
+          target_duration_seconds: number | null
           title: string | null
           updated_at: string | null
         }
         Insert: {
           actual_duration_seconds?: number | null
-          characters?: Json
+          characters?: Json | null
           created_at?: string | null
           description?: string | null
           id?: string
-          metadata?: Json
+          metadata?: Json | null
           mood?: string | null
           narrative_context?: string | null
           project_id: string
           scene_order: number
           setting?: string | null
-          status?: string
-          suggested_prompts?: Json
-          target_duration_seconds?: number
+          status?: string | null
+          suggested_prompts?: Json | null
+          target_duration_seconds?: number | null
           title?: string | null
           updated_at?: string | null
         }
         Update: {
           actual_duration_seconds?: number | null
-          characters?: Json
+          characters?: Json | null
           created_at?: string | null
           description?: string | null
           id?: string
-          metadata?: Json
+          metadata?: Json | null
           mood?: string | null
           narrative_context?: string | null
           project_id?: string
           scene_order?: number
           setting?: string | null
-          status?: string
-          suggested_prompts?: Json
-          target_duration_seconds?: number
+          status?: string | null
+          suggested_prompts?: Json | null
+          target_duration_seconds?: number | null
           title?: string | null
           updated_at?: string | null
         }

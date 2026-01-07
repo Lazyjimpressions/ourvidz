@@ -226,18 +226,20 @@ export class StoryboardService {
 
     const nextOrder = (existingScenes?.[0]?.scene_order ?? -1) + 1;
 
+    const insertData = {
+      project_id: input.project_id,
+      scene_order: nextOrder,
+      title: input.title || `Scene ${nextOrder + 1}`,
+      description: input.description || null,
+      setting: input.setting || null,
+      mood: input.mood || null,
+      characters: (input.characters || []) as unknown as import('@/integrations/supabase/types').Json,
+      target_duration_seconds: input.target_duration_seconds || 5,
+    };
+
     const { data, error } = await supabase
       .from('storyboard_scenes')
-      .insert({
-        project_id: input.project_id,
-        scene_order: nextOrder,
-        title: input.title || `Scene ${nextOrder + 1}`,
-        description: input.description || null,
-        setting: input.setting || null,
-        mood: input.mood || null,
-        characters: input.characters || [],
-        target_duration_seconds: input.target_duration_seconds || 5,
-      })
+      .insert(insertData)
       .select()
       .single();
 
