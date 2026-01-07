@@ -571,3 +571,60 @@ export const SCENARIO_HOOK_TEMPLATES: Record<ScenarioHookTemplate, { label: stri
     description: 'Write your own opening hook'
   }
 };
+
+// ============================================================================
+// SCENE GALLERY TYPES (Phase 3)
+// ============================================================================
+
+/**
+ * Scene atmosphere settings (0-100 sliders)
+ * Maps to ScenarioAtmosphere in ScenarioSetupWizard
+ */
+export interface SceneAtmosphere {
+  romance: number;
+  playfulness: number;
+  tension: number;
+  drama: number;
+}
+
+/**
+ * Scene template for the Scene Gallery
+ * Global templates that can be populated with any character(s)
+ * Different from CharacterScene which is tied to a specific character
+ */
+export interface SceneTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  creator_id?: string;
+
+  // Maps to ScenarioSetupWizard fields
+  scenario_type?: ScenarioType;
+  setting?: string;
+  atmosphere?: SceneAtmosphere;
+  time_of_day?: 'morning' | 'afternoon' | 'night';
+
+  // Character config
+  min_characters: number;
+  max_characters: number;
+  suggested_user_role?: string;
+
+  // Content & discovery
+  content_rating: ContentRating;
+  tags: string[];
+  is_public: boolean;
+  usage_count: number;
+
+  // Visual & starters
+  preview_image_url?: string;
+  scene_starters: string[];
+  scene_prompt?: string;
+
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Scene template filter options for gallery
+ */
+export type SceneTemplateFilter = 'all' | 'sfw' | 'nsfw' | 'popular' | 'recent';

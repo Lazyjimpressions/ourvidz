@@ -1,23 +1,24 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
-import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Clock, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle } from 'lucide-react';
+import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
-import { useCharacterSessions } from '@/hooks/useCharacterSessions';
 import { MobileCharacterCard } from '@/components/roleplay/MobileCharacterCard';
 import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 import { DashboardSettings } from '@/components/roleplay/DashboardSettings';
 import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
-import type { ScenarioSessionPayload, SceneStyle } from '@/types/roleplay';
+import { SceneGallery } from '@/components/roleplay/SceneGallery';
+import { SceneSetupSheet, SceneSetupConfig } from '@/components/roleplay/SceneSetupSheet';
+import type { ScenarioSessionPayload, SceneStyle, SceneTemplate } from '@/types/roleplay';
 import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
 import { useUserConversations } from '@/hooks/useUserConversations';
+import { useSceneGallery } from '@/hooks/useSceneGallery';
 import { supabase } from '@/integrations/supabase/client';
 
 const MobileRoleplayDashboard = () => {
@@ -28,6 +29,12 @@ const MobileRoleplayDashboard = () => {
   const [showAddCharacterModal, setShowAddCharacterModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showScenarioWizard, setShowScenarioWizard] = useState(false);
+  const [selectedScene, setSelectedScene] = useState<SceneTemplate | null>(null);
+  const [showSceneSetup, setShowSceneSetup] = useState(false);
+  const [showSceneGallery, setShowSceneGallery] = useState(false);
+  const [sceneConfig, setSceneConfig] = useState<SceneSetupConfig | null>(null);
+  // Track scene images that failed to load to prevent infinite re-render loops
+  const [erroredSceneImages, setErroredSceneImages] = useState<Set<string>>(new Set());
 
   // Settings state - persisted to localStorage
   const [selectedImageModel, setSelectedImageModel] = useState(() =>
@@ -77,8 +84,45 @@ const MobileRoleplayDashboard = () => {
     loadUserCharacters,
     deleteUserCharacter
   } = useUserCharacters();
-  const { sessions: ongoingSessions, isLoading: sessionsLoading } = useCharacterSessions();
   const { conversations: userConversations, isLoading: conversationsLoading } = useUserConversations(10, true);
+  const { scenes: sceneTemplates, incrementUsage: incrementSceneUsage } = useSceneGallery('all', 6);
+
+  // Handle scene selection from gallery
+  const handleSceneSelect = useCallback((scene: SceneTemplate) => {
+    setSelectedScene(scene);
+    setShowSceneSetup(true);
+  }, []);
+
+  // Handle starting roleplay from scene setup
+  const handleSceneStart = useCallback((config: SceneSetupConfig) => {
+    setSceneConfig(config);
+    setShowSceneSetup(false);
+    // Track usage
+    incrementSceneUsage(config.scene.id);
+    // Navigate to chat with scene config
+    navigate(`/roleplay/chat/${config.primaryCharacterId}`, {
+      state: {
+        sceneConfig: config,
+        scenarioPayload: {
+          type: config.scene.scenario_type || 'stranger',
+          setting: { location: config.scene.setting || 'custom' },
+          atmosphere: config.scene.atmosphere,
+          characters: {
+            partnerRole: { id: config.primaryCharacterId },
+            ...(config.secondaryCharacterId && {
+              extras: [{ id: config.secondaryCharacterId }]
+            })
+          },
+          relationshipContext: config.userRole,
+          hook: {
+            customText: config.scene.scene_starters?.[0]
+          },
+          contentTier: config.scene.content_rating,
+          aiCharacterId: config.primaryCharacterId
+        } as ScenarioSessionPayload
+      }
+    });
+  }, [navigate, incrementSceneUsage]);
 
   // Subscribe to character image updates
   useCharacterImageUpdates();
@@ -130,11 +174,6 @@ const MobileRoleplayDashboard = () => {
     const userIds = new Set(userCharacters.map(c => c.id));
     return publicCharacters.filter(c => !userIds.has(c.id));
   }, [userCharacters, publicCharacters]);
-
-  // Combined list for lookups (e.g., recent chats)
-  const allCharacters = useMemo(() => {
-    return [...myCharacters, ...publicFromOthers];
-  }, [myCharacters, publicFromOthers]);
 
   const isLoading = publicLoading || userLoading;
   const error = publicError;
@@ -285,52 +324,7 @@ const MobileRoleplayDashboard = () => {
           </div>
         </div>
         
-        {/* Ongoing Conversations Section - Clean cards without message count badge */}
-        {ongoingSessions.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Clock className="w-4 h-4 text-green-400" />
-              <h2 className="text-base font-medium text-white">Recent Chats</h2>
-            </div>
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {ongoingSessions.slice(0, 6).map((session) => {
-                // Look up character in combined list (user + public)
-                const character = allCharacters.find(c => c.id === session.character_id);
-                if (!character) return null;
-
-                return (
-                  <MobileCharacterCard
-                    key={session.character_id}
-                    character={{
-                      id: character.id,
-                      name: character.name,
-                      description: character.description,
-                      image_url: character.image_url,
-                      preview_image_url: character.reference_image_url || character.image_url,
-                      quick_start: false,
-                      category: character.content_rating === 'nsfw' ? 'nsfw' : 'sfw',
-                      consistency_method: (character as any).consistency_method || 'i2i_reference',
-                      interaction_count: character.interaction_count,
-                      likes_count: character.likes_count,
-                      appearance_tags: character.appearance_tags,
-                      traits: character.traits,
-                      persona: character.persona,
-                      gender: character.gender,
-                      reference_image_url: character.reference_image_url,
-                      seed_locked: (character as any).seed_locked,
-                      user_id: character.user_id
-                    }}
-                    onSelect={() => navigate(`/roleplay/chat/${session.character_id}`)}
-                    onPreview={() => console.log('Preview:', session.character_id)}
-                    onDelete={handleDeleteCharacter}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Continue Conversations Section - Shows last scene image as thumbnail */}
+        {/* Continue Conversations Section - Shows conversations with scene images */}
         {userConversations.filter(c => c.last_scene_image).length > 0 && (
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
@@ -341,52 +335,122 @@ const MobileRoleplayDashboard = () => {
               {userConversations
                 .filter(conv => conv.last_scene_image)
                 .slice(0, 6)
-                .map((conversation) => (
-                  <div
-                    key={conversation.id}
-                    className="relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
-                    onClick={() => navigate(`/roleplay/chat/${conversation.character_id}`)}
-                  >
-                    {/* Scene thumbnail as background */}
-                    <img
-                      src={conversation.last_scene_image!}
-                      alt={conversation.title}
-                      className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
-                    />
-                    {/* Gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    {/* Character avatar overlay */}
-                    {conversation.character?.image_url && (
-                      <div className="absolute top-2 left-2 w-8 h-8 rounded-full overflow-hidden border-2 border-white/50">
+                .map((conversation) => {
+                  // Determine image source - use character avatar if scene image errored
+                  const sceneImageErrored = erroredSceneImages.has(conversation.id);
+                  const displayImage = sceneImageErrored
+                    ? conversation.character?.image_url
+                    : conversation.last_scene_image;
+
+                  return (
+                    <div
+                      key={conversation.id}
+                      className="relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
+                      onClick={() => navigate(`/roleplay/chat/${conversation.character_id}`)}
+                    >
+                      {/* Scene thumbnail as background */}
+                      {displayImage ? (
                         <img
-                          src={conversation.character.image_url}
-                          alt={conversation.character.name}
-                          className="w-full h-full object-cover"
+                          src={displayImage}
+                          alt={conversation.title}
+                          className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
+                          onError={() => {
+                            // Mark this conversation's scene image as errored
+                            if (!sceneImageErrored) {
+                              setErroredSceneImages(prev => new Set(prev).add(conversation.id));
+                            }
+                          }}
                         />
+                      ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-gray-900" />
+                      )}
+                      {/* Gradient overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      {/* Character avatar overlay - only show if using scene image (not errored) */}
+                      {!sceneImageErrored && conversation.character?.image_url && (
+                        <div className="absolute top-2 left-2 w-8 h-8 rounded-full overflow-hidden border-2 border-white/50">
+                          <img
+                            src={conversation.character.image_url}
+                            alt={conversation.character.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      {/* Character name */}
+                      <div className="absolute bottom-2 left-2 right-2">
+                        <p className="text-white text-sm font-medium truncate">
+                          {conversation.character?.name || 'Unknown'}
+                        </p>
+                        <p className="text-white/60 text-xs truncate">{conversation.title}</p>
                       </div>
-                    )}
-                    {/* Character name */}
-                    <div className="absolute bottom-2 left-2 right-2">
-                      <p className="text-white text-sm font-medium truncate">
-                        {conversation.character?.name || 'Unknown'}
-                      </p>
-                      <p className="text-white/60 text-xs truncate">{conversation.title}</p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         )}
 
-        {/* Quick Start Section */}
-        <QuickStartSection onCharacterSelect={handleCharacterSelect} />
+
+        {/* Scene Gallery Section */}
+        {sceneTemplates.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-pink-400" />
+                <h2 className="text-base font-medium text-white">Scene Gallery</h2>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSceneGallery(true)}
+                className="h-7 text-xs"
+              >
+                View All
+              </Button>
+            </div>
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+              {sceneTemplates.slice(0, 6).map((scene) => (
+                <div
+                  key={scene.id}
+                  className="relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group bg-gradient-to-br from-pink-900/50 to-purple-900/50"
+                  onClick={() => handleSceneSelect(scene)}
+                >
+                  {scene.preview_image_url ? (
+                    <img
+                      src={scene.preview_image_url}
+                      alt={scene.name}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-pink-800/30 to-purple-900/50" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                  <div className="absolute top-2 left-2 right-2 flex justify-between">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                      scene.content_rating === 'nsfw' ? 'bg-red-500/80' : 'bg-green-500/80'
+                    } text-white`}>
+                      {scene.content_rating.toUpperCase()}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-white">
+                      {scene.min_characters}-{scene.max_characters} AI
+                    </span>
+                  </div>
+                  <div className="absolute bottom-2 left-2 right-2">
+                    <p className="text-white text-sm font-medium truncate">{scene.name}</p>
+                    <p className="text-white/60 text-xs truncate">{scene.setting}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Scenario Quick-Start Section */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-purple-400" />
-              <h2 className="text-base font-medium text-white">Start a Scenario</h2>
+              <h2 className="text-base font-medium text-white">Custom Scenario</h2>
             </div>
             <Button
               variant="outline"
@@ -398,7 +462,7 @@ const MobileRoleplayDashboard = () => {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Create a custom roleplay scenario with your favorite character.
+            Build your own roleplay scenario from scratch.
           </p>
         </div>
 
@@ -492,6 +556,43 @@ const MobileRoleplayDashboard = () => {
           onClose={() => setShowScenarioWizard(false)}
           onComplete={handleScenarioComplete}
         />
+
+        {/* Scene Setup Sheet */}
+        <SceneSetupSheet
+          scene={selectedScene}
+          isOpen={showSceneSetup}
+          onClose={() => {
+            setShowSceneSetup(false);
+            setSelectedScene(null);
+          }}
+          onStart={handleSceneStart}
+        />
+
+        {/* Full Scene Gallery Modal */}
+        {showSceneGallery && (
+          <div className="fixed inset-0 z-50 bg-background">
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <h2 className="text-lg font-semibold">Scene Gallery</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowSceneGallery(false)}
+                >
+                  Close
+                </Button>
+              </div>
+              <div className="flex-1 overflow-auto p-4">
+                <SceneGallery
+                  onSceneSelect={(scene) => {
+                    setShowSceneGallery(false);
+                    handleSceneSelect(scene);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </OurVidzDashboardLayout>
   );

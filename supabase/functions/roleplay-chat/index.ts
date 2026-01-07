@@ -174,10 +174,13 @@ serve(async (req) => {
   let workerTime = 0;
   let dbWriteTime = 0;
 
+  // Declare requestBody outside try block so it's accessible in catch
+  let requestBody: RoleplayChatRequest | null = null;
+
   try {
     // Extract authorization header for forwarding to other functions
     const authHeader = req.headers.get('authorization');
-    const requestBody: RoleplayChatRequest = await req.json();
+    requestBody = await req.json();
     const {
       message,
       conversation_id,

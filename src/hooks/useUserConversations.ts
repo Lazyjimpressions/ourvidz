@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { getSignedUrl } from '@/lib/storage';
 
 /**
  * Character info included with conversation for display
@@ -50,6 +51,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
     setError(null);
 
     try {
+      // Step 1: Fetch conversations
       const { data, error } = await supabase
         .from('conversations')
         .select(`
@@ -77,27 +79,108 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
 
       if (error) throw error;
 
-      // Process the data
-      let processedData = (data || []).map(conv => ({
-        id: conv.id,
-        user_id: conv.user_id,
-        character_id: conv.character_id,
-        title: conv.title,
-        conversation_type: conv.conversation_type,
-        status: conv.status,
-        last_scene_image: conv.last_scene_image,
-        created_at: conv.created_at,
-        updated_at: conv.updated_at,
-        message_count: conv.messages?.[0]?.count || 0,
-        character: conv.character as ConversationCharacter | null
-      }));
+      const conversationIds = (data || []).map(c => c.id);
+
+      // Step 2: Fetch latest scene images via character_scenes -> workspace_assets
+      // character_scenes.image_url may be NULL, but workspace_assets has the actual images
+      const sceneImageMap: Record<string, string> = {};
+
+      if (conversationIds.length > 0) {
+        // First get the job_ids from character_scenes for these conversations
+        const { data: sceneData } = await supabase
+          .from('character_scenes')
+          .select('conversation_id, job_id, image_url, created_at')
+          .in('conversation_id', conversationIds)
+          .not('job_id', 'is', null)
+          .order('created_at', { ascending: false });
+
+        if (sceneData && sceneData.length > 0) {
+          // Collect job_ids that need workspace_assets lookup
+          const jobIds = sceneData
+            .filter(s => s.job_id && !s.image_url)
+            .map(s => s.job_id as string);
+
+          // Fetch workspace_assets for these jobs
+          let workspaceAssetMap: Record<string, string> = {};
+          if (jobIds.length > 0) {
+            const { data: assetData } = await supabase
+              .from('workspace_assets')
+              .select('job_id, temp_storage_path')
+              .in('job_id', jobIds);
+
+            if (assetData) {
+              for (const asset of assetData) {
+                if (asset.job_id && asset.temp_storage_path) {
+                  workspaceAssetMap[asset.job_id] = asset.temp_storage_path;
+                }
+              }
+            }
+          }
+
+          // Build map of conversation_id -> most recent scene image
+          for (const scene of sceneData) {
+            if (scene.conversation_id && !sceneImageMap[scene.conversation_id]) {
+              // Prefer image_url from character_scenes, fallback to workspace_assets
+              const imageUrl = scene.image_url ||
+                (scene.job_id ? workspaceAssetMap[scene.job_id] : null);
+              if (imageUrl) {
+                sceneImageMap[scene.conversation_id] = imageUrl;
+              }
+            }
+          }
+        }
+      }
+
+      // Step 3: Process data with scene image fallback
+      let processedData = (data || []).map(conv => {
+        // Use last_scene_image if available, otherwise fallback to character_scenes
+        const effectiveSceneImage = conv.last_scene_image || sceneImageMap[conv.id] || null;
+
+        return {
+          id: conv.id,
+          user_id: conv.user_id,
+          character_id: conv.character_id,
+          title: conv.title,
+          conversation_type: conv.conversation_type,
+          status: conv.status,
+          last_scene_image: effectiveSceneImage,
+          created_at: conv.created_at,
+          updated_at: conv.updated_at,
+          message_count: conv.messages?.[0]?.count || 0,
+          character: conv.character as ConversationCharacter | null
+        };
+      });
 
       // Filter out empty conversations if requested
       if (excludeEmpty) {
         processedData = processedData.filter(conv => conv.message_count > 0);
       }
 
-      setConversations(processedData);
+      // Step 4: Sign scene image URLs (they're storage paths, not full URLs)
+      const signedData = await Promise.all(
+        processedData.map(async conv => {
+          if (!conv.last_scene_image) return conv;
+
+          // Check if already a full URL (https://) or needs signing
+          if (conv.last_scene_image.startsWith('http')) {
+            return conv;
+          }
+
+          // Sign the storage path from workspace-temp bucket
+          try {
+            const { data: signedData } = await getSignedUrl('workspace-temp', conv.last_scene_image);
+            if (signedData?.signedUrl) {
+              return { ...conv, last_scene_image: signedData.signedUrl };
+            }
+          } catch (err) {
+            console.error(`Failed to sign URL for conversation ${conv.id}:`, err);
+          }
+
+          return conv;
+        })
+      );
+
+      setConversations(signedData);
     } catch (err) {
       console.error('Error loading user conversations:', err);
       setError(err instanceof Error ? err.message : 'Failed to load conversations');
