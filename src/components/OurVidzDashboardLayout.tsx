@@ -89,9 +89,10 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
     }
   ];
 
-  // Check if we're on workspace route for mobile optimization
+  // Check if we're on workspace or chat route for mobile optimization
   const isWorkspaceRoute = location.pathname === '/workspace';
-  const shouldHideSidebar = isMobile && isWorkspaceRoute;
+  const isChatRoute = location.pathname.startsWith('/roleplay/chat');
+  const shouldHideSidebar = isMobile && (isWorkspaceRoute || isChatRoute);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">
@@ -254,12 +255,12 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
           </div>
         </header>
 
-        {/* Main Content Area - Reduced padding on mobile workspace */}
+        {/* Main Content Area - No padding on mobile workspace/chat for full-width */}
         <main className={`flex-1 bg-[#0a0a0a] ${shouldHideSidebar ? 'p-0' : 'p-6'}`}>
           {children}
         </main>
 
-        {/* Footer - Hidden on mobile workspace */}
+        {/* Footer - Hidden on mobile workspace and chat */}
         {!shouldHideSidebar && (
           <footer className="bg-[#111111] border-t border-gray-800 px-6 py-4">
           <div className="flex justify-between items-center text-sm text-gray-500">

@@ -14,6 +14,7 @@ import { generateClipPrompt, PromptContext } from '@/lib/utils/storyboardPrompts
 import { ClipCard } from './ClipCard';
 import { FrameSelector } from './FrameSelector';
 import { ChainIndicator, ChainBadge } from './ChainIndicator';
+import { ImagePickerDialog } from './ImagePickerDialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -83,8 +84,9 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
 
   // First clip reference image state
   const [firstClipReferenceUrl, setFirstClipReferenceUrl] = useState<string | null>(null);
-  const [firstClipReferenceSource, setFirstClipReferenceSource] = useState<'uploaded' | 'character_portrait' | null>(null);
+  const [firstClipReferenceSource, setFirstClipReferenceSource] = useState<'uploaded' | 'character_portrait' | 'library' | null>(null);
   const [isUploadingReference, setIsUploadingReference] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
 
   // Selected clip
   const selectedClip = useMemo(
@@ -162,6 +164,13 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
   const handleClearReference = () => {
     setFirstClipReferenceUrl(null);
     setFirstClipReferenceSource(null);
+  };
+
+  // Handle selecting image from library
+  const handleSelectFromLibrary = (imageUrl: string, source: 'library' | 'workspace') => {
+    setFirstClipReferenceUrl(imageUrl);
+    setFirstClipReferenceSource('library');
+    setShowImagePicker(false);
   };
 
   // Generate AI prompt suggestion
@@ -301,7 +310,9 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
                       <p className="text-[10px] text-gray-500 truncate">
                         {firstClipReferenceSource === 'character_portrait'
                           ? 'Using character portrait'
-                          : 'Uploaded image'}
+                          : firstClipReferenceSource === 'library'
+                            ? 'Selected from library'
+                            : 'Uploaded image'}
                       </p>
                     </div>
                     <Button
@@ -320,7 +331,7 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
                     <ImageLucide className="w-3 h-3" />
                     Reference image required for first clip
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {/* Use character portrait */}
                     {character?.reference_image_url && (
                       <Button
@@ -333,6 +344,16 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
                         Use Character
                       </Button>
                     )}
+                    {/* Browse library */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-8 text-[10px] gap-1 border-gray-700"
+                      onClick={() => setShowImagePicker(true)}
+                    >
+                      <ImageLucide className="w-3 h-3" />
+                      Browse Library
+                    </Button>
                     {/* Upload image */}
                     <Label className="flex-1">
                       <Input
@@ -573,6 +594,14 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Image Picker Dialog for Library Selection */}
+      <ImagePickerDialog
+        isOpen={showImagePicker}
+        onClose={() => setShowImagePicker(false)}
+        onSelect={handleSelectFromLibrary}
+        title="Select Reference Image"
+      />
     </div>
   );
 };

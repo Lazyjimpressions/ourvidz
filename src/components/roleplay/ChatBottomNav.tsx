@@ -31,7 +31,9 @@ export const ChatBottomNav: React.FC<ChatBottomNavProps> = ({
         className
       )}
       style={{
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)'
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        // Ensure it's above input area
+        boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)'
       }}
     >
       <div className="flex items-center justify-around h-14 px-4 max-w-lg mx-auto">

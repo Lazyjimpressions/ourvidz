@@ -265,7 +265,14 @@ export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
                   {characterScenes.map(scene => (
                     <div 
                       key={scene.id}
-                      onClick={() => handleSceneSelect(scene)}
+                      onClick={(e) => {
+                        // Only select if not clicking on edit button
+                        const target = e.target as HTMLElement;
+                        const isButton = target.closest('button') || target.tagName === 'BUTTON';
+                        if (!isButton) {
+                          handleSceneSelect(scene);
+                        }
+                      }}
                       className={`
                         text-xs text-gray-300 p-3 rounded border cursor-pointer transition-colors relative
                         ${selectedScene?.id === scene.id 

@@ -231,12 +231,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               isUser 
                 ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white border-0' 
                 : 'bg-gray-800 text-white border-gray-700',
-              isMobile ? 'px-4 py-3 text-sm' : 'px-5 py-4 text-base',
+              isMobile ? 'px-4 py-3' : 'px-5 py-4',
               "max-w-full"
             )}>
               <p className={cn(
-                "whitespace-pre-wrap break-words leading-relaxed",
-                isMobile ? "text-sm" : "text-base"
+                "whitespace-pre-wrap break-words",
+                isMobile ? "text-base leading-relaxed" : "text-base leading-relaxed"
               )}>
                 {message.content}
               </p>
@@ -274,12 +274,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             </div>
           </div>
 
-          {/* Scene Image */}
+          {/* Scene Image - Optimized for mobile full-width */}
           {hasScene && signedSceneImage && (
             <div className={cn(
               "mt-3",
               isUser ? 'ml-auto' : 'mr-auto',
-              isMobile ? 'max-w-full' : 'max-w-md'
+              isMobile ? 'w-full' : 'max-w-md'
             )}>
               <Card className="overflow-hidden border-gray-700 bg-gray-900 rounded-xl shadow-xl">
                 <div className="relative group">
@@ -293,7 +293,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                     src={signedSceneImage}
                     alt="Generated scene"
                     className={cn(
-                      "w-full h-auto max-h-96 object-cover rounded-t-xl transition-opacity duration-300",
+                      "w-full h-auto object-cover rounded-t-xl transition-opacity duration-300",
+                      isMobile ? "max-h-[60vh]" : "max-h-96",
                       sceneImageLoading ? "opacity-0 h-0" : "opacity-100"
                     )}
                     onLoad={() => setSceneImageLoading(false)}

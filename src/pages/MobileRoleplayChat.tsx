@@ -31,6 +31,7 @@ import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
 import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { Character, Message, CharacterScene, SceneStyle, ScenarioSessionPayload } from '@/types/roleplay';
+import { cn } from '@/lib/utils';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -1345,7 +1346,10 @@ const MobileRoleplayChat: React.FC = () => {
 
   return (
     <OurVidzDashboardLayout>
-      <div className="flex flex-col h-screen bg-background">
+      <div className={cn(
+        "flex flex-col bg-background",
+        isMobile ? "h-screen w-full" : "h-screen"
+      )}>
         {/* Header - Mobile uses simplified header, Desktop uses full header */}
         {isMobile ? (
           <MobileChatHeader
@@ -1370,11 +1374,16 @@ const MobileRoleplayChat: React.FC = () => {
           />
         )}
 
-        {/* Chat Messages - Add padding for bottom nav on mobile */}
+        {/* Chat Messages - Optimized padding for mobile, full width */}
         <div
-          className="flex-1 overflow-y-auto p-4 space-y-4"
+          className={cn(
+            "flex-1 overflow-y-auto space-y-4",
+            isMobile ? "px-2 py-4" : "p-4"
+          )}
           style={{
-            paddingBottom: isMobile && !isKeyboardVisible ? '80px' : undefined
+            paddingBottom: isMobile 
+              ? (isKeyboardVisible ? '20px' : '140px') // Account for input + bottom nav
+              : undefined
           }}
         >
           {messages.map((message) => (
@@ -1402,16 +1411,34 @@ const MobileRoleplayChat: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
-        <div className="border-t border-border p-4 bg-card">
-          {/* Model Selector removed - available in Settings drawer to prevent overlap */}
-          <MobileChatInput 
-            onSend={handleSendMessage}
-            onGenerateScene={handleGenerateScene}
-            isLoading={isLoading}
-            isMobile={isMobile}
-          />
-        </div>
+        {/* Input Area - Fixed on mobile to prevent footer overlap */}
+        {isMobile ? (
+          <div 
+            className="fixed bottom-14 left-0 right-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border"
+            style={{
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)'
+            }}
+          >
+            <div className="p-3">
+              <MobileChatInput 
+                onSend={handleSendMessage}
+                onGenerateScene={handleGenerateScene}
+                isLoading={isLoading}
+                isMobile={isMobile}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="border-t border-border p-4 bg-card">
+            <MobileChatInput 
+              onSend={handleSendMessage}
+              onGenerateScene={handleGenerateScene}
+              isLoading={isLoading}
+              isMobile={isMobile}
+            />
+          </div>
+        )}
 
         {/* Character Info Drawer - Non-blocking sidebar */}
         <CharacterInfoDrawer

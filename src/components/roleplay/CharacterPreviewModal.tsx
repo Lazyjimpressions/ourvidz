@@ -462,7 +462,14 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                   {characterScenes.map(scene => (
                     <div
                       key={scene.id}
-                      onClick={() => sceneToDelete !== scene.id && handleSceneSelect(scene)}
+                      onClick={(e) => {
+                        // Only select if not clicking on edit/delete buttons or in delete confirmation mode
+                        const target = e.target as HTMLElement;
+                        const isButton = target.closest('button') || target.tagName === 'BUTTON';
+                        if (sceneToDelete !== scene.id && !isButton) {
+                          handleSceneSelect(scene);
+                        }
+                      }}
                       className={`
                         text-xs text-gray-300 p-3 rounded border cursor-pointer transition-colors relative
                         ${selectedScene?.id === scene.id

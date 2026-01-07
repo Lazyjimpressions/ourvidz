@@ -101,7 +101,7 @@ export interface StoryboardScene {
 // ============================================================================
 
 export type ClipStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'approved';
-export type ReferenceImageSource = 'extracted_frame' | 'uploaded' | 'generated' | 'character_portrait';
+export type ReferenceImageSource = 'extracted_frame' | 'uploaded' | 'generated' | 'character_portrait' | 'library';
 
 export interface StoryboardClip {
   id: string;

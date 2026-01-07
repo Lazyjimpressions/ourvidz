@@ -80,7 +80,7 @@ export const MobileChatHeader: React.FC<MobileChatHeaderProps> = ({
       </button>
 
       {/* Right Section - Menu */}
-      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={true}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
@@ -91,7 +91,7 @@ export const MobileChatHeader: React.FC<MobileChatHeaderProps> = ({
             <MoreVertical className="w-5 h-5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-48 z-[100]" sideOffset={5}>
           {onCharacterInfoClick && (
             <DropdownMenuItem onClick={() => { onCharacterInfoClick(); setMenuOpen(false); }}>
               <Info className="w-4 h-4 mr-2" />
