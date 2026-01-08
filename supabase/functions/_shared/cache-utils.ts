@@ -103,7 +103,7 @@ export function getTemplateFromCache(
   enhancerModel: string,
   jobType: string,
   useCase: string,
-  contentMode: string
+  contentMode: 'sfw' | 'nsfw'
 ): any {
   if (!cache) return null;
 
@@ -251,7 +251,7 @@ export function getChatTemplateFromCache(
   let template = chatBucket[chatType];
   
   if (template) {
-    console.log(`✅ Found template: ${chatType} (${contentTier}) - token_limit: ${template.token_limit || 'unknown'}`);
+    console.log(`✅ Found template: ${chatType} (${contentTier}) - length: ${typeof template === 'string' ? template.length : 'object'} chars`);
   } else {
     console.warn(`❌ Template not found: ${chatType} (${contentTier})`);
     console.log('Available template keys:', Object.keys(chatBucket));

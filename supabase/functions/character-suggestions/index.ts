@@ -425,7 +425,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: false,
-      error: error.message || 'Failed to generate suggestions',
+      error: error instanceof Error ? error.message : 'Failed to generate suggestions',
       processing_time_ms: Date.now() - startTime
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -177,12 +177,12 @@ serve(async (req) => {
 
   } catch (error) {
     const errorPrompt = typeof prompt === 'string' ? prompt.substring(0, 100) : 'unknown prompt'
-    monitor.recordError(error, { prompt: errorPrompt })
+    monitor.recordError(error instanceof Error ? error : new Error(String(error)), { prompt: errorPrompt })
     console.error('❌ Dynamic enhance prompt error:', error)
     return new Response(JSON.stringify({
       error: 'Failed to enhance prompt',
       success: false,
-      details: error.message,
+      details: error instanceof Error ? error.message : String(error),
       execution_time_ms: monitor.finalize().executionTime
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
