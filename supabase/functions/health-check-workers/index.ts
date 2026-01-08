@@ -71,7 +71,7 @@ serve(async (req) => {
           isHealthy: false,
           lastChecked: new Date().toISOString(),
           responseTimeMs: null,
-          healthError: error.message,
+          healthError: error instanceof Error ? error.message : String(error),
           workerUrl: config.workerUrl
         }
       }
@@ -125,7 +125,7 @@ serve(async (req) => {
             isHealthy: false,
             lastChecked: new Date().toISOString(),
             responseTimeMs: null,
-            healthError: error.message,
+            healthError: error instanceof Error ? error.message : String(error),
             workerUrl: chatWorkerUrl
           }
         }
@@ -143,7 +143,7 @@ serve(async (req) => {
         isHealthy: false,
         lastChecked: new Date().toISOString(),
         responseTimeMs: null,
-        healthError: `Failed to check chat worker: ${error.message}`,
+        healthError: `Failed to check chat worker: ${error instanceof Error ? error.message : String(error)}`,
         workerUrl: null
       }
     }

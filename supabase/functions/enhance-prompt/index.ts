@@ -244,7 +244,7 @@ class DynamicEnhancementOrchestrator {
           throw new Error('No cached template found')
         }
       } catch (cacheError) {
-        console.log('⚠️ Cache failed, trying database:', cacheError.message)
+        console.log('⚠️ Cache failed, trying database:', cacheError instanceof Error ? cacheError.message : String(cacheError))
         
         try {
           const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
@@ -261,7 +261,7 @@ class DynamicEnhancementOrchestrator {
           enhancementResult.fallback_level = 1
           console.log('✅ Using database template:', template.template_name || 'unnamed')
         } catch (dbError) {
-          console.log('⚠️ Database template failed, using hardcoded fallback:', dbError.message)
+          console.log('⚠️ Database template failed, using hardcoded fallback:', dbError instanceof Error ? dbError.message : String(dbError))
           enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
           enhancementResult.fallback_level = 2
           enhancementResult.template_name = 'hardcoded_fallback'
@@ -281,7 +281,7 @@ class DynamicEnhancementOrchestrator {
       }
 
     } catch (error) {
-      console.error('💥 Enhancement failed completely:', error)
+      console.error('💥 Enhancement failed completely:', error instanceof Error ? error.message : String(error))
       return {
         enhanced_prompt: request.prompt,
         strategy: 'error_fallback',
@@ -347,7 +347,7 @@ class DynamicEnhancementOrchestrator {
       }
 
     } catch (workerError) {
-      console.log('⚠️ Worker failed, using rule-based enhancement:', workerError.message)
+      console.log('⚠️ Worker failed, using rule-based enhancement:', workerError instanceof Error ? workerError.message : String(workerError))
       return this.enhanceWithRules(request, template.model_type, contentMode, template)
     }
   }
@@ -437,8 +437,8 @@ class DynamicEnhancementOrchestrator {
       };
 
     } catch (error) {
-      console.error('❌ Chat worker request failed:', error);
-      throw new Error(`Chat worker communication failed: ${error.message}`);
+      console.error('❌ Chat worker request failed:', error instanceof Error ? error.message : String(error));
+      throw new Error(`Chat worker communication failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -670,7 +670,7 @@ CRITICAL FOR MALE CHARACTERS:
         compressed: false
       }
     } catch (error) {
-      console.error('❌ Enhanced SDXL NSFW enhancement failed:', error)
+      console.error('❌ Enhanced SDXL NSFW enhancement failed:', error instanceof Error ? error.message : String(error))
       throw error
     }
   }
@@ -685,7 +685,7 @@ CRITICAL FOR MALE CHARACTERS:
       const enhancedPrompt = this.applyTemplateEnhancement(prompt, template, contentMode)
       return enhancedPrompt
     } catch (error) {
-      console.error('❌ Enhancement API call failed:', error)
+      console.error('❌ Enhancement API call failed:', error instanceof Error ? error.message : String(error))
       // Fallback to basic enhancement
       return this.applyBasicEnhancement(prompt, contentMode)
     }

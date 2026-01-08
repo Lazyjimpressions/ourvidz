@@ -137,7 +137,7 @@ serve(async (req) => {
         healthError = `Health check failed: ${healthResponse.status} ${healthResponse.statusText}`
       }
     } catch (error) {
-      healthError = `Health check error: ${error.message}`
+      healthError = `Health check error: ${error instanceof Error ? error.message : String(error)}`
     }
 
     // Try to discover endpoints by querying worker info first

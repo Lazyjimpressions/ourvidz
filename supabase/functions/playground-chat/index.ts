@@ -1033,12 +1033,12 @@ You say: ...`;
 
   } catch (error) {
     const totalTime = Date.now() - startTime;
-    console.error('❌ Error in playground-chat function:', error);
+    console.error('❌ Error in playground-chat function:', error instanceof Error ? error.message : String(error));
     console.log('⏱️ Error timing:', { total_ms: totalTime, db_read_ms: dbReadTime, prompt_ms: promptTime, worker_ms: workerTime, db_write_ms: dbWriteTime });
     return new Response(
       JSON.stringify({
         success: false,
-        error: (error as Error).message,
+        error: error instanceof Error ? error.message : String(error),
       }),
       {
         status: 500,

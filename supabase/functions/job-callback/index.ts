@@ -297,7 +297,7 @@ serve(async (req) => {
               console.error('Failed to update scene with image URL:', sceneUpdateError);
             }
           } catch (error) {
-            console.error('Error updating roleplay scene:', error);
+            console.error('Error updating roleplay scene:', error instanceof Error ? error.message : String(error));
           }
         } else if (characterId && firstImageAsset && !sceneId) {
           // Fallback: If no scene_id but we have character_id, try to find or create scene
@@ -498,11 +498,11 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Job callback error:', error)
+    console.error('Job callback error:', error instanceof Error ? error.message : String(error))
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Internal server error',
-        details: error.message 
+        details: error instanceof Error ? error.message : String(error)
       }),
       {
         status: 500,
