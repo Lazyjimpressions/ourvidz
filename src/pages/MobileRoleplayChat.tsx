@@ -1398,6 +1398,7 @@ const MobileRoleplayChat: React.FC = () => {
                 signedUserCharacterImageUrl={signedUserCharacterImage}
                 onGenerateScene={handleGenerateScene}
                 onRetry={message.metadata?.needsRetry ? handleRetryKickoff : undefined}
+                conversationId={conversationId} // ✅ FIX: Pass conversationId to ChatMessage
               />
           ))}
           

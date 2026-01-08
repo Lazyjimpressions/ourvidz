@@ -12,9 +12,10 @@ import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera } from 'lucide-react';
+import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneStyle } from '@/types/roleplay';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface RoleplaySettingsModalProps {
   isOpen: boolean;
@@ -814,11 +815,25 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <Label className="font-medium">Image Consistency</Label>
-                    <Info className="w-4 h-4 text-muted-foreground" />
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-4 h-4 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-xs">
+                          <p className="text-sm">
+                            Choose how to maintain character consistency across generated scenes. 
+                            Hybrid combines both methods for maximum consistency.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="method" className="text-sm">Method</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="method" className="text-sm">Method</Label>
+                    </div>
                     <Select 
                       key={`consistency-method-${localConsistencySettings.method}`}
                       value={localConsistencySettings.method} 
@@ -835,54 +850,133 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                           value="hybrid"
                           disabled={(!character?.reference_image_url && !character?.seed_locked)}
                         >
-                          Hybrid
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4" />
+                            <span>Hybrid</span>
+                          </div>
                         </SelectItem>
                         <SelectItem 
                           value="i2i_reference"
                           disabled={!character?.reference_image_url}
                         >
-                          Reference Image
+                          <div className="flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4" />
+                            <span>Reference Image</span>
+                          </div>
                         </SelectItem>
                         <SelectItem 
                           value="seed_locked"
                           disabled={!character?.seed_locked}
                         >
-                          Seed Locked
+                          <div className="flex items-center gap-2">
+                            <Lock className="w-4 h-4" />
+                            <span>Seed Locked</span>
+                          </div>
                         </SelectItem>
                       </SelectContent>
                     </Select>
-                    {/* Method descriptions */}
-                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    
+                    {/* Method descriptions with visual feedback */}
+                    <div className="mt-2 space-y-1 text-xs transition-all duration-200">
                       {localConsistencySettings.method === 'hybrid' && (
-                        <p>Combines seed locking with reference image for maximum consistency</p>
+                        <div className="p-2 rounded-md bg-blue-500/10 border border-blue-500/20">
+                          <p className="text-blue-300 font-medium mb-1">Hybrid Method Selected</p>
+                          <p className="text-muted-foreground">
+                            Combines seed locking with reference image for maximum consistency. 
+                            {character?.reference_image_url && character?.seed_locked 
+                              ? ' Both reference image and seed will be used.' 
+                              : character?.reference_image_url 
+                              ? ' Using reference image only (seed not available).'
+                              : character?.seed_locked
+                              ? ' Using seed only (reference image not available).'
+                              : ' ⚠️ Requires either reference image or seed value.'}
+                          </p>
+                        </div>
                       )}
                       {localConsistencySettings.method === 'i2i_reference' && (
-                        <p>Uses reference image for character consistency</p>
+                        <div className="p-2 rounded-md bg-green-500/10 border border-green-500/20">
+                          <p className="text-green-300 font-medium mb-1">Reference Image Method Selected</p>
+                          <p className="text-muted-foreground">
+                            Uses reference image for character consistency. Best for visual accuracy.
+                            {!character?.reference_image_url && (
+                              <span className="text-amber-400 block mt-1">
+                                ⚠️ Reference image required. Generate character portrait first.
+                              </span>
+                            )}
+                          </p>
+                        </div>
                       )}
                       {localConsistencySettings.method === 'seed_locked' && (
-                        <p>Uses fixed seed for consistent character generation</p>
+                        <div className="p-2 rounded-md bg-purple-500/10 border border-purple-500/20">
+                          <p className="text-purple-300 font-medium mb-1">Seed Locked Method Selected</p>
+                          <p className="text-muted-foreground">
+                            Uses fixed seed for consistent character generation. Best for deterministic results.
+                            {character?.seed_locked ? (
+                              <span className="text-green-400 block mt-1">
+                                ✓ Seed value available: {character.seed_locked}
+                              </span>
+                            ) : (
+                              <span className="text-amber-400 block mt-1">
+                                ⚠️ Seed value required. Generate character portrait first to create a seed.
+                              </span>
+                            )}
+                          </p>
+                        </div>
                       )}
                     </div>
+                    
+                    {/* Warning messages */}
                     {localConsistencySettings.method === 'i2i_reference' && !character?.reference_image_url && (
-                      <p className="text-xs text-amber-400 mt-1">
-                        ⚠️ Reference Image method requires a character reference image. Falling back to hybrid or seed_locked.
-                      </p>
+                      <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                        <p className="text-xs text-amber-400">
+                          ⚠️ Reference Image method requires a character reference image. 
+                          Falling back to hybrid or seed_locked if available.
+                        </p>
+                      </div>
                     )}
                     {localConsistencySettings.method === 'seed_locked' && !character?.seed_locked && (
-                      <p className="text-xs text-amber-400 mt-1">
-                        ⚠️ Seed Locked method requires a character seed value. Falling back to hybrid or i2i_reference.
-                      </p>
+                      <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                        <p className="text-xs text-amber-400">
+                          ⚠️ Seed Locked method requires a character seed value. 
+                          Generate character portrait first to create a seed. 
+                          Falling back to hybrid or i2i_reference if available.
+                        </p>
+                      </div>
                     )}
                     {localConsistencySettings.method === 'hybrid' && !character?.reference_image_url && !character?.seed_locked && (
-                      <p className="text-xs text-amber-400 mt-1">
-                        ⚠️ Hybrid method requires either a reference image or seed value. Some features may not work.
-                      </p>
+                      <div className="p-2 rounded-md bg-amber-500/10 border border-amber-500/20">
+                        <p className="text-xs text-amber-400">
+                          ⚠️ Hybrid method requires either a reference image or seed value. 
+                          Some features may not work. Generate character portrait to enable full functionality.
+                        </p>
+                      </div>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <Label htmlFor="reference_strength" className="text-xs">Reference Strength</Label>
+                  {/* Sliders - conditionally shown based on method */}
+                  <div className={cn(
+                    "grid grid-cols-2 gap-4 transition-all duration-200",
+                    localConsistencySettings.method === 'seed_locked' && "opacity-50 pointer-events-none"
+                  )}>
+                    <div className={cn(
+                      "space-y-1 transition-all duration-200",
+                      localConsistencySettings.method === 'seed_locked' && "hidden"
+                    )}>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="reference_strength" className="text-xs">Reference Strength</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="w-3 h-3 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-xs">
+                                How strongly to follow the reference image. Higher values maintain more visual similarity.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <input
                         type="range"
                         min="0"
@@ -896,14 +990,32 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                           })
                         }
                         className="w-full"
+                        disabled={localConsistencySettings.method === 'seed_locked'}
                       />
                       <span className="text-xs text-muted-foreground">
-                        {localConsistencySettings.reference_strength}
+                        {Math.round(localConsistencySettings.reference_strength * 100)}%
                       </span>
                     </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="denoise_strength" className="text-xs">Denoise Strength</Label>
+                    <div className={cn(
+                      "space-y-1 transition-all duration-200",
+                      localConsistencySettings.method === 'seed_locked' && "hidden"
+                    )}>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="denoise_strength" className="text-xs">Denoise Strength</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="w-3 h-3 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-xs">
+                                How much to modify the reference image. Higher values allow more scene variation while maintaining character consistency.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                       <input
                         type="range"
                         min="0"
@@ -917,12 +1029,22 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                           })
                         }
                         className="w-full"
+                        disabled={localConsistencySettings.method === 'seed_locked'}
                       />
                       <span className="text-xs text-muted-foreground">
-                        {localConsistencySettings.denoise_strength}
+                        {Math.round(localConsistencySettings.denoise_strength * 100)}%
                       </span>
                     </div>
                   </div>
+                  
+                  {/* Seed value display for seed_locked method */}
+                  {localConsistencySettings.method === 'seed_locked' && character?.seed_locked && (
+                    <div className="p-2 rounded-md bg-purple-500/10 border border-purple-500/20">
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-purple-300">Current Seed Value:</span> {character.seed_locked}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
             </TabsContent>
