@@ -590,17 +590,21 @@ Edge Function (fal-image)
 - [x] Modal shows correct mode (I2I Modification vs Reference Image)
 - [x] Edge function receives `scene_prompt_override` parameter
 - [x] Edge function receives `current_scene_image_url` parameter
-- [ ] Modification uses I2I with current scene (not character reference)
-- [ ] Scene narrative generation is skipped when override provided
-- [ ] Regenerated scene appears in chat inline
-- [ ] character_scenes record shows `generation_mode: 'modification'`
+- [x] Modification uses I2I with current scene (not character reference) - verified in code
+- [x] Scene narrative generation is skipped when override provided - verified in code (line 2156-2159)
+- [x] Regenerated scene appears in chat inline - subscribeToJobCompletion handles this
+- [ ] character_scenes record shows `generation_mode: 'modification'` - needs database verification
 
-### Phase 2 Testing (Future)
+### Phase 2 Testing
 
-- [ ] Quick modification bottom sheet appears on scene tap
-- [ ] NSFW presets work correctly
-- [ ] Intensity presets affect strength parameter
-- [ ] Admin debug panel is collapsible
+- [x] Quick modification bottom sheet appears on scene tap (implemented in ChatMessage)
+- [x] QuickModificationSheet component created with NSFW presets
+- [x] IntensitySelector component created with presets and slider
+- [x] Strength parameter passing fixed in edge function (uses consistency_settings.denoise_strength)
+- [x] Image cropping fixed (object-cover → object-contain for full image display)
+- [ ] NSFW presets work correctly (needs end-to-end testing)
+- [ ] Intensity presets affect strength parameter (needs verification after deployment)
+- [ ] Admin debug panel is collapsible (low priority)
 
 ---
 

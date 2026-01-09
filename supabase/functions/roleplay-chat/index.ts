@@ -2641,18 +2641,27 @@ const sceneContext = analyzeSceneContent(response);
           let i2iReferenceImage: string | undefined;
           let i2iStrength: number;
 
+          // ✅ FIX: Use denoise_strength from consistency_settings when provided (for user-selected intensity)
+          const effectiveDenoiseStrength = consistencySettings?.denoise_strength;
+
           if (generationMode === 'modification' && effectiveReferenceImageUrl) {
             // Modification mode: Use Seedream v4.5/edit with CURRENT scene as reference
             i2iModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
             i2iReferenceImage = effectiveReferenceImageUrl; // Current scene image
-            i2iStrength = 0.5; // Slightly higher strength for modifications
-            console.log('🔧 Modification Mode: Using Seedream v4.5/edit with current scene');
+            i2iStrength = effectiveDenoiseStrength ?? 0.5; // Use override or default for modifications
+            console.log('🔧 Modification Mode: Using Seedream v4.5/edit with current scene', {
+              strength: i2iStrength,
+              strength_source: effectiveDenoiseStrength ? 'user_override' : 'default'
+            });
           } else if (useI2IIteration && previousSceneImageUrl) {
             // I2I continuation mode: Use Seedream v4.5/edit with previous scene as reference
             i2iModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit'; // Override to Seedream edit model
             i2iReferenceImage = previousSceneImageUrl;
-            i2iStrength = 0.45; // Moderate strength for scene-to-scene continuity
-            console.log('🔄 I2I Iteration Mode: Using Seedream v4.5/edit with previous scene');
+            i2iStrength = effectiveDenoiseStrength ?? 0.45; // Use override or default for scene-to-scene continuity
+            console.log('🔄 I2I Iteration Mode: Using Seedream v4.5/edit with previous scene', {
+              strength: i2iStrength,
+              strength_source: effectiveDenoiseStrength ? 'user_override' : 'default'
+            });
           } else {
             // T2I mode: Use character reference image if available
             i2iReferenceImage = character.reference_image_url || undefined;
