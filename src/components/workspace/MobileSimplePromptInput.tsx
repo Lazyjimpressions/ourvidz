@@ -31,8 +31,11 @@ export interface MobileSimplePromptInputProps {
   onReferenceImageSet?: (file: File, type: 'single' | 'start' | 'end') => void;
   onReferenceImageRemove?: (type: 'single' | 'start' | 'end') => void;
   referenceImage?: File | null; // NEW: Sync with hook state
+  referenceImageUrl?: string | null; // URL fallback for workspace images
   beginningRefImage?: File | null; // NEW: Sync with hook state
+  beginningRefImageUrl?: string | null; // URL fallback for video start frame
   endingRefImage?: File | null; // NEW: Sync with hook state
+  endingRefImageUrl?: string | null; // URL fallback for video end frame
   contentType?: 'sfw' | 'nsfw';
   onContentTypeChange?: (type: 'sfw' | 'nsfw') => void;
   aspectRatio?: '16:9' | '1:1' | '9:16';
@@ -54,8 +57,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onReferenceImageSet,
   onReferenceImageRemove,
   referenceImage, // NEW: Use hook state instead of local state
+  referenceImageUrl, // URL fallback for workspace images
   beginningRefImage, // NEW: Use hook state
+  beginningRefImageUrl, // URL fallback for video start frame
   endingRefImage, // NEW: Use hook state
+  endingRefImageUrl, // URL fallback for video end frame
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
@@ -512,10 +518,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       </Button>
                     )}
                   </div>
-                  {referenceImage && (
+                  {(referenceImage || referenceImageUrl) && (
                     <div className="flex items-center gap-2">
                       <MobileReferenceImagePreview
                         file={referenceImage}
+                        imageUrl={referenceImageUrl}
                         onRemove={() => removeReferenceImage('single')}
                         onError={(error) => {
                           console.error('Preview error:', error);
@@ -524,8 +531,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                         sizeClass="h-16 w-16"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium truncate">{referenceImage.name}</div>
-                        <div className="text-xs text-muted-foreground">{(referenceImage.size / 1024).toFixed(0)}KB</div>
+                        <div className="text-xs font-medium truncate">{referenceImage?.name || 'Workspace image'}</div>
+                        {referenceImage && (
+                          <div className="text-xs text-muted-foreground">{(referenceImage.size / 1024).toFixed(0)}KB</div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -556,10 +565,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                         </Button>
                       )}
                     </div>
-                    {beginningRefImage && (
+                    {(beginningRefImage || beginningRefImageUrl) && (
                       <div className="flex items-center gap-2">
                         <MobileReferenceImagePreview
                           file={beginningRefImage}
+                          imageUrl={beginningRefImageUrl}
                           onRemove={() => removeReferenceImage('start')}
                           onError={(error) => {
                             console.error('Preview error:', error);
@@ -568,8 +578,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                           sizeClass="h-16 w-16"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium truncate">{beginningRefImage.name}</div>
-                          <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
+                          <div className="text-xs font-medium truncate">{beginningRefImage?.name || 'Workspace image'}</div>
+                          {beginningRefImage && (
+                            <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
+                          )}
                         </div>
                       </div>
                     )}
@@ -600,10 +612,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                           </Button>
                         )}
                       </div>
-                      {beginningRefImage && (
+                      {(beginningRefImage || beginningRefImageUrl) && (
                         <div className="flex items-center gap-2">
                           <MobileReferenceImagePreview
                             file={beginningRefImage}
+                            imageUrl={beginningRefImageUrl}
                             onRemove={() => removeReferenceImage('start')}
                             onError={(error) => {
                               console.error('Preview error:', error);
@@ -612,8 +625,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                             sizeClass="h-16 w-16"
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium truncate">{beginningRefImage.name}</div>
-                            <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
+                            <div className="text-xs font-medium truncate">{beginningRefImage?.name || 'Workspace image'}</div>
+                            {beginningRefImage && (
+                              <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -641,10 +656,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                           </Button>
                         )}
                       </div>
-                      {endingRefImage && (
+                      {(endingRefImage || endingRefImageUrl) && (
                         <div className="flex items-center gap-2">
                           <MobileReferenceImagePreview
                             file={endingRefImage}
+                            imageUrl={endingRefImageUrl}
                             onRemove={() => removeReferenceImage('end')}
                             onError={(error) => {
                               console.error('Preview error:', error);
@@ -653,8 +669,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                             sizeClass="h-16 w-16"
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium truncate">{endingRefImage.name}</div>
-                            <div className="text-xs text-muted-foreground">{(endingRefImage.size / 1024).toFixed(0)}KB</div>
+                            <div className="text-xs font-medium truncate">{endingRefImage?.name || 'Workspace image'}</div>
+                            {endingRefImage && (
+                              <div className="text-xs text-muted-foreground">{(endingRefImage.size / 1024).toFixed(0)}KB</div>
+                            )}
                           </div>
                         </div>
                       )}

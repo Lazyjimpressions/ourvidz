@@ -39,7 +39,9 @@ const MobileSimplifiedWorkspace = () => {
     referenceImage, // NEW: Get reference image state from hook
     referenceImageUrl, // NEW: Get reference image URL state from hook
     beginningRefImage, // NEW: Get beginning ref image state
+    beginningRefImageUrl, // NEW: Get beginning ref image URL state
     endingRefImage, // NEW: Get ending ref image state
+    endingRefImageUrl, // NEW: Get ending ref image URL state
     // Actions
     updateMode,
     setPrompt,
@@ -454,8 +456,11 @@ const MobileSimplifiedWorkspace = () => {
           onReferenceImageSet={handleReferenceImageSet}
           onReferenceImageRemove={handleReferenceImageRemove}
           referenceImage={referenceImage}
+          referenceImageUrl={referenceImageUrl}
           beginningRefImage={beginningRefImage}
+          beginningRefImageUrl={beginningRefImageUrl}
           endingRefImage={endingRefImage}
+          endingRefImageUrl={endingRefImageUrl}
           contentType={contentType}
           onContentTypeChange={setContentType}
           aspectRatio={aspectRatio}

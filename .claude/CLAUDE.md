@@ -7,5 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #12 | 1:28 PM | 🔵 | Sub-Agent Process File Access Pattern Identified | ~351 |
+| #19 | 1:33 PM | 🔵 | PID 7010 Subagent Working Directory and Context | ~336 |
 </claude-mem-context>
