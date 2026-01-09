@@ -1,8 +1,9 @@
 # Scene Continuity Development Plan
 
 **Date:** 2026-01-08
-**Status:** Phase 1 Complete, Phase 2 Pending
+**Status:** Phase 1 Complete (including Regeneration), Phase 2 Pending
 **Priority:** HIGH - Core UX Enhancement
+**Last Updated:** 2026-01-08
 
 ---
 
@@ -12,11 +13,12 @@
 2. [Related Documentation](#2-related-documentation)
 3. [Architecture Overview](#3-architecture-overview)
 4. [Phase 1 Implementation Status](#4-phase-1-implementation-status)
-5. [Phase 2 Implementation Plan](#5-phase-2-implementation-plan)
-6. [Technical Details](#6-technical-details)
-7. [Known Issues & Bugs Fixed](#7-known-issues--bugs-fixed)
-8. [Testing Checklist](#8-testing-checklist)
-9. [Future Enhancements](#9-future-enhancements)
+5. [Phase 1.5: Scene Regeneration](#5-phase-15-scene-regeneration)
+6. [Phase 2 Implementation Plan](#6-phase-2-implementation-plan)
+7. [Technical Details](#7-technical-details)
+8. [Known Issues & Bugs Fixed](#8-known-issues--bugs-fixed)
+9. [Testing Checklist](#9-testing-checklist)
+10. [Future Enhancements](#10-future-enhancements)
 
 ---
 
@@ -42,6 +44,7 @@ I2I iteration is **critical for NSFW content** because it:
 | Phase | Status | Description |
 |-------|--------|-------------|
 | **Phase 1** | ✅ Complete | Core I2I iteration infrastructure |
+| **Phase 1.5** | ✅ Complete | Scene regeneration/modification with I2I |
 | **Phase 2** | 🔲 Pending | Quick modification UI & NSFW presets |
 
 ---
@@ -96,20 +99,32 @@ I2I iteration is **critical for NSFW content** because it:
 ### Model Selection Logic
 
 ```typescript
-// Implemented in roleplay-chat edge function
+// Implemented in roleplay-chat edge function (generateScene function)
 const isFirstScene = !previousSceneId || !previousSceneImageUrl;
-const useI2IIteration = sceneContinuityEnabled && !isFirstScene && !!previousSceneImageUrl;
-const generationMode = useI2IIteration ? 'i2i' : 't2i';
+const isModification = !!scenePromptOverride && !!currentSceneImageUrl;
 
-if (useI2IIteration) {
-  // I2I: Iterate on previous scene
-  model = 'fal-ai/seedream/v4.5/edit';
-  referenceImage = previousSceneImageUrl;
+// Calculate generation mode and settings
+let useI2IIteration: boolean;
+let generationMode: 't2i' | 'i2i' | 'modification';
+let effectiveReferenceImageUrl: string | undefined;
+
+if (isModification) {
+  // Modification mode: I2I on current scene with user-edited prompt
+  useI2IIteration = true;
+  generationMode = 'modification';
+  effectiveReferenceImageUrl = currentSceneImageUrl;
+  strength = 0.5; // Higher for modifications
+} else if (sceneContinuityEnabled && !isFirstScene && !!previousSceneImageUrl) {
+  // Continuation mode: I2I on previous scene
+  useI2IIteration = true;
+  generationMode = 'i2i';
+  effectiveReferenceImageUrl = previousSceneImageUrl;
   strength = 0.45; // Scene-to-scene iteration
 } else {
-  // T2I: Generate from scratch
-  model = 'fal-ai/seedream/v4/text-to-image';
-  referenceImage = character.reference_image_url;
+  // First scene or T2I: Use character reference
+  useI2IIteration = false;
+  generationMode = 't2i';
+  effectiveReferenceImageUrl = undefined; // Will use character reference
 }
 ```
 
@@ -210,13 +225,162 @@ Fixed `subscribeToJobCompletion`:
 
 ---
 
-## 5. Phase 2 Implementation Plan
+## 5. Phase 1.5: Scene Regeneration
+
+### Overview
+
+Phase 1.5 adds the ability to **edit and regenerate scenes using I2I** (image-to-image) with the current scene as reference, preserving visual context while applying prompt modifications.
+
+**Status:** ✅ Complete (2026-01-08)
+
+### Implementation Summary
+
+| Task | Status | Description |
+|------|--------|-------------|
+| Edge function interface | ✅ | Added `scene_prompt_override` and `current_scene_image_url` |
+| Regeneration detection | ✅ | Added `isSceneRegeneration` and `isSceneModification` flags |
+| generateScene() signature | ✅ | Added `scenePromptOverride`, `currentSceneImageUrl` parameters |
+| generateScene() call site | ✅ | Passes new regeneration parameters |
+| Modification mode handling | ✅ | Uses current scene for I2I with strength 0.5 |
+| Prompt override logic | ✅ | Skips narrative generation when override provided |
+| ScenePromptEditModal | ✅ | Added `currentSceneImageUrl` prop, updated UI |
+| ChatMessage edit button | ✅ | Hover-revealed purple edit button on scene images |
+| ChatMessage props | ✅ | Added `conversationId`, `consistencySettings`, `onSceneRegenerate` |
+| MobileRoleplayChat handler | ✅ | Added `handleSceneRegenerate` function |
+
+### 5.1 Backend Changes
+
+**File:** [supabase/functions/roleplay-chat/index.ts](../../supabase/functions/roleplay-chat/index.ts)
+
+#### Interface Additions (lines 51-53)
+```typescript
+// Scene regeneration/modification fields
+scene_prompt_override?: string; // User-edited prompt for regeneration
+current_scene_image_url?: string; // Current scene image for I2I modification
+```
+
+#### Detection Logic (lines 217-227)
+```typescript
+// Detect regeneration/modification mode
+const isSceneRegeneration = !!scene_prompt_override;
+const isSceneModification = isSceneRegeneration && !!current_scene_image_url;
+
+if (isSceneRegeneration) {
+  console.log('🎬 Scene regeneration mode detected:', {
+    hasPromptOverride: !!scene_prompt_override,
+    hasCurrentSceneImage: !!current_scene_image_url,
+    isModification: isSceneModification
+  });
+}
+```
+
+#### Generation Mode Selection (lines 1959-1975)
+```typescript
+if (generationMode === 'modification' && effectiveReferenceImageUrl) {
+  // Modification mode: Use Seedream v4.5/edit with CURRENT scene as reference
+  i2iModelOverride = 'fal-ai/seedream/v4.5/edit';
+  i2iReferenceImage = effectiveReferenceImageUrl; // Current scene image
+  i2iStrength = 0.5; // Slightly higher strength for modifications
+  console.log('🔧 Modification Mode: Using Seedream v4.5/edit with current scene');
+}
+```
+
+#### Prompt Override (lines 2156-2159)
+```typescript
+if (scenePromptOverride) {
+  // User-provided prompt override (regeneration/modification mode)
+  scenePrompt = scenePromptOverride;
+  console.log('🎬 Using user-provided scene prompt override:', scenePrompt.substring(0, 100) + '...');
+}
+```
+
+### 5.2 Frontend: ScenePromptEditModal
+
+**File:** [src/components/roleplay/ScenePromptEditModal.tsx](../../src/components/roleplay/ScenePromptEditModal.tsx)
+
+Key changes:
+- Added `currentSceneImageUrl` prop for I2I modification
+- Updated `onRegenerate` callback signature: `(editedPrompt: string, currentSceneImageUrl?: string) => void`
+- Edge function call now includes `current_scene_image_url`
+- Dynamic info boxes: green for I2I modification mode, amber for T2I
+
+```typescript
+// Info box shows correct mode
+{currentSceneImageUrl
+  ? 'I2I Modification Mode'
+  : 'Reference Image Used'}
+```
+
+### 5.3 Frontend: ChatMessage Edit Button
+
+**File:** [src/components/roleplay/ChatMessage.tsx](../../src/components/roleplay/ChatMessage.tsx)
+
+Key changes:
+- Added Edit icon import from lucide-react
+- Added ScenePromptEditModal import
+- Added `showSceneEditModal` state
+- New props: `conversationId`, `consistencySettings`, `onSceneRegenerate`
+- Hover-revealed purple edit button on scene images
+- Renders ScenePromptEditModal when scene exists
+
+```tsx
+{/* Edit button - hover revealed */}
+{onSceneRegenerate && (
+  <Button
+    size="sm"
+    variant="secondary"
+    onClick={() => setShowSceneEditModal(true)}
+    className="bg-purple-600/80 hover:bg-purple-600 text-white border-0 backdrop-blur-sm"
+    title="Edit scene prompt"
+  >
+    <Edit className="w-4 h-4" />
+  </Button>
+)}
+```
+
+### 5.4 Frontend: MobileRoleplayChat Handler
+
+**File:** [src/pages/MobileRoleplayChat.tsx](../../src/pages/MobileRoleplayChat.tsx)
+
+Added `handleSceneRegenerate` function (lines 1096-1174):
+- Calls roleplay-chat with `scene_prompt_override` and `current_scene_image_url`
+- Creates placeholder message with `is_regeneration: true` metadata
+- Subscribes to job completion for inline display
+- Shows appropriate toast based on modification mode
+
+Props passed to ChatMessage:
+- `conversationId`
+- `consistencySettings`
+- `onSceneRegenerate={handleSceneRegenerate}`
+
+### 5.5 Audit Against Plan
+
+**Plan File:** `~/.claude/plans/bubbly-forging-dragon.md`
+
+| Planned Task | Implementation | Deviation |
+|--------------|----------------|-----------|
+| Task 1: Interface fields | ✅ Exact match | None |
+| Task 2: Detection logic | ✅ Exact match + logging | Added console logging |
+| Task 3: Function signature | ✅ Exact match | None |
+| Task 4: Call site update | ✅ Exact match | None |
+| Task 5: Regeneration handling | ✅ Enhanced | Used `effectiveReferenceImageUrl` variable for cleaner code |
+| Task 6: Modal props | ✅ Exact match | None |
+| Task 7: Edit button | ✅ Enhanced | Purple styling for visibility |
+| Task 8: ChatMessage props | ✅ Exact match | None |
+| Task 9: Pass props | ✅ Exact match | None |
+| Task 10: Handler | ✅ Enhanced | Full implementation with job subscription |
+
+**Overall:** All 10 tasks completed. Minor enhancements over plan (logging, styling, variable naming).
+
+---
+
+## 6. Phase 2 Implementation Plan
 
 ### Overview
 
 Phase 2 adds the **Quick Modification UI** - a user-facing interface for targeted scene modifications using I2I.
 
-### 5.1 Quick Modification Bottom Sheet
+### 6.1 Quick Modification Bottom Sheet
 
 **Status:** 🔲 Pending
 **Priority:** High
@@ -243,7 +407,7 @@ Add a bottom sheet that appears when user taps a scene image:
 └────────────────────────────────────────┘
 ```
 
-### 5.2 NSFW Modification Presets
+### 6.2 NSFW Modification Presets
 
 **Status:** 🔲 Pending
 **Priority:** High
@@ -255,7 +419,7 @@ Add a bottom sheet that appears when user taps a scene image:
 | Change Position | "Change position to {{position}}, maintain clothing and setting" | 0.40 |
 | Intimate Progression | "Progress to more intimate interaction" | 0.30 |
 
-### 5.3 Intensity Presets
+### 6.3 Intensity Presets
 
 **Status:** 🔲 Pending
 **Priority:** Medium
@@ -266,7 +430,7 @@ Add a bottom sheet that appears when user taps a scene image:
 | Moderate | 0.40-0.50 | Noticeable changes, same characters |
 | Bold | 0.55-0.70 | Major changes, may alter setting |
 
-### 5.4 New Prompt Templates
+### 6.4 New Prompt Templates
 
 **Status:** 🔲 Pending
 **Priority:** Medium
@@ -281,7 +445,7 @@ Add to `prompt_templates` table:
 | `Scene Modification - Position` | Change pose | nsfw/sfw |
 | `Scene Modification - Setting` | Change location | nsfw/sfw |
 
-### 5.5 UI/UX Improvements (from Architecture Doc)
+### 6.5 UI/UX Improvements (from Architecture Doc)
 
 **Status:** 🔲 Pending
 **Priority:** Low-Medium
@@ -295,9 +459,9 @@ Per [SCENE_REGENERATION_ARCHITECTURE_ANALYSIS.md](SCENE_REGENERATION_ARCHITECTUR
 
 ---
 
-## 6. Technical Details
+## 7. Technical Details
 
-### 6.1 Strength Parameters
+### 7.1 Strength Parameters
 
 #### Scene-to-Scene Iteration
 
@@ -319,7 +483,7 @@ Per [SCENE_REGENERATION_ARCHITECTURE_ANALYSIS.md](SCENE_REGENERATION_ARCHITECTUR
 | Change position | 0.40 | Face, clothing, setting |
 | Intimate progression | 0.30 | Face, body, interaction |
 
-### 6.2 Model Routing
+### 7.2 Model Routing
 
 | Generation Mode | Model | Reference Image |
 |-----------------|-------|-----------------|
@@ -327,7 +491,7 @@ Per [SCENE_REGENERATION_ARCHITECTURE_ANALYSIS.md](SCENE_REGENERATION_ARCHITECTUR
 | I2I (subsequent) | `seedream/v4.5/edit` | Previous scene |
 | Modification | `seedream/v4.5/edit` | Current scene |
 
-### 6.3 Data Flow
+### 7.3 Data Flow
 
 ```
 Frontend (MobileRoleplayChat)
@@ -362,9 +526,9 @@ Edge Function (fal-image)
 
 ---
 
-## 7. Known Issues & Bugs Fixed
+## 8. Known Issues & Bugs Fixed
 
-### 7.1 Fixed: workspace_assets Query Column Error
+### 8.1 Fixed: workspace_assets Query Column Error
 
 **Issue:** Query failed with "column workspace_assets.metadata does not exist"
 **Root Cause:** The `subscribeToJobCompletion` function queried for `metadata` column which doesn't exist
@@ -379,21 +543,21 @@ Edge Function (fal-image)
 .select('id, temp_storage_path, generation_settings')
 ```
 
-### 7.2 Fixed: Scenes Not Appearing Inline
+### 8.2 Fixed: Scenes Not Appearing Inline
 
 **Issue:** Scenes generated successfully but didn't appear in chat messages
 **Root Cause:** The column name error caused the query to fail, so `image_url` was never set on the message
 **Fix:** Same as 7.1 - correct column name
 **Date Fixed:** 2026-01-08
 
-### 7.3 Known: Maximum Update Depth Warning
+### 8.3 Known: Maximum Update Depth Warning
 
 **Issue:** "Maximum update depth exceeded" warning from `useMobileDetection.ts`
 **Status:** Not blocking, separate issue
 **Impact:** Console warning only, scene functionality works
 **Priority:** Low
 
-### 7.4 Previous Fix: Regeneration Error (from Audit)
+### 8.4 Previous Fix: Regeneration Error (from Audit)
 
 **Issue:** "Missing required information for regeneration" error
 **Root Cause:** `conversationId` not passed from MobileRoleplayChat to ChatMessage
@@ -402,7 +566,7 @@ Edge Function (fal-image)
 
 ---
 
-## 8. Testing Checklist
+## 9. Testing Checklist
 
 ### Phase 1 Testing
 
@@ -418,40 +582,52 @@ Edge Function (fal-image)
 - [ ] Visual consistency improves across 3+ scene chain
 - [ ] NSFW: Clothing state persists across scenes
 
+### Phase 1.5 Testing (Regeneration)
+
+- [x] Edit button appears on scene image hover
+- [x] Clicking edit opens ScenePromptEditModal
+- [x] Modal shows current scene prompt
+- [x] Modal shows correct mode (I2I Modification vs Reference Image)
+- [x] Edge function receives `scene_prompt_override` parameter
+- [x] Edge function receives `current_scene_image_url` parameter
+- [ ] Modification uses I2I with current scene (not character reference)
+- [ ] Scene narrative generation is skipped when override provided
+- [ ] Regenerated scene appears in chat inline
+- [ ] character_scenes record shows `generation_mode: 'modification'`
+
 ### Phase 2 Testing (Future)
 
 - [ ] Quick modification bottom sheet appears on scene tap
 - [ ] NSFW presets work correctly
 - [ ] Intensity presets affect strength parameter
-- [ ] Modification uses current scene as reference
 - [ ] Admin debug panel is collapsible
 
 ---
 
-## 9. Future Enhancements
+## 10. Future Enhancements
 
-### 9.1 Scene Branching
+### 10.1 Scene Branching
 
 Allow users to "branch" from any previous scene, not just the most recent:
 - Add scene history viewer
 - "Use as reference" button on any scene
 - Scene tree visualization
 
-### 9.2 Consistency Scoring
+### 10.2 Consistency Scoring
 
 Implement actual visual consistency measurement:
 - Use CLIP embeddings to compare scenes
 - Track consistency scores per character over time
 - Display consistency metrics in UI
 
-### 9.3 Multi-Character I2I
+### 10.3 Multi-Character I2I
 
 Enhanced support for two-character scenes:
 - Track positions of both characters
 - Maintain relative positioning across scenes
 - Individual character modifications
 
-### 9.4 User Preference Sync
+### 10.4 User Preference Sync
 
 Move scene continuity preference to database:
 - Add to user_settings table
@@ -472,6 +648,15 @@ Move scene continuity preference to database:
 | `src/pages/MobileRoleplayChat.tsx` | Hook integration, scene tracking |
 | `src/components/roleplay/RoleplaySettingsModal.tsx` | Continuity toggle |
 
+### Modified Files (Phase 1.5 - Regeneration)
+
+| File | Changes |
+|------|---------|
+| `supabase/functions/roleplay-chat/index.ts` | `scene_prompt_override`, `current_scene_image_url`, modification mode |
+| `src/components/roleplay/ScenePromptEditModal.tsx` | `currentSceneImageUrl` prop, I2I info display |
+| `src/components/roleplay/ChatMessage.tsx` | Edit button overlay, modal integration, new props |
+| `src/pages/MobileRoleplayChat.tsx` | `handleSceneRegenerate`, ChatMessage props |
+
 ### New Files (Phase 1)
 
 | File | Purpose |
@@ -491,6 +676,7 @@ Move scene continuity preference to database:
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-01-08 | Phase 1.5 (Regeneration) complete - 10 tasks implemented | Claude |
 | 2026-01-08 | Phase 1 complete, fixed inline scene display | Claude |
 | 2026-01-07 | Phase 1 implementation started | Claude |
 | 2026-01-07 | Architecture analysis documented | Claude |
