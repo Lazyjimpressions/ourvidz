@@ -326,6 +326,95 @@ serve(async (req) => {
 
       console.log('✅ Job completed via webhook:', job.id)
 
+      // ✅ FIX: Handle character portrait destination - auto-save to library
+      if (job.metadata?.destination === 'character_portrait' && job.metadata?.character_id) {
+        const characterId = job.metadata.character_id;
+        
+        if (workspaceAsset) {
+          try {
+            // Auto-save to user library with roleplay metadata
+            let sourceKey = workspaceAsset.temp_storage_path;
+            if (sourceKey.startsWith('workspace-temp/')) {
+              sourceKey = sourceKey.replace('workspace-temp/', '');
+            }
+            
+            const destKey = `${job.user_id}/${job.id}_${characterId}.png`;
+            
+            // Copy file to user-library
+            const { data: fileData, error: downloadError } = await supabase.storage
+              .from('workspace-temp')
+              .download(sourceKey);
+
+            if (!downloadError && fileData) {
+              const { error: uploadError } = await supabase.storage
+                .from('user-library')
+                .upload(destKey, fileData, {
+                  contentType: 'image/png',
+                  upsert: true
+                });
+
+              if (!uploadError) {
+                // Create library record with roleplay metadata
+                const { data: libraryAsset, error: libraryError } = await supabase
+                  .from('user_library')
+                  .insert({
+                    user_id: job.user_id,
+                    asset_type: 'image',
+                    storage_path: destKey,
+                    thumbnail_path: null, // Thumbnail not generated for Replicate
+                    file_size_bytes: workspaceAsset.file_size_bytes || 0,
+                    mime_type: 'image/png',
+                    original_prompt: workspaceAsset.original_prompt,
+                    model_used: workspaceAsset.model_used,
+                    generation_seed: workspaceAsset.generation_seed,
+                    width: workspaceAsset.width,
+                    height: workspaceAsset.height,
+                    tags: ['character', 'portrait'],
+                    roleplay_metadata: {
+                      type: 'character_portrait',
+                      character_id: characterId,
+                      character_name: job.metadata.character_name,
+                      consistency_method: job.metadata.consistency_method
+                    },
+                    content_category: 'character'
+                  })
+                  .select()
+                  .single();
+
+                if (!libraryError && libraryAsset) {
+                  // Update character with stable storage path
+                  const stableImageUrl = `user-library/${destKey}`;
+                  
+                  const { error: updateError } = await supabase
+                    .from('characters')
+                    .update({
+                      image_url: stableImageUrl,
+                      reference_image_url: stableImageUrl,
+                      seed_locked: workspaceAsset.generation_seed,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', characterId);
+
+                  if (!updateError) {
+                    console.log(`✅ Character ${characterId} portrait saved to library and character updated`);
+                  } else {
+                    console.error('Failed to update character with library path:', updateError);
+                  }
+                } else {
+                  console.error('Failed to create library record:', libraryError);
+                }
+              } else {
+                console.error('Failed to upload character portrait to library:', uploadError);
+              }
+            } else {
+              console.error('Failed to download character portrait from workspace:', downloadError);
+            }
+          } catch (error) {
+            console.error('Error auto-saving character portrait:', error);
+          }
+        }
+      }
+
       // ✅ FIX: Handle roleplay_scene destination - link images to character_scenes
       if (job.metadata?.destination === 'roleplay_scene') {
         const sceneId = job.metadata.scene_id;

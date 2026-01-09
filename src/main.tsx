@@ -12,6 +12,9 @@ console.log('✅ MAIN.TSX: App imported successfully');
 import './index.css'
 console.log('✅ MAIN.TSX: CSS imported successfully');
 
+// Initialize mobile console for development (auto-detects local network)
+import './utils/mobileConsole'
+
 console.log('🧪 MAIN.TSX: All imports successful, testing DOM...');
 
 try {
