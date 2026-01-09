@@ -515,14 +515,31 @@ serve(async (req) => {
         scene_prompt_override,
         current_scene_image_url
       );
-      sceneGenerated = sceneResult.success;
-      consistencyScore = sceneResult.consistency_score || 0;
-      sceneJobId = sceneResult.job_id || null;
+      // ✅ ENHANCED: Validate generateScene response
+      if (!sceneResult) {
+        console.error('❌ generateScene returned null/undefined');
+        sceneGenerated = false;
+        sceneJobId = null;
+      } else if (sceneResult.success && !sceneResult.job_id) {
+        console.error('❌ generateScene returned success=true but no job_id:', sceneResult);
+        sceneGenerated = false;
+        sceneJobId = null;
+      } else {
+        sceneGenerated = sceneResult.success;
+        consistencyScore = sceneResult.consistency_score || 0;
+        sceneJobId = sceneResult.job_id || null;
+        
+        if (sceneResult.error) {
+          console.error('❌ generateScene returned error:', sceneResult.error);
+        }
+      }
       
       console.log('🎬 Scene generation result:', {
         success: sceneGenerated,
         consistency_score: consistencyScore,
-        job_id: sceneJobId
+        job_id: sceneJobId,
+        hasError: !!sceneResult?.error,
+        errorMessage: sceneResult?.error
       });
     }
 
@@ -1958,7 +1975,7 @@ async function generateScene(
   // Scene regeneration/modification parameters
   scenePromptOverride?: string, // User-edited prompt for regeneration (skips narrative generation)
   currentSceneImageUrl?: string // Current scene image for I2I modification mode
-): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string }> {
+): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string; debug?: any }> {
   try {
     // Determine generation mode: t2i (first scene), i2i (continuation), modification (I2I edit), or fresh (T2I regeneration)
     const isFirstScene = !previousSceneId || !previousSceneImageUrl;
@@ -2805,32 +2822,60 @@ const sceneContext = analyzeSceneContent(response);
 
     console.log('🎬 Scene generation response received, validating...');
     
+    // ✅ ENHANCED: Log full response structure for debugging
+    console.log('📦 Full image response structure:', JSON.stringify({
+      hasError: !!imageResponse?.error,
+      errorMessage: imageResponse?.error?.message || imageResponse?.error,
+      hasData: !!imageResponse?.data,
+      dataKeys: imageResponse?.data ? Object.keys(imageResponse?.data) : [],
+      dataType: typeof imageResponse?.data,
+      responseKeys: imageResponse ? Object.keys(imageResponse) : [],
+      responsePreview: imageResponse ? JSON.stringify(imageResponse).substring(0, 500) : 'null'
+    }, null, 2));
+    
     // Extract job ID from the response if available
-    let jobId = null;
+    let jobId: string | undefined = undefined;
     
     // Check for errors in the image response
     if (imageResponse?.error) {
       console.error('🎬❌ Image generation failed:', imageResponse.error);
+      const errorMessage = imageResponse.error.message || imageResponse.error || 'Unknown error';
       return { 
         success: false, 
-        error: `Image generation failed: ${imageResponse.error.message || imageResponse.error}` 
+        error: `Image generation failed: ${errorMessage}` 
       };
     }
     
+    // ✅ ENHANCED: Try multiple response formats (handle all possible structures)
     if (imageResponse?.data?.jobId) {
       jobId = imageResponse.data.jobId;
-      console.log('✅ Scene generation job queued with ID:', jobId);
+      console.log('✅ Found jobId in data.jobId:', jobId);
     } else if (imageResponse?.data?.job_id) {
       jobId = imageResponse.data.job_id;
-      console.log('✅ Scene generation job queued with ID:', jobId);
+      console.log('✅ Found jobId in data.job_id:', jobId);
     } else if (imageResponse?.data?.id) {
       jobId = imageResponse.data.id;
-      console.log('✅ Scene generation prediction created with ID:', jobId);
+      console.log('✅ Found jobId in data.id:', jobId);
+    } else if (imageResponse?.jobId) {
+      // Direct response (not wrapped in data) - some edge functions return this
+      jobId = imageResponse.jobId;
+      console.log('✅ Found jobId in root (direct response):', jobId);
+    } else if (imageResponse?.job_id) {
+      // Direct response (not wrapped in data)
+      jobId = imageResponse.job_id;
+      console.log('✅ Found jobId in root job_id (direct response):', jobId);
     } else {
-      console.warn('⚠️ No job ID found in image response:', imageResponse);
+      // ✅ ENHANCED: More detailed error with debug info
+      console.error('⚠️ No job ID found in image response. Full response:', JSON.stringify(imageResponse, null, 2));
       return { 
         success: false, 
-        error: 'Image generation completed but no job ID was returned' 
+        error: 'Image generation completed but no job ID was returned',
+        debug: {
+          responseStructure: imageResponse ? Object.keys(imageResponse) : [],
+          hasData: !!imageResponse?.data,
+          dataKeys: imageResponse?.data ? Object.keys(imageResponse?.data) : [],
+          dataPreview: imageResponse?.data ? JSON.stringify(imageResponse.data).substring(0, 200) : 'null'
+        }
       };
     }
     
@@ -2851,7 +2896,7 @@ const sceneContext = analyzeSceneContent(response);
       success: true,
       consistency_score: character.reference_image_url ? 0.8 : 0.6, // Consistency via reference image, random seed for variety
       job_id: jobId,
-      scene_id: sceneId ? sceneId : undefined // ✅ FIX: Return scene_id for reference (convert null to undefined)
+      scene_id: sceneId || undefined // ✅ FIX: Return scene_id for reference (convert null to undefined)
     };
   } catch (error) {
     console.error('🎬❌ Scene generation error:', error);

@@ -602,9 +602,19 @@ Edge Function (fal-image)
 - [x] IntensitySelector component created with presets and slider
 - [x] Strength parameter passing fixed in edge function (uses consistency_settings.denoise_strength)
 - [x] Image cropping fixed (object-cover → object-contain for full image display)
-- [ ] NSFW presets work correctly (needs end-to-end testing)
-- [ ] Intensity presets affect strength parameter (needs verification after deployment)
+- [x] Browser testing completed (2026-01-09) - See SCENE_CONTINUITY_BROWSER_TEST_RESULTS.md
+- [x] Supabase verification completed - All prompt templates present, database schema correct, edge function deployed
+- [ ] NSFW presets work correctly (BLOCKED: Scene generation error "No job ID returned")
+- [ ] Intensity presets affect strength parameter (BLOCKED: Scene generation error)
 - [ ] Admin debug panel is collapsible (low priority)
+
+**Browser Test Results (2026-01-09):**
+- ✅ Scene continuity toggle visible in Advanced Settings
+- ✅ Generate Scene buttons functional
+- ✅ Prompt templates verified in database (Scene Iteration NSFW/SFW, Scene Modification templates)
+- ✅ Database schema verified (character_scenes has required columns)
+- ✅ Edge function deployed (roleplay-chat v215)
+- ⚠️ Scene generation error: "No job ID returned from scene generation request" - needs investigation
 
 ---
 

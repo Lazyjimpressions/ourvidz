@@ -1035,10 +1035,30 @@ const MobileRoleplayChat: React.FC = () => {
         }
       });
 
-      if (error) throw error;
+      // ✅ ENHANCED: Add detailed logging for debugging
+      console.log('🎬 Scene generation response:', {
+        hasData: !!data,
+        dataKeys: data ? Object.keys(data) : [],
+        hasError: !!error,
+        errorMessage: error?.message,
+        fullResponse: { data, error }
+      });
 
-      // Normalize job ID from various possible response fields
+      if (error) {
+        console.error('❌ Scene generation error:', error);
+        throw error;
+      }
+
+      // ✅ ENHANCED: Normalize job ID from various possible response fields with logging
       const newJobId = data?.job_id || data?.scene_job_id || data?.data?.jobId || data?.data?.job_id;
+      
+      console.log('🔍 Job ID extraction:', {
+        'data?.job_id': data?.job_id,
+        'data?.scene_job_id': data?.scene_job_id,
+        'data?.data?.jobId': data?.data?.jobId,
+        'data?.data?.job_id': data?.data?.job_id,
+        extracted: newJobId
+      });
       
       if (newJobId) {
         // Add placeholder message that will be updated when job completes
@@ -1065,6 +1085,7 @@ const MobileRoleplayChat: React.FC = () => {
           description: "I'll post it here when it's ready."
         });
       } else {
+        console.error('❌ No job ID found. Full response:', JSON.stringify({ data, error }, null, 2));
         throw new Error('No job ID returned from scene generation request');
       }
     } catch (error) {
