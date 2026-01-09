@@ -619,6 +619,7 @@ const MobileRoleplayChat: React.FC = () => {
             model_provider: modelProvider,
             memory_tier: memoryTier,
             content_tier: contentTier,
+            scene_generation: true, // ✅ Enable auto scene generation on kickoff
             scene_context: loadedScene?.scene_prompt || null,
             scene_system_prompt: loadedScene?.system_prompt || null,
             user_id: user.id,
@@ -1219,6 +1220,7 @@ const MobileRoleplayChat: React.FC = () => {
           model_provider: modelProvider,
           memory_tier: memoryTier,
           content_tier: contentTier,
+          scene_generation: true, // ✅ Enable auto scene generation on kickoff retry
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,
@@ -1349,6 +1351,7 @@ const MobileRoleplayChat: React.FC = () => {
           model_provider: modelProvider,
           memory_tier: memoryTier,
           content_tier: contentTier,
+          scene_generation: true, // ✅ Enable auto scene generation on kickoff
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,

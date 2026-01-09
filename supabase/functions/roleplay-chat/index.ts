@@ -622,12 +622,22 @@ function sanitizeResponse(response: string, character: any, isKickoff: boolean =
   const aiPhrases = [
     'As an AI assistant,',
     'I\'m an AI and',
+    'I\'m an AI',
+    'I am an AI',
     'As an artificial intelligence,',
     'I\'m here to assist',
     'How may I be of assistance',
-    'I\'m designed to help'
+    'I\'m designed to help',
+    'I\'m an uncensored AI',
+    'I am an uncensored AI',
+    'uncensored AI character',
+    'uncensored AI assistant',
+    'I\'m a character that',
+    'I am a character that',
+    'Feel free to explore',
+    'Feel free to ask'
   ];
-  
+
   for (const phrase of aiPhrases) {
     const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
     sanitized = sanitized.replace(regex, '');
