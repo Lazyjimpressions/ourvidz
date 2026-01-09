@@ -40,6 +40,7 @@ import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
+import { useSceneContinuity } from '@/hooks/useSceneContinuity';
 
 // Add prompt template interface
 interface PromptTemplate {
@@ -214,6 +215,15 @@ const MobileRoleplayChat: React.FC = () => {
   const { user, profile } = useAuth();
   const { getSignedUrl } = useSignedImageUrls();
   const { toast } = useToast();
+
+  // Scene continuity hook - tracks previous scene for I2I iteration
+  const {
+    isEnabled: sceneContinuityEnabled,
+    previousSceneId,
+    previousSceneImageUrl,
+    setLastScene,
+    clearLastScene
+  } = useSceneContinuity(conversationId || undefined);
 
   // Helper to get valid image model with fallback to first active Replicate model
   // Always returns a valid Replicate model UUID (never null) to avoid defaulting to local SDXL
@@ -620,7 +630,11 @@ const MobileRoleplayChat: React.FC = () => {
             // Scene style for user representation in images
             scene_style: sceneStyle,
             // ✅ Pass consistency settings from UI
-            consistency_settings: consistencySettings
+            consistency_settings: consistencySettings,
+            // 🔄 Scene continuity (initial kickoff - no previous scene yet)
+            scene_continuity_enabled: sceneContinuityEnabled,
+            previous_scene_id: null,
+            previous_scene_image_url: null
           }
         });
 
@@ -688,26 +702,52 @@ const MobileRoleplayChat: React.FC = () => {
   // Subscribe to workspace asset updates for job completion
   // ✅ FIX: Check for existing asset first (handles sync providers like fal.ai)
   const subscribeToJobCompletion = async (jobId: string, messageId: string) => {
-    console.log('🔄 Checking/subscribing to workspace_assets for job:', jobId);
+    console.log('🔄 Checking/subscribing to workspace_assets for job:', { jobId, messageId });
 
     // Helper to update message with asset data
-    const updateMessageWithAsset = (assetData: { temp_storage_path: string; id: string }) => {
-      setMessages(prev => prev.map(msg => {
-        if (msg.id === messageId) {
-          return {
-            ...msg,
-            content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
-            metadata: {
-              ...msg.metadata,
-              // metadata.image_url is the canonical location for scene images
-              image_url: assetData.temp_storage_path,
-              asset_id: assetData.id,
-              job_completed: true
-            }
-          };
-        }
-        return msg;
-      }));
+    const updateMessageWithAsset = (assetData: { temp_storage_path: string; id: string; scene_id?: string }) => {
+      console.log('🎬 updateMessageWithAsset called:', {
+        messageId,
+        assetId: assetData.id,
+        tempStoragePath: assetData.temp_storage_path?.substring(0, 60) + '...',
+        sceneId: assetData.scene_id
+      });
+
+      setMessages(prev => {
+        const messageExists = prev.some(msg => msg.id === messageId);
+        console.log('🎬 Message lookup:', { messageId, messageExists, totalMessages: prev.length });
+
+        return prev.map(msg => {
+          if (msg.id === messageId) {
+            console.log('🎬 Updating message with image_url:', assetData.temp_storage_path);
+            return {
+              ...msg,
+              content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
+              metadata: {
+                ...msg.metadata,
+                // metadata.image_url is the canonical location for scene images
+                image_url: assetData.temp_storage_path,
+                asset_id: assetData.id,
+                scene_id: assetData.scene_id,
+                job_completed: true
+              }
+            };
+          }
+          return msg;
+        });
+      });
+
+      // 🔄 Track this scene for I2I continuity
+      if (conversationId && assetData.temp_storage_path) {
+        // Use scene_id if available, otherwise use asset_id as fallback
+        const sceneIdForTracking = assetData.scene_id || assetData.id;
+        setLastScene(conversationId, sceneIdForTracking, assetData.temp_storage_path);
+        console.log('🔄 Scene continuity: Tracked last scene for I2I iteration', {
+          conversationId,
+          sceneId: sceneIdForTracking,
+          imageUrl: assetData.temp_storage_path.substring(0, 60) + '...'
+        });
+      }
 
       toast({
         title: 'Scene completed!',
@@ -716,20 +756,28 @@ const MobileRoleplayChat: React.FC = () => {
     };
 
     // ✅ FIX: First check if asset already exists (for sync providers like fal.ai)
+    console.log('🔍 Querying workspace_assets for job_id:', jobId);
     const { data: existingAsset, error: queryError } = await supabase
       .from('workspace_assets')
-      .select('id, temp_storage_path')
+      .select('id, temp_storage_path, generation_settings')
       .eq('job_id', jobId)
       .maybeSingle();
 
+    console.log('🔍 Query result:', {
+      existingAsset: existingAsset ? { id: existingAsset.id, hasPath: !!existingAsset.temp_storage_path } : null,
+      queryError: queryError?.message || null
+    });
+
     if (!queryError && existingAsset?.temp_storage_path) {
       console.log('✅ Asset already exists for job (sync provider):', jobId);
-      updateMessageWithAsset(existingAsset);
+      // Extract scene_id from generation_settings if available
+      const sceneId = (existingAsset.generation_settings as any)?.scene_id;
+      updateMessageWithAsset({ ...existingAsset, scene_id: sceneId });
       return; // No need to subscribe
     }
 
     // Asset doesn't exist yet - subscribe for async providers (replicate, etc.)
-    console.log('🔄 Asset not found, subscribing for updates...');
+    console.log('🔄 Asset not found, subscribing for realtime updates...');
 
     const channel = supabase
       .channel(`job-completion-${jobId}`)
@@ -744,9 +792,15 @@ const MobileRoleplayChat: React.FC = () => {
         (payload) => {
           console.log('✅ Workspace asset created for job:', jobId, payload.new);
 
-          const assetData = payload.new as { temp_storage_path?: string; id: string };
+          const assetData = payload.new as { temp_storage_path?: string; id: string; generation_settings?: any };
           if (assetData?.temp_storage_path) {
-            updateMessageWithAsset({ temp_storage_path: assetData.temp_storage_path, id: assetData.id });
+            // Extract scene_id from generation_settings if available
+            const sceneId = assetData.generation_settings?.scene_id;
+            updateMessageWithAsset({
+              temp_storage_path: assetData.temp_storage_path,
+              id: assetData.id,
+              scene_id: sceneId
+            });
           }
 
           // Cleanup subscription after success
@@ -848,7 +902,11 @@ const MobileRoleplayChat: React.FC = () => {
           // ✅ Scene style for user representation in images
           scene_style: sceneStyle,
           // ✅ Pass consistency settings from UI
-          consistency_settings: consistencySettings
+          consistency_settings: consistencySettings,
+          // 🔄 Scene continuity for I2I iteration
+          scene_continuity_enabled: sceneContinuityEnabled,
+          previous_scene_id: previousSceneId || null,
+          previous_scene_image_url: previousSceneImageUrl || null
         }
       });
 
@@ -870,6 +928,15 @@ const MobileRoleplayChat: React.FC = () => {
         // Normalize job ID from various possible response fields
         const newJobId = data.scene_job_id || data.job_id || data?.jobId || data?.data?.jobId;
 
+        console.log('📤 Edge function response:', {
+          hasResponse: !!data.response,
+          scene_job_id: data.scene_job_id,
+          job_id: data.job_id,
+          jobId: data.jobId,
+          scene_generated: data.scene_generated,
+          extractedJobId: newJobId
+        });
+
         const characterMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
@@ -882,12 +949,21 @@ const MobileRoleplayChat: React.FC = () => {
             usedFallback: data.usedFallback
           }
         };
+
+        console.log('💬 Creating character message:', {
+          messageId: characterMessage.id,
+          hasJobId: !!newJobId,
+          scene_generated: characterMessage.metadata?.scene_generated
+        });
+
         setMessages(prev => [...prev, characterMessage]);
 
         // Start job polling if scene generation was initiated
         if (newJobId) {
-          console.log('🎬 Starting polling for auto-generated scene job:', newJobId);
+          console.log('🎬 Starting subscription for scene job:', { newJobId, messageId: characterMessage.id });
           subscribeToJobCompletion(newJobId, characterMessage.id);
+        } else {
+          console.log('⚠️ No job ID in response - scene generation may have been skipped');
         }
       } else {
         throw new Error('No response from roleplay-chat function');
@@ -950,7 +1026,11 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Pass consistency settings from UI
-          consistency_settings: consistencySettings
+          consistency_settings: consistencySettings,
+          // 🔄 Scene continuity for I2I iteration
+          scene_continuity_enabled: sceneContinuityEnabled,
+          previous_scene_id: previousSceneId || null,
+          previous_scene_image_url: previousSceneImageUrl || null
         }
       });
 
@@ -1048,7 +1128,11 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Pass consistency settings from UI
-          consistency_settings: consistencySettings
+          consistency_settings: consistencySettings,
+          // 🔄 Scene continuity (kickoff retry - use existing previous scene if any)
+          scene_continuity_enabled: sceneContinuityEnabled,
+          previous_scene_id: previousSceneId || null,
+          previous_scene_image_url: previousSceneImageUrl || null
         }
       });
 
@@ -1061,7 +1145,7 @@ const MobileRoleplayChat: React.FC = () => {
         timestamp: new Date().toISOString()
       };
       setMessages([openerMessage]);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Retry kickoff error:', error);
       setKickoffError(error.message || 'Failed to retry');
     } finally {
@@ -1111,6 +1195,12 @@ const MobileRoleplayChat: React.FC = () => {
       }
       keysToRemove.forEach(key => localStorage.removeItem(key));
       console.log(`✅ Cleared ${keysToRemove.length} conversation cache(s)`);
+
+      // 🔄 Clear scene continuity tracking for the old conversation
+      if (conversationId) {
+        clearLastScene(conversationId);
+        console.log('🔄 Cleared scene continuity for archived conversation');
+      }
 
       // Create brand new conversation
       const conversationTitle = selectedScene
@@ -1171,7 +1261,11 @@ const MobileRoleplayChat: React.FC = () => {
           consistency_settings: consistencySettings,
           // ✅ Pass template ID (edge function will use model-specific selection if not provided)
           prompt_template_id: currentTemplate?.id || null,
-          prompt_template_name: currentTemplate?.template_name || null
+          prompt_template_name: currentTemplate?.template_name || null,
+          // 🔄 Scene continuity (fresh conversation - no previous scene)
+          scene_continuity_enabled: sceneContinuityEnabled,
+          previous_scene_id: null,
+          previous_scene_image_url: null
         }
       });
 

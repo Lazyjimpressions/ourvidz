@@ -170,16 +170,24 @@ serve(async (req) => {
     }
 
     // Capture model info for use later (avoids TypeScript narrowing issues in nested try-catch)
-    const modelKey = apiModel.model_key;
-    const modelDisplayName = apiModel.display_name;
+    // ✅ I2I ITERATION: Support model_key_override for scene continuity (Seedream v4.5/edit)
+    const modelKeyOverride = body.model_key_override;
+    const modelKey = modelKeyOverride || apiModel.model_key;
+    const modelDisplayName = modelKeyOverride
+      ? `${modelKeyOverride} (Override)`
+      : apiModel.display_name;
     const providerName = apiModel.api_providers.name;
     const modelModality = apiModel.modality;
+    const isModelOverridden = !!modelKeyOverride;
 
-    console.log('✅ Using fal.ai model from database:', {
+    console.log('✅ Using fal.ai model:', {
       model_key: modelKey,
       display_name: modelDisplayName,
       provider: providerName,
-      modality: modelModality
+      modality: modelModality,
+      is_overridden: isModelOverridden,
+      override_model: modelKeyOverride || null,
+      database_model: apiModel.model_key
     });
 
     // Require prompt
@@ -245,7 +253,9 @@ serve(async (req) => {
       contentMode,
       generationMode,
       hasReferenceImage,
-      model_key: apiModel.model_key,
+      model_key: modelKey,
+      is_overridden: isModelOverridden,
+      database_model: apiModel.model_key,
       // Debug I2I detection
       input_image_url: body.input?.image_url ? 'present' : 'missing',
       input_image: body.input?.image ? 'present' : 'missing',
@@ -275,7 +285,9 @@ serve(async (req) => {
         metadata: {
           ...body.metadata,
           provider_name: apiModel.api_providers.name,
-          model_key: apiModel.model_key,
+          model_key: modelKey, // Effective model key (may be overridden)
+          database_model_key: apiModel.model_key, // Original database model key
+          is_model_overridden: isModelOverridden,
           content_mode: contentMode,
           generation_mode: generationMode
         }
@@ -383,17 +395,19 @@ serve(async (req) => {
 
         // Seedream edit models (v4/edit, v4.5/edit) require image_urls (plural, array)
         // Other models use image_url (singular, string)
-        const modelKeyLower = (apiModel.model_key || '').toLowerCase();
-        const isSeedreamEdit = modelKeyLower.includes('seedream') && modelKeyLower.includes('edit');
-        
+        // ✅ I2I ITERATION: Use modelKey (potentially overridden) for detection
+        const modelKeyLowerForI2I = (modelKey || '').toLowerCase();
+        const isSeedreamEditForI2I = modelKeyLowerForI2I.includes('seedream') && modelKeyLowerForI2I.includes('edit');
+
         console.log('🔍 I2I parameter detection:', {
-          model_key: apiModel.model_key,
-          model_key_lower: modelKeyLower,
-          is_seedream_edit: isSeedreamEdit,
-          will_use_image_urls: isSeedreamEdit
+          model_key: modelKey,
+          model_key_lower: modelKeyLowerForI2I,
+          is_overridden: isModelOverridden,
+          is_seedream_edit: isSeedreamEditForI2I,
+          will_use_image_urls: isSeedreamEditForI2I
         });
-        
-        if (isSeedreamEdit) {
+
+        if (isSeedreamEditForI2I) {
           modelInput.image_urls = [finalImageUrl];
           // Remove image_url if it was set by input_defaults
           delete modelInput.image_url;
@@ -630,16 +644,18 @@ serve(async (req) => {
 
     // Final check: For Seedream edit models, ensure image_urls is set and image_url is removed
     // This MUST run before sending to fal.ai API
-    const modelKeyLower = (apiModel.model_key || '').toLowerCase();
-    const isSeedreamEdit = modelKeyLower.includes('seedream') && modelKeyLower.includes('edit');
-    
+    // ✅ I2I ITERATION: Use modelKey (potentially overridden) for detection
+    const modelKeyLowerFinal = (modelKey || '').toLowerCase();
+    const isSeedreamEditFinal = modelKeyLowerFinal.includes('seedream') && modelKeyLowerFinal.includes('edit');
+
     // Re-check hasReferenceImage from request body (in case it wasn't detected earlier)
     const finalHasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
-    
+
     console.log('🔍 FINAL CHECK - Model detection:', {
-      model_key: apiModel.model_key,
-      model_key_lower: modelKeyLower,
-      is_seedream_edit: isSeedreamEdit,
+      model_key: modelKey,
+      model_key_lower: modelKeyLowerFinal,
+      is_overridden: isModelOverridden,
+      is_seedream_edit: isSeedreamEditFinal,
       has_reference_image: hasReferenceImage,
       final_has_reference_image: finalHasReferenceImage,
       body_input_image_url: body.input?.image_url ? 'present' : 'missing',
@@ -649,9 +665,9 @@ serve(async (req) => {
       current_image_url: modelInput.image_url ? 'present' : 'missing',
       current_image_urls: modelInput.image_urls ? `present (${Array.isArray(modelInput.image_urls) ? modelInput.image_urls.length : 'not array'})` : 'missing'
     });
-    
+
     // For Seedream edit models, ALWAYS check if we need to set image_urls
-    if (isSeedreamEdit && finalHasReferenceImage) {
+    if (isSeedreamEditFinal && finalHasReferenceImage) {
       // Try to get the image URL from any source
       let imageUrlToUse = modelInput.image_url || 
                           body.input?.image_url || 
@@ -708,7 +724,7 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
-    } else if (!isSeedreamEdit && finalHasReferenceImage) {
+    } else if (!isSeedreamEditFinal && finalHasReferenceImage) {
       // For non-Seedream models, ensure image_url is set and image_urls is removed
       if (!modelInput.image_url && modelInput.image_urls && Array.isArray(modelInput.image_urls) && modelInput.image_urls.length > 0) {
         modelInput.image_url = modelInput.image_urls[0];
@@ -764,8 +780,9 @@ serve(async (req) => {
     }
     
     console.log('🔧 fal.ai input configuration (FINAL):', {
-      model_key: apiModel.model_key,
-      is_seedream_edit: isSeedreamEdit,
+      model_key: modelKey,
+      is_overridden: isModelOverridden,
+      is_seedream_edit: isSeedreamEditFinal,
       is_wan_i2v: finalIsWanI2V,
       has_reference_image: hasReferenceImage,
       // Mask sensitive URLs in logs
@@ -789,11 +806,14 @@ serve(async (req) => {
 
     // Call fal.ai API using their synchronous endpoint
     // Note: fal.run is for sync, queue.fal.run is for async/polling
-    const falEndpoint = `https://fal.run/${apiModel.model_key}`;
+    // ✅ I2I ITERATION: Use modelKey which may be overridden for scene continuity
+    const falEndpoint = `https://fal.run/${modelKey}`;
 
     console.log('🚀 Calling fal.ai API:', {
       endpoint: falEndpoint,
-      model_key: apiModel.model_key
+      model_key: modelKey,
+      is_overridden: isModelOverridden,
+      database_model: apiModel.model_key
     });
 
     try {
@@ -820,7 +840,8 @@ serve(async (req) => {
           statusText: falResponse.statusText,
           error: errorDetails,
           request_preview: {
-            model_key: apiModel.model_key,
+            model_key: modelKey,
+            is_overridden: isModelOverridden,
             has_image_url: !!modelInput.image_url,
             image_url_preview: modelInput.image_url ? modelInput.image_url.substring(0, 60) : 'missing',
             has_prompt: !!modelInput.prompt,
@@ -843,8 +864,11 @@ serve(async (req) => {
           details: errorDetails.message || errorText,
           status: falResponse.status,
           debug: falResponse.status === 422 ? {
-            model_key: apiModel.model_key,
+            model_key: modelKey,
+            is_overridden: isModelOverridden,
+            database_model: apiModel.model_key,
             has_image_url: !!modelInput.image_url,
+            has_image_urls: !!modelInput.image_urls,
             has_prompt: !!modelInput.prompt,
             input_keys: Object.keys(modelInput)
           } : undefined

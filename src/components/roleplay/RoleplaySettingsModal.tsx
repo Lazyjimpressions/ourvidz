@@ -9,10 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
+import { useSceneContinuity } from '@/hooks/useSceneContinuity';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle } from 'lucide-react';
+import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneStyle } from '@/types/roleplay';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -62,6 +63,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   const { allModelOptions, defaultModel: defaultChatModel, isLoading: modelsLoading, chatWorkerHealthy } = useRoleplayModels();
   const { modelOptions: imageModelOptions, defaultModel: defaultImageModel, isLoading: imageModelsLoading, sdxlWorkerHealthy } = useImageModels();
   const { characters: userCharacters, isLoading: userCharactersLoading, defaultCharacterId, setDefaultCharacter } = useUserCharacters();
+  const { isEnabled: sceneContinuityEnabled, setEnabled: setSceneContinuityEnabled, defaultStrength, setDefaultStrength } = useSceneContinuity();
   const { toast } = useToast();
 
   // Local state for form data
@@ -1045,6 +1047,99 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                       </p>
                     </div>
                   )}
+                </div>
+              </Card>
+
+              {/* Scene Continuity Settings */}
+              <Card className="p-4">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium flex items-center gap-2">
+                      <Link2 className="w-4 h-4" />
+                      Scene Continuity
+                    </Label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="w-4 h-4 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="max-w-xs">
+                          <p className="text-sm">
+                            When enabled, each new scene builds on the previous scene image using I2I iteration.
+                            This maintains visual continuity for clothing state, positions, and scene context.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+
+                  {/* Enable/Disable Toggle */}
+                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-gray-800/50">
+                    <Checkbox
+                      id="sceneContinuity"
+                      checked={sceneContinuityEnabled}
+                      onCheckedChange={(checked) => setSceneContinuityEnabled(!!checked)}
+                    />
+                    <label
+                      htmlFor="sceneContinuity"
+                      className="text-sm cursor-pointer flex-1"
+                    >
+                      <span className="font-medium">Link scenes together</span>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Each scene iterates on the previous, maintaining character appearance and scene context.
+                      </p>
+                    </label>
+                  </div>
+
+                  {/* I2I Strength Slider - only shown when enabled */}
+                  {sceneContinuityEnabled && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="i2i_strength" className="text-sm">Iteration Strength</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="w-3 h-3 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="text-xs">
+                                How much to modify each scene from the previous.
+                                Lower = more similar, Higher = more variation.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.2"
+                        max="0.7"
+                        step="0.05"
+                        value={defaultStrength}
+                        onChange={(e) => setDefaultStrength(parseFloat(e.target.value))}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Subtle</span>
+                        <span className="font-medium">{Math.round(defaultStrength * 100)}%</span>
+                        <span>Bold</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Info box */}
+                  <div className={cn(
+                    "p-2 rounded-md text-xs",
+                    sceneContinuityEnabled
+                      ? "bg-green-500/10 border border-green-500/20"
+                      : "bg-gray-500/10 border border-gray-500/20"
+                  )}>
+                    <p className={sceneContinuityEnabled ? "text-green-300" : "text-muted-foreground"}>
+                      {sceneContinuityEnabled
+                        ? "✓ Scene continuity enabled. Scenes will maintain visual consistency."
+                        : "Scene continuity disabled. Each scene generates independently."}
+                    </p>
+                  </div>
                 </div>
               </Card>
             </TabsContent>

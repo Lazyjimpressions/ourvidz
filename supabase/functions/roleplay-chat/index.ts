@@ -44,6 +44,10 @@ interface RoleplayChatRequest {
   consistency_settings?: ConsistencySettings; // User's consistency settings from UI
   scene_name?: string; // Scene name for scene generation
   scene_description?: string; // Scene description for scene generation
+  // Scene continuity (I2I iteration) fields
+  previous_scene_id?: string; // ID of previous scene for linking
+  previous_scene_image_url?: string; // URL of previous scene for I2I iteration
+  scene_continuity_enabled?: boolean; // Whether to use I2I for subsequent scenes
 }
 
 // User character interface for scene generation
@@ -197,7 +201,11 @@ serve(async (req) => {
       prompt_template_id,
       prompt_template_name,
       scene_name,
-      scene_description
+      scene_description,
+      // Scene continuity (I2I iteration) fields
+      previous_scene_id,
+      previous_scene_image_url,
+      scene_continuity_enabled
     } = requestBody;
 
     // Validate required fields (message is optional for kickoff)
@@ -477,7 +485,11 @@ serve(async (req) => {
         conversation_id, // ✅ FIX: Pass conversation_id to link scene to conversation
         content_tier, // ✅ FIX: Pass content_tier to respect NSFW setting
         scene_name, // ✅ FIX: Pass scene_name from request body
-        scene_description // ✅ FIX: Pass scene_description from request body
+        scene_description, // ✅ FIX: Pass scene_description from request body
+        // Scene continuity (I2I iteration) parameters
+        previous_scene_id,
+        previous_scene_image_url,
+        scene_continuity_enabled ?? true // Default to enabled
       );
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
@@ -1904,9 +1916,18 @@ async function generateScene(
   conversationId?: string, // ✅ FIX: Add conversation_id parameter
   contentTier: 'sfw' | 'nsfw' = 'nsfw', // ✅ FIX: Add content_tier parameter, default NSFW
   sceneName?: string, // ✅ FIX: Add scene_name parameter
-  sceneDescription?: string // ✅ FIX: Add scene_description parameter
+  sceneDescription?: string, // ✅ FIX: Add scene_description parameter
+  // Scene continuity (I2I iteration) parameters
+  previousSceneId?: string, // ID of previous scene for linking
+  previousSceneImageUrl?: string, // URL of previous scene for I2I iteration
+  sceneContinuityEnabled: boolean = true // Whether to use I2I for subsequent scenes (default: enabled)
 ): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string }> {
   try {
+    // Determine if this is the first scene or a subsequent scene for I2I iteration
+    const isFirstScene = !previousSceneId || !previousSceneImageUrl;
+    const useI2IIteration = sceneContinuityEnabled && !isFirstScene && !!previousSceneImageUrl;
+    const generationMode = useI2IIteration ? 'i2i' : 't2i';
+
     console.log('🎬 Starting scene generation:', {
       characterId,
       responseLength: response.length,
@@ -1914,7 +1935,14 @@ async function generateScene(
       selectedImageModel,
       conversationHistoryLength: conversationHistory.length,
       sceneStyle,
-      hasUserCharacter: !!userCharacter
+      hasUserCharacter: !!userCharacter,
+      // Scene continuity info
+      sceneContinuityEnabled,
+      isFirstScene,
+      useI2IIteration,
+      generationMode,
+      previousSceneId: previousSceneId || null,
+      hasPreviousSceneImage: !!previousSceneImageUrl
     });
     
     // ✅ ENHANCED: Load character data with comprehensive visual information
@@ -2197,6 +2225,10 @@ const sceneContext = analyzeSceneContent(response);
           scene_description: finalSceneDescription,
           scene_prompt: cleanScenePrompt || scenePrompt,
           system_prompt: null,
+          // Scene continuity (I2I iteration) fields
+          previous_scene_id: previousSceneId || null,
+          previous_scene_image_url: previousSceneImageUrl || null,
+          generation_mode: generationMode, // 't2i' or 'i2i'
           generation_metadata: {
             model_used: selectedImageModel ? 'api_model' : 'sdxl',
             selected_image_model: selectedImageModel || null, // Track what was requested
@@ -2208,7 +2240,11 @@ const sceneContext = analyzeSceneContent(response);
             scene_type: 'chat_scene',
             scene_style: sceneStyle,
             scene_context: sceneContext,
-            character_visual_description: characterVisualDescription
+            character_visual_description: characterVisualDescription,
+            // I2I iteration tracking
+            scene_continuity_enabled: sceneContinuityEnabled,
+            is_first_scene: isFirstScene,
+            use_i2i_iteration: useI2IIteration
           },
           job_id: null, // Will be updated when job is queued
           priority: 0
@@ -2519,10 +2555,30 @@ const sceneContext = analyzeSceneContent(response);
             headers['authorization'] = authHeader;
           }
 
+          // ✅ I2I ITERATION: Determine model and reference image based on scene continuity
+          let i2iModelOverride: string | null = null;
+          let i2iReferenceImage: string | undefined;
+          let i2iStrength: number;
+
+          if (useI2IIteration && previousSceneImageUrl) {
+            // I2I mode: Use Seedream v4.5/edit with previous scene as reference
+            i2iModelOverride = 'fal-ai/seedream/v4.5/edit'; // Override to Seedream edit model
+            i2iReferenceImage = previousSceneImageUrl;
+            i2iStrength = 0.45; // Moderate strength for scene-to-scene continuity
+            console.log('🔄 I2I Iteration Mode: Using Seedream v4.5/edit with previous scene');
+          } else {
+            // T2I mode: Use character reference image if available
+            i2iReferenceImage = character.reference_image_url || undefined;
+            i2iStrength = refStrength ?? 0.7;
+            console.log('🎨 T2I Mode: Using character reference for consistency');
+          }
+
           // Build fal.ai-specific request body
           const falRequestBody = {
             prompt: enhancedScenePrompt, // Use full prompt - fal.ai has 8K+ char limits
             apiModelId: modelConfig.id,
+            // Override model_key for I2I iteration
+            model_key_override: i2iModelOverride || undefined,
             job_type: 'fal_image',
             quality: 'high',
             input: {
@@ -2530,9 +2586,9 @@ const sceneContext = analyzeSceneContent(response);
               num_inference_steps: 30,
               guidance_scale: 7.5,
               seed: seedLocked ?? undefined,
-              // I2I parameters if reference image exists
-              image_url: character.reference_image_url || undefined,
-              strength: character.reference_image_url ? (refStrength ?? 0.7) : undefined
+              // I2I parameters - use previous scene for iteration, or character reference for T2I
+              image_url: i2iReferenceImage,
+              strength: i2iReferenceImage ? i2iStrength : undefined
             },
             metadata: {
               destination: 'roleplay_scene',
@@ -2542,23 +2598,32 @@ const sceneContext = analyzeSceneContent(response);
               conversation_id: conversationId || null,
               scene_type: 'chat_scene',
               consistency_method: finalConsistencyMethod,
-              model_used: modelConfig.model_key,
-              model_display_name: modelConfig.display_name,
+              model_used: i2iModelOverride || modelConfig.model_key,
+              model_display_name: i2iModelOverride ? 'Seedream v4.5 Edit (I2I)' : modelConfig.display_name,
               selected_image_model: selectedImageModel || null,
               effective_image_model: effectiveImageModel,
               provider_name: providerName,
               contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
               scene_context: JSON.stringify(sceneContext),
               character_visual_description: characterVisualDescription,
-              reference_strength: refStrength,
-              seed_locked: seedLocked
+              reference_strength: i2iStrength,
+              seed_locked: seedLocked,
+              // I2I iteration tracking
+              generation_mode: generationMode,
+              use_i2i_iteration: useI2IIteration,
+              previous_scene_id: previousSceneId || null,
+              has_previous_scene_image: !!previousSceneImageUrl
             }
           };
 
           console.log('📤 AUDIT: Sending to fal-image:', JSON.stringify({
             consistency_method: finalConsistencyMethod,
-            has_reference_image: !!character.reference_image_url,
-            reference_strength: refStrength,
+            generation_mode: generationMode,
+            use_i2i_iteration: useI2IIteration,
+            i2i_model_override: i2iModelOverride,
+            has_reference_image: !!i2iReferenceImage,
+            reference_image_type: useI2IIteration ? 'previous_scene' : 'character_reference',
+            reference_strength: i2iStrength,
             seed_locked: seedLocked,
             prompt_length: enhancedScenePrompt.length,
             apiModelId: modelConfig.id
