@@ -2699,12 +2699,9 @@ const sceneContext = analyzeSceneContent(response);
               num_inference_steps: 30,
               guidance_scale: 7.5,
               seed: seedLocked ?? undefined,
-              // ✅ FIX: Only add I2I parameters if reference image is actually provided
-              // This prevents 422 errors when image_url is undefined
-              ...(i2iReferenceImage && i2iReferenceImage.trim() !== '' ? {
-                image_url: i2iReferenceImage,
-                strength: i2iStrength
-              } : {})
+              // I2I parameters - use previous scene for iteration, or character reference for T2I
+              image_url: i2iReferenceImage,
+              strength: i2iReferenceImage ? i2iStrength : undefined
             },
             metadata: {
               destination: 'roleplay_scene',
