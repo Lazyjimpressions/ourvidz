@@ -5,9 +5,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Edit, Sparkles, RefreshCw } from 'lucide-react';
+import { Edit, Sparkles, RefreshCw, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { IntensitySelector } from './IntensitySelector';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
 
 interface ScenePromptEditModalProps {
@@ -306,30 +307,65 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
               </p>
             </div>
 
-            {/* Reference Image Info */}
-            <div className={`p-3 rounded-md ${currentSceneImageUrl
-              ? 'bg-green-500/10 border border-green-500/20'
-              : 'bg-amber-500/10 border border-amber-500/20'
-            }`}>
-              <p className={`text-xs font-medium mb-1 ${currentSceneImageUrl ? 'text-green-300' : 'text-amber-300'}`}>
-                ℹ️ {currentSceneImageUrl ? 'I2I Modification Mode' : 'Reference Image Used'}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {currentSceneImageUrl
-                  ? <>The system will use the <strong>current scene image</strong> as a base and apply your prompt changes using I2I (image-to-image). This preserves the scene context while modifying specific details.</>
-                  : <>The system uses the <strong>character's reference image</strong> for consistency. If no scene is available, a new scene will be generated from scratch.</>
-                }
-              </p>
-            </div>
+            {/* Reference Image Preview & Info - Collapsible */}
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger className="w-full">
+                <div className={`flex items-center justify-between p-3 rounded-md ${currentSceneImageUrl
+                  ? 'bg-green-500/10 border border-green-500/20'
+                  : 'bg-amber-500/10 border border-amber-500/20'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <Info className={`w-4 h-4 ${currentSceneImageUrl ? 'text-green-300' : 'text-amber-300'}`} />
+                    <p className={`text-xs font-medium ${currentSceneImageUrl ? 'text-green-300' : 'text-amber-300'}`}>
+                      {currentSceneImageUrl ? 'I2I Modification Mode' : 'Reference Image Used'}
+                    </p>
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className={`p-3 rounded-md mt-2 ${currentSceneImageUrl
+                  ? 'bg-green-500/10 border border-green-500/20'
+                  : 'bg-amber-500/10 border border-amber-500/20'
+                }`}>
+                  {/* Reference Image Preview */}
+                  {currentSceneImageUrl && (
+                    <div className="mb-3">
+                      <Label className="text-xs font-medium mb-2 block">Current Scene (Reference)</Label>
+                      <img
+                        src={currentSceneImageUrl}
+                        alt="Current scene reference"
+                        className="w-full max-h-48 object-contain rounded-md border border-gray-700 bg-gray-900"
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {currentSceneImageUrl
+                      ? <>The system will use the <strong>current scene image</strong> as a base and apply your prompt changes using I2I (image-to-image). This preserves the scene context while modifying specific details.</>
+                      : <>The system uses the <strong>character's reference image</strong> for consistency. If no scene is available, a new scene will be generated from scratch.</>
+                    }
+                  </p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
-            {/* Tips for Clothing Changes */}
-            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
-              <p className="text-xs font-medium text-blue-300 mb-1">💡 Tip: Changing Clothing</p>
-              <p className="text-xs text-muted-foreground">
-                To change character clothing, add phrases like "wearing [description]" or "changed to [outfit]". 
-                The system will use I2I with higher denoise strength to modify clothing while maintaining character consistency.
-              </p>
-            </div>
+            {/* Tips for Clothing Changes - Collapsible */}
+            <Collapsible defaultOpen={false}>
+              <CollapsibleTrigger className="w-full">
+                <div className="flex items-center justify-between p-3 bg-blue-500/10 border border-blue-500/20 rounded-md">
+                  <p className="text-xs font-medium text-blue-300">💡 Tip: Changing Clothing</p>
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-md mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    To change character clothing, add phrases like "wearing [description]" or "changed to [outfit]". 
+                    The system will use I2I with higher denoise strength to modify clothing while maintaining character consistency.
+                  </p>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Action Buttons */}
             <div className="flex gap-2 pt-2">

@@ -1086,14 +1086,17 @@ const MobileRoleplayChat: React.FC = () => {
       }
 
       // ✅ ENHANCED: Normalize job ID from various possible response fields with logging
-      const newJobId = data?.job_id || data?.scene_job_id || data?.data?.jobId || data?.data?.job_id;
+      // Check scene_job_id first (primary field from roleplay-chat edge function)
+      const newJobId = data?.scene_job_id || data?.job_id || data?.data?.jobId || data?.data?.job_id || data?.jobId;
       
       console.log('🔍 Job ID extraction:', {
-        'data?.job_id': data?.job_id,
         'data?.scene_job_id': data?.scene_job_id,
+        'data?.job_id': data?.job_id,
+        'data?.jobId': data?.jobId,
         'data?.data?.jobId': data?.data?.jobId,
         'data?.data?.job_id': data?.data?.job_id,
-        extracted: newJobId
+        extracted: newJobId,
+        fullDataKeys: data ? Object.keys(data) : []
       });
       
       if (newJobId) {
@@ -1121,8 +1124,37 @@ const MobileRoleplayChat: React.FC = () => {
           description: "I'll post it here when it's ready."
         });
       } else {
+        // ✅ ENHANCED: Provide detailed error with response structure
         console.error('❌ No job ID found. Full response:', JSON.stringify({ data, error }, null, 2));
-        throw new Error('No job ID returned from scene generation request');
+        console.error('❌ Response structure analysis:', {
+          hasData: !!data,
+          dataKeys: data ? Object.keys(data) : [],
+          hasSceneGenerated: data?.scene_generated,
+          hasError: !!error,
+          errorMessage: error?.message || error
+        });
+        
+        // Don't throw - show user-friendly error message instead
+        setSceneJobStatus('failed');
+        const errorMessage: Message = {
+          id: Date.now().toString(),
+          content: 'Scene generation failed. The chat message was sent, but I couldn\'t generate a scene image right now.',
+          sender: 'character',
+          timestamp: new Date().toISOString(),
+          metadata: { 
+            sceneError: true,
+            canRetryScene: true,
+            errorDetails: 'No job ID returned from scene generation request'
+          }
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        
+        toast({
+          title: 'Scene generation failed',
+          description: 'The chat message was sent, but scene generation could not be started. You can try generating a scene again.',
+          variant: 'destructive'
+        });
+        return; // Exit early instead of throwing
       }
     } catch (error) {
       console.error('Error generating scene:', error);
@@ -1231,7 +1263,16 @@ const MobileRoleplayChat: React.FC = () => {
 
       if (error) throw error;
 
-      const newJobId = data?.job_id || data?.scene_job_id || data?.data?.jobId || data?.data?.job_id;
+      // ✅ FIX: Check scene_job_id first (primary field from roleplay-chat edge function)
+      const newJobId = data?.scene_job_id || data?.job_id || data?.data?.jobId || data?.data?.job_id || data?.jobId;
+      
+      console.log('🔍 Regeneration Job ID extraction:', {
+        'data?.scene_job_id': data?.scene_job_id,
+        'data?.job_id': data?.job_id,
+        'data?.jobId': data?.jobId,
+        extracted: newJobId,
+        fullDataKeys: data ? Object.keys(data) : []
+      });
 
       if (newJobId) {
         // Add placeholder message for regenerated scene
@@ -1263,7 +1304,29 @@ const MobileRoleplayChat: React.FC = () => {
             : 'Generating new scene from character reference'
         });
       } else {
-        throw new Error('No job ID returned from scene regeneration request');
+        // ✅ ENHANCED: Provide detailed error instead of throwing
+        console.error('❌ No job ID found for regeneration. Full response:', JSON.stringify({ data, error }, null, 2));
+        setSceneJobStatus('failed');
+        
+        const errorMessage: Message = {
+          id: Date.now().toString(),
+          content: 'Scene regeneration failed. Please try again.',
+          sender: 'character',
+          timestamp: new Date().toISOString(),
+          metadata: { 
+            sceneError: true,
+            canRetryScene: true,
+            errorDetails: 'No job ID returned from scene regeneration request'
+          }
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        
+        toast({
+          title: 'Scene regeneration failed',
+          description: 'Could not start scene regeneration. Please try again.',
+          variant: 'destructive'
+        });
+        return; // Exit early instead of throwing
       }
     } catch (error) {
       console.error('Error regenerating scene:', error);

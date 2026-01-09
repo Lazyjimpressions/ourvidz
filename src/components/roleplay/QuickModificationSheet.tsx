@@ -32,7 +32,7 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Shirt,
     promptModifier: 'topless, bare chest, removed shirt',
     continuityPhrase: 'maintain same character identity, keep same lighting',
-    strength: 0.55,
+    strength: 0.35, // ✅ Adjusted to match plan (was 0.55)
     category: 'clothing',
     nsfwOnly: true
   },
@@ -42,7 +42,7 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Shirt,
     promptModifier: 'fully nude, no clothes, naked',
     continuityPhrase: 'maintain same character identity, keep same environment',
-    strength: 0.65,
+    strength: 0.45, // ✅ Adjusted to match plan (was 0.65)
     category: 'clothing',
     nsfwOnly: true
   },
@@ -52,7 +52,7 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Move,
     promptModifier: 'different pose, new position',
     continuityPhrase: 'maintain same character, subtle change',
-    strength: 0.50,
+    strength: 0.40, // ✅ Adjusted to match plan (was 0.50)
     category: 'position',
     nsfwOnly: false
   },
@@ -62,7 +62,7 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Heart,
     promptModifier: 'more intimate, closer contact',
     continuityPhrase: 'maintain same characters, keep same setting',
-    strength: 0.55,
+    strength: 0.30, // ✅ Adjusted to match plan (was 0.55)
     category: 'intensity',
     nsfwOnly: true
   }
