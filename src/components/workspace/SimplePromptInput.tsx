@@ -439,8 +439,22 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    console.log('🔵 SIMPLE PROMPT INPUT: handleSubmit called', {
+      mode,
+      prompt: prompt?.substring(0, 50),
+      promptLength: prompt?.length,
+      promptTrimmed: prompt?.trim(),
+      isGenerating,
+      exactCopyMode,
+      hasReferenceImage: !!referenceImage,
+      hasReferenceImageUrl: !!referenceImageUrl,
+      conditionCheck: !isGenerating && (prompt.trim() || exactCopyMode)
+    });
+    
     // Require non-empty prompt for video mode to avoid queue-job 400s
     if (mode === 'video' && !prompt.trim()) {
+      console.warn('⚠️ SIMPLE PROMPT INPUT: Video mode requires prompt, returning early');
       return;
     }
     
@@ -457,7 +471,15 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
     
     if (!isGenerating && (prompt.trim() || exactCopyMode)) {
+      console.log('✅ SIMPLE PROMPT INPUT: Calling onGenerate()');
       onGenerate();
+    } else {
+      console.warn('⚠️ SIMPLE PROMPT INPUT: Not calling onGenerate()', {
+        isGenerating,
+        hasPrompt: !!prompt.trim(),
+        exactCopyMode,
+        reason: isGenerating ? 'isGenerating is true' : 'prompt is empty and exactCopyMode is false'
+      });
     }
   };
 
