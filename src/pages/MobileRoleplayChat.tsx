@@ -1093,9 +1093,16 @@ const MobileRoleplayChat: React.FC = () => {
     }
   };
 
-  // Handle scene regeneration with edited prompt (I2I modification)
-  const handleSceneRegenerate = async (editedPrompt: string, currentSceneImageUrl?: string) => {
+  // Handle scene regeneration with edited prompt (I2I modification or T2I fresh)
+  const handleSceneRegenerate = async (
+    editedPrompt: string,
+    currentSceneImageUrl?: string,
+    strengthOverride?: number
+  ) => {
     if (!character || !conversationId || !user) return;
+
+    // Determine generation mode
+    const isI2IModification = !!currentSceneImageUrl;
 
     setIsLoading(true);
     setSceneJobStatus('queued');
@@ -1103,9 +1110,15 @@ const MobileRoleplayChat: React.FC = () => {
     try {
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
 
+      // Build consistency settings with optional strength override
+      const effectiveConsistencySettings = {
+        ...consistencySettings,
+        ...(isI2IModification && strengthOverride && { denoise_strength: strengthOverride })
+      };
+
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
-          message: 'Regenerate scene with edited prompt.',
+          message: isI2IModification ? 'Modify scene.' : 'Regenerate scene.',
           conversation_id: conversationId,
           character_id: character.id,
           model_provider: modelProvider,
@@ -1115,10 +1128,11 @@ const MobileRoleplayChat: React.FC = () => {
           user_id: user.id,
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle,
-          consistency_settings: consistencySettings,
+          consistency_settings: effectiveConsistencySettings,
           // Scene regeneration/modification fields
           scene_prompt_override: editedPrompt,
-          current_scene_image_url: currentSceneImageUrl,
+          // Only include current_scene_image_url for I2I mode
+          ...(isI2IModification && { current_scene_image_url: currentSceneImageUrl }),
           // Scene continuity context
           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: previousSceneId || null,
@@ -1134,27 +1148,30 @@ const MobileRoleplayChat: React.FC = () => {
         // Add placeholder message for regenerated scene
         const placeholderMessage: Message = {
           id: Date.now().toString(),
-          content: currentSceneImageUrl
-            ? 'Modifying scene with your changes...'
-            : 'Regenerating scene...',
+          content: isI2IModification
+            ? `Modifying scene${strengthOverride ? ` (${Math.round(strengthOverride * 100)}% intensity)` : ''}...`
+            : 'Generating fresh scene from character reference...',
           sender: 'character',
           timestamp: new Date().toISOString(),
           metadata: {
             scene_generated: true,
             job_id: newJobId,
             consistency_method: consistencySettings.method,
-            is_regeneration: true
+            is_regeneration: true,
+            generation_mode: isI2IModification ? 'modification' : 't2i'
           }
         };
         setMessages(prev => [...prev, placeholderMessage]);
 
         // Start polling for job completion
-        console.log('🔧 Starting polling for scene regeneration job:', newJobId);
+        console.log(`🔧 Starting polling for scene ${isI2IModification ? 'modification' : 'fresh generation'} job:`, newJobId);
         subscribeToJobCompletion(newJobId, placeholderMessage.id);
 
         toast({
-          title: currentSceneImageUrl ? 'Scene modification started' : 'Scene regeneration started',
-          description: "I'll update it here when it's ready."
+          title: isI2IModification ? 'Scene modification started' : 'Fresh scene generation started',
+          description: isI2IModification
+            ? `Modifying with ${Math.round((strengthOverride || 0.5) * 100)}% intensity`
+            : 'Generating new scene from character reference'
         });
       } else {
         throw new Error('No job ID returned from scene regeneration request');
@@ -1575,6 +1592,7 @@ const MobileRoleplayChat: React.FC = () => {
                 conversationId={conversationId}
                 consistencySettings={consistencySettings}
                 onSceneRegenerate={handleSceneRegenerate}
+                contentMode="nsfw"
               />
           ))}
           

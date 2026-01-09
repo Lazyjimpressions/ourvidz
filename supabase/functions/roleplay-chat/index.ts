@@ -217,12 +217,15 @@ serve(async (req) => {
     // Detect regeneration/modification mode
     const isSceneRegeneration = !!scene_prompt_override;
     const isSceneModification = isSceneRegeneration && !!current_scene_image_url;
+    const isFreshGeneration = isSceneRegeneration && !current_scene_image_url;
 
     if (isSceneRegeneration) {
       console.log('🎬 Scene regeneration mode detected:', {
         hasPromptOverride: !!scene_prompt_override,
         hasCurrentSceneImage: !!current_scene_image_url,
-        isModification: isSceneModification
+        isModification: isSceneModification,
+        isFreshGeneration: isFreshGeneration,
+        mode: isSceneModification ? 'modification (I2I)' : 'fresh (T2I from character)'
       });
     }
 
@@ -1947,31 +1950,42 @@ async function generateScene(
   currentSceneImageUrl?: string // Current scene image for I2I modification mode
 ): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string }> {
   try {
-    // Determine generation mode: t2i (first scene), i2i (continuation), or modification (user edit)
+    // Determine generation mode: t2i (first scene), i2i (continuation), modification (I2I edit), or fresh (T2I regeneration)
     const isFirstScene = !previousSceneId || !previousSceneImageUrl;
-    const isModification = !!scenePromptOverride && !!currentSceneImageUrl;
+    const isPromptOverride = !!scenePromptOverride;
+    const hasCurrentSceneImage = !!currentSceneImageUrl;
 
     // Calculate generation mode and settings
+    // Priority: modification > fresh > continuation > first scene
     let useI2IIteration: boolean;
     let generationMode: 't2i' | 'i2i' | 'modification';
     let effectiveReferenceImageUrl: string | undefined;
 
-    if (isModification) {
+    if (isPromptOverride && hasCurrentSceneImage) {
       // Modification mode: I2I on current scene with user-edited prompt
       useI2IIteration = true;
       generationMode = 'modification';
       effectiveReferenceImageUrl = currentSceneImageUrl;
-      console.log('🎬 Modification mode: Using current scene image for I2I');
+      console.log('🎬 Modification mode: I2I with current scene image');
+    } else if (isPromptOverride && !hasCurrentSceneImage) {
+      // Fresh generation mode: T2I with user-edited prompt (explicitly NO I2I)
+      // User requested fresh generation from character reference - skip scene continuity
+      useI2IIteration = false;
+      generationMode = 't2i';
+      effectiveReferenceImageUrl = undefined; // Will use character reference
+      console.log('🎬 Fresh generation mode: T2I from character reference (ignoring scene continuity)');
     } else if (sceneContinuityEnabled && !isFirstScene && !!previousSceneImageUrl) {
       // Continuation mode: I2I on previous scene
       useI2IIteration = true;
       generationMode = 'i2i';
       effectiveReferenceImageUrl = previousSceneImageUrl;
+      console.log('🎬 Continuation mode: I2I from previous scene');
     } else {
       // First scene or T2I: Use character reference (resolved later)
       useI2IIteration = false;
       generationMode = 't2i';
       effectiveReferenceImageUrl = undefined; // Will use character reference
+      console.log('🎬 First scene mode: T2I initial generation');
     }
 
     console.log('🎬 Starting scene generation:', {
@@ -1988,7 +2002,10 @@ async function generateScene(
       useI2IIteration,
       generationMode,
       previousSceneId: previousSceneId || null,
-      hasPreviousSceneImage: !!previousSceneImageUrl
+      hasPreviousSceneImage: !!previousSceneImageUrl,
+      // Regeneration/modification detection
+      isPromptOverride,
+      hasCurrentSceneImage
     });
     
     // ✅ ENHANCED: Load character data with comprehensive visual information

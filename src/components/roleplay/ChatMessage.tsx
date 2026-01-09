@@ -15,6 +15,7 @@ import {
   Edit
 } from 'lucide-react';
 import { ScenePromptEditModal } from './ScenePromptEditModal';
+import { QuickModificationSheet, ModificationPreset } from './QuickModificationSheet';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Character, Message, UserCharacter } from '@/types/roleplay';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
@@ -37,7 +38,8 @@ interface ChatMessageProps {
     reference_strength?: number;
     denoise_strength?: number;
   };
-  onSceneRegenerate?: (editedPrompt: string, currentSceneImageUrl?: string) => void;
+  onSceneRegenerate?: (editedPrompt: string, currentSceneImageUrl?: string, strengthOverride?: number) => void;
+  contentMode?: 'sfw' | 'nsfw';
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -50,7 +52,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onRetry,
   conversationId,
   consistencySettings,
-  onSceneRegenerate
+  onSceneRegenerate,
+  contentMode = 'nsfw'
 }) => {
   const { isMobile } = useMobileDetection();
   const { getSignedUrl } = useSignedImageUrls();
@@ -63,6 +66,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [sceneImageError, setSceneImageError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [showSceneEditModal, setShowSceneEditModal] = useState(false);
+  const [showQuickModSheet, setShowQuickModSheet] = useState(false);
 
   // Sign character image URL (use passed prop if available)
   useEffect(() => {
@@ -250,6 +254,34 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     }
   };
 
+  // Handle preset selection from QuickModificationSheet
+  const handlePresetSelect = async (preset: ModificationPreset, customStrength?: number) => {
+    if (!onSceneRegenerate || !message.metadata?.scene_prompt) return;
+
+    // Combine original scene prompt with preset modifier (which already includes continuity phrase)
+    const modifiedPrompt = `${message.metadata.scene_prompt}. ${preset.promptModifier}`;
+    const strengthToUse = customStrength ?? preset.strength;
+
+    // Call regenerate with current scene image (I2I mode) and strength
+    await onSceneRegenerate(
+      modifiedPrompt,
+      signedSceneImage || message.metadata?.image_url,
+      strengthToUse
+    );
+  };
+
+  // Handle fresh generation (T2I from character reference)
+  const handleFreshGeneration = async () => {
+    if (!onSceneRegenerate || !message.metadata?.scene_prompt) return;
+
+    // Call regenerate WITHOUT current scene image (triggers T2I mode)
+    await onSceneRegenerate(
+      message.metadata.scene_prompt,
+      undefined,  // No image = T2I mode
+      undefined   // No strength needed for T2I
+    );
+  };
+
   return (
     <div className={cn(
       "flex group",
@@ -411,8 +443,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       className={cn(
                         "w-full h-auto object-cover rounded-t-xl transition-opacity duration-300",
                         isMobile ? "max-h-[60vh]" : "max-h-96",
-                        sceneImageLoading ? "opacity-0 h-0" : "opacity-100"
+                        sceneImageLoading ? "opacity-0 h-0" : "opacity-100",
+                        onSceneRegenerate && "cursor-pointer"
                       )}
+                      onClick={() => {
+                        if (onSceneRegenerate) {
+                          setShowQuickModSheet(true);
+                        }
+                      }}
                       onLoad={() => {
                         setSceneImageLoading(false);
                         console.log('✅ Scene image loaded successfully');
@@ -512,6 +550,23 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           consistencySettings={consistencySettings}
           currentSceneImageUrl={signedSceneImage || message.metadata?.image_url}
           onRegenerate={onSceneRegenerate}
+        />
+      )}
+
+      {/* Quick Modification Sheet */}
+      {hasScene && onSceneRegenerate && (
+        <QuickModificationSheet
+          isOpen={showQuickModSheet}
+          onClose={() => setShowQuickModSheet(false)}
+          onSelectPreset={handlePresetSelect}
+          onCustomEdit={() => {
+            setShowQuickModSheet(false);
+            setShowSceneEditModal(true);
+          }}
+          onFreshGeneration={handleFreshGeneration}
+          currentSceneImageUrl={signedSceneImage || message.metadata?.image_url}
+          currentScenePrompt={message.metadata?.scene_prompt || ''}
+          contentMode={contentMode}
         />
       )}
     </div>

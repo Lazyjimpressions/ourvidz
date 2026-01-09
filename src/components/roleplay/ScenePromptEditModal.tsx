@@ -5,8 +5,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Edit, Sparkles } from 'lucide-react';
+import { Edit, Sparkles, RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { IntensitySelector } from './IntensitySelector';
+import { cn } from '@/lib/utils';
 
 interface ScenePromptEditModalProps {
   isOpen: boolean;
@@ -23,7 +25,7 @@ interface ScenePromptEditModalProps {
     denoise_strength?: number;
   };
   currentSceneImageUrl?: string; // Current scene image for I2I modification
-  onRegenerate?: (editedPrompt: string, currentSceneImageUrl?: string) => void;
+  onRegenerate?: (editedPrompt: string, currentSceneImageUrl?: string, strengthOverride?: number) => void;
 }
 
 export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
@@ -44,6 +46,8 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
   const [sceneData, setSceneData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [generationMode, setGenerationMode] = useState<'modify' | 'fresh'>('modify');
+  const [selectedStrength, setSelectedStrength] = useState(0.45);
   const { toast } = useToast();
 
   // Load scene data when modal opens
@@ -117,13 +121,18 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
 
     setIsRegenerating(true);
     try {
+      // Determine parameters based on generation mode
+      const isModifyMode = generationMode === 'modify';
+      const imageUrl = isModifyMode ? currentSceneImageUrl : undefined;
+      const strength = isModifyMode ? selectedStrength : undefined;
+
       if (onRegenerate) {
-        await onRegenerate(editedPrompt, currentSceneImageUrl);
+        await onRegenerate(editedPrompt, imageUrl, strength);
         toast({
           title: "Scene Regeneration Started",
-          description: currentSceneImageUrl
-            ? "Modifying current scene with your edited prompt"
-            : "Regenerating scene with your edited prompt",
+          description: isModifyMode
+            ? `Modifying current scene (${Math.round(selectedStrength * 100)}% intensity)`
+            : "Generating fresh scene from character reference",
         });
         onClose();
       } else {
@@ -189,6 +198,60 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Generation Mode Toggle */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Generation Mode</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setGenerationMode('modify')}
+                  disabled={isRegenerating}
+                  className={cn(
+                    "flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-all",
+                    generationMode === 'modify'
+                      ? "bg-purple-600/20 border-purple-500"
+                      : "bg-card border-border hover:bg-accent"
+                  )}
+                >
+                  <RefreshCw className={cn(
+                    "w-5 h-5",
+                    generationMode === 'modify' ? "text-purple-400" : "text-muted-foreground"
+                  )} />
+                  <span className="font-medium text-sm">Modify Current</span>
+                  <span className="text-xs text-muted-foreground">I2I Edit</span>
+                </button>
+
+                <button
+                  onClick={() => setGenerationMode('fresh')}
+                  disabled={isRegenerating}
+                  className={cn(
+                    "flex flex-col items-center gap-1 p-3 rounded-lg border-2 transition-all",
+                    generationMode === 'fresh'
+                      ? "bg-blue-600/20 border-blue-500"
+                      : "bg-card border-border hover:bg-accent"
+                  )}
+                >
+                  <Sparkles className={cn(
+                    "w-5 h-5",
+                    generationMode === 'fresh' ? "text-blue-400" : "text-muted-foreground"
+                  )} />
+                  <span className="font-medium text-sm">Fresh Scene</span>
+                  <span className="text-xs text-muted-foreground">From Character</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Intensity Selector - Only for Modify mode */}
+            {generationMode === 'modify' && (
+              <div className="p-4 bg-muted/30 rounded-lg">
+                <IntensitySelector
+                  value={selectedStrength}
+                  onChange={setSelectedStrength}
+                  disabled={isRegenerating}
+                  showSlider={true}
+                />
+              </div>
+            )}
+
             {/* Character Visual Description (Read-only) */}
             {characterVisualDescription && (
               <div className="p-3 bg-muted/50 rounded-md">
@@ -290,7 +353,7 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
               </Button>
               <Button
                 onClick={handleRegenerate}
-                disabled={isRegenerating || !editedPrompt.trim() || !hasChanges}
+                disabled={isRegenerating || !editedPrompt.trim() || (generationMode === 'modify' && !hasChanges)}
                 className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
               >
                 {isRegenerating ? (
