@@ -1093,6 +1093,86 @@ const MobileRoleplayChat: React.FC = () => {
     }
   };
 
+  // Handle scene regeneration with edited prompt (I2I modification)
+  const handleSceneRegenerate = async (editedPrompt: string, currentSceneImageUrl?: string) => {
+    if (!character || !conversationId || !user) return;
+
+    setIsLoading(true);
+    setSceneJobStatus('queued');
+
+    try {
+      const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
+
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        body: {
+          message: 'Regenerate scene with edited prompt.',
+          conversation_id: conversationId,
+          character_id: character.id,
+          model_provider: modelProvider,
+          memory_tier: memoryTier,
+          content_tier: contentTier,
+          scene_generation: true,
+          user_id: user.id,
+          selected_image_model: getValidImageModel(),
+          scene_style: sceneStyle,
+          consistency_settings: consistencySettings,
+          // Scene regeneration/modification fields
+          scene_prompt_override: editedPrompt,
+          current_scene_image_url: currentSceneImageUrl,
+          // Scene continuity context
+          scene_continuity_enabled: sceneContinuityEnabled,
+          previous_scene_id: previousSceneId || null,
+          previous_scene_image_url: previousSceneImageUrl || null
+        }
+      });
+
+      if (error) throw error;
+
+      const newJobId = data?.job_id || data?.scene_job_id || data?.data?.jobId || data?.data?.job_id;
+
+      if (newJobId) {
+        // Add placeholder message for regenerated scene
+        const placeholderMessage: Message = {
+          id: Date.now().toString(),
+          content: currentSceneImageUrl
+            ? 'Modifying scene with your changes...'
+            : 'Regenerating scene...',
+          sender: 'character',
+          timestamp: new Date().toISOString(),
+          metadata: {
+            scene_generated: true,
+            job_id: newJobId,
+            consistency_method: consistencySettings.method,
+            is_regeneration: true
+          }
+        };
+        setMessages(prev => [...prev, placeholderMessage]);
+
+        // Start polling for job completion
+        console.log('🔧 Starting polling for scene regeneration job:', newJobId);
+        subscribeToJobCompletion(newJobId, placeholderMessage.id);
+
+        toast({
+          title: currentSceneImageUrl ? 'Scene modification started' : 'Scene regeneration started',
+          description: "I'll update it here when it's ready."
+        });
+      } else {
+        throw new Error('No job ID returned from scene regeneration request');
+      }
+    } catch (error) {
+      console.error('Error regenerating scene:', error);
+      setSceneJobStatus('failed');
+
+      toast({
+        title: 'Scene regeneration failed',
+        description: error instanceof Error ? error.message : 'Could not regenerate scene',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleBack = () => {
     navigate('/roleplay');
   };
@@ -1492,7 +1572,9 @@ const MobileRoleplayChat: React.FC = () => {
                 signedUserCharacterImageUrl={signedUserCharacterImage}
                 onGenerateScene={handleGenerateScene}
                 onRetry={message.metadata?.needsRetry ? handleRetryKickoff : undefined}
-                conversationId={conversationId} // ✅ FIX: Pass conversationId to ChatMessage
+                conversationId={conversationId}
+                consistencySettings={consistencySettings}
+                onSceneRegenerate={handleSceneRegenerate}
               />
           ))}
           

@@ -22,7 +22,8 @@ interface ScenePromptEditModalProps {
     reference_strength?: number;
     denoise_strength?: number;
   };
-  onRegenerate?: (editedPrompt: string) => void;
+  currentSceneImageUrl?: string; // Current scene image for I2I modification
+  onRegenerate?: (editedPrompt: string, currentSceneImageUrl?: string) => void;
 }
 
 export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
@@ -35,6 +36,7 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
   currentPrompt,
   characterVisualDescription,
   consistencySettings,
+  currentSceneImageUrl,
   onRegenerate
 }) => {
   const [editedPrompt, setEditedPrompt] = useState('');
@@ -116,10 +118,12 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
     setIsRegenerating(true);
     try {
       if (onRegenerate) {
-        await onRegenerate(editedPrompt);
+        await onRegenerate(editedPrompt, currentSceneImageUrl);
         toast({
           title: "Scene Regeneration Started",
-          description: "The scene is being regenerated with your edited prompt",
+          description: currentSceneImageUrl
+            ? "Modifying current scene with your edited prompt"
+            : "Regenerating scene with your edited prompt",
         });
         onClose();
       } else {
@@ -131,6 +135,7 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
             character_id: characterId,
             scene_generation: true,
             scene_prompt_override: editedPrompt,
+            current_scene_image_url: currentSceneImageUrl, // For I2I modification
             consistency_settings: consistencySettings
           }
         });
@@ -139,7 +144,9 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
 
         toast({
           title: "Scene Regeneration Started",
-          description: "The scene is being regenerated with your edited prompt",
+          description: currentSceneImageUrl
+            ? "Modifying current scene with your edited prompt"
+            : "Regenerating scene with your edited prompt",
         });
         onClose();
       }
@@ -169,7 +176,9 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
             Edit the prompt used to generate this scene. Changes will be applied when you regenerate.
             <br />
             <span className="text-xs text-muted-foreground mt-1 block">
-              ℹ️ Regeneration uses the character's reference image (not the previous scene) for consistency.
+              ℹ️ {currentSceneImageUrl
+                ? "Modification uses the current scene image to preserve context while applying your changes."
+                : "Regeneration uses the character's reference image for consistency."}
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -235,11 +244,18 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
             </div>
 
             {/* Reference Image Info */}
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md">
-              <p className="text-xs font-medium text-amber-300 mb-1">ℹ️ Reference Image Used</p>
+            <div className={`p-3 rounded-md ${currentSceneImageUrl
+              ? 'bg-green-500/10 border border-green-500/20'
+              : 'bg-amber-500/10 border border-amber-500/20'
+            }`}>
+              <p className={`text-xs font-medium mb-1 ${currentSceneImageUrl ? 'text-green-300' : 'text-amber-300'}`}>
+                ℹ️ {currentSceneImageUrl ? 'I2I Modification Mode' : 'Reference Image Used'}
+              </p>
               <p className="text-xs text-muted-foreground">
-                The system uses the <strong>character's reference image</strong> (from character settings) for consistency, 
-                not the previous scene image. This ensures character appearance remains consistent across all scenes.
+                {currentSceneImageUrl
+                  ? <>The system will use the <strong>current scene image</strong> as a base and apply your prompt changes using I2I (image-to-image). This preserves the scene context while modifying specific details.</>
+                  : <>The system uses the <strong>character's reference image</strong> for consistency. If no scene is available, a new scene will be generated from scratch.</>
+                }
               </p>
             </div>
 

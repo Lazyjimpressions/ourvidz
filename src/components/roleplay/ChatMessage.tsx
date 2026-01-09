@@ -11,8 +11,10 @@ import {
   Image as ImageIcon,
   Clock,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Edit
 } from 'lucide-react';
+import { ScenePromptEditModal } from './ScenePromptEditModal';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Character, Message, UserCharacter } from '@/types/roleplay';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
@@ -28,6 +30,14 @@ interface ChatMessageProps {
   signedCharacterImageUrl?: string | null;
   signedUserCharacterImageUrl?: string | null;
   onRetry?: () => void;
+  // Scene editing props
+  conversationId?: string;
+  consistencySettings?: {
+    method?: string;
+    reference_strength?: number;
+    denoise_strength?: number;
+  };
+  onSceneRegenerate?: (editedPrompt: string, currentSceneImageUrl?: string) => void;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -37,18 +47,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onGenerateScene,
   signedCharacterImageUrl,
   signedUserCharacterImageUrl,
-  onRetry
+  onRetry,
+  conversationId,
+  consistencySettings,
+  onSceneRegenerate
 }) => {
   const { isMobile } = useMobileDetection();
   const { getSignedUrl } = useSignedImageUrls();
   const isUser = message.sender === 'user';
   const hasScene = message.metadata?.scene_generated && message.metadata?.image_url;
-  
+
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [signedSceneImage, setSignedSceneImage] = useState<string | null>(null);
   const [sceneImageLoading, setSceneImageLoading] = useState(true);
   const [sceneImageError, setSceneImageError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [showSceneEditModal, setShowSceneEditModal] = useState(false);
 
   // Sign character image URL (use passed prop if available)
   useEffect(() => {
@@ -422,6 +436,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   
                   {/* Scene Actions - Show on hover */}
                   <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Edit button for scene modification */}
+                    {onSceneRegenerate && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setShowSceneEditModal(true)}
+                        className="bg-purple-600/80 hover:bg-purple-600 text-white border-0 backdrop-blur-sm"
+                        title="Edit scene prompt"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="secondary"
@@ -472,6 +498,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           )}
         </div>
       </div>
+
+      {/* Scene Prompt Edit Modal */}
+      {hasScene && (
+        <ScenePromptEditModal
+          isOpen={showSceneEditModal}
+          onClose={() => setShowSceneEditModal(false)}
+          sceneId={message.metadata?.scene_id}
+          jobId={message.metadata?.job_id}
+          conversationId={conversationId}
+          characterId={character?.id}
+          currentPrompt={message.metadata?.scene_prompt}
+          consistencySettings={consistencySettings}
+          currentSceneImageUrl={signedSceneImage || message.metadata?.image_url}
+          onRegenerate={onSceneRegenerate}
+        />
+      )}
     </div>
   );
 };

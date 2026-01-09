@@ -48,6 +48,9 @@ interface RoleplayChatRequest {
   previous_scene_id?: string; // ID of previous scene for linking
   previous_scene_image_url?: string; // URL of previous scene for I2I iteration
   scene_continuity_enabled?: boolean; // Whether to use I2I for subsequent scenes
+  // Scene regeneration/modification fields
+  scene_prompt_override?: string; // User-edited prompt for regeneration
+  current_scene_image_url?: string; // Current scene image for I2I modification
 }
 
 // User character interface for scene generation
@@ -205,8 +208,23 @@ serve(async (req) => {
       // Scene continuity (I2I iteration) fields
       previous_scene_id,
       previous_scene_image_url,
-      scene_continuity_enabled
+      scene_continuity_enabled,
+      // Scene regeneration/modification fields
+      scene_prompt_override,
+      current_scene_image_url
     } = requestBody;
+
+    // Detect regeneration/modification mode
+    const isSceneRegeneration = !!scene_prompt_override;
+    const isSceneModification = isSceneRegeneration && !!current_scene_image_url;
+
+    if (isSceneRegeneration) {
+      console.log('🎬 Scene regeneration mode detected:', {
+        hasPromptOverride: !!scene_prompt_override,
+        hasCurrentSceneImage: !!current_scene_image_url,
+        isModification: isSceneModification
+      });
+    }
 
     // Validate required fields (message is optional for kickoff)
     if ((!message && !kickoff) || !conversation_id || !character_id || !model_provider || !memory_tier || !content_tier) {
@@ -489,7 +507,10 @@ serve(async (req) => {
         // Scene continuity (I2I iteration) parameters
         previous_scene_id,
         previous_scene_image_url,
-        scene_continuity_enabled ?? true // Default to enabled
+        scene_continuity_enabled ?? true, // Default to enabled
+        // Scene regeneration/modification parameters
+        scene_prompt_override,
+        current_scene_image_url
       );
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
@@ -1920,13 +1941,38 @@ async function generateScene(
   // Scene continuity (I2I iteration) parameters
   previousSceneId?: string, // ID of previous scene for linking
   previousSceneImageUrl?: string, // URL of previous scene for I2I iteration
-  sceneContinuityEnabled: boolean = true // Whether to use I2I for subsequent scenes (default: enabled)
+  sceneContinuityEnabled: boolean = true, // Whether to use I2I for subsequent scenes (default: enabled)
+  // Scene regeneration/modification parameters
+  scenePromptOverride?: string, // User-edited prompt for regeneration (skips narrative generation)
+  currentSceneImageUrl?: string // Current scene image for I2I modification mode
 ): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string }> {
   try {
-    // Determine if this is the first scene or a subsequent scene for I2I iteration
+    // Determine generation mode: t2i (first scene), i2i (continuation), or modification (user edit)
     const isFirstScene = !previousSceneId || !previousSceneImageUrl;
-    const useI2IIteration = sceneContinuityEnabled && !isFirstScene && !!previousSceneImageUrl;
-    const generationMode = useI2IIteration ? 'i2i' : 't2i';
+    const isModification = !!scenePromptOverride && !!currentSceneImageUrl;
+
+    // Calculate generation mode and settings
+    let useI2IIteration: boolean;
+    let generationMode: 't2i' | 'i2i' | 'modification';
+    let effectiveReferenceImageUrl: string | undefined;
+
+    if (isModification) {
+      // Modification mode: I2I on current scene with user-edited prompt
+      useI2IIteration = true;
+      generationMode = 'modification';
+      effectiveReferenceImageUrl = currentSceneImageUrl;
+      console.log('🎬 Modification mode: Using current scene image for I2I');
+    } else if (sceneContinuityEnabled && !isFirstScene && !!previousSceneImageUrl) {
+      // Continuation mode: I2I on previous scene
+      useI2IIteration = true;
+      generationMode = 'i2i';
+      effectiveReferenceImageUrl = previousSceneImageUrl;
+    } else {
+      // First scene or T2I: Use character reference (resolved later)
+      useI2IIteration = false;
+      generationMode = 't2i';
+      effectiveReferenceImageUrl = undefined; // Will use character reference
+    }
 
     console.log('🎬 Starting scene generation:', {
       characterId,
@@ -2104,46 +2150,54 @@ const sceneContext = analyzeSceneContent(response);
       referenceImage: character.reference_image_url || character.image_url || character.preview_image_url
     }];
 
-    // Generate AI-powered scene narrative using OpenRouter
-    console.log('🎬 Generating scene narrative for character:', character.name);
-    
+    // Generate scene prompt: use override (regeneration) or AI-generated narrative
     let scenePrompt: string;
-    try {
-      // Use the same model configuration as the current roleplay conversation
-      const roleplayModel = 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free'; // Default to Venice Dolphin
-      const modelConfig = await getModelConfig(supabase, roleplayModel);
-      
-      if (modelConfig && modelConfig.provider_name === 'openrouter') {
-        scenePrompt = await generateSceneNarrativeWithOpenRouter(
-          character,
-          sceneContext,
-          conversationHistory,
-          characterVisualDescription,
-          roleplayModel,
-          sceneContext.isNSFW ? 'nsfw' : 'sfw',
-          modelConfig,
-          supabase
-        );
-        console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...');
-      } else {
-        throw new Error('OpenRouter model configuration not found');
-      }
-    } catch (narrativeError) {
-      console.log('🎬 Fallback to enhanced scene extraction:', narrativeError.message);
-      // Fallback to enhanced scene extraction with storyline context
-      const extractedScene = extractSceneFromResponse(response);
-      const fallbackStoryline = extractStorylineContext(conversationHistory);
-      const fallbackLocation = fallbackStoryline.locations.length > 0
-        ? fallbackStoryline.locations[fallbackStoryline.locations.length - 1]
-        : 'intimate setting';
 
-      if (!extractedScene) {
-        console.log('🎬 No specific scene description found, using storyline context for scene generation');
-        // Use storyline context as scene prompt if no specific scene is detected
-        scenePrompt = `A scene showing ${character.name} at ${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-5).join(' | ')}`;
-      } else {
-        // Enhance extracted scene with storyline location
-        scenePrompt = `${extractedScene}. Location: ${fallbackLocation}.`;
+    if (scenePromptOverride) {
+      // User-provided prompt override (regeneration/modification mode)
+      scenePrompt = scenePromptOverride;
+      console.log('🎬 Using user-provided scene prompt override:', scenePrompt.substring(0, 100) + '...');
+    } else {
+      // Generate AI-powered scene narrative using OpenRouter
+      console.log('🎬 Generating scene narrative for character:', character.name);
+
+      try {
+        // Use the same model configuration as the current roleplay conversation
+        const roleplayModel = 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free'; // Default to Venice Dolphin
+        const modelConfig = await getModelConfig(supabase, roleplayModel);
+
+        if (modelConfig && modelConfig.provider_name === 'openrouter') {
+          scenePrompt = await generateSceneNarrativeWithOpenRouter(
+            character,
+            sceneContext,
+            conversationHistory,
+            characterVisualDescription,
+            roleplayModel,
+            sceneContext.isNSFW ? 'nsfw' : 'sfw',
+            modelConfig,
+            supabase
+          );
+          console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...');
+        } else {
+          throw new Error('OpenRouter model configuration not found');
+        }
+      } catch (narrativeError) {
+        console.log('🎬 Fallback to enhanced scene extraction:', narrativeError.message);
+        // Fallback to enhanced scene extraction with storyline context
+        const extractedScene = extractSceneFromResponse(response);
+        const fallbackStoryline = extractStorylineContext(conversationHistory);
+        const fallbackLocation = fallbackStoryline.locations.length > 0
+          ? fallbackStoryline.locations[fallbackStoryline.locations.length - 1]
+          : 'intimate setting';
+
+        if (!extractedScene) {
+          console.log('🎬 No specific scene description found, using storyline context for scene generation');
+          // Use storyline context as scene prompt if no specific scene is detected
+          scenePrompt = `A scene showing ${character.name} at ${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-5).join(' | ')}`;
+        } else {
+          // Enhance extracted scene with storyline location
+          scenePrompt = `${extractedScene}. Location: ${fallbackLocation}.`;
+        }
       }
     }
 
@@ -2555,13 +2609,19 @@ const sceneContext = analyzeSceneContent(response);
             headers['authorization'] = authHeader;
           }
 
-          // ✅ I2I ITERATION: Determine model and reference image based on scene continuity
+          // ✅ I2I ITERATION: Determine model and reference image based on generation mode
           let i2iModelOverride: string | null = null;
           let i2iReferenceImage: string | undefined;
           let i2iStrength: number;
 
-          if (useI2IIteration && previousSceneImageUrl) {
-            // I2I mode: Use Seedream v4.5/edit with previous scene as reference
+          if (generationMode === 'modification' && effectiveReferenceImageUrl) {
+            // Modification mode: Use Seedream v4.5/edit with CURRENT scene as reference
+            i2iModelOverride = 'fal-ai/seedream/v4.5/edit';
+            i2iReferenceImage = effectiveReferenceImageUrl; // Current scene image
+            i2iStrength = 0.5; // Slightly higher strength for modifications
+            console.log('🔧 Modification Mode: Using Seedream v4.5/edit with current scene');
+          } else if (useI2IIteration && previousSceneImageUrl) {
+            // I2I continuation mode: Use Seedream v4.5/edit with previous scene as reference
             i2iModelOverride = 'fal-ai/seedream/v4.5/edit'; // Override to Seedream edit model
             i2iReferenceImage = previousSceneImageUrl;
             i2iStrength = 0.45; // Moderate strength for scene-to-scene continuity
