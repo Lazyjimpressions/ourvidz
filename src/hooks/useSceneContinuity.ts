@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 const STORAGE_KEY = 'scene-continuity-settings';
+const SCENES_STORAGE_KEY = 'scene-continuity-scenes';
+const MAX_STORED_CONVERSATIONS = 25;
 
 interface SceneContinuitySettings {
   enabled: boolean;
@@ -36,6 +39,89 @@ interface UseSceneContinuityResult {
   isLoading: boolean;
 }
 
+/**
+ * Helper to persist scenes Map to localStorage
+ */
+const persistScenesToStorage = (scenesMap: Map<string, PreviousSceneInfo>) => {
+  try {
+    const scenesObj = Object.fromEntries(scenesMap);
+    localStorage.setItem(SCENES_STORAGE_KEY, JSON.stringify(scenesObj));
+  } catch (error) {
+    console.warn('🔄 Scene continuity: Failed to persist scenes to localStorage:', error);
+  }
+};
+
+/**
+ * Helper to load scenes from localStorage
+ */
+const loadScenesFromStorage = (): Map<string, PreviousSceneInfo> => {
+  const map = new Map<string, PreviousSceneInfo>();
+  try {
+    const savedScenes = localStorage.getItem(SCENES_STORAGE_KEY);
+    if (savedScenes) {
+      const parsed = JSON.parse(savedScenes);
+      Object.entries(parsed).forEach(([convId, sceneInfo]) => {
+        map.set(convId, sceneInfo as PreviousSceneInfo);
+      });
+      console.log('🔄 Scene continuity: Loaded', map.size, 'scenes from localStorage');
+    }
+  } catch (error) {
+    console.warn('🔄 Scene continuity: Failed to load scenes from localStorage:', error);
+  }
+  return map;
+};
+
+/**
+ * Helper to cleanup old conversations to prevent localStorage bloat
+ */
+const cleanupOldConversations = (scenesMap: Map<string, PreviousSceneInfo>) => {
+  if (scenesMap.size <= MAX_STORED_CONVERSATIONS) return;
+
+  // Remove oldest entries by timestamp
+  const entries = Array.from(scenesMap.entries());
+  entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+  const toRemove = entries.slice(0, entries.length - MAX_STORED_CONVERSATIONS);
+  toRemove.forEach(([key]) => scenesMap.delete(key));
+
+  console.log('🔄 Scene continuity: Cleaned up', toRemove.length, 'old conversations');
+};
+
+/**
+ * Fetch last scene from database (fallback when localStorage misses)
+ */
+const fetchLastSceneFromDB = async (convId: string): Promise<PreviousSceneInfo | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('character_scenes')
+      .select('id, image_url, created_at')
+      .eq('conversation_id', convId)
+      .not('image_url', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data?.image_url) {
+      console.log('🔄 Scene continuity: No previous scene in DB for conversation', convId);
+      return null;
+    }
+
+    console.log('🔄 Scene continuity: Found previous scene in DB', {
+      conversationId: convId,
+      sceneId: data.id,
+      imageUrl: data.image_url.substring(0, 60) + '...'
+    });
+
+    return {
+      sceneId: data.id,
+      imageUrl: data.image_url,
+      timestamp: new Date(data.created_at).getTime()
+    };
+  } catch (error) {
+    console.warn('🔄 Scene continuity: Failed to fetch scene from DB:', error);
+    return null;
+  }
+};
+
 export const useSceneContinuity = (conversationId?: string): UseSceneContinuityResult => {
   const [settings, setSettings] = useState<SceneContinuitySettings>(DEFAULT_SETTINGS);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -43,16 +129,18 @@ export const useSceneContinuity = (conversationId?: string): UseSceneContinuityR
 
   // In-memory cache of previous scenes per conversation
   // Using a ref to persist across renders without causing re-renders
+  // Now initialized from localStorage
   const previousScenesRef = useRef<Map<string, PreviousSceneInfo>>(new Map());
 
   // State for the current conversation's previous scene
   const [currentPreviousScene, setCurrentPreviousScene] = useState<PreviousSceneInfo | null>(null);
 
-  // Initialize settings from localStorage
+  // Initialize settings and scenes from localStorage
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
+    // Load settings
     try {
       const savedSettings = localStorage.getItem(STORAGE_KEY);
       if (savedSettings) {
@@ -66,17 +154,45 @@ export const useSceneContinuity = (conversationId?: string): UseSceneContinuityR
       console.warn('Failed to load scene continuity settings:', error);
     }
 
+    // Load previous scenes from localStorage
+    previousScenesRef.current = loadScenesFromStorage();
+
     setIsInitialized(true);
   }, []);
 
   // Update current previous scene when conversationId changes
+  // Also triggers DB fallback if localStorage doesn't have the scene
   useEffect(() => {
-    if (conversationId) {
-      const scene = previousScenesRef.current.get(conversationId) || null;
-      setCurrentPreviousScene(scene);
-    } else {
+    if (!conversationId) {
       setCurrentPreviousScene(null);
+      return;
     }
+
+    // Check localStorage/memory first
+    const cached = previousScenesRef.current.get(conversationId);
+    if (cached) {
+      console.log('🔄 Scene continuity: Found cached scene for conversation', {
+        conversationId,
+        sceneId: cached.sceneId,
+        imageUrl: cached.imageUrl.substring(0, 60) + '...'
+      });
+      setCurrentPreviousScene(cached);
+      return;
+    }
+
+    // Fallback: Query database for last scene
+    console.log('🔄 Scene continuity: No cached scene, checking database for', conversationId);
+    fetchLastSceneFromDB(conversationId).then(scene => {
+      if (scene) {
+        // Store in memory and localStorage
+        previousScenesRef.current.set(conversationId, scene);
+        cleanupOldConversations(previousScenesRef.current);
+        persistScenesToStorage(previousScenesRef.current);
+        setCurrentPreviousScene(scene);
+      } else {
+        setCurrentPreviousScene(null);
+      }
+    });
   }, [conversationId]);
 
   // Save settings to localStorage
@@ -106,7 +222,7 @@ export const useSceneContinuity = (conversationId?: string): UseSceneContinuityR
     console.log('🔄 Scene continuity strength:', clampedStrength);
   }, [settings, saveSettings]);
 
-  // Store the last scene for a conversation
+  // Store the last scene for a conversation (with localStorage persistence)
   const setLastScene = useCallback((convId: string, sceneId: string, imageUrl: string) => {
     const sceneInfo: PreviousSceneInfo = {
       sceneId,
@@ -114,6 +230,12 @@ export const useSceneContinuity = (conversationId?: string): UseSceneContinuityR
       timestamp: Date.now()
     };
     previousScenesRef.current.set(convId, sceneInfo);
+
+    // Cleanup old conversations if needed
+    cleanupOldConversations(previousScenesRef.current);
+
+    // Persist to localStorage
+    persistScenesToStorage(previousScenesRef.current);
 
     // Update state if this is the current conversation
     if (convId === conversationId) {
@@ -127,9 +249,12 @@ export const useSceneContinuity = (conversationId?: string): UseSceneContinuityR
     });
   }, [conversationId]);
 
-  // Clear the last scene for a conversation
+  // Clear the last scene for a conversation (with localStorage persistence)
   const clearLastScene = useCallback((convId: string) => {
     previousScenesRef.current.delete(convId);
+
+    // Persist deletion to localStorage
+    persistScenesToStorage(previousScenesRef.current);
 
     // Update state if this is the current conversation
     if (convId === conversationId) {

@@ -881,6 +881,14 @@ const MobileRoleplayChat: React.FC = () => {
         console.log('📸 Using default Replicate model:', validImageModel);
       }
 
+      // Debug: Log scene continuity state before API call
+      console.log('🔄 Scene continuity state (handleSendMessage):', {
+        enabled: sceneContinuityEnabled,
+        previousSceneId,
+        previousSceneImageUrl: previousSceneImageUrl?.substring(0, 60) || null,
+        conversationId
+      });
+
       // ✅ FIX: Sign previous scene image URL if it's a storage path (needed for I2I iteration)
       let signedPreviousSceneImageUrl: string | null = null;
       if (previousSceneImageUrl) {

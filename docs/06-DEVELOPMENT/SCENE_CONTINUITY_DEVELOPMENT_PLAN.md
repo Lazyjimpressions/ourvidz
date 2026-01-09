@@ -1,9 +1,9 @@
 # Scene Continuity Development Plan
 
 **Date:** 2026-01-08
-**Status:** Phase 1 Complete (including Regeneration), Phase 2 Pending
+**Status:** Phase 1.6 Complete (Persistence Fix), Phase 2 Pending
 **Priority:** HIGH - Core UX Enhancement
-**Last Updated:** 2026-01-08
+**Last Updated:** 2026-01-09
 
 ---
 
@@ -45,6 +45,7 @@ I2I iteration is **critical for NSFW content** because it:
 |-------|--------|-------------|
 | **Phase 1** | ✅ Complete | Core I2I iteration infrastructure |
 | **Phase 1.5** | ✅ Complete | Scene regeneration/modification with I2I |
+| **Phase 1.6** | ✅ Complete | Persistence fix - localStorage + DB fallback |
 | **Phase 2** | 🔲 Pending | Quick modification UI & NSFW presets |
 
 ---
@@ -563,6 +564,29 @@ Edge Function (fal-image)
 **Root Cause:** `conversationId` not passed from MobileRoleplayChat to ChatMessage
 **Fix:** Added `conversationId` prop to ChatMessage interface
 **Date Fixed:** 2026-01-07 (documented in SCENE_REGENERATION_AUDIT.md)
+
+### 8.5 Fixed: I2I Chain Broken - In-Memory Storage Loss
+
+**Issue:** I2I iteration never triggered - ALL scenes treated as "first scene"
+**Root Cause:** The `useSceneContinuity` hook stored previous scenes in React `useRef<Map>` which resets on page refresh/navigation. Every scene had `is_first: true` and `has_previous_url: false` in database.
+**Fix:** Added localStorage persistence with database fallback:
+1. Previous scenes now persist to `localStorage['scene-continuity-scenes']`
+2. Cleanup limits storage to 25 conversations
+3. Database fallback queries `character_scenes` when localStorage misses
+**Date Fixed:** 2026-01-09
+
+**Files Modified:**
+- `src/hooks/useSceneContinuity.ts` - Added persistence layer
+- `src/pages/MobileRoleplayChat.tsx` - Added debug logging
+
+**Verification:**
+```sql
+-- After fix, expect mix of t2i and i2i
+SELECT generation_mode, COUNT(*)
+FROM character_scenes
+WHERE created_at > NOW() - INTERVAL '1 hour'
+GROUP BY generation_mode;
+```
 
 ---
 
