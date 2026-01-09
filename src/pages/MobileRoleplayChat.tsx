@@ -881,6 +881,24 @@ const MobileRoleplayChat: React.FC = () => {
         console.log('📸 Using default Replicate model:', validImageModel);
       }
 
+      // ✅ FIX: Sign previous scene image URL if it's a storage path (needed for I2I iteration)
+      let signedPreviousSceneImageUrl: string | null = null;
+      if (previousSceneImageUrl) {
+        if (previousSceneImageUrl.startsWith('http://') || previousSceneImageUrl.startsWith('https://')) {
+          // Already a signed URL
+          signedPreviousSceneImageUrl = previousSceneImageUrl;
+        } else {
+          // Storage path - need to sign it
+          const bucket = previousSceneImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          const signedUrl = await getSignedUrl(previousSceneImageUrl, bucket);
+          signedPreviousSceneImageUrl = signedUrl;
+          console.log('🔄 Scene continuity: Signed previous scene image URL for I2I iteration', {
+            original: previousSceneImageUrl.substring(0, 60) + '...',
+            signed: signedUrl ? signedUrl.substring(0, 60) + '...' : 'failed'
+          });
+        }
+      }
+
       // Call the roleplay-chat edge function with prompt template
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
@@ -894,7 +912,7 @@ const MobileRoleplayChat: React.FC = () => {
           user_id: user.id,
           // ✅ ADD SCENE CONTEXT:
           scene_context: selectedScene?.scene_prompt || null,
-          scene_system_prompt: selectedScene?.system_prompt || null,
+          scene_system_prompt: selectedScene?.scene_prompt || null,
           // ✅ ADD PROMPT TEMPLATE INTEGRATION:
           prompt_template_id: promptTemplate?.id || null,
           prompt_template_name: promptTemplate?.template_name || null,
@@ -907,7 +925,7 @@ const MobileRoleplayChat: React.FC = () => {
           // 🔄 Scene continuity for I2I iteration
           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: previousSceneId || null,
-          previous_scene_image_url: previousSceneImageUrl || null
+          previous_scene_image_url: signedPreviousSceneImageUrl || null
         }
       });
 
@@ -1010,6 +1028,24 @@ const MobileRoleplayChat: React.FC = () => {
       // This will use the enhanced scene generation logic with character visual context
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       
+      // ✅ FIX: Sign previous scene image URL if it's a storage path (needed for I2I iteration)
+      let signedPreviousSceneImageUrl: string | null = null;
+      if (previousSceneImageUrl) {
+        if (previousSceneImageUrl.startsWith('http://') || previousSceneImageUrl.startsWith('https://')) {
+          // Already a signed URL
+          signedPreviousSceneImageUrl = previousSceneImageUrl;
+        } else {
+          // Storage path - need to sign it
+          const bucket = previousSceneImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          const signedUrl = await getSignedUrl(previousSceneImageUrl, bucket);
+          signedPreviousSceneImageUrl = signedUrl;
+          console.log('🔄 Scene continuity: Signed previous scene image URL for I2I iteration', {
+            original: previousSceneImageUrl.substring(0, 60) + '...',
+            signed: signedUrl ? signedUrl.substring(0, 60) + '...' : 'failed'
+          });
+        }
+      }
+      
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
           message: 'Generate a scene based on our current conversation context.',
@@ -1031,7 +1067,7 @@ const MobileRoleplayChat: React.FC = () => {
           // 🔄 Scene continuity for I2I iteration
           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: previousSceneId || null,
-          previous_scene_image_url: previousSceneImageUrl || null
+          previous_scene_image_url: signedPreviousSceneImageUrl || null
         }
       });
 
@@ -1138,6 +1174,37 @@ const MobileRoleplayChat: React.FC = () => {
         ...(isI2IModification && strengthOverride && { denoise_strength: strengthOverride })
       };
 
+      // ✅ FIX: Sign image URLs if they're storage paths (needed for I2I)
+      let signedCurrentSceneImageUrl: string | undefined = undefined;
+      if (isI2IModification && currentSceneImageUrl) {
+        if (currentSceneImageUrl.startsWith('http://') || currentSceneImageUrl.startsWith('https://')) {
+          signedCurrentSceneImageUrl = currentSceneImageUrl;
+        } else {
+          const bucket = currentSceneImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          const signedUrl = await getSignedUrl(currentSceneImageUrl, bucket);
+          signedCurrentSceneImageUrl = signedUrl || undefined;
+          console.log('🔧 Scene modification: Signed current scene image URL', {
+            original: currentSceneImageUrl.substring(0, 60) + '...',
+            signed: signedUrl ? signedUrl.substring(0, 60) + '...' : 'failed'
+          });
+        }
+      }
+
+      let signedPreviousSceneImageUrl: string | null = null;
+      if (previousSceneImageUrl) {
+        if (previousSceneImageUrl.startsWith('http://') || previousSceneImageUrl.startsWith('https://')) {
+          signedPreviousSceneImageUrl = previousSceneImageUrl;
+        } else {
+          const bucket = previousSceneImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          const signedUrl = await getSignedUrl(previousSceneImageUrl, bucket);
+          signedPreviousSceneImageUrl = signedUrl;
+          console.log('🔄 Scene continuity: Signed previous scene image URL for I2I iteration', {
+            original: previousSceneImageUrl.substring(0, 60) + '...',
+            signed: signedUrl ? signedUrl.substring(0, 60) + '...' : 'failed'
+          });
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
           message: isI2IModification ? 'Modify scene.' : 'Regenerate scene.',
@@ -1153,12 +1220,12 @@ const MobileRoleplayChat: React.FC = () => {
           consistency_settings: effectiveConsistencySettings,
           // Scene regeneration/modification fields
           scene_prompt_override: editedPrompt,
-          // Only include current_scene_image_url for I2I mode
-          ...(isI2IModification && { current_scene_image_url: currentSceneImageUrl }),
+          // Only include current_scene_image_url for I2I mode (signed if needed)
+          ...(isI2IModification && signedCurrentSceneImageUrl && { current_scene_image_url: signedCurrentSceneImageUrl }),
           // Scene continuity context
           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: previousSceneId || null,
-          previous_scene_image_url: previousSceneImageUrl || null
+          previous_scene_image_url: signedPreviousSceneImageUrl || null
         }
       });
 
