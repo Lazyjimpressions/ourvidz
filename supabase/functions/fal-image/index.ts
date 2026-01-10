@@ -1310,6 +1310,14 @@ serve(async (req) => {
         }
       }
 
+      // Handle scene_preview destination - just return the image URL, no DB updates
+      // Frontend will store the URL when user creates the scene template
+      if (body.metadata?.destination === 'scene_preview') {
+        console.log('🎬 Scene preview generated, returning URL for frontend storage');
+        // No database updates needed - the preview_image_url will be saved
+        // when the user clicks "Create Scene" in the SceneCreationModal
+      }
+
       return new Response(JSON.stringify({
         jobId: jobData.id,
         status: 'completed',

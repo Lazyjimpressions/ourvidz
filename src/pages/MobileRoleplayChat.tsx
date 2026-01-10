@@ -771,6 +771,60 @@ const MobileRoleplayChat: React.FC = () => {
           sceneId: sceneIdForTracking,
           imageUrl: assetData.temp_storage_path.substring(0, 60) + '...'
         });
+
+        // 📸 Persist last scene image to conversation for dashboard thumbnails
+        // Copy from workspace-temp to user-library for persistence
+        (async () => {
+          try {
+            // Download the image from workspace-temp
+            const { data: downloadData, error: downloadError } = await supabase.storage
+              .from('workspace-temp')
+              .download(assetData.temp_storage_path);
+
+            if (downloadError || !downloadData) {
+              console.error('❌ Failed to download scene image for persistence:', downloadError);
+              // Fallback: store temp path anyway
+              await supabase
+                .from('conversations')
+                .update({ last_scene_image: assetData.temp_storage_path } as any)
+                .eq('id', conversationId);
+              return;
+            }
+
+            // Upload to user-library with persistent path
+            const persistentPath = `${user?.id}/scene-thumbnails/${conversationId}/${assetData.id}.png`;
+            const { error: uploadError } = await supabase.storage
+              .from('user-library')
+              .upload(persistentPath, downloadData, {
+                contentType: 'image/png',
+                upsert: true
+              });
+
+            if (uploadError) {
+              console.error('❌ Failed to upload scene image to user-library:', uploadError);
+              // Fallback: store temp path anyway
+              await supabase
+                .from('conversations')
+                .update({ last_scene_image: assetData.temp_storage_path } as any)
+                .eq('id', conversationId);
+              return;
+            }
+
+            // Store the persistent path in the conversation
+            const { error: updateError } = await supabase
+              .from('conversations')
+              .update({ last_scene_image: persistentPath } as any)
+              .eq('id', conversationId);
+
+            if (updateError) {
+              console.error('❌ Failed to update conversation last_scene_image:', updateError);
+            } else {
+              console.log('✅ Persisted scene thumbnail to user-library:', persistentPath);
+            }
+          } catch (err) {
+            console.error('❌ Error persisting scene thumbnail:', err);
+          }
+        })();
       }
 
       toast({

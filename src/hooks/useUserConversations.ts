@@ -167,16 +167,23 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
             return conv;
           }
 
-          // Sign the storage path from workspace-temp bucket
+          // Determine bucket based on path pattern
+          // user-library paths: {userId}/scene-thumbnails/...
+          // workspace-temp paths: everything else
+          const isUserLibrary = conv.last_scene_image.includes('/scene-thumbnails/');
+          const bucket = isUserLibrary ? 'user-library' : 'workspace-temp';
+          // Use longer TTL for user-library (24 hours) vs workspace-temp (1 hour)
+          const ttl = isUserLibrary ? 86400 : 3600;
+
           try {
             const { data: signedData } = await supabase.storage
-              .from('workspace-temp')
-              .createSignedUrl(conv.last_scene_image, 3600); // 1 hour expiry
+              .from(bucket)
+              .createSignedUrl(conv.last_scene_image, ttl);
             if (signedData?.signedUrl) {
               return { ...conv, last_scene_image: signedData.signedUrl };
             }
           } catch (err) {
-            console.error(`Failed to sign URL for conversation ${conv.id}:`, err);
+            console.error(`Failed to sign URL for conversation ${conv.id} from ${bucket}:`, err);
           }
 
           return conv;
@@ -225,7 +232,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
 
   /**
    * Delete a conversation entirely (removes from database)
-   * This deletes the conversation record and all associated messages
+   * This deletes the conversation record, all associated messages, and stored thumbnails
    */
   const deleteConversation = async (conversationId: string) => {
     if (!user?.id) return;
@@ -256,6 +263,20 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
           localStorage.removeItem(key);
         }
       });
+
+      // Clean up persisted scene thumbnails from user-library storage
+      const thumbnailFolder = `${user.id}/scene-thumbnails/${conversationId}`;
+      const { data: files } = await supabase.storage
+        .from('user-library')
+        .list(thumbnailFolder);
+
+      if (files && files.length > 0) {
+        const filePaths = files.map(f => `${thumbnailFolder}/${f.name}`);
+        await supabase.storage
+          .from('user-library')
+          .remove(filePaths);
+        console.log('🗑️ Cleaned up scene thumbnails:', filePaths.length, 'files');
+      }
     } catch (err) {
       console.error('Error deleting conversation:', err);
       throw err;

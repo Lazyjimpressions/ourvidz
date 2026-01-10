@@ -63,6 +63,149 @@ serve(async (req) => {
       });
     }
 
+    // Handle scene_creation content type - returns structured JSON for scene templates
+    if (contentType === 'scene_creation') {
+      console.log('🎬 Processing scene_creation content type');
+      const contentRating = requestBody.contentRating || 'nsfw';
+
+      const sceneCreationSystemPrompt = `You are an expert at creating roleplay scene templates. Given a user's scene description, create optimized content for both chat roleplay and image generation.
+
+IMPORTANT: Your response must be valid JSON with exactly this structure:
+{
+  "enhanced_description": "A vivid, detailed scene description optimized for roleplay chat context. Include atmosphere, mood, setting details, and sensory elements. 2-4 sentences.",
+  "scene_prompt": "An optimized prompt for SDXL image generation. Focus on visual elements: lighting, composition, colors, environment. Use comma-separated descriptive tags. Do NOT include character names or specific people - keep it location/atmosphere focused.",
+  "suggested_tags": ["tag1", "tag2", "tag3"],
+  "suggested_scenario_type": "stranger|relationship|power_dynamic|fantasy|slow_burn"
+}
+
+Content rating: ${contentRating}
+${contentRating === 'nsfw' ? 'The scene can include adult themes, intimate settings, and suggestive atmospheres.' : 'Keep the scene appropriate for general audiences.'}
+
+Focus on:
+- Visual elements for image generation (lighting, setting, mood)
+- Atmospheric details for immersive roleplay
+- Character-agnostic descriptions (no specific names or identities)
+- Tags that help with discovery (3-5 relevant tags)`;
+
+      try {
+        // Get chat worker URL
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
+          body: { worker_type: 'chat' }
+        });
+
+        if (workerError || !workerData?.worker_url) {
+          console.error('❌ Failed to get chat worker for scene_creation:', workerError);
+          throw new Error('Chat worker unavailable');
+        }
+
+        const chatWorkerUrl = workerData.worker_url;
+        console.log('✅ Using chat worker for scene_creation:', chatWorkerUrl);
+
+        const payload = {
+          messages: [
+            { role: "system", content: sceneCreationSystemPrompt },
+            { role: "user", content: prompt }
+          ],
+          max_tokens: 500,
+          temperature: 0.7,
+          top_p: 0.9
+        };
+
+        const response = await fetch(`${chatWorkerUrl}/enhance`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ Scene creation enhancement failed:', response.status, errorText);
+          throw new Error(`Chat worker failed: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (!result.success || !result.enhanced_prompt) {
+          throw new Error('Invalid chat worker response');
+        }
+
+        // Parse the JSON response from the model
+        let sceneData;
+        try {
+          // Try to extract JSON from the response (model might include extra text)
+          const jsonMatch = result.enhanced_prompt.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            sceneData = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error('No JSON found in response');
+          }
+        } catch (parseError) {
+          console.error('❌ Failed to parse scene creation response:', parseError);
+          // Fallback: use the prompt as-is for both fields
+          sceneData = {
+            enhanced_description: prompt,
+            scene_prompt: prompt,
+            suggested_tags: [],
+            suggested_scenario_type: null
+          };
+        }
+
+        // Validate and normalize the response
+        const validScenarioTypes = ['stranger', 'relationship', 'power_dynamic', 'fantasy', 'slow_burn'];
+        const normalizedScenarioType = validScenarioTypes.includes(sceneData.suggested_scenario_type)
+          ? sceneData.suggested_scenario_type
+          : null;
+
+        console.log('✅ Scene creation enhancement complete:', {
+          descriptionLength: sceneData.enhanced_description?.length || 0,
+          promptLength: sceneData.scene_prompt?.length || 0,
+          tagsCount: sceneData.suggested_tags?.length || 0,
+          scenarioType: normalizedScenarioType
+        });
+
+        return new Response(JSON.stringify({
+          success: true,
+          original_prompt: prompt,
+          enhanced_description: sceneData.enhanced_description || prompt,
+          scene_prompt: sceneData.scene_prompt || prompt,
+          suggested_tags: Array.isArray(sceneData.suggested_tags) ? sceneData.suggested_tags : [],
+          suggested_scenario_type: normalizedScenarioType,
+          enhancement_strategy: 'scene_creation',
+          enhancement_metadata: {
+            content_type: 'scene_creation',
+            content_rating: contentRating,
+            template_name: 'scene_creation_template'
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+
+      } catch (sceneError) {
+        console.error('❌ Scene creation enhancement error:', sceneError);
+        // Return a fallback response
+        return new Response(JSON.stringify({
+          success: true,
+          original_prompt: prompt,
+          enhanced_description: prompt,
+          scene_prompt: prompt,
+          suggested_tags: [],
+          suggested_scenario_type: null,
+          enhancement_strategy: 'scene_creation_fallback',
+          enhancement_metadata: {
+            content_type: 'scene_creation',
+            error: sceneError instanceof Error ? sceneError.message : 'Unknown error'
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // Handle modify flows (reference_mode: 'modify')
     if (referenceMode === 'modify') {
       console.log('🔄 Processing modify flow - reference_mode: modify');

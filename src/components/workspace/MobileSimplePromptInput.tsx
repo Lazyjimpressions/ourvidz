@@ -41,6 +41,8 @@ export interface MobileSimplePromptInputProps {
   aspectRatio?: '16:9' | '1:1' | '9:16';
   onAspectRatioChange?: (ratio: '16:9' | '1:1' | '9:16') => void;
   onCollapsedChange?: (collapsed: boolean) => void;
+  exactCopyMode?: boolean;
+  onExactCopyModeChange?: (mode: boolean) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -66,7 +68,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onContentTypeChange,
   aspectRatio = '1:1',
   onAspectRatioChange,
-  onCollapsedChange
+  onCollapsedChange,
+  exactCopyMode = false,
+  onExactCopyModeChange
 }) => {
   // Use hook state for reference images instead of local state
   const hasReferenceImage = !!referenceImage;
@@ -519,24 +523,46 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                     )}
                   </div>
                   {(referenceImage || referenceImageUrl) && (
-                    <div className="flex items-center gap-2">
-                      <MobileReferenceImagePreview
-                        file={referenceImage}
-                        imageUrl={referenceImageUrl}
-                        onRemove={() => removeReferenceImage('single')}
-                        onError={(error) => {
-                          console.error('Preview error:', error);
-                          toast.error('Image preview failed. File may be corrupted.');
-                        }}
-                        sizeClass="h-16 w-16"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium truncate">{referenceImage?.name || 'Workspace image'}</div>
-                        {referenceImage && (
-                          <div className="text-xs text-muted-foreground">{(referenceImage.size / 1024).toFixed(0)}KB</div>
-                        )}
+                    <>
+                      <div className="flex items-center gap-2">
+                        <MobileReferenceImagePreview
+                          file={referenceImage}
+                          imageUrl={referenceImageUrl}
+                          onRemove={() => removeReferenceImage('single')}
+                          onError={(error) => {
+                            console.error('Preview error:', error);
+                            toast.error('Image preview failed. File may be corrupted.');
+                          }}
+                          sizeClass="h-16 w-16"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium truncate">{referenceImage?.name || 'Workspace image'}</div>
+                          {referenceImage && (
+                            <div className="text-xs text-muted-foreground">{(referenceImage.size / 1024).toFixed(0)}KB</div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                      {/* Exact Copy Mode Toggle - Only show when reference image is set */}
+                      {onExactCopyModeChange && (
+                        <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg border">
+                          <span className="text-sm font-medium">Mode:</span>
+                          <Button
+                            type="button"
+                            variant={exactCopyMode ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => onExactCopyModeChange(!exactCopyMode)}
+                            className="min-w-[60px]"
+                          >
+                            {exactCopyMode ? "COPY" : "MOD"}
+                          </Button>
+                          <span className="text-xs text-muted-foreground flex-1">
+                            {exactCopyMode 
+                              ? "Exact copy - preserves image exactly" 
+                              : "Modify - allows changes to image"}
+                          </span>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (
@@ -566,24 +592,46 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       )}
                     </div>
                     {(beginningRefImage || beginningRefImageUrl) && (
-                      <div className="flex items-center gap-2">
-                        <MobileReferenceImagePreview
-                          file={beginningRefImage}
-                          imageUrl={beginningRefImageUrl}
-                          onRemove={() => removeReferenceImage('start')}
-                          onError={(error) => {
-                            console.error('Preview error:', error);
-                            toast.error('Image preview failed. File may be corrupted.');
-                          }}
-                          sizeClass="h-16 w-16"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium truncate">{beginningRefImage?.name || 'Workspace image'}</div>
-                          {beginningRefImage && (
-                            <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
-                          )}
+                      <>
+                        <div className="flex items-center gap-2">
+                          <MobileReferenceImagePreview
+                            file={beginningRefImage}
+                            imageUrl={beginningRefImageUrl}
+                            onRemove={() => removeReferenceImage('start')}
+                            onError={(error) => {
+                              console.error('Preview error:', error);
+                              toast.error('Image preview failed. File may be corrupted.');
+                            }}
+                            sizeClass="h-16 w-16"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium truncate">{beginningRefImage?.name || 'Workspace image'}</div>
+                            {beginningRefImage && (
+                              <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                        {/* Exact Copy Mode Toggle - Only show when reference image is set */}
+                        {onExactCopyModeChange && (
+                          <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg border">
+                            <span className="text-sm font-medium">Mode:</span>
+                            <Button
+                              type="button"
+                              variant={exactCopyMode ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => onExactCopyModeChange(!exactCopyMode)}
+                              className="min-w-[60px]"
+                            >
+                              {exactCopyMode ? "COPY" : "MOD"}
+                            </Button>
+                            <span className="text-xs text-muted-foreground flex-1">
+                              {exactCopyMode 
+                                ? "Exact copy - preserves image exactly" 
+                                : "Modify - allows changes to image"}
+                            </span>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (

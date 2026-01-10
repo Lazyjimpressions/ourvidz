@@ -1,27 +1,55 @@
 # Roleplay Scene UX Specification
 
-**Document Version:** 1.0
+**Document Version:** 2.0
 **Last Updated:** January 10, 2026
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/roleplay/chat/:characterId` (modal-based)
-**Components:** `SceneGenerationModal.tsx`, `SceneEditModal.tsx`, `SceneGallery.tsx`
+**Components:** `SceneCreationModal.tsx`, `SceneGallery.tsx`, `SceneSetupSheet.tsx`
 
 ---
 
 ## Purpose
 
-Scene creation and management interface for roleplay conversations. Scenes provide context, setting, and conversation starters for character interactions. Supports both user-created scenes and system templates.
+Scene templates provide context, setting, and conversation starters for roleplay interactions. Scenes are **character-agnostic** - users select a scene template and THEN choose which character(s) to use with it.
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      scenes table                               │
+│  (THE source for Scene Gallery - agnostic templates)            │
+│  ───────────────────────────────────────────────────            │
+│  • System templates: creator_id = NULL, is_public = true        │
+│  • User templates: creator_id = user.id, is_public = true/false │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    User starts roleplay
+                    (picks scene → picks character)
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  character_scenes table                          │
+│  (Conversation image artifacts ONLY - not templates)             │
+│  ───────────────────────────────────────────────────             │
+│  • Tracks generated scene images during conversation             │
+│  • Used for scene continuity (I2I generation)                    │
+│  • NOT for template storage                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Scene Types
 
-| Type | Source | Purpose |
-|------|--------|---------|
-| **Character Scene** | User-created | Custom scene for specific character |
-| **Template Scene** | System gallery | Pre-built scenario templates |
-| **Generated Scene** | AI-generated | Scene created during conversation |
+| Type | Table | Visibility | Purpose |
+|------|-------|------------|---------|
+| **System Template** | `scenes` | Public (creator_id = NULL) | Pre-built scenario templates |
+| **User Template** | `scenes` | Public or Private | User-created agnostic scenes |
+| **Conversation Image** | `character_scenes` | N/A (artifacts) | Generated images during chat |
 
 ---
 
@@ -29,41 +57,50 @@ Scene creation and management interface for roleplay conversations. Scenes provi
 
 | Trigger | Location | Opens |
 |---------|----------|-------|
-| "Create Scene" button | Character info drawer | `SceneGenerationModal` |
+| "+ Create Scene" button | Scene Gallery section | `SceneCreationModal` |
 | Scene template card | Dashboard gallery | `SceneSetupSheet` |
-| Edit button on scene | Character info drawer | `SceneEditModal` |
-| Scene card in chat | Chat message | Scene details popover |
+| Edit button on scene | Scene Gallery (user's scenes) | `SceneCreationModal` (edit mode) |
 
 ---
 
-## SceneGenerationModal
+## SceneCreationModal
+
+Unified modal for creating AND editing scene templates. Character-agnostic - no character selection in this modal.
 
 ### Layout Structure
 
 ```
 ┌─────────────────────────────────────┐
 │  Dialog Header                      │
-│  "Create New Scene"          [X]    │
+│  "Create Scene Template"     [X]    │
 ├─────────────────────────────────────┤
 │                                     │
 │  Scene Name: *                      │
 │  [________________________]         │
 │                                     │
+│  Scenario Type:                     │
+│  [stranger | relationship | ...]    │
+│                                     │
 │  Scene Description:                 │
 │  [________________________]         │
 │  [________________________]         │
 │                                     │
-│  Scene Prompt: *                    │
+│  Scene Prompt: * (for images)       │
 │  [________________________]         │
 │  [________________________]         │
 │  [________________________]         │
 │                                     │
 │  [Enhance ✨] [Undo ↩]              │
 │                                     │
-│  Characters:                        │
-│  AI Character 1: [Select v]         │
-│  AI Character 2: [Select v]         │
-│  [ ] Include Narrator               │
+│  Conversation Starters:             │
+│  [________________________]         │
+│  (one per line)                     │
+│                                     │
+│  Content Rating:                    │
+│  ( ) SFW   (•) NSFW                 │
+│                                     │
+│  Visibility:                        │
+│  [x] Make Public                    │
 │                                     │
 ├─────────────────────────────────────┤
 │                   [Cancel] [Create] │
@@ -74,12 +111,13 @@ Scene creation and management interface for roleplay conversations. Scenes provi
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| Scene Name | Text | Yes | Display name for the scene |
-| Scene Description | Textarea | No | Context shown to user |
-| Scene Prompt | Textarea | Yes | Prompt for scene generation |
-| AI Character 1 | Select | No | Primary character in scene |
-| AI Character 2 | Select | No | Secondary character (optional) |
-| Include Narrator | Checkbox | No | Adds narrator voice to scene |
+| Scene Name | Text | Yes | Display name (2-100 chars) |
+| Scenario Type | Select | No | Category (stranger, relationship, fantasy, etc.) |
+| Scene Description | Textarea | No | User-facing context |
+| Scene Prompt | Textarea | Yes | Prompt for image generation (10-2000 chars) |
+| Conversation Starters | Multi-line | No | One starter per line, stored as array |
+| Content Rating | Radio | Yes | SFW or NSFW |
+| Make Public | Checkbox | No | Whether others can see/use this scene |
 
 ### Prompt Enhancement
 
@@ -88,80 +126,29 @@ Scene creation and management interface for roleplay conversations. Scenes provi
 | Enhance | Calls `useScenePromptEnhancement` to improve prompt |
 | Undo | Restores original prompt before enhancement |
 
-### Character Selection
-
-- Dropdown populated from `usePublicCharacters` + `useUserCharacters`
-- Deduplicates characters by ID
-- Shows character name and avatar
-- "None" option available
-
 ### Creation Flow
 
-1. User opens modal from character info drawer
+1. User clicks "+ Create Scene" in Scene Gallery section
 2. Fills in scene name and prompt (required)
-3. Optionally: describe scene, select characters
+3. Optionally: set type, description, starters, rating
 4. Optionally: click "Enhance" to improve prompt
 5. Click "Create"
-6. `useSceneNarrative.generateSceneNarrative()` called
-7. Scene saved to `character_scenes` table
-8. `onSceneCreated` callback with scene ID
-9. Parent auto-navigates to chat with new scene
+6. Scene saved to `scenes` table with `creator_id = user.id`
+7. `onSceneCreated` callback with scene ID
+8. Scene appears in user's gallery section
 
----
+### Edit Mode
 
-## SceneEditModal
-
-### Layout Structure
-
-```
-┌─────────────────────────────────────┐
-│  Dialog Header                      │
-│  "Edit Scene"                [X]    │
-├─────────────────────────────────────┤
-│                                     │
-│  Scene Name: *                      │
-│  [________________________]         │
-│                                     │
-│  Scene Description:                 │
-│  [________________________]         │
-│                                     │
-│  Scene Prompt: *                    │
-│  [________________________]         │
-│  [________________________]         │
-│                                     │
-│  Scene Rules:                       │
-│  [________________________]         │
-│                                     │
-│  Conversation Starters:             │
-│  [________________________]         │
-│  (one per line)                     │
-│                                     │
-│  System Prompt Override:            │
-│  [________________________]         │
-│                                     │
-│  Priority: [0-100]                  │
-│                                     │
-├─────────────────────────────────────┤
-│                     [Cancel] [Save] │
-└─────────────────────────────────────┘
-```
-
-### Form Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| Scene Name | Text | Required display name |
-| Scene Description | Textarea | User-facing context |
-| Scene Prompt | Textarea | Required prompt for image generation |
-| Scene Rules | Textarea | Behavior constraints for scene |
-| Conversation Starters | Multi-line | One starter per line, converted to array |
-| System Prompt | Textarea | Override default system prompt |
-| Priority | Number | 0-100, higher = shown first |
+When editing an existing scene:
+- Modal title changes to "Edit Scene Template"
+- Form pre-populated with existing values
+- Save button instead of Create
+- Only owner (creator_id = user.id) or admin can edit
 
 ### Permissions
 
 ```typescript
-const isOwner = user.id === scene.character.user_id;
+const isOwner = user.id === scene.creator_id;
 const isAdmin = userRole === 'admin';
 const canEdit = isOwner || isAdmin;
 ```
@@ -170,43 +157,56 @@ const canEdit = isOwner || isAdmin;
 
 ## SceneGallery
 
+Dashboard section displaying scene templates from `scenes` table.
+
 ### Layout (Dashboard)
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Scene Templates                     [View All] │
-├─────────────────────────────────────────────────┤
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐│
-│  │ Scene 1 │ │ Scene 2 │ │ Scene 3 │ │ Scene 4 ││
-│  │ [Image] │ │ [Image] │ │ [Image] │ │ [Image] ││
-│  │ Name    │ │ Name    │ │ Name    │ │ Name    ││
-│  │ Type    │ │ Type    │ │ Type    │ │ Type    ││
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘│
-│  ← Horizontal scroll →                          │
-└─────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Scene Gallery                    [+ Create]     [View All] │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐│
+│  │ Scene 1 │ │ Scene 2 │ │ Scene 3 │ │ Scene 4 │ │ Scene 5 ││
+│  │ [Image] │ │ [Image] │ │ [Image] │ │ [Image] │ │ [Image] ││
+│  │ Name    │ │ Name    │ │ Name    │ │ Name    │ │ Name    ││
+│  │ Type    │ │ Type    │ │ Type    │ │ Type    │ │ Type    ││
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘│
+│  ← Horizontal scroll →                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Data Source
+
+```typescript
+// useSceneGallery queries `scenes` table
+const { scenes } = useSceneGallery(filter, limit);
+// Shows: public scenes (is_public = true) + user's private scenes (creator_id = user.id)
 ```
 
 ### Scene Template Card
 
 | Element | Content |
 |---------|---------|
-| Image | Scene preview (1:1 ratio) |
+| Image | Scene preview (1:1 ratio) from `preview_image_url` |
 | Name | Scene title |
-| Type | Scenario type badge |
+| Type | Scenario type badge (stranger, relationship, fantasy, etc.) |
 | Usage count | Optional popularity indicator |
+| Edit icon | Shown on user's own scenes (hover) |
 
 ### Interaction
 
 | Gesture | Action |
 |---------|--------|
 | Tap card | Open `SceneSetupSheet` |
+| Tap edit icon | Open `SceneCreationModal` in edit mode |
 | Swipe | Horizontal scroll |
+| Tap "+ Create" | Open `SceneCreationModal` |
 
 ---
 
 ## SceneSetupSheet
 
-Bottom sheet for configuring scene template before starting chat.
+Bottom sheet for configuring scene template before starting chat. This is where character selection happens.
 
 ### Layout
 
@@ -219,10 +219,16 @@ Bottom sheet for configuring scene template before starting chat.
 │  Scene Name                         │
 │  Scene description text here...     │
 │                                     │
+│  Conversation Starters:             │
+│  "Hey, I noticed you..."            │
+│  "What brings you here?"            │
+│                                     │
+│  ─────────────────────────          │
+│                                     │
 │  Select Character:                  │
 │  [Primary Character    v]           │
 │                                     │
-│  Your Role:                         │
+│  Your Role: (optional)              │
 │  [________________________]         │
 │                                     │
 │  [Start Roleplay]                   │
@@ -232,92 +238,109 @@ Bottom sheet for configuring scene template before starting chat.
 
 ### Fields
 
-| Field | Type | Required |
-|-------|------|----------|
-| Primary Character | Select | Yes |
-| Secondary Character | Select | No |
-| Your Role | Text | No |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| Primary Character | Select | Yes | Character from user's library or public |
+| Your Role | Text | No | User's role in the scene |
 
----
+### Start Flow
 
-## Scene Display in Chat
-
-### Character Info Drawer - Scene List
-
-```
-┌─────────────────────────────────────┐
-│  Scenes                  [+ Create] │
-├─────────────────────────────────────┤
-│  ┌─────────────────────────────────┐│
-│  │ [Thumb] Scene Name         [Ed] ││
-│  │         Scene description...    ││
-│  │         [Expand ▼]              ││
-│  └─────────────────────────────────┘│
-│  ┌─────────────────────────────────┐│
-│  │ [Thumb] Scene Name 2       [Ed] ││
-│  │         ...                     ││
-│  └─────────────────────────────────┘│
-└─────────────────────────────────────┘
-```
-
-### Scene Card States
-
-| State | UI |
-|-------|-----|
-| Collapsed | Name + truncated description |
-| Expanded | Full prompt visible |
-| Selected | Highlighted border |
-| Has Image | Thumbnail shown |
+1. User taps scene card in gallery
+2. `SceneSetupSheet` opens with scene details
+3. User selects character(s)
+4. Optionally defines their role
+5. Taps "Start Roleplay"
+6. Navigate to `/roleplay/chat/:characterId?scene=:sceneId`
+7. Scene prompt and starters passed to chat context
 
 ---
 
 ## Data Flow
 
-### Create Scene
-1. User opens `SceneGenerationModal`
-2. Fills required fields (name, prompt)
-3. Optional: enhance prompt, add characters
-4. Click "Create"
-5. Insert into `character_scenes` table
-6. Return scene ID via callback
-7. Parent navigates to `/roleplay/chat/:characterId/scene/:sceneId`
+### Create Scene Template
+1. User clicks "+ Create Scene" in Scene Gallery
+2. `SceneCreationModal` opens
+3. Fills required fields (name, prompt)
+4. Optional: enhance prompt, set visibility, content rating
+5. Click "Create"
+6. Insert into `scenes` table with `creator_id = user.id`
+7. Scene appears in gallery
 
-### Select Existing Scene
-1. User opens character info drawer
-2. Browses scene list
-3. Taps scene card
-4. Scene ID added to URL
-5. Scene context loaded in chat
-6. System prompt includes scene rules
+### Use Scene Template
+1. User taps scene card in Scene Gallery
+2. `SceneSetupSheet` opens with scene details
+3. User selects character(s) from dropdown
+4. Optionally sets their role
+5. Click "Start Roleplay"
+6. `scenes.usage_count` incremented
+7. Navigate to `/roleplay/chat/:characterId?scene=:sceneId`
+8. Scene context (prompt, starters) passed to chat
 
 ### Scene in Conversation
-1. Scene context passed to `roleplay-chat` edge function
+1. Scene template context passed to `roleplay-chat` edge function
 2. Scene prompt used for image generation
-3. Scene rules added to system prompt
-4. Conversation starters offered as suggestions
+3. Conversation starters offered as suggestions
+4. Generated images stored in `character_scenes` table (artifacts)
+
+### Scene Continuity (I2I)
+1. Image generated → stored in `character_scenes` with `conversation_id`
+2. `useSceneContinuity` tracks `previous_scene_id` and `previous_scene_image_url`
+3. Next generation uses previous image for I2I consistency
 
 ---
 
 ## Database Schema
 
-### character_scenes Table
+### scenes Table (Templates)
+
+Primary table for scene templates shown in Scene Gallery.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
-| character_id | UUID | FK to characters |
-| conversation_id | UUID | Optional FK |
-| scene_name | Text | Display name |
-| scene_description | Text | User-facing context |
-| scene_prompt | Text | Image generation prompt |
-| scene_rules | Text | Behavior constraints |
-| scene_starters | Text[] | Conversation openers |
-| system_prompt | Text | System prompt override |
-| priority | Int | Sort order (higher = first) |
-| image_url | Text | Generated scene image |
-| generation_metadata | JSONB | Model, settings used |
+| name | Text | Required display name |
+| description | Text | User-facing context |
+| creator_id | UUID | FK to auth.users (NULL = system template) |
+| scenario_type | Text | Category (stranger, relationship, fantasy, etc.) |
+| setting | Text | Location description |
+| atmosphere | JSONB | Mood sliders (drama, romance, tension, playfulness) |
+| time_of_day | Text | Time context |
+| min_characters | Int | Minimum characters (default: 1) |
+| max_characters | Int | Maximum characters (default: 2) |
+| suggested_user_role | Text | Suggested role for user |
+| content_rating | Text | 'sfw' or 'nsfw' (default: 'sfw') |
+| tags | Text[] | Searchable tags |
+| is_public | Boolean | Visibility (default: true) |
+| usage_count | Int | Popularity metric |
+| preview_image_url | Text | Gallery thumbnail |
+| scene_prompt | Text | Prompt for image generation |
+| scene_starters | Text[] | Conversation opener suggestions |
 | created_at | Timestamp | Creation time |
 | updated_at | Timestamp | Last update |
+
+### character_scenes Table (Conversation Artifacts)
+
+Stores generated scene images during conversations. NOT for templates.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| conversation_id | UUID | FK to conversations (required for artifacts) |
+| character_id | UUID | FK to characters |
+| scene_prompt | Text | Prompt used for this specific generation |
+| image_url | Text | Generated scene image URL |
+| job_id | UUID | FK to generation_jobs |
+| generation_metadata | JSONB | Model, settings, parameters used |
+| generation_mode | Text | 't2i' or 'i2i' |
+| previous_scene_id | UUID | FK to previous scene (for continuity) |
+| previous_scene_image_url | Text | Reference image URL (for I2I) |
+| created_at | Timestamp | Creation time |
+| updated_at | Timestamp | Last update |
+
+**Deprecated columns** (to be removed in future migration):
+- scene_name, scene_description, scene_rules, scene_starters, system_prompt, priority, scene_type
+
+These were used when `character_scenes` was overloaded for both templates and artifacts. Templates now belong exclusively in `scenes` table.
 
 ---
 
@@ -355,12 +378,35 @@ Bottom sheet for configuring scene template before starting chat.
 
 ## Related Components
 
-| Component | Purpose |
-|-----------|---------|
-| `SceneCard` | Scene display in messages |
-| `SceneTemplateCard` | Gallery template card |
-| `SceneDebugPanel` | Development debugging |
-| `ScenePromptEditModal` | Quick prompt editing |
+| Component | Purpose | Status |
+|-----------|---------|--------|
+| `SceneCreationModal` | Create/edit scene templates | Primary (unified) |
+| `SceneGallery` | Display scene templates grid | Active |
+| `SceneSetupSheet` | Configure scene before starting chat | Active |
+| `SceneTemplateCard` | Individual gallery card | Active |
+| `SceneCard` | Scene display in chat messages | Active |
+| `SceneDebugPanel` | Development debugging | Dev only |
+| `SceneGenerationModal` | Character-specific scene creation | **Deprecated** |
+| `ScenarioSetupWizard` | Multi-step scenario wizard | **Deprecated** |
+| `SceneEditModal` | Edit character scenes | **Deprecated** |
+
+### Deprecated Components Migration
+
+| Old Component | Replace With |
+|---------------|--------------|
+| `SceneGenerationModal` | `SceneCreationModal` |
+| `ScenarioSetupWizard` | `SceneCreationModal` + `SceneSetupSheet` |
+| `SceneEditModal` | `SceneCreationModal` (edit mode) |
+
+---
+
+## Related Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useSceneGallery` | Fetch scene templates from `scenes` table |
+| `useSceneContinuity` | Track previous scene for I2I generation |
+| `useScenePromptEnhancement` | Enhance scene prompts with AI |
 
 ---
 
@@ -369,4 +415,5 @@ Bottom sheet for configuring scene template before starting chat.
 - [PURPOSE.md](./PURPOSE.md) - Business requirements
 - [UX_CHAT.md](./UX_CHAT.md) - Chat interface
 - [UX_CHARACTER.md](./UX_CHARACTER.md) - Character creation
+- [UX_DASHBOARD.md](./UX_DASHBOARD.md) - Dashboard layout
 - [../../03-SYSTEMS/PROMPTING_SYSTEM.md](../../03-SYSTEMS/PROMPTING_SYSTEM.md) - Prompt templates

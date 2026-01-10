@@ -14,6 +14,7 @@ import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 import { DashboardSettings } from '@/components/roleplay/DashboardSettings';
 import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
 import { SceneGallery } from '@/components/roleplay/SceneGallery';
+import { SceneCreationModal } from '@/components/roleplay/SceneCreationModal';
 import { SceneSetupSheet, SceneSetupConfig } from '@/components/roleplay/SceneSetupSheet';
 import type { ScenarioSessionPayload, SceneStyle, SceneTemplate } from '@/types/roleplay';
 import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
@@ -32,6 +33,7 @@ const MobileRoleplayDashboard = () => {
   const [selectedScene, setSelectedScene] = useState<SceneTemplate | null>(null);
   const [showSceneSetup, setShowSceneSetup] = useState(false);
   const [showSceneGallery, setShowSceneGallery] = useState(false);
+  const [showSceneCreation, setShowSceneCreation] = useState(false);
   const [sceneConfig, setSceneConfig] = useState<SceneSetupConfig | null>(null);
   // Track scene images that failed to load to prevent infinite re-render loops
   const [erroredSceneImages, setErroredSceneImages] = useState<Set<string>>(new Set());
@@ -90,13 +92,20 @@ const MobileRoleplayDashboard = () => {
     deleteConversation,
     dismissConversation
   } = useUserConversations(10, true);
-  const { scenes: sceneTemplates, incrementUsage: incrementSceneUsage } = useSceneGallery('all', 6);
+  const { scenes: sceneTemplates, incrementUsage: incrementSceneUsage, loadScenes: loadSceneGallery } = useSceneGallery('all', 6);
 
   // Handle scene selection from gallery
   const handleSceneSelect = useCallback((scene: SceneTemplate) => {
     setSelectedScene(scene);
     setShowSceneSetup(true);
   }, []);
+
+  // Handle new scene created
+  const handleSceneCreated = useCallback((scene: SceneTemplate) => {
+    console.log('🎬 New scene created:', scene.name);
+    loadSceneGallery();
+    setShowSceneCreation(false);
+  }, [loadSceneGallery]);
 
   // Handle starting roleplay from scene setup
   const handleSceneStart = useCallback((config: SceneSetupConfig) => {
@@ -420,22 +429,34 @@ const MobileRoleplayDashboard = () => {
 
 
         {/* Scene Gallery Section */}
-        {sceneTemplates.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-pink-400" />
-                <h2 className="text-base font-medium text-white">Scene Gallery</h2>
-              </div>
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="w-4 h-4 text-pink-400" />
+              <h2 className="text-base font-medium text-white">Scene Gallery</h2>
+            </div>
+            <div className="flex items-center gap-2">
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
-                onClick={() => setShowSceneGallery(true)}
+                onClick={() => setShowSceneCreation(true)}
                 className="h-7 text-xs"
               >
-                View All
+                <Plus className="w-3 h-3 mr-1" /> Create
               </Button>
+              {sceneTemplates.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSceneGallery(true)}
+                  className="h-7 text-xs"
+                >
+                  View All
+                </Button>
+              )}
             </div>
+          </div>
+          {sceneTemplates.length > 0 ? (
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
               {sceneTemplates.slice(0, 6).map((scene) => (
                 <div
@@ -470,8 +491,14 @@ const MobileRoleplayDashboard = () => {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-6 text-muted-foreground border border-dashed border-border rounded-lg">
+              <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No scene templates yet</p>
+              <p className="text-xs mt-1">Create your first scene to get started</p>
+            </div>
+          )}
+        </div>
 
         {/* Scenario Quick-Start Section */}
         <div className="mb-6">
@@ -594,6 +621,13 @@ const MobileRoleplayDashboard = () => {
             setSelectedScene(null);
           }}
           onStart={handleSceneStart}
+        />
+
+        {/* Scene Creation Modal */}
+        <SceneCreationModal
+          isOpen={showSceneCreation}
+          onClose={() => setShowSceneCreation(false)}
+          onSceneCreated={handleSceneCreated}
         />
 
         {/* Full Scene Gallery Modal */}

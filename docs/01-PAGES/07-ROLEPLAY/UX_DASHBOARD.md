@@ -1,6 +1,6 @@
 # Roleplay Dashboard UX Specification
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Last Updated:** January 10, 2026
 **Status:** Active
 **Author:** AI Assistant
@@ -18,36 +18,35 @@ Character selection grid with quick access to recent conversations and scene tem
 ## Layout Structure
 
 ```
-┌─────────────────────────────────────┐
-│  Header (Title + Refresh + Settings)│
-├─────────────────────────────────────┤
-│  Continue Where You Left Off        │
-│  ┌─────┐ ┌─────┐ ┌─────┐           │
-│  │Scene│ │Scene│ │Scene│ (up to 6) │
-│  │Tile │ │Tile │ │Tile │           │
-│  └─────┘ └─────┘ └─────┘           │
-├─────────────────────────────────────┤
-│  Scene Gallery                      │
-│  ┌─────┐ ┌─────┐ ┌─────┐           │
-│  │Scene│ │Scene│ │Scene│           │
-│  └─────┘ └─────┘ └─────┘           │
-├─────────────────────────────────────┤
-│  Custom Scenario (Build your own)   │
-├─────────────────────────────────────┤
-│  Search + Filters                   │
-├─────────────────────────────────────┤
-│  My Characters                      │
-│  ┌─────┐ ┌─────┐ ┌─────┐           │
-│  │Card │ │Card │ │Card │           │
-│  └─────┘ └─────┘ └─────┘           │
-├─────────────────────────────────────┤
-│  Explore Public                     │
-│  ┌─────┐ ┌─────┐ ┌─────┐           │
-│  │Card │ │Card │ │Card │           │
-│  └─────┘ └─────┘ └─────┘           │
-├─────────────────────────────────────┤
-│  Bottom Navigation                  │
-└─────────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│  Header (Title + Refresh + Settings)          │
+├───────────────────────────────────────────────┤
+│  Continue Where You Left Off                  │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐     │
+│  │Tile │ │Tile │ │Tile │ │Tile │ │Tile │     │
+│  └─────┘ └─────┘ └─────┘ └─────┘ └─────┘     │
+│  ← Horizontal scroll →                        │
+├───────────────────────────────────────────────┤
+│  Scene Gallery               [+ Create]       │
+│  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐     │
+│  │Scene│ │Scene│ │Scene│ │Scene│ │Scene│     │
+│  └─────┘ └─────┘ └─────┘ └─────┘ └─────┘     │
+│  ← Horizontal scroll →                        │
+├───────────────────────────────────────────────┤
+│  Search + Filters                             │
+├───────────────────────────────────────────────┤
+│  My Characters                                │
+│  ┌─────┐ ┌─────┐ ┌─────┐                     │
+│  │Card │ │Card │ │Card │                     │
+│  └─────┘ └─────┘ └─────┘                     │
+├───────────────────────────────────────────────┤
+│  Explore Public                               │
+│  ┌─────┐ ┌─────┐ ┌─────┐                     │
+│  │Card │ │Card │ │Card │                     │
+│  └─────┘ └─────┘ └─────┘                     │
+├───────────────────────────────────────────────┤
+│  Bottom Navigation                            │
+└───────────────────────────────────────────────┘
 ```
 
 ---
@@ -60,6 +59,8 @@ Character selection grid with quick access to recent conversations and scene tem
 | `MobileCharacterCard` | Individual character card | `components/roleplay/MobileCharacterCard.tsx` |
 | `SearchAndFilters` | Search bar + filter chips | `components/roleplay/SearchAndFilters.tsx` |
 | `SceneGallery` | Horizontal scene template scroll | `components/roleplay/SceneGallery.tsx` |
+| `SceneCreationModal` | Create/edit scene templates | `components/roleplay/SceneCreationModal.tsx` |
+| `SceneSetupSheet` | Character selection for scene | `components/roleplay/SceneSetupSheet.tsx` |
 | `AddCharacterModal` | Create new character | `components/roleplay/AddCharacterModal.tsx` |
 | `DashboardSettings` | Settings drawer | `components/roleplay/DashboardSettings.tsx` |
 
@@ -70,7 +71,7 @@ Character selection grid with quick access to recent conversations and scene tem
 | `useUserConversations` | Fetch/manage user conversations | `hooks/useUserConversations.ts` |
 | `usePublicCharacters` | Fetch public characters | `hooks/usePublicCharacters.ts` |
 | `useUserCharacters` | Fetch user's characters | `hooks/useUserCharacters.ts` |
-| `useSceneGallery` | Fetch scene templates | `hooks/useSceneGallery.ts` |
+| `useSceneGallery` | Fetch scene templates from `scenes` table | `hooks/useSceneGallery.ts` |
 
 ---
 
@@ -119,6 +120,85 @@ Displays user's recent conversations as visual tiles for quick resumption.
 - Returns conversations with `message_count > 0`
 - Includes character details via join
 
+### Image Persistence
+Scene thumbnails are automatically persisted when generated:
+
+| Step | Location | TTL |
+|------|----------|-----|
+| Generation | `workspace-temp` bucket | Temporary |
+| Persistence | `user-library/{userId}/scene-thumbnails/{conversationId}/` | Permanent |
+| Database | `conversations.last_scene_image` column | N/A |
+
+**Flow:**
+1. Scene generated → stored in `workspace-temp` (temporary)
+2. Background copy to `user-library` (persistent)
+3. `last_scene_image` updated with persistent path
+4. Dashboard signs URL with 24h TTL for display
+
+**Cleanup:**
+- Delete conversation → removes thumbnails from `user-library`
+- Dismiss conversation → thumbnails remain (for potential restore)
+
+---
+
+## Scene Gallery
+
+Displays scene templates from `scenes` table. Scenes are **character-agnostic** - user selects a scene, then picks which character to use.
+
+### Data Source
+
+```typescript
+const { scenes } = useSceneGallery(filter, limit);
+// Queries `scenes` table
+// Shows: public templates (is_public = true) + user's private scenes (creator_id = user.id)
+```
+
+### Layout
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Scene Gallery                         [+ Create]    │
+├──────────────────────────────────────────────────────┤
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐    │
+│  │ [Image] │ │ [Image] │ │ [Image] │ │ [Image] │    │
+│  │ Name    │ │ Name    │ │ Name    │ │ Name    │    │
+│  │ Type    │ │ Type    │ │ Type    │ │ Type    │    │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘    │
+│  ← Horizontal scroll →                               │
+└──────────────────────────────────────────────────────┘
+```
+
+### Scene Card Elements
+
+| Element | Content |
+|---------|---------|
+| Image | Preview from `preview_image_url` (1:1 ratio) |
+| Name | Scene title from `name` |
+| Type | Scenario type badge (stranger, relationship, fantasy) |
+| Edit icon | Hover-only, shown on user's own scenes |
+
+### Interactions
+
+| Gesture | Action |
+|---------|--------|
+| Tap card | Open `SceneSetupSheet` for character selection |
+| Tap edit icon | Open `SceneCreationModal` in edit mode |
+| Tap "+ Create" | Open `SceneCreationModal` for new scene |
+
+### Scene Flow
+
+1. **Tap scene card** → `SceneSetupSheet` opens
+2. **Select character** → Dropdown of user's + public characters
+3. **Set role (optional)** → User's role in the scene
+4. **Tap "Start Roleplay"** → Navigate to `/roleplay/chat/:characterId?scene=:sceneId`
+
+### Scene Types
+
+| Type | Description |
+|------|-------------|
+| System templates | `creator_id = NULL`, always public |
+| User templates | `creator_id = user.id`, public or private |
+
 ---
 
 ## User Flow
@@ -136,9 +216,12 @@ Displays user's recent conversations as visual tiles for quick resumption.
 4. Chat starts new conversation (or resumes most recent if exists)
 
 ### Alternative: Start Chat via Scene Template
-1. User scrolls to Scene Templates section
+1. User scrolls to Scene Gallery section
 2. **Tap** scene card → Opens `SceneSetupSheet`
-3. Select character for scene → Navigate to chat with scene context
+3. **Select character** from dropdown (user's + public)
+4. **Optionally** set user's role in the scene
+5. **Tap "Start Roleplay"** → Navigate to `/roleplay/chat/:characterId?scene=:sceneId`
+6. Chat loads with scene context (prompt, starters)
 
 ### Alternative: Preview Character First
 1. **Long-press** (500ms) OR tap preview button on card

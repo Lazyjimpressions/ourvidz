@@ -52,6 +52,7 @@ const MobileSimplifiedWorkspace = () => {
     setReferenceImage,
     setReferenceImageUrl,
     setReferenceMetadata,
+    exactCopyMode,
     setExactCopyMode,
     setBeginningRefImage,
     setEndingRefImage,
@@ -385,11 +386,39 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [deleteItem]);
 
+  // Keyboard visibility detection for mobile
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      // Detect keyboard by viewport height change
+      // On mobile, keyboard typically reduces viewport by 40-50%
+      if (window.visualViewport) {
+        const viewportHeight = window.visualViewport.height;
+        const windowHeight = window.innerHeight;
+        const isKeyboardVisible = viewportHeight < windowHeight * 0.75;
+        setKeyboardVisible(isKeyboardVisible);
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+      return () => {
+        window.visualViewport?.removeEventListener('resize', handleResize);
+      };
+    }
+  }, []);
+
   return (
     <OurVidzDashboardLayout>
       <div className="flex flex-col min-h-screen bg-background">
         {/* Main Content */}
-        <div className={`flex-1 p-2 ${isControlsExpanded ? 'pb-80' : 'pb-32'}`}>
+        <div className={`
+          flex-1 overflow-y-auto p-4
+          ${keyboardVisible ? 'pb-4' : isControlsExpanded ? 'pb-80' : 'pb-32'}
+          pb-[max(1rem,env(safe-area-inset-bottom))]
+          pt-[env(safe-area-inset-top)]
+        `}>
           {/* Progress Indicator */}
           {isGenerating && (
             <div className="mb-4">
@@ -466,6 +495,8 @@ const MobileSimplifiedWorkspace = () => {
           aspectRatio={aspectRatio}
           onAspectRatioChange={setAspectRatio}
           onCollapsedChange={setIsControlsExpanded}
+          exactCopyMode={exactCopyMode}
+          onExactCopyModeChange={setExactCopyMode}
         />
 
         {/* Lightbox */}
