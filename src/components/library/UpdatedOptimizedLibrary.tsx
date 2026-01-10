@@ -27,7 +27,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [visibleCount, setVisibleCount] = useState(isMobile ? 8 : 12);
   const [lastLightboxClose, setLastLightboxClose] = useState<number>(0);
-  const [activeTab, setActiveTab] = useState<'all' | 'characters'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'characters' | 'scenes'>('all');
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -49,6 +49,14 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
         asset.metadata?.roleplay_metadata?.type === 'character_portrait' ||
         asset.metadata?.tags?.includes('character') ||
         asset.metadata?.content_category === 'character'
+      );
+    }
+
+    if (activeTab === 'scenes') {
+      return allAssets.filter(asset => 
+        asset.metadata?.roleplay_metadata?.type === 'roleplay_scene' ||
+        asset.metadata?.tags?.includes('scene') ||
+        asset.metadata?.content_category === 'scene'
       );
     }
     
@@ -305,10 +313,11 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
             
             {/* Tabs */}
             <div className="mt-3">
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'all' | 'characters')}>
-                <TabsList className="grid w-full max-w-md grid-cols-2">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'all' | 'characters' | 'scenes')}>
+                <TabsList className="grid w-full max-w-md grid-cols-3">
                   <TabsTrigger value="all">All Assets</TabsTrigger>
                   <TabsTrigger value="characters">Characters</TabsTrigger>
+                  <TabsTrigger value="scenes">Scenes</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>

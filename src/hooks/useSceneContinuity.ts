@@ -88,10 +88,12 @@ const cleanupOldConversations = (scenesMap: Map<string, PreviousSceneInfo>) => {
 
 /**
  * Fetch last scene from database (fallback when localStorage misses)
+ * ✅ FIX 5: Improved fallback - first try scenes with image_url, then any scene
  */
 const fetchLastSceneFromDB = async (convId: string): Promise<PreviousSceneInfo | null> => {
   try {
-    const { data, error } = await supabase
+    // ✅ FIX 5: First try: Get scene with image_url
+    let { data, error } = await supabase
       .from('character_scenes')
       .select('id, image_url, created_at')
       .eq('conversation_id', convId)
@@ -100,8 +102,35 @@ const fetchLastSceneFromDB = async (convId: string): Promise<PreviousSceneInfo |
       .limit(1)
       .single();
 
+    // ✅ FIX 5: Fallback: If no scene with image_url, get most recent scene (image might be updating)
     if (error || !data?.image_url) {
+      console.log('🔄 Scene continuity: No scene with image_url, checking for any scene...');
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('character_scenes')
+        .select('id, image_url, created_at')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!fallbackError && fallbackData) {
+        data = fallbackData;
+        error = null;
+        console.log('🔄 Scene continuity: Found scene without image_url, will check again later', {
+          sceneId: data.id,
+          hasImage: !!data.image_url
+        });
+      }
+    }
+
+    if (error || !data) {
       console.log('🔄 Scene continuity: No previous scene in DB for conversation', convId);
+      return null;
+    }
+
+    // Only return if we have an image URL (required for I2I)
+    if (!data.image_url) {
+      console.log('🔄 Scene continuity: Scene found but no image_url yet - will retry later');
       return null;
     }
 

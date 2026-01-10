@@ -1288,7 +1288,7 @@ serve(async (req) => {
       }
 
       // Handle character scene destination - update scene's image_url
-      // ✅ FIX: Also handle 'roleplay_scene' destination from roleplay-chat
+      // ✅ FIX 1.3: Also handle 'roleplay_scene' destination from roleplay-chat with retry logic
       if ((body.metadata?.destination === 'character_scene' || body.metadata?.destination === 'roleplay_scene') && body.metadata?.scene_id) {
         console.log('🎬 Updating character scene for:', body.metadata.scene_id, '(destination:', body.metadata.destination, ')');
 
@@ -1304,9 +1304,97 @@ serve(async (req) => {
           .eq('id', body.metadata.scene_id);
 
         if (sceneUpdateError) {
-          console.warn('⚠️ Failed to update character scene:', sceneUpdateError);
+          console.error('❌ Failed to update character scene:', sceneUpdateError);
+          // ✅ FIX 1.3: Retry once
+          const { error: retryError } = await supabase
+            .from('character_scenes')
+            .update({
+              image_url: sceneImagePath,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', body.metadata.scene_id);
+          
+          if (retryError) {
+            console.error('❌ Retry also failed:', retryError);
+          } else {
+            console.log('✅ Character scene updated on retry');
+          }
         } else {
-          console.log('✅ Character scene updated successfully');
+          console.log('✅ Character scene updated successfully:', {
+            scene_id: body.metadata.scene_id,
+            image_url: sceneImagePath.substring(0, 60) + '...'
+          });
+        }
+
+        // ✅ FIX 6.1: Auto-save roleplay scene to library (similar to character portraits)
+        if (!storagePath.startsWith('http')) {
+          console.log('🎬 Auto-saving scene to library:', body.metadata.scene_id);
+          
+          // Copy scene image from workspace-temp to user-library
+          const sourceKey = storagePath.startsWith('workspace-temp/') 
+            ? storagePath 
+            : `workspace-temp/${storagePath}`;
+          const destKey = `user-library/${body.metadata.user_id}/${body.metadata.scene_id}_${Date.now()}.png`;
+          
+          try {
+            // Download from workspace-temp
+            const { data: fileData, error: downloadError } = await supabase.storage
+              .from('workspace-temp')
+              .download(sourceKey);
+            
+            if (!downloadError && fileData) {
+              // Upload to user-library
+              const { error: uploadError } = await supabase.storage
+                .from('user-library')
+                .upload(destKey, fileData, {
+                  contentType: 'image/png',
+                  upsert: true
+                });
+              
+              if (!uploadError) {
+                // Create library record with roleplay metadata
+                const { data: libraryAsset, error: libraryError } = await supabase
+                  .from('user_library')
+                  .insert({
+                    user_id: body.metadata.user_id,
+                    asset_type: 'image',
+                    storage_path: destKey,
+                    thumbnail_path: null,
+                    file_size_bytes: workspaceAsset?.file_size_bytes || 0,
+                    mime_type: 'image/png',
+                    original_prompt: workspaceAsset?.original_prompt || body.prompt,
+                    model_used: workspaceAsset?.model_used || modelKey,
+                    generation_seed: workspaceAsset?.generation_seed || generationSeed,
+                    width: workspaceAsset?.width || 1024,
+                    height: workspaceAsset?.height || 1024,
+                    tags: ['scene', 'roleplay'],
+                    roleplay_metadata: {
+                      type: 'roleplay_scene',
+                      scene_id: body.metadata.scene_id,
+                      character_id: body.metadata.character_id,
+                      character_name: body.metadata.character_name,
+                      conversation_id: body.metadata.conversation_id,
+                      generation_mode: body.metadata.generation_mode || 't2i'
+                    },
+                    content_category: 'scene'
+                  })
+                  .select()
+                  .single();
+                
+                if (!libraryError && libraryAsset) {
+                  console.log('✅ Scene saved to library:', libraryAsset.id);
+                } else {
+                  console.error('❌ Failed to create library record:', libraryError);
+                }
+              } else {
+                console.error('❌ Failed to upload scene to library:', uploadError);
+              }
+            } else {
+              console.error('❌ Failed to download scene from workspace-temp:', downloadError);
+            }
+          } catch (error) {
+            console.error('❌ Error auto-saving scene to library:', error);
+          }
         }
       }
 

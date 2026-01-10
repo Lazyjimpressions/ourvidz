@@ -2038,10 +2038,65 @@ async function generateScene(
   currentSceneImageUrl?: string // Current scene image for I2I modification mode
 ): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string; debug?: any }> {
   try {
-    // Determine generation mode: t2i (first scene), i2i (continuation), modification (I2I edit), or fresh (T2I regeneration)
-    const isFirstScene = !previousSceneId || !previousSceneImageUrl;
+    // ✅ FIX 1.1: More robust first scene detection
+    // A scene is "first" if no valid previous scene image exists
+    // Verify previous scene exists in database if ID is provided
+    let isFirstScene = true;
+    let verifiedPreviousSceneImageUrl: string | undefined = undefined;
+
+    if (previousSceneId && previousSceneImageUrl) {
+      // Verify the previous scene actually exists and has an image
+      try {
+        const { data: prevScene, error: prevSceneError } = await supabase
+          .from('character_scenes')
+          .select('id, image_url')
+          .eq('id', previousSceneId)
+          .not('image_url', 'is', null)
+          .single();
+        
+        if (!prevSceneError && prevScene && prevScene.image_url) {
+          isFirstScene = false;
+          verifiedPreviousSceneImageUrl = prevScene.image_url;
+          console.log('✅ Previous scene verified:', {
+            scene_id: previousSceneId,
+            has_image: !!prevScene.image_url
+          });
+        } else {
+          console.warn('⚠️ Previous scene ID provided but scene not found or missing image:', {
+            scene_id: previousSceneId,
+            error: prevSceneError?.message
+          });
+          // Treat as first scene if previous scene doesn't exist
+          isFirstScene = true;
+        }
+      } catch (error) {
+        console.warn('⚠️ Error verifying previous scene:', error);
+        isFirstScene = true;
+      }
+    } else if (previousSceneId && !previousSceneImageUrl) {
+      // Scene ID provided but no image URL - likely scene not completed yet
+      console.warn('⚠️ Previous scene ID provided but no image URL - treating as first scene');
+      isFirstScene = true;
+    } else if (!previousSceneId && previousSceneImageUrl) {
+      // Image URL provided but no scene ID - use the URL but log warning
+      console.warn('⚠️ Previous scene image URL provided but no scene ID - using URL but treating as first scene for tracking');
+      isFirstScene = true;
+      verifiedPreviousSceneImageUrl = previousSceneImageUrl;
+    } else {
+      // No previous scene info - definitely first scene
+      isFirstScene = true;
+    }
+
     const isPromptOverride = !!scenePromptOverride;
     const hasCurrentSceneImage = !!currentSceneImageUrl;
+
+    // ✅ CRITICAL: I2I mode REQUIRES a valid previous scene image
+    // If no previous scene image, force T2I mode even if continuity is enabled
+    const canUseI2I = sceneContinuityEnabled && !isFirstScene && !!verifiedPreviousSceneImageUrl;
+
+    if (sceneContinuityEnabled && !verifiedPreviousSceneImageUrl) {
+      console.warn('⚠️ Scene continuity enabled but no previous scene image - falling back to T2I mode');
+    }
 
     // Calculate generation mode and settings
     // Priority: modification > fresh > continuation > first scene
@@ -2062,18 +2117,23 @@ async function generateScene(
       generationMode = 't2i';
       effectiveReferenceImageUrl = undefined; // Will use character reference
       console.log('🎬 Fresh generation mode: T2I from character reference (ignoring scene continuity)');
-    } else if (sceneContinuityEnabled && !isFirstScene && !!previousSceneImageUrl) {
-      // Continuation mode: I2I on previous scene
+    } else if (canUseI2I) {
+      // ✅ Continuation mode: I2I on previous scene (only if we have verified previous scene image)
       useI2IIteration = true;
       generationMode = 'i2i';
-      effectiveReferenceImageUrl = previousSceneImageUrl;
-      console.log('🎬 Continuation mode: I2I from previous scene');
+      effectiveReferenceImageUrl = verifiedPreviousSceneImageUrl;
+      console.log('🎬 Continuation mode: I2I from previous scene', {
+        previous_scene_id: previousSceneId,
+        has_verified_image: !!verifiedPreviousSceneImageUrl
+      });
     } else {
       // First scene or T2I: Use character reference (resolved later)
       useI2IIteration = false;
       generationMode = 't2i';
       effectiveReferenceImageUrl = undefined; // Will use character reference
-      console.log('🎬 First scene mode: T2I initial generation');
+      console.log('🎬 First scene mode: T2I initial generation', {
+        reason: isFirstScene ? 'no_previous_scene' : 'continuity_disabled_or_no_image'
+      });
     }
 
     console.log('🎬 Starting scene generation:', {
@@ -2091,6 +2151,7 @@ async function generateScene(
       generationMode,
       previousSceneId: previousSceneId || null,
       hasPreviousSceneImage: !!previousSceneImageUrl,
+      hasVerifiedPreviousSceneImage: !!verifiedPreviousSceneImageUrl,
       // Regeneration/modification detection
       isPromptOverride,
       hasCurrentSceneImage
@@ -2129,15 +2190,25 @@ async function generateSceneNarrativeWithOpenRouter(
   modelKey: string,
   contentTier: string,
   modelConfig: any,
-  supabase: any
+  supabase: any,
+  useI2IIteration: boolean = false  // ✅ FIX 3.1: ADD I2I FLAG PARAMETER
 ): Promise<string> {
   const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
     throw new Error('OpenRouter API key not configured');
   }
 
-  // Load scene narrative template based on content tier
-  const templateName = contentTier === 'nsfw' ? 'Scene Narrative - NSFW' : 'Scene Narrative - SFW';
+  // ✅ FIX 3.2: Use Scene Iteration template for I2I, Scene Narrative for T2I
+  const templateName = useI2IIteration
+    ? (contentTier === 'nsfw' ? 'Scene Iteration - NSFW' : 'Scene Iteration - SFW')
+    : (contentTier === 'nsfw' ? 'Scene Narrative - NSFW' : 'Scene Narrative - SFW');
+
+  console.log('📝 Scene narrative template selection:', {
+    useI2IIteration,
+    contentTier,
+    templateName,
+    generation_mode: useI2IIteration ? 'i2i' : 't2i'
+  });
   const { data: template, error: templateError } = await supabase
     .from('prompt_templates')
     .select('system_prompt')
@@ -2280,7 +2351,8 @@ const sceneContext = analyzeSceneContent(response);
             roleplayModel,
             sceneContext.isNSFW ? 'nsfw' : 'sfw',
             modelConfig,
-            supabase
+            supabase,
+            useI2IIteration  // ✅ FIX 3.3: PASS I2I FLAG
           );
           console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...');
         } else {
@@ -2413,7 +2485,46 @@ const sceneContext = analyzeSceneContent(response);
 
       if (sceneError || !sceneRecord) {
         console.error('🎬❌ Failed to create scene record:', sceneError);
-        // Continue with generation but scene won't be linked
+        // ✅ FIX 1.2: Retry once with simplified data
+        try {
+          console.log('🔄 Retrying scene record creation with simplified data...');
+          const { data: retryRecord, error: retryError } = await supabase
+            .from('character_scenes')
+            .insert({
+              character_id: characterId,
+              conversation_id: conversationId || null,
+              scene_prompt: cleanScenePrompt || scenePrompt,
+              generation_mode: generationMode,
+              previous_scene_id: previousSceneId || null,
+              previous_scene_image_url: verifiedPreviousSceneImageUrl || previousSceneImageUrl || null,
+              image_url: null, // Will be updated after generation
+              system_prompt: null,
+              scene_name: finalSceneName,
+              scene_description: finalSceneDescription,
+              generation_metadata: {
+                model_used: selectedImageModel ? 'api_model' : 'sdxl',
+                generation_mode: generationMode,
+                scene_continuity_enabled: sceneContinuityEnabled,
+                is_first_scene: isFirstScene,
+                use_i2i_iteration: useI2IIteration
+              },
+              job_id: null,
+              priority: 0
+            })
+            .select('id')
+            .single();
+          
+          if (!retryError && retryRecord) {
+            sceneId = retryRecord.id;
+            console.log('✅ Scene record created on retry with ID:', sceneId);
+          } else {
+            console.error('🎬❌ Retry also failed:', retryError);
+            // Continue without scene record - generation will still work
+          }
+        } catch (retryErr) {
+          console.error('🎬❌ Retry exception:', retryErr);
+          // Continue without scene record - generation will still work
+        }
       } else {
         sceneId = sceneRecord.id;
         console.log('✅ Scene record created with ID:', sceneId);
@@ -2731,15 +2842,22 @@ const sceneContext = analyzeSceneContent(response);
               strength: i2iStrength,
               strength_source: effectiveDenoiseStrength ? 'user_override' : 'default'
             });
-          } else if (useI2IIteration && previousSceneImageUrl) {
-            // I2I continuation mode: Use Seedream v4.5/edit with previous scene as reference
+          } else if (useI2IIteration && effectiveReferenceImageUrl) {
+            // ✅ I2I continuation mode: Use Seedream v4.5/edit with previous scene as reference
+            // This block only executes if effectiveReferenceImageUrl is valid (enforced in mode detection)
             i2iModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit'; // Override to Seedream edit model
-            i2iReferenceImage = previousSceneImageUrl;
+            i2iReferenceImage = effectiveReferenceImageUrl;
             i2iStrength = effectiveDenoiseStrength ?? 0.45; // Use override or default for scene-to-scene continuity
             console.log('🔄 I2I Iteration Mode: Using Seedream v4.5/edit with previous scene', {
               strength: i2iStrength,
-              strength_source: effectiveDenoiseStrength ? 'user_override' : 'default'
+              strength_source: effectiveDenoiseStrength ? 'user_override' : 'default',
+              previous_scene_id: previousSceneId
             });
+          } else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
+            // ✅ Fallback: Continuity enabled but no previous scene - use T2I with character reference
+            // This ensures we don't try to use I2I model without a reference image
+            console.log('📝 Scene continuity enabled but no previous scene - using T2I mode with character reference');
+            // Continue with T2I mode (no model override, will use v4 text-to-image)
           } else {
             // T2I mode: Use character reference image if available
             i2iReferenceImage = character.reference_image_url || undefined;

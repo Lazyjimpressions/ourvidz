@@ -31,7 +31,11 @@ export const useSceneNarrative = () => {
   const generateSceneNarrative = useCallback(async (
     scenePrompt: string,
     characters: CharacterParticipant[] = [],
-    options: SceneNarrativeOptions = {}
+    options: SceneNarrativeOptions = {},
+    // ✅ FIX 4.1: ADD: Scene continuity parameters
+    sceneContinuityEnabled?: boolean,
+    previousSceneId?: string | null,
+    previousSceneImageUrl?: string | null
   ): Promise<string | undefined> => {
     if (!scenePrompt.trim()) {
       toast.error('Please provide a scene description');
@@ -122,6 +126,10 @@ export const useSceneNarrative = () => {
           user_id: user?.id,
           scene_name: options.sceneName.trim(),
           scene_description: options.sceneDescription?.trim() || null,
+          // ✅ FIX 4.2: ADD: Scene continuity parameters
+          scene_continuity_enabled: sceneContinuityEnabled ?? true,
+          previous_scene_id: previousSceneId || null,
+          previous_scene_image_url: previousSceneImageUrl || null
         }
       });
 

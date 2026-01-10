@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useScenePromptEnhancement } from '@/hooks/useScenePromptEnhancement';
+import { useSceneContinuity } from '@/hooks/useSceneContinuity'; // ✅ FIX 4.3: ADD continuity hook
 import { User, Sparkles, Wand2, Undo2, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -53,6 +54,12 @@ export const SceneGenerationModal = ({
   const { characters: publicCharacters } = usePublicCharacters();
   const { characters: userCharacters } = useUserCharacters();
   const { enhancePrompt, isEnhancing } = useScenePromptEnhancement();
+  // ✅ FIX 4.3: Get scene continuity state from hook
+  const {
+    isEnabled: sceneContinuityEnabled,
+    previousSceneId,
+    previousSceneImageUrl
+  } = useSceneContinuity(conversationId || undefined);
   
   // Combine public and user characters, removing duplicates
   const aiCharacters = React.useMemo(() => {
@@ -166,15 +173,23 @@ export const SceneGenerationModal = ({
 
       // Note: User character identity is set globally in Roleplay Settings
       // and will be automatically applied during scene generation
-      const sceneId = await generateSceneNarrative(prompt, selectedCharacters, {
-        includeNarrator,
-        includeUserCharacter: false, // Will be determined from global settings
-        characterId,
-        conversationId,
-        userCharacterId: undefined, // Will be retrieved from global settings
-        sceneName: sceneName.trim(),
-        sceneDescription: sceneDescription.trim() || undefined
-      });
+      const sceneId = await generateSceneNarrative(
+        prompt, 
+        selectedCharacters, 
+        {
+          includeNarrator,
+          includeUserCharacter: false, // Will be determined from global settings
+          characterId,
+          conversationId,
+          userCharacterId: undefined, // Will be retrieved from global settings
+          sceneName: sceneName.trim(),
+          sceneDescription: sceneDescription.trim() || undefined
+        },
+        // ✅ FIX 4.3: Pass continuity parameters
+        sceneContinuityEnabled,
+        previousSceneId,
+        previousSceneImageUrl
+      );
 
       if (sceneId) {
         toast({
