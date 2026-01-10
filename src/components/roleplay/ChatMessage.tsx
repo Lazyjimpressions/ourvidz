@@ -1,10 +1,11 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, Share2, RotateCcw } from 'lucide-react';
+import { Download, Share2, RotateCcw, Info } from 'lucide-react';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   User,
   Bot,
@@ -16,12 +17,14 @@ import {
 } from 'lucide-react';
 import { ScenePromptEditModal } from './ScenePromptEditModal';
 import { QuickModificationSheet, ModificationPreset } from './QuickModificationSheet';
+import { SceneDebugPanel } from './SceneDebugPanel';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Character, Message, UserCharacter } from '@/types/roleplay';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { MessageActions } from './MessageActions';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ChatMessageProps {
   message: Message;
@@ -57,6 +60,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 }) => {
   const { isMobile } = useMobileDetection();
   const { getSignedUrl } = useSignedImageUrls();
+  const { isAdmin } = useAuth();
   const isUser = message.sender === 'user';
   const hasScene = message.metadata?.scene_generated && message.metadata?.image_url;
 
@@ -357,13 +361,40 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             isUser ? 'flex-row-reverse' : 'flex-row'
           )}>
             <Card className={cn(
-              "rounded-2xl shadow-lg",
+              "rounded-2xl shadow-lg relative",
               isUser 
                 ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white border-0' 
                 : 'bg-gray-800 text-white border-gray-700',
               isMobile ? 'px-4 py-3' : 'px-5 py-4',
               "max-w-full"
             )}>
+              {/* ✅ ADMIN: Info icon for AI messages */}
+              {isAdmin && !isUser && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute top-1 right-1 h-5 w-5 p-0 opacity-40 hover:opacity-100 group-hover:opacity-60 transition-opacity z-10"
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="View admin debug info"
+                    >
+                      <Info className="w-3 h-3" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    className="w-80 max-h-[80vh] overflow-y-auto p-3" 
+                    align="end"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <SceneDebugPanel 
+                      generationMetadata={message.metadata?.generation_metadata || message.metadata}
+                      sceneData={message.metadata}
+                    />
+                  </PopoverContent>
+                </Popover>
+              )}
+              
               <p className={cn(
                 "whitespace-pre-wrap break-words",
                 isMobile ? "text-base leading-relaxed" : "text-base leading-relaxed"

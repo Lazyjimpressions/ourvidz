@@ -324,11 +324,14 @@ const MobileRoleplayChat: React.FC = () => {
   // Load prompt template for roleplay - model-specific with fallback to universal
   const loadPromptTemplate = async (modelKey: string, contentTier: string) => {
     try {
-      // First try model-specific template
+      // ✅ Normalize model key (remove "openrouter:" prefix if present)
+      const normalizedModelKey = modelKey.replace(/^openrouter:/, '').trim();
+      
+      // First try model-specific template with normalized key
       const { data: modelSpecific, error: modelError } = await supabase
         .from('prompt_templates')
         .select('*')
-        .eq('target_model', modelKey)
+        .eq('target_model', normalizedModelKey)
         .eq('use_case', 'character_roleplay')
         .eq('content_mode', contentTier)
         .eq('is_active', true)
@@ -337,8 +340,27 @@ const MobileRoleplayChat: React.FC = () => {
         .maybeSingle();
 
       if (!modelError && modelSpecific) {
-        console.log('✅ Loaded model-specific template:', modelSpecific.template_name, 'for model:', modelKey);
+        console.log('✅ Loaded model-specific template:', modelSpecific.template_name, 'for model:', normalizedModelKey);
         return modelSpecific;
+      }
+
+      // Try with original model key (in case it's stored with prefix)
+      if (normalizedModelKey !== modelKey) {
+        const { data: modelSpecificAlt, error: modelErrorAlt } = await supabase
+          .from('prompt_templates')
+          .select('*')
+          .eq('target_model', modelKey)
+          .eq('use_case', 'character_roleplay')
+          .eq('content_mode', contentTier)
+          .eq('is_active', true)
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!modelErrorAlt && modelSpecificAlt) {
+          console.log('✅ Loaded model-specific template (with prefix):', modelSpecificAlt.template_name, 'for model:', modelKey);
+          return modelSpecificAlt;
+        }
       }
 
       // Fallback to universal template (target_model IS NULL)
@@ -358,7 +380,7 @@ const MobileRoleplayChat: React.FC = () => {
         return universal;
       }
 
-      console.error('❌ No template found for model:', modelKey, 'content tier:', contentTier);
+      console.error('❌ No template found for model:', modelKey, '(normalized:', normalizedModelKey, ') content tier:', contentTier);
       return null;
     } catch (error) {
       console.error('Error in loadPromptTemplate:', error);
@@ -1087,7 +1109,17 @@ const MobileRoleplayChat: React.FC = () => {
             scene_generated: Boolean(newJobId),
             consistency_method: character.consistency_method,
             job_id: newJobId,
-            usedFallback: data.usedFallback
+            usedFallback: data.usedFallback,
+            // ✅ ADMIN: Include prompt template info from edge function response
+            generation_metadata: {
+              template_id: data.prompt_template_id,
+              template_name: data.prompt_template_name,
+              chat_model_used: data.model_used,
+              chat_provider: data.usedFallback ? data.fallbackModel : modelProvider,
+              processing_time: data.processing_time,
+              memory_tier: memoryTier,
+              content_tier: contentTier
+            }
           }
         };
 

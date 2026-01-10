@@ -7,7 +7,12 @@ import { cn } from '@/lib/utils';
 
 interface SceneDebugPanelProps {
   generationMetadata?: {
-    template_name?: string;
+    // ✅ ADMIN: Prompt template info (REQUIRED)
+    template_id?: string; // From prompt_templates.id
+    template_name?: string; // From prompt_templates.template_name
+    scene_template_id?: string; // Scene prompt template ID
+    scene_template_name?: string; // Scene prompt template name
+    // Existing fields
     model_used?: string;
     model_display_name?: string;
     provider_name?: string;
@@ -20,6 +25,12 @@ interface SceneDebugPanelProps {
     estimated_tokens?: number;
     character_visual_description?: string;
     scene_context?: string;
+    // ✅ ADMIN: Chat response info
+    chat_model_used?: string;
+    chat_provider?: string;
+    processing_time?: number;
+    memory_tier?: string;
+    content_tier?: string;
     [key: string]: any;
   };
   sceneData?: {
@@ -44,41 +55,112 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
   const scene = sceneData || {};
 
   return (
-    <Card className={cn("p-4 bg-gray-900/80 border-gray-700", className)}>
-      <div className="flex items-center gap-2 mb-3">
-        <Code className="w-4 h-4 text-purple-400" />
-        <Label className="text-sm font-medium text-purple-300">Admin Debug Info</Label>
+    <Card className={cn("p-3 bg-gray-900/80 border-gray-700", className)}>
+      <div className="flex items-center gap-2 mb-2">
+        <Code className="w-3.5 h-3.5 text-purple-400" />
+        <Label className="text-xs font-medium text-purple-300">Admin Debug</Label>
       </div>
 
-      <div className="space-y-3 text-xs">
-        {/* Template & Model Info */}
-        <div className="grid grid-cols-2 gap-3">
-          {metadata.template_name && (
-            <div>
-              <Label className="text-xs text-gray-400 mb-1 flex items-center gap-1">
-                <FileText className="w-3 h-3" />
-                Template
-              </Label>
-              <p className="text-gray-200 font-mono text-xs">{metadata.template_name}</p>
+      <div className="space-y-2 text-xs">
+        {/* ✅ ADMIN: Prompt Template Info (ID + Name) */}
+        {(metadata.template_id || metadata.template_name || metadata.scene_template_id || metadata.scene_template_name) && (
+          <div>
+            <Label className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+              <FileText className="w-3 h-3" />
+              Prompt Template
+            </Label>
+            <div className="space-y-0.5">
+              {metadata.template_id && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-500 text-[10px]">ID:</span>
+                  <code className="text-[10px] text-purple-300 font-mono">{metadata.template_id.substring(0, 8)}...</code>
+                  {metadata.template_id && (
+                    <a
+                      href={`/admin?tab=prompts&template=${metadata.template_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-blue-400 hover:text-blue-300 ml-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      view
+                    </a>
+                  )}
+                </div>
+              )}
+              {metadata.template_name && (
+                <p className="text-gray-200 text-xs font-mono">{metadata.template_name}</p>
+              )}
+              {metadata.scene_template_id && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-gray-500 text-[10px]">Scene Template ID:</span>
+                  <code className="text-[10px] text-purple-300 font-mono">{metadata.scene_template_id.substring(0, 8)}...</code>
+                </div>
+              )}
+              {metadata.scene_template_name && (
+                <p className="text-gray-200 text-xs font-mono">{metadata.scene_template_name}</p>
+              )}
             </div>
-          )}
+          </div>
+        )}
+
+        {/* Template & Model Info */}
+        <div className="grid grid-cols-2 gap-2">
           
           {metadata.model_display_name && (
             <div>
               <Label className="text-xs text-gray-400 mb-1 flex items-center gap-1">
                 <Database className="w-3 h-3" />
-                Model
+                Image Model
               </Label>
               <p className="text-gray-200 font-mono text-xs">{metadata.model_display_name}</p>
               {metadata.model_used && metadata.model_used !== metadata.model_display_name && (
-                <p className="text-gray-400 text-xs mt-0.5">({metadata.model_used})</p>
+                <p className="text-gray-400 text-[10px] mt-0.5">({metadata.model_used})</p>
               )}
             </div>
           )}
         </div>
 
+        {/* ✅ ADMIN: Chat Response Info */}
+        {(metadata.chat_model_used || metadata.chat_provider || metadata.processing_time) && (
+          <div>
+            <Label className="text-xs text-gray-400 mb-1">Chat Response</Label>
+            <div className="space-y-0.5">
+              {metadata.chat_model_used && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-500">Model:</span>
+                  <span className="text-gray-200 font-mono">{metadata.chat_model_used}</span>
+                </div>
+              )}
+              {metadata.chat_provider && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-500">Provider:</span>
+                  <span className="text-gray-200">{metadata.chat_provider}</span>
+                </div>
+              )}
+              {metadata.processing_time && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-500">Time:</span>
+                  <span className="text-gray-200">{metadata.processing_time}ms</span>
+                </div>
+              )}
+              {metadata.memory_tier && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-500">Memory:</span>
+                  <span className="text-gray-200">{metadata.memory_tier}</span>
+                </div>
+              )}
+              {metadata.content_tier && (
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-500">Content:</span>
+                  <span className="text-gray-200">{metadata.content_tier.toUpperCase()}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Provider & Consistency */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {metadata.provider_name && (
             <div>
               <Label className="text-xs text-gray-400 mb-1">Provider</Label>
@@ -181,21 +263,21 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
         {/* Character Visual Description (truncated) */}
         {metadata.character_visual_description && (
           <div>
-            <Label className="text-xs text-gray-400 mb-1">Character Visual Description</Label>
-            <p className="text-gray-300 text-xs bg-gray-800/50 p-2 rounded font-mono line-clamp-3">
-              {metadata.character_visual_description.length > 150
-                ? `${metadata.character_visual_description.substring(0, 150)}...`
+            <Label className="text-xs text-gray-400 mb-1">Character Visual</Label>
+            <p className="text-gray-300 text-[10px] bg-gray-800/50 p-1.5 rounded font-mono line-clamp-2">
+              {metadata.character_visual_description.length > 100
+                ? `${metadata.character_visual_description.substring(0, 100)}...`
                 : metadata.character_visual_description}
             </p>
           </div>
         )}
 
         {/* Full Metadata JSON (collapsible) */}
-        <details className="mt-2">
-          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300">
-            View Full Metadata JSON
+        <details className="mt-1.5">
+          <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-300">
+            View Full JSON
           </summary>
-          <pre className="mt-2 p-2 bg-gray-950 rounded text-xs text-gray-400 overflow-x-auto max-h-96 overflow-y-auto">
+          <pre className="mt-1.5 p-1.5 bg-gray-950 rounded text-[10px] text-gray-400 overflow-x-auto max-h-64 overflow-y-auto">
             {(() => {
               try {
                 // Safely stringify with circular reference handling

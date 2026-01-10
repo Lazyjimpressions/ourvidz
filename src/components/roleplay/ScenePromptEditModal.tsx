@@ -292,6 +292,17 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
               <Label htmlFor="scene-prompt" className="text-sm font-medium mb-2 block">
                 Scene Prompt
               </Label>
+              {/* ✅ Show original prompt if available from metadata */}
+              {sceneData?.generation_metadata?.original_scene_prompt && !originalPrompt && (
+                <div className="mb-2 p-2 bg-muted/30 rounded text-xs">
+                  <Label className="text-xs font-medium text-muted-foreground mb-1 block">
+                    Original Prompt Used:
+                  </Label>
+                  <p className="text-xs text-foreground/70 font-mono whitespace-pre-wrap">
+                    {sceneData.generation_metadata.original_scene_prompt}
+                  </p>
+                </div>
+              )}
               <Textarea
                 id="scene-prompt"
                 value={editedPrompt}

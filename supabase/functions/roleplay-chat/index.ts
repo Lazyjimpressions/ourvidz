@@ -103,6 +103,9 @@ interface RoleplayChatResponse {
   processing_time?: number;
   message_id?: string; // For kickoff messages
   scene_job_id?: string; // For scene generation job polling
+  // ✅ ADMIN: Prompt template info for debugging
+  prompt_template_id?: string; // Template ID from prompt_templates table
+  prompt_template_name?: string; // Template name from prompt_templates table
 }
 
 interface Database {
@@ -316,9 +319,39 @@ serve(async (req) => {
           console.log('📝 Loaded prompt template:', templateData.template_name);
         } else {
           console.log('⚠️ Failed to load prompt template:', templateError);
+          // ✅ ADMIN: Still preserve template ID/name from request even if load fails
+          console.log('📝 Preserving template info from request:', {
+            id: prompt_template_id,
+            name: prompt_template_name
+          });
         }
       } catch (error) {
         console.error('Error loading prompt template:', error);
+        // ✅ ADMIN: Still preserve template ID/name from request even if load fails
+        console.log('📝 Preserving template info from request after error:', {
+          id: prompt_template_id,
+          name: prompt_template_name
+        });
+      }
+    } else if (prompt_template_name) {
+      // ✅ ADMIN: If only name is provided, try to find template by name
+      console.log('📝 Template ID not provided, searching by name:', prompt_template_name);
+      try {
+        const { data: templateData, error: templateError } = await supabase
+          .from('prompt_templates')
+          .select('*')
+          .eq('template_name', prompt_template_name)
+          .eq('is_active', true)
+          .order('version', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!templateError && templateData) {
+          promptTemplate = templateData;
+          console.log('📝 Found template by name:', templateData.template_name, 'ID:', templateData.id);
+        }
+      } catch (error) {
+        console.error('Error searching template by name:', error);
       }
     }
 
@@ -557,7 +590,11 @@ serve(async (req) => {
       scene_job_id: sceneJobId,
       // Include fallback info so frontend can update UI
       usedFallback,
-      fallbackModel: usedFallback ? effectiveModelProvider : undefined
+      fallbackModel: usedFallback ? effectiveModelProvider : undefined,
+      // ✅ ADMIN: Include prompt template info for debugging
+      // Always include template info from request if available, even if template wasn't loaded
+      prompt_template_id: promptTemplate?.id || prompt_template_id || null,
+      prompt_template_name: promptTemplate?.template_name || prompt_template_name || null
     };
 
     return new Response(JSON.stringify(responseData), {
@@ -2182,6 +2219,7 @@ async function generateScene(
     }
 
 // Generate scene narrative using OpenRouter (same model as roleplay)
+// ✅ ADMIN: Returns template info along with scene prompt
 async function generateSceneNarrativeWithOpenRouter(
   character: any,
   sceneContext: any,
@@ -2192,7 +2230,7 @@ async function generateSceneNarrativeWithOpenRouter(
   modelConfig: any,
   supabase: any,
   useI2IIteration: boolean = false  // ✅ FIX 3.1: ADD I2I FLAG PARAMETER
-): Promise<string> {
+): Promise<{ scenePrompt: string; templateId: string; templateName: string; templateUseCase: string; templateContentMode: string }> {
   const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
     throw new Error('OpenRouter API key not configured');
@@ -2209,9 +2247,10 @@ async function generateSceneNarrativeWithOpenRouter(
     templateName,
     generation_mode: useI2IIteration ? 'i2i' : 't2i'
   });
+  // ✅ ADMIN: Select template ID and name along with system_prompt
   const { data: template, error: templateError } = await supabase
     .from('prompt_templates')
-    .select('system_prompt')
+    .select('id, template_name, system_prompt, use_case, content_mode')
     .eq('template_name', templateName)
     .eq('is_active', true)
     .single();
@@ -2287,7 +2326,15 @@ async function generateSceneNarrativeWithOpenRouter(
   }
 
   console.log('✅ Scene narrative generated via OpenRouter:', narrative.substring(0, 100) + '...');
-  return narrative;
+  
+  // ✅ ADMIN: Return template info along with narrative
+  return {
+    scenePrompt: narrative,
+    templateId: template.id,
+    templateName: template.template_name,
+    templateUseCase: template.use_case,
+    templateContentMode: template.content_mode
+  };
 }
 
     // ✅ Extract consistency settings from UI with defaults
@@ -2328,6 +2375,9 @@ const sceneContext = analyzeSceneContent(response);
 
     // Generate scene prompt: use override (regeneration) or AI-generated narrative
     let scenePrompt: string;
+    // ✅ ADMIN: Store template info for metadata
+    let sceneTemplateId: string | undefined;
+    let sceneTemplateName: string | undefined;
 
     if (scenePromptOverride) {
       // User-provided prompt override (regeneration/modification mode)
@@ -2343,7 +2393,7 @@ const sceneContext = analyzeSceneContent(response);
         const modelConfig = await getModelConfig(supabase, roleplayModel);
 
         if (modelConfig && modelConfig.provider_name === 'openrouter') {
-          scenePrompt = await generateSceneNarrativeWithOpenRouter(
+          const narrativeResult = await generateSceneNarrativeWithOpenRouter(
             character,
             sceneContext,
             conversationHistory,
@@ -2354,7 +2404,14 @@ const sceneContext = analyzeSceneContent(response);
             supabase,
             useI2IIteration  // ✅ FIX 3.3: PASS I2I FLAG
           );
-          console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...');
+          scenePrompt = narrativeResult.scenePrompt;
+          // ✅ ADMIN: Store template info for metadata (will be used in scene generation metadata)
+          sceneTemplateId = narrativeResult.templateId;
+          sceneTemplateName = narrativeResult.templateName;
+          console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...', {
+            templateId: sceneTemplateId,
+            templateName: sceneTemplateName
+          });
         } else {
           throw new Error('OpenRouter model configuration not found');
         }
@@ -2475,7 +2532,12 @@ const sceneContext = analyzeSceneContent(response);
             // I2I iteration tracking
             scene_continuity_enabled: sceneContinuityEnabled,
             is_first_scene: isFirstScene,
-            use_i2i_iteration: useI2IIteration
+            use_i2i_iteration: useI2IIteration,
+            // ✅ ADMIN: Store scene prompt template info
+            scene_template_id: sceneTemplateId,
+            scene_template_name: sceneTemplateName,
+            // ✅ ADMIN: Store original scene prompt used for generation
+            original_scene_prompt: cleanScenePrompt || scenePrompt
           },
           job_id: null, // Will be updated when job is queued
           priority: 0
@@ -2793,7 +2855,10 @@ const sceneContext = analyzeSceneContent(response);
               seed_locked: seedLocked,
               seed: seedLocked, // Also in metadata for fallback detection
               original_prompt_length: enhancedScenePrompt.length, // Store original for reference
-              optimized_prompt_length: optimizedPrompt.length
+              optimized_prompt_length: optimizedPrompt.length,
+              // ✅ ADMIN: Include scene prompt template info
+              scene_template_id: sceneTemplateId,
+              scene_template_name: sceneTemplateName
             }
           };
           
@@ -2828,7 +2893,7 @@ const sceneContext = analyzeSceneContent(response);
           // ✅ I2I ITERATION: Determine model and reference image based on generation mode
           let i2iModelOverride: string | null = null;
           let i2iReferenceImage: string | undefined;
-          let i2iStrength: number;
+          let i2iStrength: number = 0.7; // Default strength
 
           // ✅ FIX: Use denoise_strength from consistency_settings when provided (for user-selected intensity)
           const effectiveDenoiseStrength = consistencySettings?.denoise_strength;
@@ -2917,7 +2982,10 @@ const sceneContext = analyzeSceneContent(response);
               generation_mode: generationMode,
               use_i2i_iteration: useI2IIteration,
               previous_scene_id: previousSceneId || null,
-              has_previous_scene_image: !!previousSceneImageUrl
+              has_previous_scene_image: !!previousSceneImageUrl,
+              // ✅ ADMIN: Include scene prompt template info
+              scene_template_id: sceneTemplateId,
+              scene_template_name: sceneTemplateName
             }
           };
 
