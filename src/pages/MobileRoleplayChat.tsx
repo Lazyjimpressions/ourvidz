@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
@@ -55,6 +55,7 @@ interface PromptTemplate {
 const MobileRoleplayChat: React.FC = () => {
   const { characterId, sceneId } = useParams<{ characterId: string; sceneId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const conversationIdFromUrl = searchParams.get('conversation');
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
@@ -381,6 +382,21 @@ const MobileRoleplayChat: React.FC = () => {
         return;
       }
 
+      // Extract userCharacterId from navigation state (from scene setup)
+      const locationState = location.state as { 
+        sceneConfig?: any;
+        scenarioPayload?: ScenarioSessionPayload;
+        userCharacterId?: string | null;
+      } | null;
+      
+      const userCharacterIdFromState = locationState?.userCharacterId;
+      
+      // If userCharacterId is provided from state, use it (overrides saved settings)
+      if (userCharacterIdFromState !== undefined) {
+        setSelectedUserCharacterId(userCharacterIdFromState);
+        console.log('✅ Using userCharacterId from navigation state:', userCharacterIdFromState);
+      }
+
       try {
         setIsInitializing(true);
         // Load character data first
@@ -589,8 +605,28 @@ const MobileRoleplayChat: React.FC = () => {
         }
 
         // Create new conversation if none exists
-        if (!conversation) {
-          console.log('🆕 Creating new conversation');
+        // If coming from scene setup, always create new conversation (clear cache)
+        const locationState = location.state as { 
+          sceneConfig?: any;
+          scenarioPayload?: ScenarioSessionPayload;
+          userCharacterId?: string | null;
+        } | null;
+        
+        const isFromSceneSetup = !!locationState?.sceneConfig;
+        const userCharacterIdFromState = locationState?.userCharacterId;
+        const effectiveUserCharacterId = userCharacterIdFromState !== undefined 
+          ? userCharacterIdFromState 
+          : selectedUserCharacterId;
+        
+        // Clear conversation cache if coming from scene setup to ensure new conversation
+        if (isFromSceneSetup) {
+          const cacheKey = `conversation_${characterId}_${sceneId || 'none'}`;
+          localStorage.removeItem(cacheKey);
+          console.log('🧹 Cleared conversation cache for new scene setup');
+        }
+        
+        if (!conversation || isFromSceneSetup) {
+          console.log('🆕 Creating new conversation', isFromSceneSetup ? '(from scene setup)' : '');
           const conversationTitle = loadedScene
             ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
             : `Roleplay: ${loadedCharacter.name}`;
@@ -605,7 +641,7 @@ const MobileRoleplayChat: React.FC = () => {
               status: 'active',
               memory_tier: memoryTier,
               memory_data: sceneId ? { scene_id: sceneId } : {},
-              user_character_id: selectedUserCharacterId || null
+              user_character_id: effectiveUserCharacterId || null
             })
             .select()
             .single();
@@ -613,6 +649,7 @@ const MobileRoleplayChat: React.FC = () => {
           if (insertError) throw insertError;
           conversation = newConversation;
           setConversationId(newConversation.id);
+          console.log('✅ Created new conversation with user_character_id:', effectiveUserCharacterId);
         }
 
         // Show "Setting the scene..." indicator

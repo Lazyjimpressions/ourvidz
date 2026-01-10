@@ -20,9 +20,11 @@ import type { ScenarioSessionPayload, SceneStyle, SceneTemplate } from '@/types/
 import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
 import { useUserConversations } from '@/hooks/useUserConversations';
 import { useSceneGallery } from '@/hooks/useSceneGallery';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 const MobileRoleplayDashboard = () => {
+  const { user } = useAuth();
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -126,6 +128,7 @@ const MobileRoleplayDashboard = () => {
     navigate(`/roleplay/chat/${config.primaryCharacterId}`, {
       state: {
         sceneConfig: config,
+        userCharacterId: config.userCharacterId,
         scenarioPayload: {
           type: config.scene.scenario_type || 'stranger',
           setting: { location: config.scene.setting || 'custom' },
@@ -493,20 +496,21 @@ const MobileRoleplayDashboard = () => {
                     } text-white`}>
                       {scene.content_rating.toUpperCase()}
                     </span>
-                    {/* Edit button - appears on hover, positioned on the right */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        console.log('📝 Edit button clicked for scene:', scene.id, scene.name);
-                        console.log('📝 Scene object:', JSON.stringify(scene, null, 2));
-                        setEditingScene(scene);
-                        setShowSceneCreation(true);
-                      }}
-                      className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                      title="Edit scene"
-                    >
-                      <Pencil className="w-3 h-3 text-white" />
-                    </button>
+                    {/* Edit button - only shows for scenes the user owns */}
+                    {scene.creator_id === user?.id && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('📝 Edit button clicked for scene:', scene.id, scene.name);
+                          setEditingScene(scene);
+                          setShowSceneCreation(true);
+                        }}
+                        className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                        title="Edit scene"
+                      >
+                        <Pencil className="w-3 h-3 text-white" />
+                      </button>
+                    )}
                   </div>
                   {/* Scenario type badge (if available) */}
                   {scene.scenario_type && (

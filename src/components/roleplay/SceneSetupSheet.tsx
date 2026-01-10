@@ -22,9 +22,13 @@ import {
   Heart,
   Flame,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  User,
+  CheckCircle2
 } from 'lucide-react';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useUserCharacters } from '@/hooks/useUserCharacters';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SceneTemplate, ContentRating } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
 
@@ -40,6 +44,7 @@ export interface SceneSetupConfig {
   primaryCharacterId: string;
   secondaryCharacterId?: string;
   userRole: string;
+  userCharacterId: string | null;
 }
 
 // Gradient backgrounds for scenes without preview images
@@ -63,15 +68,27 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
   onClose,
   onStart
 }) => {
-  const { characters, isLoading: isLoadingCharacters } = usePublicCharacters();
+  const { characters: publicCharacters, isLoading: isLoadingPublicCharacters } = usePublicCharacters();
+  const { characters: userCharacters, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
 
   // Selection state
   const [primaryCharacterId, setPrimaryCharacterId] = useState<string | null>(null);
   const [secondaryCharacterId, setSecondaryCharacterId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState('');
+  const [selectedUserCharacterId, setSelectedUserCharacterId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSecondCharacter, setShowSecondCharacter] = useState(false);
   const [expandedSection, setExpandedSection] = useState<'primary' | 'secondary' | null>('primary');
+
+  // Combine public and user characters, removing duplicates
+  const allCharacters = useMemo(() => {
+    const combined = [...publicCharacters, ...userCharacters];
+    // Remove duplicates by id
+    const unique = combined.filter((char, index, self) => 
+      index === self.findIndex(c => c.id === char.id)
+    );
+    return unique;
+  }, [publicCharacters, userCharacters]);
 
   // Reset state when scene changes
   React.useEffect(() => {
@@ -81,15 +98,18 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
       setUserRole(scene.suggested_user_role || '');
       setShowSecondCharacter(false);
       setExpandedSection('primary');
+      // Set default user character if available
+      setSelectedUserCharacterId(defaultCharacterId || null);
     }
-  }, [scene?.id]);
+  }, [scene?.id, defaultCharacterId]);
 
   // Filter characters based on content rating and search
   const filteredCharacters = useMemo(() => {
     if (!scene) return [];
 
-    return characters.filter(char => {
-      // Match content rating
+    return allCharacters.filter(char => {
+      // Match content rating - SFW scenes can use SFW or NSFW characters
+      // NSFW scenes should only use NSFW characters
       if (scene.content_rating === 'sfw' && char.content_rating === 'nsfw') {
         return false;
       }
@@ -105,22 +125,24 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
 
       return true;
     });
-  }, [characters, scene, searchQuery]);
+  }, [allCharacters, scene, searchQuery]);
 
-  const primaryCharacter = characters.find(c => c.id === primaryCharacterId);
-  const secondaryCharacter = characters.find(c => c.id === secondaryCharacterId);
+  const primaryCharacter = allCharacters.find(c => c.id === primaryCharacterId);
+  const secondaryCharacter = allCharacters.find(c => c.id === secondaryCharacterId);
+  const selectedUserCharacter = userCharacters.find(c => c.id === selectedUserCharacterId);
 
-  const canStart = primaryCharacterId !== null;
+  const canStart = primaryCharacterId !== null && selectedUserCharacterId !== null;
   const gradient = scene ? (SCENE_GRADIENTS[scene.setting || 'default'] || SCENE_GRADIENTS.default) : SCENE_GRADIENTS.default;
 
   const handleStart = () => {
-    if (!scene || !primaryCharacterId) return;
+    if (!scene || !primaryCharacterId || !selectedUserCharacterId) return;
 
     onStart({
       scene,
       primaryCharacterId,
       secondaryCharacterId: secondaryCharacterId || undefined,
-      userRole: userRole || scene.suggested_user_role || 'The protagonist'
+      userRole: userRole || scene.suggested_user_role || 'The protagonist',
+      userCharacterId: selectedUserCharacterId
     });
   };
 
@@ -310,6 +332,70 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
               </div>
             )}
 
+            {/* User Profile Selection */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Your Profile</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                Choose how you appear in the roleplay. The AI will use your name and pronouns.
+              </p>
+              <Select
+                value={selectedUserCharacterId || 'none'}
+                onValueChange={(value) => {
+                  setSelectedUserCharacterId(value === 'none' ? null : value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your profile..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-gray-400" />
+                      <span>Anonymous (You)</span>
+                    </div>
+                  </SelectItem>
+                  {isLoadingUserCharacters ? (
+                    <SelectItem value="" disabled>Loading characters...</SelectItem>
+                  ) : userCharacters.length === 0 ? (
+                    <SelectItem value="" disabled>No characters created yet</SelectItem>
+                  ) : (
+                    userCharacters.map((char) => (
+                      <SelectItem key={char.id} value={char.id}>
+                        <div className="flex items-center gap-2">
+                          {char.image_url ? (
+                            <img
+                              src={char.image_url}
+                              alt={char.name}
+                              className="w-5 h-5 rounded-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-4 h-4 text-blue-400" />
+                          )}
+                          <span>{char.name}</span>
+                          {char.gender && (
+                            <Badge variant="outline" className="text-xs ml-1">
+                              {char.gender}
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedUserCharacterId && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <CheckCircle2 className="w-3 h-3 text-green-500" />
+                  <span>Profile selected: {selectedUserCharacter?.name || 'Unknown'}</span>
+                </div>
+              )}
+              {userCharacters.length === 0 && !isLoadingUserCharacters && (
+                <p className="text-xs text-blue-400 mt-1">
+                  Create a character in your profile settings to personalize your roleplay experience.
+                </p>
+              )}
+            </div>
+
             {/* User Role */}
             <div className="space-y-2">
               <Label htmlFor="userRole" className="text-sm font-medium">Your Role</Label>
@@ -351,6 +437,11 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
             <Play className="w-4 h-4" />
             Start Roleplay
           </Button>
+          {!selectedUserCharacterId && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              Please select your profile to continue
+            </p>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>

@@ -69,17 +69,19 @@ export const SceneCreationModal = ({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [sceneStarters, setSceneStarters] = useState('');
 
-  // Model selection state
-  const [selectedChatModel, setSelectedChatModel] = useState<string>('');
-  const [selectedImageModel, setSelectedImageModel] = useState<string>('');
+  // Model selection state - use "auto" as default value instead of empty string
+  // (Radix UI Select has issues with empty string values)
+  const [selectedChatModel, setSelectedChatModel] = useState<string>('auto');
+  const [selectedImageModel, setSelectedImageModel] = useState<string>('auto');
 
   // Track if enhanced data has been applied
   const [hasEnhanced, setHasEnhanced] = useState(false);
 
   // Get AI options based on selected models
+  // Convert "auto" back to undefined for the hooks
   const getAIOptions = useCallback((): SceneAIOptions => ({
-    chatModel: selectedChatModel || undefined,
-    imageModel: selectedImageModel || undefined
+    chatModel: selectedChatModel === 'auto' ? undefined : selectedChatModel,
+    imageModel: selectedImageModel === 'auto' ? undefined : selectedImageModel
   }), [selectedChatModel, selectedImageModel]);
 
   // Reset form when modal opens/closes
@@ -123,6 +125,8 @@ export const SceneCreationModal = ({
         setScenePrompt('');
         setPreviewImageUrl(null);
         setSceneStarters('');
+        setSelectedChatModel('auto');
+        setSelectedImageModel('auto');
         setHasEnhanced(false);
         reset();
       }
@@ -231,6 +235,19 @@ export const SceneCreationModal = ({
   const canCreate = name.trim() && description.trim();
   const isLoading = isEnhancing || isGeneratingPreview || isGeneratingStarters || isCreating;
 
+  // Debug logging for render
+  if (isOpen) {
+    console.log('🎬 SceneCreationModal render:', {
+      isOpen,
+      isEditMode,
+      editSceneId: editScene?.id,
+      chatModelsCount: chatModels?.length,
+      imageModelsCount: imageModels?.length,
+      loadingChatModels,
+      loadingImageModels
+    });
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -293,7 +310,7 @@ export const SceneCreationModal = ({
                     <SelectValue placeholder={loadingChatModels ? "Loading..." : "Auto (default)"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Auto (default)</SelectItem>
+                    <SelectItem value="auto">Auto (default)</SelectItem>
                     {chatModels?.map(model => (
                       <SelectItem key={model.value} value={model.value}>
                         {model.label}
@@ -325,7 +342,7 @@ export const SceneCreationModal = ({
                     <SelectValue placeholder={loadingImageModels ? "Loading..." : "Auto (default)"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Auto (default)</SelectItem>
+                    <SelectItem value="auto">Auto (default)</SelectItem>
                     {imageModels?.map(model => (
                       <SelectItem key={model.value} value={model.value}>
                         {model.label}
@@ -378,14 +395,15 @@ export const SceneCreationModal = ({
               <div className="space-y-2">
                 <Label>Scenario Type</Label>
                 <Select
-                  value={scenarioType || ''}
-                  onValueChange={(value) => setScenarioType(value || null)}
+                  value={scenarioType || 'none'}
+                  onValueChange={(value) => setScenarioType(value === 'none' ? null : value)}
                   disabled={isLoading}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type..." />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">Not specified</SelectItem>
                     {SCENARIO_TYPES.map(type => (
                       <SelectItem key={type.value} value={type.value}>
                         {type.label}
