@@ -1288,8 +1288,9 @@ serve(async (req) => {
       }
 
       // Handle character scene destination - update scene's image_url
-      if (body.metadata?.destination === 'character_scene' && body.metadata?.scene_id) {
-        console.log('🎬 Updating character scene for:', body.metadata.scene_id);
+      // ✅ FIX: Also handle 'roleplay_scene' destination from roleplay-chat
+      if ((body.metadata?.destination === 'character_scene' || body.metadata?.destination === 'roleplay_scene') && body.metadata?.scene_id) {
+        console.log('🎬 Updating character scene for:', body.metadata.scene_id, '(destination:', body.metadata.destination, ')');
 
         // Determine the full image path - only prepend bucket if it's a storage path (not external URL)
         const sceneImagePath = storagePath.startsWith('http') ? storagePath : `workspace-temp/${storagePath}`;
