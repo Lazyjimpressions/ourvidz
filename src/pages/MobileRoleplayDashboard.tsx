@@ -5,7 +5,7 @@ import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X } from 'lucide-react';
+import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -34,6 +34,7 @@ const MobileRoleplayDashboard = () => {
   const [showSceneSetup, setShowSceneSetup] = useState(false);
   const [showSceneGallery, setShowSceneGallery] = useState(false);
   const [showSceneCreation, setShowSceneCreation] = useState(false);
+  const [editingScene, setEditingScene] = useState<SceneTemplate | null>(null);
   const [sceneConfig, setSceneConfig] = useState<SceneSetupConfig | null>(null);
   // Track scene images that failed to load to prevent infinite re-render loops
   const [erroredSceneImages, setErroredSceneImages] = useState<Set<string>>(new Set());
@@ -105,7 +106,15 @@ const MobileRoleplayDashboard = () => {
     console.log('🎬 New scene created:', scene.name);
     loadSceneGallery();
     setShowSceneCreation(false);
+    setEditingScene(null);
   }, [loadSceneGallery]);
+
+  // Handle scene edit
+  const handleSceneEdit = useCallback((scene: SceneTemplate) => {
+    console.log('📝 Editing scene:', scene.name);
+    setEditingScene(scene);
+    setShowSceneCreation(true);
+  }, []);
 
   // Handle starting roleplay from scene setup
   const handleSceneStart = useCallback((config: SceneSetupConfig) => {
@@ -439,7 +448,10 @@ const MobileRoleplayDashboard = () => {
               <Button
                 variant="default"
                 size="sm"
-                onClick={() => setShowSceneCreation(true)}
+                onClick={() => {
+                  setEditingScene(null);
+                  setShowSceneCreation(true);
+                }}
                 className="h-7 text-xs"
               >
                 <Plus className="w-3 h-3 mr-1" /> Create
@@ -484,6 +496,18 @@ const MobileRoleplayDashboard = () => {
                       {scene.min_characters}-{scene.max_characters} AI
                     </span>
                   </div>
+                  {/* Edit button - appears on hover */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingScene(scene);
+                      setShowSceneCreation(true);
+                    }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                    title="Edit scene"
+                  >
+                    <Pencil className="w-3.5 h-3.5 text-white" />
+                  </button>
                   <div className="absolute bottom-2 left-2 right-2">
                     <p className="text-white text-sm font-medium truncate">{scene.name}</p>
                     <p className="text-white/60 text-xs truncate">{scene.setting}</p>
@@ -626,8 +650,12 @@ const MobileRoleplayDashboard = () => {
         {/* Scene Creation Modal */}
         <SceneCreationModal
           isOpen={showSceneCreation}
-          onClose={() => setShowSceneCreation(false)}
+          onClose={() => {
+            setShowSceneCreation(false);
+            setEditingScene(null);
+          }}
           onSceneCreated={handleSceneCreated}
+          editScene={editingScene}
         />
 
         {/* Full Scene Gallery Modal */}
@@ -649,6 +677,10 @@ const MobileRoleplayDashboard = () => {
                   onSceneSelect={(scene) => {
                     setShowSceneGallery(false);
                     handleSceneSelect(scene);
+                  }}
+                  onSceneEdit={(scene) => {
+                    setShowSceneGallery(false);
+                    handleSceneEdit(scene);
                   }}
                 />
               </div>

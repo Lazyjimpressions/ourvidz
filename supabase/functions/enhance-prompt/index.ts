@@ -87,75 +87,27 @@ Focus on:
 - Character-agnostic descriptions (no specific names or identities)
 - Tags that help with discovery (3-5 relevant tags)`;
 
-      try {
-        // Get chat worker URL
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
-
-        const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
-          body: { worker_type: 'chat' }
-        });
-
-        if (workerError || !workerData?.worker_url) {
-          console.error('❌ Failed to get chat worker for scene_creation:', workerError);
-          throw new Error('Chat worker unavailable');
-        }
-
-        const chatWorkerUrl = workerData.worker_url;
-        console.log('✅ Using chat worker for scene_creation:', chatWorkerUrl);
-
-        const payload = {
-          messages: [
-            { role: "system", content: sceneCreationSystemPrompt },
-            { role: "user", content: prompt }
-          ],
-          max_tokens: 500,
-          temperature: 0.7,
-          top_p: 0.9
-        };
-
-        const response = await fetch(`${chatWorkerUrl}/enhance`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ Scene creation enhancement failed:', response.status, errorText);
-          throw new Error(`Chat worker failed: ${response.status}`);
-        }
-
-        const result = await response.json();
-
-        if (!result.success || !result.enhanced_prompt) {
-          throw new Error('Invalid chat worker response');
-        }
-
-        // Parse the JSON response from the model
-        let sceneData;
+      // Helper function to parse scene creation response
+      const parseSceneResponse = (responseText: string, fallbackPrompt: string): any => {
         try {
-          // Try to extract JSON from the response (model might include extra text)
-          const jsonMatch = result.enhanced_prompt.match(/\{[\s\S]*\}/);
+          const jsonMatch = responseText.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            sceneData = JSON.parse(jsonMatch[0]);
-          } else {
-            throw new Error('No JSON found in response');
+            return JSON.parse(jsonMatch[0]);
           }
+          throw new Error('No JSON found in response');
         } catch (parseError) {
           console.error('❌ Failed to parse scene creation response:', parseError);
-          // Fallback: use the prompt as-is for both fields
-          sceneData = {
-            enhanced_description: prompt,
-            scene_prompt: prompt,
+          return {
+            enhanced_description: fallbackPrompt,
+            scene_prompt: fallbackPrompt,
             suggested_tags: [],
             suggested_scenario_type: null
           };
         }
+      };
 
-        // Validate and normalize the response
+      // Helper function to build success response
+      const buildSceneResponse = (sceneData: any, strategy: string, modelUsed: string) => {
         const validScenarioTypes = ['stranger', 'relationship', 'power_dynamic', 'fantasy', 'slow_burn'];
         const normalizedScenarioType = validScenarioTypes.includes(sceneData.suggested_scenario_type)
           ? sceneData.suggested_scenario_type
@@ -165,7 +117,9 @@ Focus on:
           descriptionLength: sceneData.enhanced_description?.length || 0,
           promptLength: sceneData.scene_prompt?.length || 0,
           tagsCount: sceneData.suggested_tags?.length || 0,
-          scenarioType: normalizedScenarioType
+          scenarioType: normalizedScenarioType,
+          strategy,
+          modelUsed
         });
 
         return new Response(JSON.stringify({
@@ -175,35 +129,245 @@ Focus on:
           scene_prompt: sceneData.scene_prompt || prompt,
           suggested_tags: Array.isArray(sceneData.suggested_tags) ? sceneData.suggested_tags : [],
           suggested_scenario_type: normalizedScenarioType,
-          enhancement_strategy: 'scene_creation',
+          enhancement_strategy: strategy,
           enhancement_metadata: {
             content_type: 'scene_creation',
             content_rating: contentRating,
-            template_name: 'scene_creation_template'
+            template_name: 'scene_creation_template',
+            model_used: modelUsed
           }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      };
+
+      // Try local chat worker first
+      let chatWorkerAvailable = false;
+      let chatWorkerUrl = '';
+
+      try {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
+          body: { worker_type: 'chat' }
         });
 
-      } catch (sceneError) {
-        console.error('❌ Scene creation enhancement error:', sceneError);
-        // Return a fallback response
-        return new Response(JSON.stringify({
-          success: true,
-          original_prompt: prompt,
-          enhanced_description: prompt,
-          scene_prompt: prompt,
-          suggested_tags: [],
-          suggested_scenario_type: null,
-          enhancement_strategy: 'scene_creation_fallback',
-          enhancement_metadata: {
-            content_type: 'scene_creation',
-            error: sceneError instanceof Error ? sceneError.message : 'Unknown error'
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        });
+        if (!workerError && workerData?.worker_url) {
+          chatWorkerUrl = workerData.worker_url;
+          chatWorkerAvailable = true;
+          console.log('✅ Chat worker available for scene_creation:', chatWorkerUrl);
+        } else {
+          console.log('⚠️ Chat worker unavailable, will try OpenRouter fallback');
+        }
+      } catch (workerCheckError) {
+        console.log('⚠️ Failed to check chat worker availability:', workerCheckError);
       }
+
+      // Attempt 1: Try local chat worker
+      if (chatWorkerAvailable) {
+        try {
+          const payload = {
+            messages: [
+              { role: "system", content: sceneCreationSystemPrompt },
+              { role: "user", content: prompt }
+            ],
+            max_tokens: 500,
+            temperature: 0.7,
+            top_p: 0.9
+          };
+
+          const response = await fetch(`${chatWorkerUrl}/enhance`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.enhanced_prompt) {
+              const sceneData = parseSceneResponse(result.enhanced_prompt, prompt);
+              return buildSceneResponse(sceneData, 'scene_creation_local', 'qwen_instruct');
+            }
+          }
+          console.log('⚠️ Chat worker response invalid, trying OpenRouter fallback');
+        } catch (chatWorkerError) {
+          console.log('⚠️ Chat worker failed:', chatWorkerError instanceof Error ? chatWorkerError.message : String(chatWorkerError));
+        }
+      }
+
+      // Attempt 2: Try OpenRouter as fallback
+      const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
+      if (openRouterKey) {
+        try {
+          console.log('🔄 Attempting OpenRouter fallback for scene_creation');
+
+          const openRouterPayload = {
+            model: 'mistralai/mistral-small-3.1-24b-instruct:free', // Free tier model
+            messages: [
+              { role: "system", content: sceneCreationSystemPrompt },
+              { role: "user", content: prompt }
+            ],
+            max_tokens: 500,
+            temperature: 0.7,
+            top_p: 0.9
+          };
+
+          const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openRouterKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://ulmdmzhcdwfadbvfpckt.supabase.co',
+              'X-Title': 'OurVidz Scene Creation'
+            },
+            body: JSON.stringify(openRouterPayload)
+          });
+
+          if (openRouterResponse.ok) {
+            const openRouterData = await openRouterResponse.json();
+            const responseText = openRouterData.choices?.[0]?.message?.content;
+
+            if (responseText) {
+              console.log('✅ OpenRouter scene_creation response received');
+              const sceneData = parseSceneResponse(responseText, prompt);
+              return buildSceneResponse(sceneData, 'scene_creation_openrouter', 'mistral-small-3.1-24b');
+            }
+          } else {
+            const errorText = await openRouterResponse.text();
+            console.error('❌ OpenRouter error:', openRouterResponse.status, errorText);
+          }
+        } catch (openRouterError) {
+          console.error('❌ OpenRouter fallback failed:', openRouterError instanceof Error ? openRouterError.message : String(openRouterError));
+        }
+      } else {
+        console.log('⚠️ OpenRouter API key not configured, skipping fallback');
+      }
+
+      // Final fallback: Return original prompt with no enhancement
+      console.log('⚠️ All enhancement methods failed, returning original prompt');
+      return new Response(JSON.stringify({
+        success: true,
+        original_prompt: prompt,
+        enhanced_description: prompt,
+        scene_prompt: prompt,
+        suggested_tags: [],
+        suggested_scenario_type: null,
+        enhancement_strategy: 'scene_creation_fallback',
+        enhancement_metadata: {
+          content_type: 'scene_creation',
+          content_rating: contentRating,
+          error: 'All enhancement methods unavailable'
+        }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Handle scene_starters content type - generates conversation starters for scenes
+    if (contentType === 'scene_starters') {
+      console.log('💬 Processing scene_starters content type');
+      const contentRating = requestBody.contentRating || 'nsfw';
+      const generateCount = requestBody.metadata?.generate_count || 3;
+
+      const startersSystemPrompt = `You are an expert roleplay scene writer. Given a scene description, generate ${generateCount} conversation starters that could begin a roleplay in this scene.
+
+IMPORTANT: Your response must be valid JSON with exactly this structure:
+{
+  "starters": [
+    "*First conversation starter with action and atmosphere...*",
+    "*Second conversation starter with different opening...*",
+    "*Third conversation starter with unique approach...*"
+  ]
+}
+
+Guidelines:
+- Each starter should be 1-2 sentences
+- Use asterisks for actions/narration (e.g., *She walks in slowly...*)
+- Set the scene and create atmosphere
+- Be character-agnostic (don't use specific names)
+- Content rating: ${contentRating}
+${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : '- Keep content appropriate for general audiences'}`;
+
+      // Try OpenRouter for starters (simpler, more reliable)
+      const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
+      if (openRouterKey) {
+        try {
+          const openRouterPayload = {
+            model: 'mistralai/mistral-small-3.1-24b-instruct:free',
+            messages: [
+              { role: "system", content: startersSystemPrompt },
+              { role: "user", content: prompt }
+            ],
+            max_tokens: 400,
+            temperature: 0.8,
+            top_p: 0.9
+          };
+
+          const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openRouterKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://ulmdmzhcdwfadbvfpckt.supabase.co',
+              'X-Title': 'OurVidz Scene Starters'
+            },
+            body: JSON.stringify(openRouterPayload)
+          });
+
+          if (openRouterResponse.ok) {
+            const openRouterData = await openRouterResponse.json();
+            const responseText = openRouterData.choices?.[0]?.message?.content;
+
+            if (responseText) {
+              try {
+                const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  const startersData = JSON.parse(jsonMatch[0]);
+                  if (Array.isArray(startersData.starters)) {
+                    console.log('✅ Starters generated:', startersData.starters.length);
+                    return new Response(JSON.stringify({
+                      success: true,
+                      starters: startersData.starters,
+                      enhancement_strategy: 'scene_starters_openrouter'
+                    }), {
+                      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    });
+                  }
+                }
+              } catch (parseError) {
+                console.log('⚠️ Failed to parse starters JSON, using text fallback');
+              }
+
+              // Fallback: return enhanced_prompt for manual parsing
+              return new Response(JSON.stringify({
+                success: true,
+                enhanced_prompt: responseText,
+                enhancement_strategy: 'scene_starters_text'
+              }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+              });
+            }
+          }
+        } catch (error) {
+          console.error('❌ Starters generation failed:', error);
+        }
+      }
+
+      // Final fallback
+      return new Response(JSON.stringify({
+        success: true,
+        starters: [
+          '*The scene begins as you enter...*',
+          '*A moment of anticipation hangs in the air...*',
+          '*The atmosphere shifts as everything comes into focus...*'
+        ],
+        enhancement_strategy: 'scene_starters_fallback'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Handle modify flows (reference_mode: 'modify')

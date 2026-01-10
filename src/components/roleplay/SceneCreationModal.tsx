@@ -8,9 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
-import { useSceneCreation, SceneFormData, EnhancedSceneData } from '@/hooks/useSceneCreation';
-import { Sparkles, Undo2, ImageIcon, RefreshCw, Loader2, Plus, X } from 'lucide-react';
+import { useSceneCreation, SceneFormData, SceneAIOptions } from '@/hooks/useSceneCreation';
+import { useRoleplayModels } from '@/hooks/useRoleplayModels';
+import { useImageModels } from '@/hooks/useImageModels';
+import { Sparkles, Undo2, ImageIcon, RefreshCw, Loader2, Plus, X, HelpCircle, MessageSquare } from 'lucide-react';
 import type { ContentRating, SceneTemplate } from '@/types/roleplay';
 
 interface SceneCreationModalProps {
@@ -44,10 +47,17 @@ export const SceneCreationModal = ({
     undoEnhancement,
     generatePreview,
     isGeneratingPreview,
+    generateStarters,
+    isGeneratingStarters,
     createScene,
+    updateScene,
     isCreating,
     reset
   } = useSceneCreation();
+
+  // Load available models
+  const { models: chatModels, isLoading: loadingChatModels } = useRoleplayModels();
+  const { models: imageModels, isLoading: loadingImageModels } = useImageModels();
 
   // Form state
   const [name, setName] = useState('');
@@ -61,8 +71,18 @@ export const SceneCreationModal = ({
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [sceneStarters, setSceneStarters] = useState('');
 
+  // Model selection state
+  const [selectedChatModel, setSelectedChatModel] = useState<string>('');
+  const [selectedImageModel, setSelectedImageModel] = useState<string>('');
+
   // Track if enhanced data has been applied
   const [hasEnhanced, setHasEnhanced] = useState(false);
+
+  // Get AI options based on selected models
+  const getAIOptions = useCallback((): SceneAIOptions => ({
+    chatModel: selectedChatModel || undefined,
+    imageModel: selectedImageModel || undefined
+  }), [selectedChatModel, selectedImageModel]);
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -113,11 +133,11 @@ export const SceneCreationModal = ({
 
   // Handle enhance button click
   const handleEnhance = useCallback(async () => {
-    const result = await enhanceScene(description, contentRating);
+    const result = await enhanceScene(description, contentRating, getAIOptions());
     if (result) {
       setHasEnhanced(false); // Allow re-apply
     }
-  }, [enhanceScene, description, contentRating]);
+  }, [enhanceScene, description, contentRating, getAIOptions]);
 
   // Handle undo enhancement
   const handleUndo = useCallback(() => {
@@ -131,11 +151,19 @@ export const SceneCreationModal = ({
 
   // Handle generate preview
   const handleGeneratePreview = useCallback(async () => {
-    const url = await generatePreview(scenePrompt || description, contentRating);
+    const url = await generatePreview(scenePrompt || description, contentRating, getAIOptions());
     if (url) {
       setPreviewImageUrl(url);
     }
-  }, [generatePreview, scenePrompt, description, contentRating]);
+  }, [generatePreview, scenePrompt, description, contentRating, getAIOptions]);
+
+  // Handle generate starters
+  const handleGenerateStarters = useCallback(async () => {
+    const starters = await generateStarters(description, contentRating, getAIOptions());
+    if (starters && starters.length > 0) {
+      setSceneStarters(starters.join('\n'));
+    }
+  }, [generateStarters, description, contentRating, getAIOptions]);
 
   // Handle add tag
   const handleAddTag = useCallback(() => {
@@ -151,7 +179,7 @@ export const SceneCreationModal = ({
     setTags(prev => prev.filter(t => t !== tagToRemove));
   }, []);
 
-  // Handle create scene
+  // Handle create or update scene
   const handleCreate = useCallback(async () => {
     const formData: SceneFormData = {
       name,
@@ -165,7 +193,11 @@ export const SceneCreationModal = ({
       scene_starters: sceneStarters.split('\n').filter(s => s.trim())
     };
 
-    const scene = await createScene(formData);
+    // Use updateScene if editing, createScene if new
+    const scene = editScene
+      ? await updateScene(editScene.id, formData)
+      : await createScene(formData);
+
     if (scene) {
       onSceneCreated?.(scene);
       onClose();
@@ -173,7 +205,7 @@ export const SceneCreationModal = ({
   }, [
     name, description, contentRating, scenarioType, tags,
     isPublic, scenePrompt, previewImageUrl, sceneStarters,
-    createScene, onSceneCreated, onClose
+    editScene, createScene, updateScene, onSceneCreated, onClose
   ]);
 
   // Handle close
@@ -184,7 +216,7 @@ export const SceneCreationModal = ({
 
   const isEditMode = !!editScene;
   const canCreate = name.trim() && description.trim();
-  const isLoading = isEnhancing || isGeneratingPreview || isCreating;
+  const isLoading = isEnhancing || isGeneratingPreview || isGeneratingStarters || isCreating;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
@@ -223,6 +255,74 @@ export const SceneCreationModal = ({
               Describe the setting, mood, and situation. AI will optimize for roleplay and images.
             </p>
           </div>
+
+          {/* Model Selection */}
+          <TooltipProvider>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>Chat Model</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p>Choose which AI model enhances your scene description and generates conversation starters.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={selectedChatModel}
+                  onValueChange={setSelectedChatModel}
+                  disabled={isLoading || loadingChatModels}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingChatModels ? "Loading..." : "Auto (default)"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Auto (default)</SelectItem>
+                    {chatModels?.map(model => (
+                      <SelectItem key={model.model_key} value={model.model_key}>
+                        {model.display_name || model.model_key}
+                        {!model.available && ' (offline)'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>Image Model</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p>Choose which AI model generates the preview thumbnail image.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={selectedImageModel}
+                  onValueChange={setSelectedImageModel}
+                  disabled={isLoading || loadingImageModels}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingImageModels ? "Loading..." : "Auto (default)"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Auto (default)</SelectItem>
+                    {imageModels?.map(model => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.display_name || model.model_key}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </TooltipProvider>
 
           {/* Enhancement buttons */}
           <div className="flex gap-2">
@@ -302,41 +402,53 @@ export const SceneCreationModal = ({
             </div>
 
             {/* Tags */}
-            <div className="space-y-2">
-              <Label>Tags</Label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {tags.map(tag => (
-                  <Badge key={tag} variant="secondary" className="gap-1">
-                    {tag}
-                    <button
-                      onClick={() => handleRemoveTag(tag)}
-                      className="ml-1 hover:text-destructive"
-                      disabled={isLoading}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
+            <TooltipProvider>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label>Tags</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs">
+                      <p>Tags help users discover your scene. Add keywords like "romantic", "office", "mystery" etc.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {tags.map(tag => (
+                    <Badge key={tag} variant="secondary" className="gap-1">
+                      {tag}
+                      <button
+                        onClick={() => handleRemoveTag(tag)}
+                        className="ml-1 hover:text-destructive"
+                        disabled={isLoading}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={newTag}
+                    onChange={(e) => setNewTag(e.target.value)}
+                    placeholder="Add tag..."
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                    disabled={isLoading}
+                    className="flex-1"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={handleAddTag}
+                    disabled={isLoading || !newTag.trim()}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Input
-                  value={newTag}
-                  onChange={(e) => setNewTag(e.target.value)}
-                  placeholder="Add tag..."
-                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                  disabled={isLoading}
-                  className="flex-1"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleAddTag}
-                  disabled={isLoading || !newTag.trim()}
-                >
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
+            </TooltipProvider>
 
             {/* Scene Prompt */}
             <div className="space-y-2">
@@ -402,20 +514,47 @@ export const SceneCreationModal = ({
             </div>
 
             {/* Conversation Starters */}
-            <div className="space-y-2">
-              <Label htmlFor="scene-starters">Conversation Starters (optional)</Label>
-              <Textarea
-                id="scene-starters"
-                value={sceneStarters}
-                onChange={(e) => setSceneStarters(e.target.value)}
-                placeholder="One starter per line, e.g.:&#10;Hey, I noticed you sitting alone...&#10;This place has the best coffee, doesn't it?"
-                rows={3}
-                disabled={isLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Suggested conversation openers for this scene.
-              </p>
-            </div>
+            <TooltipProvider>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="scene-starters">Conversation Starters</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p>Suggested opening lines that fit this scene. These help users start conversations naturally.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateStarters}
+                    disabled={isLoading || !description.trim()}
+                  >
+                    {isGeneratingStarters ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                    )}
+                    Generate with AI
+                  </Button>
+                </div>
+                <Textarea
+                  id="scene-starters"
+                  value={sceneStarters}
+                  onChange={(e) => setSceneStarters(e.target.value)}
+                  placeholder="One starter per line, e.g.:&#10;Hey, I noticed you sitting alone...&#10;This place has the best coffee, doesn't it?"
+                  rows={3}
+                  disabled={isLoading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Suggested conversation openers for this scene. One per line.
+                </p>
+              </div>
+            </TooltipProvider>
 
             <Separator />
 

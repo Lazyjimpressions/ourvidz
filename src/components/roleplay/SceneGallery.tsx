@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 
 interface SceneGalleryProps {
   onSceneSelect: (scene: SceneTemplate) => void;
+  onSceneEdit?: (scene: SceneTemplate) => void;
   className?: string;
 }
 
@@ -21,6 +22,7 @@ const FILTER_OPTIONS: { value: SceneTemplateFilter; label: string }[] = [
 
 export const SceneGallery: React.FC<SceneGalleryProps> = ({
   onSceneSelect,
+  onSceneEdit,
   className
 }) => {
   const [activeFilter, setActiveFilter] = useState<SceneTemplateFilter>('all');
@@ -138,6 +140,7 @@ export const SceneGallery: React.FC<SceneGalleryProps> = ({
               key={scene.id}
               scene={scene}
               onClick={onSceneSelect}
+              onEdit={onSceneEdit}
             />
           ))}
         </div>

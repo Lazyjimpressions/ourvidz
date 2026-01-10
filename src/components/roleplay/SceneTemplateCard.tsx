@@ -1,12 +1,14 @@
-import React from 'react';
-import { Users, Heart, Flame, TrendingUp } from 'lucide-react';
+import React, { useCallback } from 'react';
+import { Users, Heart, Flame, TrendingUp, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneTemplate, ContentRating } from '@/types/roleplay';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SceneTemplateCardProps {
   scene: SceneTemplate;
   onClick: (scene: SceneTemplate) => void;
+  onEdit?: (scene: SceneTemplate) => void;
   className?: string;
 }
 
@@ -34,11 +36,19 @@ const RATING_COLORS: Record<ContentRating, string> = {
 export const SceneTemplateCard: React.FC<SceneTemplateCardProps> = ({
   scene,
   onClick,
+  onEdit,
   className
 }) => {
+  const { user } = useAuth();
   const gradient = SCENE_GRADIENTS[scene.setting || 'default'] || SCENE_GRADIENTS.default;
   const hasHighRomance = (scene.atmosphere?.romance ?? 0) >= 60;
   const hasHighTension = (scene.atmosphere?.tension ?? 0) >= 50;
+  const isOwner = user?.id === scene.creator_id;
+
+  const handleEdit = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    onEdit?.(scene);
+  }, [onEdit, scene]);
 
   return (
     <div
@@ -98,6 +108,17 @@ export const SceneTemplateCard: React.FC<SceneTemplateCardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Edit button - only visible on hover for owner */}
+      {isOwner && onEdit && (
+        <button
+          onClick={handleEdit}
+          className="absolute top-2 right-14 bg-black/60 backdrop-blur-sm rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 z-20"
+          title="Edit scene"
+        >
+          <Pencil className="w-3.5 h-3.5 text-white" />
+        </button>
+      )}
 
       {/* Content */}
       <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
