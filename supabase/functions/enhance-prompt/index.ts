@@ -67,6 +67,7 @@ serve(async (req) => {
     if (contentType === 'scene_creation') {
       console.log('🎬 Processing scene_creation content type');
       const contentRating = requestBody.contentRating || 'nsfw';
+      const userSelectedModel = requestBody.selectedModel || requestBody.chatModel || ''; // User's model choice
 
       const sceneCreationSystemPrompt = `You are an expert at creating roleplay scene templates. Given a user's scene description, create optimized content for both chat roleplay and image generation.
 
@@ -141,71 +142,100 @@ Focus on:
         });
       };
 
-      // Try local chat worker first
-      let chatWorkerAvailable = false;
-      let chatWorkerUrl = '';
+      // Determine if user selected local model
+      const isLocalModel = userSelectedModel === 'qwen_instruct' ||
+                          userSelectedModel === 'qwen-local' ||
+                          userSelectedModel === 'qwen_local';
 
-      try {
-        const supabase = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
+      console.log('🎯 Model selection:', { userSelectedModel, isLocalModel });
 
-        const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
-          body: { worker_type: 'chat' }
-        });
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
 
-        if (!workerError && workerData?.worker_url) {
-          chatWorkerUrl = workerData.worker_url;
-          chatWorkerAvailable = true;
-          console.log('✅ Chat worker available for scene_creation:', chatWorkerUrl);
-        } else {
-          console.log('⚠️ Chat worker unavailable, will try OpenRouter fallback');
-        }
-      } catch (workerCheckError) {
-        console.log('⚠️ Failed to check chat worker availability:', workerCheckError);
-      }
-
-      // Attempt 1: Try local chat worker
-      if (chatWorkerAvailable) {
+      // Route based on user's model selection
+      if (isLocalModel) {
+        // User explicitly selected local model - try local chat worker
+        console.log('👤 User selected local model, using chat worker');
         try {
-          const payload = {
-            messages: [
-              { role: "system", content: sceneCreationSystemPrompt },
-              { role: "user", content: prompt }
-            ],
-            max_tokens: 500,
-            temperature: 0.7,
-            top_p: 0.9
-          };
-
-          const response = await fetch(`${chatWorkerUrl}/enhance`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+          const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
+            body: { worker_type: 'chat' }
           });
 
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.enhanced_prompt) {
-              const sceneData = parseSceneResponse(result.enhanced_prompt, prompt);
-              return buildSceneResponse(sceneData, 'scene_creation_local', 'qwen_instruct');
+          if (!workerError && workerData?.worker_url) {
+            const payload = {
+              messages: [
+                { role: "system", content: sceneCreationSystemPrompt },
+                { role: "user", content: prompt }
+              ],
+              max_tokens: 500,
+              temperature: 0.7,
+              top_p: 0.9
+            };
+
+            const response = await fetch(`${workerData.worker_url}/enhance`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.enhanced_prompt) {
+                const sceneData = parseSceneResponse(result.enhanced_prompt, prompt);
+                return buildSceneResponse(sceneData, 'scene_creation_local', 'qwen_instruct');
+              }
             }
           }
-          console.log('⚠️ Chat worker response invalid, trying OpenRouter fallback');
-        } catch (chatWorkerError) {
-          console.log('⚠️ Chat worker failed:', chatWorkerError instanceof Error ? chatWorkerError.message : String(chatWorkerError));
+          // Local worker failed - return error (user explicitly wanted local)
+          console.error('❌ Local chat worker unavailable but user selected it');
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Local chat worker is unavailable. Please select a different model.',
+            enhancement_strategy: 'scene_creation_error'
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 503
+          });
+        } catch (localError) {
+          console.error('❌ Local chat worker error:', localError);
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Local chat worker failed. Please select a different model.',
+            enhancement_strategy: 'scene_creation_error'
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 503
+          });
         }
       }
 
-      // Attempt 2: Try OpenRouter as fallback
+      // User selected API model or Auto (default) - use OpenRouter
       const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
       if (openRouterKey) {
         try {
-          console.log('🔄 Attempting OpenRouter fallback for scene_creation');
+          // Determine which OpenRouter model to use
+          let openRouterModel = 'mistralai/mistral-small-3.1-24b-instruct:free'; // Default
+
+          // If user selected a specific API model, look it up
+          if (userSelectedModel && !isLocalModel) {
+            const { data: modelData } = await supabase
+              .from('api_models')
+              .select('model_key')
+              .eq('model_key', userSelectedModel)
+              .single();
+
+            if (modelData?.model_key) {
+              openRouterModel = modelData.model_key;
+              console.log('🎯 Using user-selected API model:', openRouterModel);
+            }
+          }
+
+          console.log('🌐 Using OpenRouter for scene_creation:', openRouterModel);
 
           const openRouterPayload = {
-            model: 'mistralai/mistral-small-3.1-24b-instruct:free', // Free tier model
+            model: openRouterModel,
             messages: [
               { role: "system", content: sceneCreationSystemPrompt },
               { role: "user", content: prompt }
@@ -233,17 +263,17 @@ Focus on:
             if (responseText) {
               console.log('✅ OpenRouter scene_creation response received');
               const sceneData = parseSceneResponse(responseText, prompt);
-              return buildSceneResponse(sceneData, 'scene_creation_openrouter', 'mistral-small-3.1-24b');
+              return buildSceneResponse(sceneData, 'scene_creation_openrouter', openRouterModel);
             }
           } else {
             const errorText = await openRouterResponse.text();
             console.error('❌ OpenRouter error:', openRouterResponse.status, errorText);
           }
         } catch (openRouterError) {
-          console.error('❌ OpenRouter fallback failed:', openRouterError instanceof Error ? openRouterError.message : String(openRouterError));
+          console.error('❌ OpenRouter error:', openRouterError instanceof Error ? openRouterError.message : String(openRouterError));
         }
       } else {
-        console.log('⚠️ OpenRouter API key not configured, skipping fallback');
+        console.log('⚠️ OpenRouter API key not configured');
       }
 
       // Final fallback: Return original prompt with no enhancement
@@ -259,7 +289,7 @@ Focus on:
         enhancement_metadata: {
           content_type: 'scene_creation',
           content_rating: contentRating,
-          error: 'All enhancement methods unavailable'
+          error: 'Enhancement unavailable'
         }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

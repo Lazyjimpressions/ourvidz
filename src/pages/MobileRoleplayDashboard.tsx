@@ -486,31 +486,39 @@ const MobileRoleplayDashboard = () => {
                     <div className="absolute inset-0 bg-gradient-to-br from-pink-800/30 to-purple-900/50" />
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                  <div className="absolute top-2 left-2 right-2 flex justify-between">
+                  {/* Top badges row */}
+                  <div className="absolute top-2 left-2 right-2 flex justify-between items-start">
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                       scene.content_rating === 'nsfw' ? 'bg-red-500/80' : 'bg-green-500/80'
                     } text-white`}>
                       {scene.content_rating.toUpperCase()}
                     </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-white">
-                      {scene.min_characters}-{scene.max_characters} AI
-                    </span>
+                    {/* Edit button - appears on hover, positioned on the right */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log('📝 Edit button clicked for scene:', scene.id, scene.name);
+                        console.log('📝 Scene object:', JSON.stringify(scene, null, 2));
+                        setEditingScene(scene);
+                        setShowSceneCreation(true);
+                      }}
+                      className="w-6 h-6 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                      title="Edit scene"
+                    >
+                      <Pencil className="w-3 h-3 text-white" />
+                    </button>
                   </div>
-                  {/* Edit button - appears on hover */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingScene(scene);
-                      setShowSceneCreation(true);
-                    }}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                    title="Edit scene"
-                  >
-                    <Pencil className="w-3.5 h-3.5 text-white" />
-                  </button>
+                  {/* Scenario type badge (if available) */}
+                  {scene.scenario_type && (
+                    <div className="absolute top-9 left-2">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/70 text-white capitalize">
+                        {scene.scenario_type.replace('_', ' ')}
+                      </span>
+                    </div>
+                  )}
                   <div className="absolute bottom-2 left-2 right-2">
                     <p className="text-white text-sm font-medium truncate">{scene.name}</p>
-                    <p className="text-white/60 text-xs truncate">{scene.setting}</p>
+                    <p className="text-white/60 text-xs truncate">{scene.description?.substring(0, 50) || scene.setting}</p>
                   </div>
                 </div>
               ))}

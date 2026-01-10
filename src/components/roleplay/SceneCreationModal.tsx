@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useToast } from '@/hooks/use-toast';
 import { useSceneCreation, SceneFormData, SceneAIOptions } from '@/hooks/useSceneCreation';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
@@ -38,7 +37,6 @@ export const SceneCreationModal = ({
   onSceneCreated,
   editScene
 }: SceneCreationModalProps) => {
-  const { toast } = useToast();
   const {
     enhanceScene,
     isEnhancing,
@@ -56,8 +54,8 @@ export const SceneCreationModal = ({
   } = useSceneCreation();
 
   // Load available models
-  const { models: chatModels, isLoading: loadingChatModels } = useRoleplayModels();
-  const { models: imageModels, isLoading: loadingImageModels } = useImageModels();
+  const { allModelOptions: chatModels, isLoading: loadingChatModels } = useRoleplayModels();
+  const { modelOptions: imageModels, isLoading: loadingImageModels } = useImageModels();
 
   // Form state
   const [name, setName] = useState('');
@@ -87,18 +85,33 @@ export const SceneCreationModal = ({
   // Reset form when modal opens/closes
   useEffect(() => {
     if (isOpen) {
+      console.log('🎬 SceneCreationModal opened', {
+        editMode: !!editScene,
+        editSceneId: editScene?.id,
+        editSceneName: editScene?.name
+      });
+
       if (editScene) {
         // Edit mode - populate with existing scene data
-        setName(editScene.name || '');
-        setDescription(editScene.description || '');
-        setContentRating(editScene.content_rating || 'nsfw');
-        setScenarioType(editScene.scenario_type || null);
-        setTags(editScene.tags || []);
-        setIsPublic(editScene.is_public ?? true);
-        setScenePrompt(editScene.scene_prompt || '');
-        setPreviewImageUrl(editScene.preview_image_url || null);
-        setSceneStarters(editScene.scene_starters?.join('\n') || '');
-        setHasEnhanced(false);
+        try {
+          setName(editScene.name || '');
+          setDescription(editScene.description || '');
+          setContentRating(editScene.content_rating || 'nsfw');
+          setScenarioType(editScene.scenario_type || null);
+          setTags(Array.isArray(editScene.tags) ? editScene.tags : []);
+          setIsPublic(editScene.is_public ?? true);
+          setScenePrompt(editScene.scene_prompt || '');
+          setPreviewImageUrl(editScene.preview_image_url || null);
+          // Handle scene_starters safely - ensure it's an array before joining
+          const starters = Array.isArray(editScene.scene_starters)
+            ? editScene.scene_starters.join('\n')
+            : '';
+          setSceneStarters(starters);
+          setHasEnhanced(false);
+          console.log('✅ Edit mode form populated');
+        } catch (err) {
+          console.error('❌ Error populating edit form:', err);
+        }
       } else {
         // Create mode - reset form
         setName('');
@@ -282,9 +295,9 @@ export const SceneCreationModal = ({
                   <SelectContent>
                     <SelectItem value="">Auto (default)</SelectItem>
                     {chatModels?.map(model => (
-                      <SelectItem key={model.model_key} value={model.model_key}>
-                        {model.display_name || model.model_key}
-                        {!model.available && ' (offline)'}
+                      <SelectItem key={model.value} value={model.value}>
+                        {model.label}
+                        {!model.isAvailable && ' (offline)'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -314,8 +327,8 @@ export const SceneCreationModal = ({
                   <SelectContent>
                     <SelectItem value="">Auto (default)</SelectItem>
                     {imageModels?.map(model => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.display_name || model.model_key}
+                      <SelectItem key={model.value} value={model.value}>
+                        {model.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
