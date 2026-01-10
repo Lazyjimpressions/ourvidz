@@ -5,7 +5,7 @@ import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon } from 'lucide-react';
+import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -84,7 +84,12 @@ const MobileRoleplayDashboard = () => {
     loadUserCharacters,
     deleteUserCharacter
   } = useUserCharacters();
-  const { conversations: userConversations, isLoading: conversationsLoading } = useUserConversations(10, true);
+  const {
+    conversations: userConversations,
+    isLoading: conversationsLoading,
+    deleteConversation,
+    dismissConversation
+  } = useUserConversations(10, true);
   const { scenes: sceneTemplates, incrementUsage: incrementSceneUsage } = useSceneGallery('all', 6);
 
   // Handle scene selection from gallery
@@ -346,7 +351,7 @@ const MobileRoleplayDashboard = () => {
                     <div
                       key={conversation.id}
                       className="relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
-                      onClick={() => navigate(`/roleplay/chat/${conversation.character_id}`)}
+                      onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
                     >
                       {/* Scene thumbnail as background */}
                       {displayImage ? (
@@ -376,6 +381,29 @@ const MobileRoleplayDashboard = () => {
                           />
                         </div>
                       )}
+                      {/* Hover action icons - top right */}
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            dismissConversation(conversation.id);
+                          }}
+                          className="p-1 bg-black/60 hover:bg-black/80 rounded-full"
+                          title="Hide from list"
+                        >
+                          <X className="w-3.5 h-3.5 text-white/80" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteConversation(conversation.id);
+                          }}
+                          className="p-1 bg-black/60 hover:bg-red-600/80 rounded-full"
+                          title="Delete conversation"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-white/80" />
+                        </button>
+                      </div>
                       {/* Character name */}
                       <div className="absolute bottom-2 left-2 right-2">
                         <p className="text-white text-sm font-medium truncate">

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/contexts/AuthContext';
-import { getSignedUrl } from '@/lib/storage';
 
 /**
  * Character info included with conversation for display
@@ -52,6 +51,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
 
     try {
       // Step 1: Fetch conversations
+      // Note: last_scene_image column exists in DB but may not be in generated types
       const { data, error } = await supabase
         .from('conversations')
         .select(`
@@ -61,7 +61,6 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
           title,
           conversation_type,
           status,
-          last_scene_image,
           created_at,
           updated_at,
           messages(count),
@@ -79,7 +78,9 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
 
       if (error) throw error;
 
-      const conversationIds = (data || []).map(c => c.id);
+      // Cast data to include last_scene_image which exists in DB but not in generated types
+      const conversationsWithSceneImage = data as Array<typeof data[number] & { last_scene_image?: string | null }> | null;
+      const conversationIds = (conversationsWithSceneImage || []).map(c => c.id);
 
       // Step 2: Fetch latest scene images via character_scenes -> workspace_assets
       // character_scenes.image_url may be NULL, but workspace_assets has the actual images
@@ -132,7 +133,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
       }
 
       // Step 3: Process data with scene image fallback
-      let processedData = (data || []).map(conv => {
+      let processedData = (conversationsWithSceneImage || []).map(conv => {
         // Use last_scene_image if available, otherwise fallback to character_scenes
         const effectiveSceneImage = conv.last_scene_image || sceneImageMap[conv.id] || null;
 
@@ -168,7 +169,9 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
 
           // Sign the storage path from workspace-temp bucket
           try {
-            const { data: signedData } = await getSignedUrl('workspace-temp', conv.last_scene_image);
+            const { data: signedData } = await supabase.storage
+              .from('workspace-temp')
+              .createSignedUrl(conv.last_scene_image, 3600); // 1 hour expiry
             if (signedData?.signedUrl) {
               return { ...conv, last_scene_image: signedData.signedUrl };
             }
@@ -195,9 +198,10 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
    */
   const updateLastSceneImage = async (conversationId: string, imageUrl: string) => {
     try {
+      // last_scene_image exists in DB but may not be in generated types
       const { error } = await supabase
         .from('conversations')
-        .update({ last_scene_image: imageUrl })
+        .update({ last_scene_image: imageUrl } as any)
         .eq('id', conversationId)
         .eq('user_id', user?.id);
 
@@ -219,11 +223,76 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
     loadConversations();
   }, [user?.id, limit, excludeEmpty]);
 
+  /**
+   * Delete a conversation entirely (removes from database)
+   * This deletes the conversation record and all associated messages
+   */
+  const deleteConversation = async (conversationId: string) => {
+    if (!user?.id) return;
+
+    try {
+      // Delete messages first (foreign key constraint)
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('conversation_id', conversationId);
+
+      // Delete the conversation
+      const { error } = await supabase
+        .from('conversations')
+        .delete()
+        .eq('id', conversationId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+
+      // Clear localStorage cache for this conversation
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.startsWith('conversation_') && localStorage.getItem(key) === conversationId) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (err) {
+      console.error('Error deleting conversation:', err);
+      throw err;
+    }
+  };
+
+  /**
+   * Dismiss/hide a conversation from the dashboard (archives it)
+   * The conversation still exists but won't show in the Continue section
+   */
+  const dismissConversation = async (conversationId: string) => {
+    if (!user?.id) return;
+
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ status: 'archived' })
+        .eq('id', conversationId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Remove from local state (since we only show active conversations)
+      setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+    } catch (err) {
+      console.error('Error dismissing conversation:', err);
+      throw err;
+    }
+  };
+
   return {
     conversations,
     isLoading,
     error,
     loadConversations,
-    updateLastSceneImage
+    updateLastSceneImage,
+    deleteConversation,
+    dismissConversation
   };
 };

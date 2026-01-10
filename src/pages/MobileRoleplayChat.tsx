@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
@@ -55,6 +55,8 @@ interface PromptTemplate {
 const MobileRoleplayChat: React.FC = () => {
   const { characterId, sceneId } = useParams<{ characterId: string; sceneId?: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const conversationIdFromUrl = searchParams.get('conversation');
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const { isKeyboardVisible } = useKeyboardVisible();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -485,30 +487,51 @@ const MobileRoleplayChat: React.FC = () => {
 
         // Check for existing active conversation first
         let conversation = null;
-        
-        // First try localStorage cache for quick lookup
-        const cacheKey = `conversation_${characterId}_${sceneId || 'general'}`;
-        const cachedConversationId = localStorage.getItem(cacheKey);
-        
-        if (cachedConversationId) {
-          console.log('🔍 Checking cached conversation:', cachedConversationId);
-          const { data: cachedConv } = await supabase
+
+        // Priority 1: Use conversation ID from URL query param (from "Continue Where You Left Off")
+        if (conversationIdFromUrl) {
+          console.log('🔍 Loading conversation from URL param:', conversationIdFromUrl);
+          const { data: urlConv } = await supabase
             .from('conversations')
             .select('*')
-            .eq('id', cachedConversationId)
+            .eq('id', conversationIdFromUrl)
+            .eq('user_id', user.id)
             .eq('status', 'active')
             .single();
-          
-          if (cachedConv) {
-            conversation = cachedConv;
-            console.log('✅ Using cached conversation:', conversation.id);
+
+          if (urlConv) {
+            conversation = urlConv;
+            console.log('✅ Using conversation from URL:', conversation.id);
           } else {
-            // Remove invalid cache
-            localStorage.removeItem(cacheKey);
+            console.warn('⚠️ Conversation from URL not found or inactive');
           }
         }
-        
-        // Fallback to database query if no cached conversation
+
+        // Priority 2: Try localStorage cache for quick lookup
+        const cacheKey = `conversation_${characterId}_${sceneId || 'general'}`;
+        if (!conversation) {
+          const cachedConversationId = localStorage.getItem(cacheKey);
+
+          if (cachedConversationId) {
+            console.log('🔍 Checking cached conversation:', cachedConversationId);
+            const { data: cachedConv } = await supabase
+              .from('conversations')
+              .select('*')
+              .eq('id', cachedConversationId)
+              .eq('status', 'active')
+              .single();
+
+            if (cachedConv) {
+              conversation = cachedConv;
+              console.log('✅ Using cached conversation:', conversation.id);
+            } else {
+              // Remove invalid cache
+              localStorage.removeItem(cacheKey);
+            }
+          }
+        }
+
+        // Priority 3: Fallback to database query if no cached conversation
         if (!conversation) {
           const conversationQuery = supabase
             .from('conversations')
