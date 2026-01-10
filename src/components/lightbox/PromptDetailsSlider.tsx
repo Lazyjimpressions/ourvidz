@@ -158,28 +158,51 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
               </Badge>
 
               {/* Template Name */}
-              {details?.templateName && (
+              {(details?.templateName || details?.sceneTemplateName) && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5">
                     <Tag className="h-3.5 w-3.5 text-muted-foreground" />
                     <h4 className="font-medium text-xs">Template</h4>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge 
-                      variant="outline" 
-                      className="border-emerald-500/20 text-emerald-400 text-xs"
-                    >
-                      {details.templateName}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(details.templateName!, 'Template name')}
-                      className="h-5 w-5 p-0"
-                      aria-label="Copy template name"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
+                  <div className="space-y-1.5">
+                    {details.templateName && (
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant="outline" 
+                          className="border-emerald-500/20 text-emerald-400 text-xs"
+                        >
+                          Chat: {details.templateName}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(details.templateName!, 'Template name')}
+                          className="h-5 w-5 p-0"
+                          aria-label="Copy template name"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                    {details?.sceneTemplateName && (
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant="outline" 
+                          className="border-purple-500/20 text-purple-400 text-xs"
+                        >
+                          Scene: {details.sceneTemplateName}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(details.sceneTemplateName!, 'Scene template name')}
+                          className="h-5 w-5 p-0"
+                          aria-label="Copy scene template name"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

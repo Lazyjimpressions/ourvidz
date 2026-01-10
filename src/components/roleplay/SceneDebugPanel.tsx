@@ -76,11 +76,12 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
                   <code className="text-[10px] text-purple-300 font-mono">{metadata.template_id.substring(0, 8)}...</code>
                   {metadata.template_id && (
                     <a
-                      href={`/admin?tab=prompts&template=${metadata.template_id}`}
+                      href={`/admin?tab=prompt-management&template=${metadata.template_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[10px] text-blue-400 hover:text-blue-300 ml-1"
                       onClick={(e) => e.stopPropagation()}
+                      title="Open template in admin panel"
                     >
                       view
                     </a>
@@ -94,6 +95,16 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className="text-gray-500 text-[10px]">Scene Template ID:</span>
                   <code className="text-[10px] text-purple-300 font-mono">{metadata.scene_template_id.substring(0, 8)}...</code>
+                  <a
+                    href={`/admin?tab=prompt-management&template=${metadata.scene_template_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-blue-400 hover:text-blue-300 ml-1"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Open scene template in admin panel"
+                  >
+                    view
+                  </a>
                 </div>
               )}
               {metadata.scene_template_name && (

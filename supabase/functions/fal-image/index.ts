@@ -1109,7 +1109,12 @@ serve(async (req) => {
             provider: 'fal',
             content_mode: contentMode,
             generation_mode: generationMode,
-            seed: generationSeed
+            seed: generationSeed,
+            // ✅ ADMIN: Include scene template info if available (for roleplay scenes)
+            scene_template_id: body.metadata?.scene_template_id,
+            scene_template_name: body.metadata?.scene_template_name,
+            // ✅ ADMIN: Include original scene prompt if available
+            original_scene_prompt: body.metadata?.original_scene_prompt || body.prompt
           }
         });
 
@@ -1360,13 +1365,13 @@ serve(async (req) => {
                     asset_type: 'image',
                     storage_path: destKey,
                     thumbnail_path: null,
-                    file_size_bytes: workspaceAsset?.file_size_bytes || 0,
+                    file_size_bytes: fileSizeBytes || 0,
                     mime_type: 'image/png',
-                    original_prompt: workspaceAsset?.original_prompt || body.prompt,
-                    model_used: workspaceAsset?.model_used || modelKey,
-                    generation_seed: workspaceAsset?.generation_seed || generationSeed,
-                    width: workspaceAsset?.width || 1024,
-                    height: workspaceAsset?.height || 1024,
+                    original_prompt: body.metadata?.original_scene_prompt || body.prompt,
+                    model_used: modelKey,
+                    generation_seed: generationSeed,
+                    width: falResult.images?.[0]?.width || falResult.width || 1024,
+                    height: falResult.images?.[0]?.height || falResult.height || 1024,
                     tags: ['scene', 'roleplay'],
                     roleplay_metadata: {
                       type: 'roleplay_scene',

@@ -10,6 +10,8 @@ interface ImageDetails {
   generationTime?: number;
   referenceStrength?: number;
   templateName?: string;
+  sceneTemplateName?: string; // ✅ ADMIN: Scene generation template
+  sceneTemplateId?: string; // ✅ ADMIN: Scene template ID
   jobType?: string;
   quality?: string;
   // i2i settings
@@ -124,6 +126,9 @@ export const useFetchImageDetails = () => {
           generationTime: settings?.generationTime,
           referenceStrength: settings?.referenceStrength || settings?.reference_strength,
           templateName,
+          // ✅ ADMIN: Scene template info from generation_settings
+          sceneTemplateName: settings?.scene_template_name,
+          sceneTemplateId: settings?.scene_template_id,
           jobType,
           quality,
           // i2i settings
