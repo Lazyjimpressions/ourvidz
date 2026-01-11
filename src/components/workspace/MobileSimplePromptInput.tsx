@@ -13,6 +13,7 @@ import { useVideoModels } from '@/hooks/useApiModels';
 import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
 import { MobileReferenceImagePreview } from './MobileReferenceImagePreview';
 import { detectImageType, looksLikeImage, isHeicType, normalizeExtension } from '@/utils/imageTypeDetection';
+import { uploadAndSignReferenceImage } from '@/lib/storage';
 
 // Detect iOS Safari for special handling
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -29,6 +30,7 @@ export interface MobileSimplePromptInputProps {
   quality: 'fast' | 'high';
   onQualityChange: (quality: 'fast' | 'high') => void;
   onReferenceImageSet?: (file: File, type: 'single' | 'start' | 'end') => void;
+  onReferenceImageUrlSet?: (url: string, type: 'single' | 'start' | 'end') => void; // NEW: For immediate upload workflow
   onReferenceImageRemove?: (type: 'single' | 'start' | 'end') => void;
   referenceImage?: File | null; // NEW: Sync with hook state
   referenceImageUrl?: string | null; // URL fallback for workspace images
@@ -57,6 +59,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   quality,
   onQualityChange,
   onReferenceImageSet,
+  onReferenceImageUrlSet,
   onReferenceImageRemove,
   referenceImage, // NEW: Use hook state instead of local state
   referenceImageUrl, // URL fallback for workspace images
@@ -241,9 +244,32 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         type
       });
       
-      onReferenceImageSet?.(persistedFile, type);
-      console.log('✅ MOBILE: File set callback called with persisted file');
-      toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
+      // CRITICAL FIX: Upload immediately instead of storing File object
+      // This fixes iPhone persistence issues - File objects may not persist on iOS
+      console.log('📤 MOBILE: Uploading reference image immediately (iPhone fix)...');
+      try {
+        const signedUrl = await uploadAndSignReferenceImage(persistedFile);
+        console.log('✅ MOBILE: Reference image uploaded and signed:', signedUrl.substring(0, 60) + '...');
+        
+        // Store signed URL via new callback (preferred)
+        if (onReferenceImageUrlSet) {
+          onReferenceImageUrlSet(signedUrl, type);
+          console.log('✅ MOBILE: Signed URL set via callback');
+        } else if (onReferenceImageSet) {
+          // Fallback: Still support File object for backward compatibility
+          // But this should be removed once all components use URL callback
+          console.warn('⚠️ MOBILE: Using legacy File object callback (should use onReferenceImageUrlSet)');
+          onReferenceImageSet(persistedFile, type);
+        }
+        
+        toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image uploaded and ready`);
+      } catch (uploadError) {
+        console.error('❌ MOBILE: Failed to upload reference image:', uploadError);
+        toast.error(uploadError instanceof Error 
+          ? `Upload failed: ${uploadError.message}`
+          : 'Failed to upload reference image. Please try again.');
+        return;
+      }
     } catch (error) {
       console.error('❌ MOBILE: File persistence/validation failed:', error);
       toast.error(isIOS 

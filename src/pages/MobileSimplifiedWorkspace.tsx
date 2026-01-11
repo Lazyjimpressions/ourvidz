@@ -68,11 +68,38 @@ const MobileSimplifiedWorkspace = () => {
     registerAssetRef
   } = useLibraryFirstWorkspace();
 
+  // NEW: Handle signed URL from immediate upload (preferred workflow)
+  const handleReferenceImageUrlSet = useCallback((url: string, type: 'single' | 'start' | 'end') => {
+    console.log('🖼️ MOBILE: Setting reference image URL (from immediate upload):', type, {
+      url: url.substring(0, 60) + '...',
+      isValidUrl: url.startsWith('http://') || url.startsWith('https://')
+    });
+    
+    switch (type) {
+      case 'single':
+        setReferenceImageUrl(url);
+        setReferenceImage(null); // Clear File object - we have URL now
+        console.log('✅ MOBILE: Reference image URL set in hook state');
+        break;
+      case 'start':
+        setBeginningRefImageUrl(url);
+        setBeginningRefImage(null);
+        console.log('✅ MOBILE: Beginning reference image URL set in hook state');
+        break;
+      case 'end':
+        setEndingRefImageUrl(url);
+        setEndingRefImage(null);
+        console.log('✅ MOBILE: Ending reference image URL set in hook state');
+        break;
+    }
+  }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage]);
+
+  // LEGACY: Handle File object (fallback for backward compatibility)
   const handleReferenceImageSet = useCallback((file: File, type: 'single' | 'start' | 'end') => {
     // Use robust validation that handles empty file.type on iOS
     const isValidImage = file.type.startsWith('image/') || looksLikeImage(file);
     
-    console.log('🖼️ MOBILE: Setting reference image:', type, {
+    console.log('🖼️ MOBILE: Setting reference image File (legacy):', type, {
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type,
@@ -93,18 +120,21 @@ const MobileSimplifiedWorkspace = () => {
       return;
     }
     
+    // LEGACY: Store File object (will be uploaded during generate)
+    // This is a fallback - new workflow should use handleReferenceImageUrlSet
+    console.warn('⚠️ MOBILE: Using legacy File object workflow (should use immediate upload)');
     switch (type) {
       case 'single':
         setReferenceImage(file);
-        console.log('✅ MOBILE: Reference image File set in hook state');
+        console.log('✅ MOBILE: Reference image File set in hook state (legacy)');
         break;
       case 'start':
         setBeginningRefImage(file);
-        console.log('✅ MOBILE: Beginning reference image File set in hook state');
+        console.log('✅ MOBILE: Beginning reference image File set in hook state (legacy)');
         break;
       case 'end':
         setEndingRefImage(file);
-        console.log('✅ MOBILE: Ending reference image File set in hook state');
+        console.log('✅ MOBILE: Ending reference image File set in hook state (legacy)');
         break;
     }
   }, [setReferenceImage, setBeginningRefImage, setEndingRefImage]);
@@ -492,6 +522,7 @@ const MobileSimplifiedWorkspace = () => {
           quality={quality}
           onQualityChange={setQuality}
           onReferenceImageSet={handleReferenceImageSet}
+          onReferenceImageUrlSet={handleReferenceImageUrlSet}
           onReferenceImageRemove={handleReferenceImageRemove}
           referenceImage={referenceImage}
           referenceImageUrl={referenceImageUrl}

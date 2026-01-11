@@ -382,8 +382,59 @@ export const uploadReferenceImage = async (
 };
 
 export const getReferenceImageUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('reference_images', filePath);
+  // filePath from upload is already: "userId/filename.jpg" (from uploadFile userScopedPath)
+  // Remove any bucket prefix if present (shouldn't be, but handle edge cases)
+  let cleanPath = filePath;
+  if (cleanPath.startsWith('reference_images/')) {
+    cleanPath = cleanPath.replace('reference_images/', '');
+  }
+  
+  const { data, error } = await getSignedUrl('reference_images', cleanPath);
   return error ? null : data?.signedUrl || null;
+};
+
+/**
+ * Upload and sign reference image immediately
+ * Returns signed URL ready for use in generation
+ * This is the preferred method for reference image uploads (works on iPhone)
+ */
+export const uploadAndSignReferenceImage = async (
+  file: File,
+  onProgress?: (progress: UploadProgress) => void
+): Promise<string> => {
+  console.log('📤 Uploading and signing reference image immediately:', {
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type
+  });
+  
+  // 1. Upload file to reference_images bucket
+  const uploadResult = await uploadReferenceImage(file, onProgress);
+  
+  if (uploadResult.error || !uploadResult.data?.path) {
+    const errorMsg = uploadResult.error instanceof Error 
+      ? uploadResult.error.message 
+      : 'Failed to upload reference image';
+    console.error('❌ Reference image upload failed:', errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  console.log('✅ Reference image uploaded to:', uploadResult.data.path);
+  
+  // 2. Sign URL immediately
+  // uploadResult.data.path is already in format: "userId/filename.jpg"
+  const signedUrl = await getReferenceImageUrl(uploadResult.data.path);
+  
+  if (!signedUrl || typeof signedUrl !== 'string' || signedUrl.trim() === '') {
+    console.error('❌ Failed to sign reference image URL:', {
+      path: uploadResult.data.path,
+      signedUrl
+    });
+    throw new Error('Failed to sign reference image URL');
+  }
+  
+  console.log('✅ Reference image URL signed successfully:', signedUrl.substring(0, 60) + '...');
+  return signedUrl;
 };
 
 // UPDATED: Fast video specific functions with proper video support

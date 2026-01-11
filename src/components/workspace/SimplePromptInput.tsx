@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { NegativePromptPresets } from '@/components/ui/negative-prompt-presets';
 import { UrlCache } from '@/lib/services/UrlCache';
 import { supabase } from '@/integrations/supabase/client';
+import { uploadAndSignReferenceImage } from '@/lib/storage';
 
 // Compact reference upload component with sizing
 const ReferenceImageUpload: React.FC<{
@@ -38,6 +39,8 @@ const ReferenceImageUpload: React.FC<{
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
   
   // Sign storage paths automatically
   useEffect(() => {
@@ -99,13 +102,62 @@ const ReferenceImageUpload: React.FC<{
     }
   }, [file]);
   
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
-    if (uploadedFile) {
-      onFileChange(uploadedFile);
+    if (!uploadedFile) return;
+    
+    // Validate file
+    if (!uploadedFile.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please select an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (uploadedFile.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Maximum file size is 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Clear previous state
+    onFileChange(null);
+    if (onImageUrlChange) {
+      onImageUrlChange(null);
+    }
+    
+    // Upload immediately (fixes iPhone persistence issues)
+    setIsUploading(true);
+    try {
+      console.log('📤 DESKTOP: Uploading reference image immediately...');
+      const signedUrl = await uploadAndSignReferenceImage(uploadedFile);
+      
+      // Store signed URL, not File object
       if (onImageUrlChange) {
-        onImageUrlChange(null);
+        onImageUrlChange(signedUrl);
       }
+      // Clear file (we have URL now, don't need File object)
+      onFileChange(null);
+      
+      console.log('✅ DESKTOP: Reference image uploaded and signed');
+      toast({
+        title: "Reference Image Ready",
+        description: "Image uploaded and ready for generation",
+      });
+    } catch (error) {
+      console.error('❌ DESKTOP: Failed to upload reference image:', error);
+      toast({
+        title: "Upload Failed",
+        description: error instanceof Error ? error.message : "Failed to upload reference image",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
   const handleDragOver = (e: React.DragEvent) => {
@@ -120,13 +172,51 @@ const ReferenceImageUpload: React.FC<{
     e.preventDefault();
     setIsDragOver(false);
 
-    // Handle file drops
+    // Handle file drops - upload immediately
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0 && files[0].type.startsWith('image/')) {
-      onFileChange(files[0]);
+      const droppedFile = files[0];
+      
+      // Validate file
+      if (droppedFile.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Maximum file size is 10MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Clear previous state
+      onFileChange(null);
       if (onImageUrlChange) {
         onImageUrlChange(null);
       }
+      
+      // Upload immediately
+      setIsUploading(true);
+      uploadAndSignReferenceImage(droppedFile)
+        .then((signedUrl) => {
+          if (onImageUrlChange) {
+            onImageUrlChange(signedUrl);
+          }
+          onFileChange(null);
+          toast({
+            title: "Reference Image Ready",
+            description: "Image uploaded and ready for generation",
+          });
+        })
+        .catch((error) => {
+          console.error('❌ DESKTOP: Failed to upload dropped reference image:', error);
+          toast({
+            title: "Upload Failed",
+            description: error instanceof Error ? error.message : "Failed to upload reference image",
+            variant: "destructive",
+          });
+        })
+        .finally(() => {
+          setIsUploading(false);
+        });
       return;
     }
 
@@ -212,7 +302,7 @@ const ReferenceImageUpload: React.FC<{
       console.log('🖼️ REF IMAGE DISPLAY: No image to display', { file: !!file, signedImageUrl: !!signedImageUrl, imageUrl: !!imageUrl });
     }
   }, [displayImage, file, signedImageUrl, imageUrl]);
-  return <div className={`border border-border/30 bg-muted/10 rounded ${sizeClass} transition-all duration-200 overflow-hidden ${isDragOver ? 'border-primary bg-primary/10' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+  return <div className={`border border-border/30 bg-muted/10 rounded ${sizeClass} transition-all duration-200 overflow-hidden ${isDragOver ? 'border-primary bg-primary/10' : ''} ${isUploading ? 'opacity-50 pointer-events-none' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
       {displayImage ? <div className="relative w-full h-full">
           <img src={displayImage} alt={label} className="w-full h-full object-cover" />
           <button 
@@ -220,13 +310,23 @@ const ReferenceImageUpload: React.FC<{
             type="button"
             className="absolute -top-1 -right-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold z-10 cursor-pointer"
             title="Clear reference image"
+            disabled={isUploading}
           >
             ×
           </button>
-        </div> : <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-muted-foreground hover:text-foreground transition-colors bg-muted/20">
-          <Camera className="w-4 h-4 mb-1" />
-          <span className="text-xs font-medium">{label}</span>
-          <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+        </div> : <label className={`cursor-pointer flex flex-col items-center justify-center w-full h-full text-muted-foreground hover:text-foreground transition-colors bg-muted/20 ${isUploading ? 'opacity-50' : ''}`}>
+          {isUploading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin mb-1" />
+              <span className="text-xs font-medium">Uploading...</span>
+            </>
+          ) : (
+            <>
+              <Camera className="w-4 h-4 mb-1" />
+              <span className="text-xs font-medium">{label}</span>
+            </>
+          )}
+          <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" disabled={isUploading} />
         </label>}
     </div>;
 };
