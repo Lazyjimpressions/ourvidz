@@ -53,11 +53,15 @@ interface PromptTemplate {
 }
 
 const MobileRoleplayChat: React.FC = () => {
-  const { characterId, sceneId } = useParams<{ characterId: string; sceneId?: string }>();
+  const { characterId } = useParams<{ characterId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const conversationIdFromUrl = searchParams.get('conversation');
+  // Extract scene and fresh flags from URL query parameters
+  const sceneIdFromUrl = searchParams.get('scene');
+  const sceneId = sceneIdFromUrl || undefined; // Keep compatibility with existing code
+  const shouldStartFresh = searchParams.get('fresh') === 'true';
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const { isKeyboardVisible } = useKeyboardVisible();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -404,12 +408,16 @@ const MobileRoleplayChat: React.FC = () => {
         return;
       }
 
-      // Extract userCharacterId from navigation state (from scene setup)
-      const locationState = location.state as { 
+      // Extract userCharacterId and forceNewConversation from navigation state (from scene setup)
+      const locationState = location.state as {
         sceneConfig?: any;
         scenarioPayload?: ScenarioSessionPayload;
         userCharacterId?: string | null;
+        forceNewConversation?: boolean;
       } | null;
+
+      // Check if this is a fresh scene start
+      const forceNewConversation = locationState?.forceNewConversation || shouldStartFresh;
       
       const userCharacterIdFromState = locationState?.userCharacterId;
       
@@ -526,8 +534,17 @@ const MobileRoleplayChat: React.FC = () => {
         // Check for existing active conversation first
         let conversation = null;
 
-        // Priority 1: Use conversation ID from URL query param (from "Continue Where You Left Off")
-        if (conversationIdFromUrl) {
+        // Use scene-specific cache key if scene present
+        const cacheKey = sceneIdFromUrl
+          ? `conversation_${characterId}_scene_${sceneIdFromUrl}`
+          : `conversation_${characterId}_general`;
+
+        // Skip conversation lookup if forcing new conversation (fresh scene start)
+        if (!forceNewConversation) {
+          console.log('🔍 Looking for existing conversation (not forcing new)');
+
+          // Priority 1: Use conversation ID from URL query param (from "Continue Where You Left Off")
+          if (conversationIdFromUrl) {
           console.log('🔍 Loading conversation from URL param:', conversationIdFromUrl);
           const { data: urlConv } = await supabase
             .from('conversations')
@@ -543,11 +560,10 @@ const MobileRoleplayChat: React.FC = () => {
           } else {
             console.warn('⚠️ Conversation from URL not found or inactive');
           }
-        }
+          }
 
-        // Priority 2: Try localStorage cache for quick lookup
-        const cacheKey = `conversation_${characterId}_${sceneId || 'general'}`;
-        if (!conversation) {
+          // Priority 2: Try localStorage cache for quick lookup
+          if (!conversation) {
           const cachedConversationId = localStorage.getItem(cacheKey);
 
           if (cachedConversationId) {
@@ -597,8 +613,12 @@ const MobileRoleplayChat: React.FC = () => {
             // Cache for future use
             localStorage.setItem(cacheKey, conversation.id);
           }
+          }
+        } else {
+          console.log('🆕 Starting fresh scene conversation (skipping lookup)');
+          // Will create new conversation below
         }
-        
+
         if (conversation) {
           setConversationId(conversation.id);
 
@@ -682,30 +702,22 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
-        // Create new conversation if none exists
-        // If coming from scene setup, always create new conversation (clear cache)
-        const locationState = location.state as { 
-          sceneConfig?: any;
-          scenarioPayload?: ScenarioSessionPayload;
-          userCharacterId?: string | null;
-        } | null;
-        
-        const isFromSceneSetup = !!locationState?.sceneConfig;
+        // Create new conversation if none exists or forcing new conversation (fresh scene start)
         const userCharacterIdFromState = locationState?.userCharacterId;
-        const effectiveUserCharacterId = userCharacterIdFromState !== undefined 
-          ? userCharacterIdFromState 
+        const effectiveUserCharacterId = userCharacterIdFromState !== undefined
+          ? userCharacterIdFromState
           : selectedUserCharacterId;
-        
-        // Clear conversation cache if coming from scene setup to ensure new conversation
-        if (isFromSceneSetup) {
-          const cacheKey = `conversation_${characterId}_${sceneId || 'none'}`;
-          localStorage.removeItem(cacheKey);
-          console.log('🧹 Cleared conversation cache for new scene setup');
-        }
-        
-        if (!conversation || isFromSceneSetup) {
-          console.log('🆕 Creating new conversation', isFromSceneSetup ? '(from scene setup)' : '');
-          const conversationTitle = loadedScene
+
+        if (!conversation || forceNewConversation) {
+          console.log('🆕 Creating new conversation', forceNewConversation ? '(fresh scene start)' : '');
+
+          // Get scene name from location state or loaded scene
+          const sceneName = locationState?.sceneConfig?.scene?.name || locationState?.scenarioPayload?.sceneName;
+          const userRole = locationState?.userRole;
+
+          const conversationTitle = sceneIdFromUrl && sceneName
+            ? `${loadedCharacter.name} - ${sceneName}`
+            : loadedScene
             ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
             : `Roleplay: ${loadedCharacter.name}`;
 
@@ -714,11 +726,16 @@ const MobileRoleplayChat: React.FC = () => {
             .insert({
               user_id: user.id,
               character_id: characterId,
-              conversation_type: sceneId ? 'scene_roleplay' : 'character_roleplay',
+              conversation_type: sceneIdFromUrl ? 'scene_roleplay' : 'character_roleplay',
               title: conversationTitle,
               status: 'active',
               memory_tier: memoryTier,
-              memory_data: sceneId ? { scene_id: sceneId } : {},
+              memory_data: sceneIdFromUrl ? {
+                scene_id: sceneIdFromUrl,
+                scene_name: sceneName || null,
+                user_character_id: effectiveUserCharacterId || null,
+                user_role: userRole || null
+              } : {},
               user_character_id: effectiveUserCharacterId || null
             })
             .select()

@@ -116,11 +116,36 @@ export const uploadFile = async (
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    // Check authentication - try getUser first, fallback to getSession
+    let user = null;
+    try {
+      const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
+      if (getUserError) {
+        console.warn('⚠️ getUser() failed, trying getSession():', getUserError.message);
+        // Fallback to getSession if getUser fails
+        const { data: { session } } = await supabase.auth.getSession();
+        user = session?.user || null;
+      } else {
+        user = getUserResult;
+      }
+    } catch (authError) {
+      console.error('❌ Auth check failed:', authError);
+      // Try getSession as last resort
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        user = session?.user || null;
+      } catch (sessionError) {
+        console.error('❌ getSession() also failed:', sessionError);
+      }
+    }
     
     if (!user) {
-      throw new Error('User must be authenticated to upload files');
+      const errorMsg = 'User must be authenticated to upload files. Please log in and try again.';
+      console.error('❌ Upload failed - no authenticated user');
+      throw new Error(errorMsg);
     }
+    
+    console.log('✅ User authenticated for upload:', user.id.substring(0, 8) + '...');
 
     // Create user-scoped path for private buckets
     const userScopedPath = bucket === 'system_assets' 

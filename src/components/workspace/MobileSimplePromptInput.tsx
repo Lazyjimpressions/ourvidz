@@ -14,6 +14,7 @@ import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
 import { MobileReferenceImagePreview } from './MobileReferenceImagePreview';
 import { detectImageType, looksLikeImage, isHeicType, normalizeExtension } from '@/utils/imageTypeDetection';
 import { uploadAndSignReferenceImage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 
 // Detect iOS Safari for special handling
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -247,6 +248,22 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       // CRITICAL FIX: Upload immediately instead of storing File object
       // This fixes iPhone persistence issues - File objects may not persist on iOS
       console.log('📤 MOBILE: Uploading reference image immediately (iPhone fix)...');
+      
+      // Check authentication before attempting upload
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
+          console.error('❌ MOBILE: User not authenticated:', authError?.message || 'No user found');
+          toast.error('Please log in to upload images. Your session may have expired.');
+          return;
+        }
+        console.log('✅ MOBILE: User authenticated:', user.id.substring(0, 8) + '...');
+      } catch (authCheckError) {
+        console.error('❌ MOBILE: Auth check failed:', authCheckError);
+        toast.error('Authentication check failed. Please refresh the page and try again.');
+        return;
+      }
+      
       try {
         const signedUrl = await uploadAndSignReferenceImage(persistedFile);
         console.log('✅ MOBILE: Reference image uploaded and signed:', signedUrl.substring(0, 60) + '...');
@@ -265,9 +282,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image uploaded and ready`);
       } catch (uploadError) {
         console.error('❌ MOBILE: Failed to upload reference image:', uploadError);
-        toast.error(uploadError instanceof Error 
-          ? `Upload failed: ${uploadError.message}`
-          : 'Failed to upload reference image. Please try again.');
+        const errorMessage = uploadError instanceof Error ? uploadError.message : 'Unknown error';
+        
+        // Provide more helpful error messages
+        if (errorMessage.includes('authenticated')) {
+          toast.error('Your session expired. Please refresh the page and log in again.');
+        } else if (errorMessage.includes('size') || errorMessage.includes('large')) {
+          toast.error('Image is too large. Maximum size is 10MB.');
+        } else {
+          toast.error(`Upload failed: ${errorMessage}`);
+        }
         return;
       }
     } catch (error) {

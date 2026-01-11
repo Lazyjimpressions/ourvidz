@@ -132,13 +132,26 @@ const MobileRoleplayDashboard = () => {
     setShowSceneSetup(false);
     // Track usage
     incrementSceneUsage(config.scene.id);
-    // Navigate to chat with scene config
-    navigate(`/roleplay/chat/${config.primaryCharacterId}`, {
+
+    // Clear cache for this scene to ensure fresh start
+    const cacheKey = `conversation_${config.primaryCharacterId}_scene_${config.scene.id}`;
+    localStorage.removeItem(cacheKey);
+
+    // Navigate with sceneId and fresh flag in URL
+    navigate(`/roleplay/chat/${config.primaryCharacterId}?scene=${config.scene.id}&fresh=true`, {
       state: {
         sceneConfig: config,
         userCharacterId: config.userCharacterId,
+        secondaryCharacterId: config.secondaryCharacterId,
+        userRole: config.userRole,
+        forceNewConversation: true,  // Explicit flag for chat component
         scenarioPayload: {
+          sceneId: config.scene.id,
+          sceneName: config.scene.name,
           type: config.scene.scenario_type || 'stranger',
+          sceneDescription: config.scene.description || '',
+          scenePrompt: config.scene.scene_prompt,
+          sceneStarters: config.scene.scene_starters || [],
           setting: { location: config.scene.setting || 'custom' },
           atmosphere: config.scene.atmosphere,
           characters: {
@@ -152,7 +165,11 @@ const MobileRoleplayDashboard = () => {
             customText: config.scene.scene_starters?.[0]
           },
           contentTier: config.scene.content_rating,
-          aiCharacterId: config.primaryCharacterId
+          aiCharacterId: config.primaryCharacterId,
+          primaryCharacterId: config.primaryCharacterId,
+          secondaryCharacterId: config.secondaryCharacterId,
+          userCharacterId: config.userCharacterId,
+          timestamp: Date.now()
         } as ScenarioSessionPayload
       }
     });
