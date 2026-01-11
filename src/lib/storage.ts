@@ -234,10 +234,46 @@ export const getSignedUrl = async (
       cleanPath = cleanPath.replace(`${bucket}/`, '');
     }
 
+    // CRITICAL FIX: Ensure user is authenticated before creating signed URL
+    // This is especially important on mobile where auth state can be inconsistent
+    let user = null;
+    try {
+      const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
+      if (getUserError) {
+        // Fallback to getSession
+        const { data: { session } } = await supabase.auth.getSession();
+        user = session?.user || null;
+      } else {
+        user = getUserResult;
+      }
+    } catch (authError) {
+      console.error('❌ getSignedUrl: Auth check failed:', authError);
+      // Try getSession as last resort
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        user = session?.user || null;
+      } catch (sessionError) {
+        console.error('❌ getSignedUrl: getSession() also failed:', sessionError);
+      }
+    }
+
+    if (!user) {
+      const error = new Error('User must be authenticated to generate signed URLs');
+      console.error('❌ getSignedUrl: No authenticated user');
+      return { data: null, error };
+    }
+
+    // Use longer expiration on mobile (24 hours) to reduce network issues
+    // Mobile networks can be slower/intermittent, so longer URLs help
+    const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const effectiveExpiry = isMobile ? Math.max(expiresIn, 86400) : expiresIn; // At least 24h on mobile
+    
+    console.log(`🔐 getSignedUrl: Generating signed URL for ${bucket}/${cleanPath.slice(0, 40)}... (user: ${user.id.substring(0, 8)}..., expiry: ${Math.round(effectiveExpiry / 3600)}h)`);
+
     // PHASE 2: Direct Supabase call with exact bucket+path from database
     const { data, error } = await supabase.storage
       .from(bucket)
-      .createSignedUrl(cleanPath, expiresIn);
+      .createSignedUrl(cleanPath, effectiveExpiry);
 
     if (error) {
       console.error(`❌ Supabase error for ${bucket}/${cleanPath.slice(0, 30)}...:`, error.message);
@@ -249,9 +285,9 @@ export const getSignedUrl = async (
       return { data: null, error: new Error('No signed URL returned') };
     }
 
-    // Cache successful result
-    urlCache.set(bucket, filePath, data.signedUrl, expiresIn);
-    console.log(`✅ Generated signed URL for: ${bucket}/${cleanPath.slice(0, 30)}...`);
+    // Cache successful result (use effectiveExpiry for cache TTL)
+    urlCache.set(bucket, filePath, data.signedUrl, effectiveExpiry);
+    console.log(`✅ Generated signed URL for: ${bucket}/${cleanPath.slice(0, 30)}... (expires in ${Math.round(effectiveExpiry / 3600)}h)`);
     
     return { data, error: null };
     

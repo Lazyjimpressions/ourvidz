@@ -1,5 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
 
+// Import for mobile detection
+declare const navigator: Navigator | undefined;
+
 type CacheKey = string; // `${bucket}:${path}`
 
 interface CachedUrlEntry {
@@ -42,16 +45,56 @@ class UrlCacheImpl {
     if (existing) return existing;
 
     const promise = (async () => {
+      // CRITICAL FIX: Ensure user is authenticated before creating signed URL
+      // This is especially important on mobile where auth state can be inconsistent
+      let user = null;
+      try {
+        const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
+        if (getUserError) {
+          // Fallback to getSession
+          const { data: { session } } = await supabase.auth.getSession();
+          user = session?.user || null;
+        } else {
+          user = getUserResult;
+        }
+      } catch (authError) {
+        console.error('❌ UrlCache: Auth check failed:', authError);
+        // Try getSession as last resort
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          user = session?.user || null;
+        } catch (sessionError) {
+          console.error('❌ UrlCache: getSession() also failed:', sessionError);
+        }
+      }
+
+      if (!user) {
+        const error = new Error('User must be authenticated to generate signed URLs');
+        this.pending.delete(k);
+        throw error;
+      }
+
+      console.log(`🔐 UrlCache: Generating signed URL for ${bucket}/${storagePath.substring(0, 40)}... (user: ${user.id.substring(0, 8)}...)`);
+      
+      // Use longer expiration on mobile (24 hours) to reduce network issues
+      // Mobile networks can be slower/intermittent, so longer URLs help
+      const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const effectiveExpiry = isMobile ? Math.max(expiresInSeconds, 86400) : expiresInSeconds; // At least 24h on mobile
+      
       const { data, error } = await supabase.storage
         .from(bucket)
-        .createSignedUrl(storagePath, expiresInSeconds);
+        .createSignedUrl(storagePath, effectiveExpiry);
+        
       if (error || !data?.signedUrl) {
+        console.error(`❌ UrlCache: Failed to create signed URL for ${bucket}/${storagePath.substring(0, 40)}...:`, error?.message || 'No signed URL returned');
         this.pending.delete(k);
         throw error || new Error('Failed to create signed URL');
       }
-      const expiresAt = Date.now() + expiresInSeconds * 1000;
+      
+      const expiresAt = Date.now() + effectiveExpiry * 1000;
       this.cache.set(k, { signedUrl: data.signedUrl, expiresAt });
       this.pending.delete(k);
+      console.log(`✅ UrlCache: Generated signed URL (expires in ${Math.round(effectiveExpiry / 3600)}h)`);
       return data.signedUrl;
     })();
 

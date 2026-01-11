@@ -476,49 +476,30 @@ const MobileRoleplayChat: React.FC = () => {
           setSignedCharacterImage(loadedCharacter.image_url);
         }
 
-        // Load scene data - auto-select if no sceneId provided
+        // Load scene data from scenes table (templates, not artifacts)
         let loadedScene = null;
         if (sceneId) {
-          // Load specific scene if provided in URL
+          // Load specific scene template if provided in URL
           try {
             const { data: sceneData, error: sceneError } = await supabase
-              .from('character_scenes')
+              .from('scenes')  // Query scenes table for templates
               .select('*')
               .eq('id', sceneId)
-              .eq('character_id', characterId)
               .single();
 
             if (!sceneError && sceneData) {
               loadedScene = sceneData;
               setSelectedScene(sceneData);
-              console.log('🎬 Loaded scene context:', sceneData.scene_prompt.substring(0, 50) + '...');
+              console.log('🎬 Loaded scene template:', sceneData.name, '-', sceneData.scene_prompt?.substring(0, 50) + '...');
+            } else {
+              console.error('❌ Failed to load scene template:', sceneError);
             }
           } catch (error) {
-            console.error('Error loading scene:', error);
+            console.error('Error loading scene template:', error);
           }
         } else {
-          // Auto-select first available scene if no sceneId provided
-          // This makes scenes optional - can start without scene
-          try {
-            const { data: scenes, error: scenesError } = await supabase
-              .from('character_scenes')
-              .select('*')
-              .eq('character_id', characterId)
-              .order('priority', { ascending: false })
-              .limit(1);
-
-            if (!scenesError && scenes && scenes.length > 0) {
-              loadedScene = scenes[0];
-              setSelectedScene(scenes[0]);
-              console.log('🎬 Auto-selected scene:', scenes[0].scene_prompt.substring(0, 50) + '...');
-            } else {
-              // No scenes available - that's okay, can start without scene
-              console.log('ℹ️ No scenes available for character, starting without scene context');
-            }
-          } catch (error) {
-            console.error('Error loading scenes for auto-select:', error);
-            // Continue without scene - it's optional
-          }
+          // No sceneId provided - scenes are optional, start without scene context
+          console.log('ℹ️ No scene specified, starting general conversation');
         }
 
         // Load prompt template for roleplay - use current modelProvider
@@ -776,7 +757,9 @@ const MobileRoleplayChat: React.FC = () => {
             content_tier: contentTier,
             scene_generation: true, // ✅ Enable auto scene generation on kickoff
             scene_context: loadedScene?.scene_prompt || null,
-            scene_system_prompt: loadedScene?.system_prompt || null,
+            scene_name: loadedScene?.name || null,
+            scene_description: loadedScene?.description || null,
+            scene_starters: loadedScene?.scene_starters || null,
             user_id: user.id,
             // Add prompt template integration
             prompt_template_id: loadedPromptTemplate?.id || null,

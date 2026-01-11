@@ -253,12 +253,48 @@ export class UrlSigningService {
     // Use concurrency limiter to prevent overwhelming the system
     return concurrencyLimiter.execute(async () => {
       try {
+        // CRITICAL FIX: Ensure user is authenticated before creating signed URL
+        // This is especially important on mobile where auth state can be inconsistent
+        let user = null;
+        try {
+          const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
+          if (getUserError) {
+            // Fallback to getSession
+            const { data: { session } } = await supabase.auth.getSession();
+            user = session?.user || null;
+          } else {
+            user = getUserResult;
+          }
+        } catch (authError) {
+          console.error('❌ UrlSigningService: Auth check failed:', authError);
+          // Try getSession as last resort
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            user = session?.user || null;
+          } catch (sessionError) {
+            console.error('❌ UrlSigningService: getSession() also failed:', sessionError);
+          }
+        }
+
+        if (!user) {
+          const error = new Error('User must be authenticated to generate signed URLs');
+          console.error(`❌ UrlSigningService: No authenticated user for ${bucket}:${path}`);
+          throw error;
+        }
+
+        // Use longer expiration on mobile (24 hours) to reduce network issues
+        // Mobile networks can be slower/intermittent, so longer URLs help
+        const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const effectiveExpiry = isMobile ? Math.max(opts.ttlSec, 86400) : opts.ttlSec; // At least 24h on mobile
+        
+        console.log(`🔐 UrlSigningService: Generating signed URL for ${bucket}/${path.substring(0, 40)}... (user: ${user.id.substring(0, 8)}..., expiry: ${Math.round(effectiveExpiry / 3600)}h)`);
+
         const { data, error } = await supabase.storage
           .from(bucket)
-          .createSignedUrl(path, opts.ttlSec);
+          .createSignedUrl(path, effectiveExpiry);
 
         if (error) {
-          console.error(`Failed to sign URL ${bucket}:${path}:`, error);
+          console.error(`❌ UrlSigningService: Failed to sign URL ${bucket}:${path}:`, error);
           throw error;
         }
 
@@ -266,16 +302,17 @@ export class UrlSigningService {
           throw new Error(`No signed URL returned for ${bucket}:${path}`);
         }
 
-        // Cache the result
+        // Cache the result (use effectiveExpiry for cache TTL)
         const cacheKey = `${bucket}:${path}`;
         this.cache.set(cacheKey, {
           url: data.signedUrl,
-          expiresAt: Date.now() + (opts.ttlSec * 1000) - 60000 // Expire 1min early
+          expiresAt: Date.now() + (effectiveExpiry * 1000) - 60000 // Expire 1min early
         });
 
+        console.log(`✅ UrlSigningService: Generated signed URL (expires in ${Math.round(effectiveExpiry / 3600)}h)`);
         return data.signedUrl;
       } catch (error) {
-        console.error(`Error signing URL ${bucket}:${path}:`, error);
+        console.error(`❌ UrlSigningService: Error signing URL ${bucket}:${path}:`, error);
         throw error;
       }
     });

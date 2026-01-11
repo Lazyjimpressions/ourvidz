@@ -44,6 +44,7 @@ interface RoleplayChatRequest {
   consistency_settings?: ConsistencySettings; // User's consistency settings from UI
   scene_name?: string; // Scene name for scene generation
   scene_description?: string; // Scene description for scene generation
+  scene_starters?: string[]; // Conversation starters from scene template
   // Scene continuity (I2I iteration) fields
   previous_scene_id?: string; // ID of previous scene for linking
   previous_scene_image_url?: string; // URL of previous scene for I2I iteration
@@ -216,6 +217,7 @@ serve(async (req) => {
       prompt_template_name,
       scene_name,
       scene_description,
+      scene_starters,
       // Scene continuity (I2I iteration) fields
       previous_scene_id,
       previous_scene_image_url,
@@ -385,7 +387,7 @@ serve(async (req) => {
 
     // Build context-aware prompt
     const promptStart = Date.now();
-    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, scene_context, scene_system_prompt);
+    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, scene_context, scene_system_prompt, scene_starters);
     
     // ✅ PREVENT RE-INTRODUCTIONS: Check if conversation already has messages
     let userMessage: string;
@@ -427,7 +429,7 @@ serve(async (req) => {
     // Route to appropriate model provider
     if (effectiveModelProvider === 'chat_worker') {
       // Local Qwen model
-      const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate);
+      const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate, scene_starters);
       response = await callChatWorkerWithHistory(character, recentMessages || [], systemPrompt, userMessage, content_tier);
       modelUsed = 'chat_worker';
     } else {
@@ -442,7 +444,7 @@ serve(async (req) => {
             usedFallback
           });
           // Use database-driven model configuration with user character
-          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character);
+          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character, scene_starters);
           modelUsed = `${modelConfig.provider_name}:${effectiveModelProvider}`;
         } else {
           console.error('❌ Model config not found for:', effectiveModelProvider);
@@ -875,7 +877,8 @@ async function callModelWithConfig(
   supabase: any,
   sceneContext?: string,
   sceneSystemPrompt?: string,
-  userCharacter?: UserCharacterForTemplate | null
+  userCharacter?: UserCharacterForTemplate | null,
+  sceneStarters?: string[]
 ): Promise<string> {
   console.log('🔧 Using database-driven model configuration:', {
     modelKey,
@@ -902,7 +905,7 @@ async function callModelWithConfig(
   }
 
   // Build system prompt using template with scene context and user character
-  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier, sceneContext, sceneSystemPrompt, userCharacter);
+  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier, sceneContext, sceneSystemPrompt, userCharacter, sceneStarters);
 
   // Route to appropriate provider based on model config
   if (modelConfig.provider_name === 'openrouter') {
@@ -996,7 +999,8 @@ function buildSystemPromptFromTemplate(
   contentTier: string,
   sceneContext?: string,
   sceneSystemPrompt?: string,
-  userCharacter?: UserCharacterForTemplate | null
+  userCharacter?: UserCharacterForTemplate | null,
+  sceneStarters?: string[]
 ): string {
   let systemPrompt = template.system_prompt;
 
@@ -1045,6 +1049,15 @@ function buildSystemPromptFromTemplate(
   if (sceneSystemPrompt && sceneSystemPrompt.trim()) {
     console.log('🎬 Adding scene-specific system prompt to template');
     systemPrompt += '\n\n' + sceneSystemPrompt;
+  }
+
+  // Add scene starters from request body (new architecture - scenes are character-agnostic)
+  if (sceneStarters && sceneStarters.length > 0) {
+    systemPrompt += `\n\nCONVERSATION STARTERS - Use these to begin or continue:\n`;
+    sceneStarters.forEach((starter: string, index: number) => {
+      systemPrompt += `Starter ${index + 1}: "${starter}"\n`;
+    });
+    console.log('✅ Applied scene starters from request body to template:', sceneStarters.length);
   }
 
   return systemPrompt;
@@ -1396,7 +1409,7 @@ function sanitizeSceneContext(sceneContext?: string): string | undefined {
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
-function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string, sceneContext?: string, sceneSystemPrompt?: string): string {
+function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, sceneStarters?: string[]): string {
   // Sanitize scene context and system prompt
   const cleanedSceneContext = sanitizeSceneContext(sceneContext);
   const cleanedSceneSystemPrompt = sceneSystemPrompt ? 
@@ -1435,17 +1448,13 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
     console.log('⚠️ No scene system prompt provided, using default behavior');
   }
 
-  // Active scene rules and starters from database
-  if (character.activeScene) {
-    if (character.activeScene.scene_rules) {
-      characterContext += `\\nACTIVE SCENE RULES: ${character.activeScene.scene_rules}\\n`;
-    }
-    if (character.activeScene.scene_starters && character.activeScene.scene_starters.length > 0) {
-      characterContext += `\\nSCENE STARTERS - Use these to begin or continue:\\n`;
-      character.activeScene.scene_starters.forEach((starter: string, index: number) => {
-        characterContext += `Starter ${index + 1}: "${starter}"\\n`;
-      });
-    }
+  // Scene starters from request body (new architecture - scenes are character-agnostic)
+  if (sceneStarters && sceneStarters.length > 0) {
+    characterContext += `\\nSCENE STARTERS - Use these to begin or continue:\\n`;
+    sceneStarters.forEach((starter: string, index: number) => {
+      characterContext += `Starter ${index + 1}: "${starter}"\\n`;
+    });
+    console.log('✅ Applied scene starters from request body:', sceneStarters.length);
   }
   
   // Content tier instructions with stronger grounding
@@ -1508,7 +1517,7 @@ Remember: You ARE ${character.name}. Think, speak, and act as this character wou
 }
 
 // Build system prompt with template support and NSFW integration
-function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean, promptTemplate?: any): string {
+function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean, promptTemplate?: any, sceneStarters?: string[]): string {
   console.log('🔧 Building system prompt:', { 
     characterName: character.name,
     contentTier,
@@ -1577,11 +1586,13 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
       } else {
         systemPrompt += `\\n\\nSCENE BEHAVIOR: Act naturally in the current setting.\\n`;
       }
-      if (character.activeScene.scene_starters && character.activeScene.scene_starters.length > 0) {
+      // Scene starters now come from request body (new architecture - scenes are character-agnostic)
+      if (sceneStarters && sceneStarters.length > 0) {
         systemPrompt += `\\n\\nCONVERSATION STARTERS - Use these to begin or continue:\\n`;
-        character.activeScene.scene_starters.forEach((starter: string, index: number) => {
+        sceneStarters.forEach((starter: string, index: number) => {
           systemPrompt += `Starter ${index + 1}: "${starter}"\\n`;
         });
+        console.log('✅ Applied scene starters from request body to system prompt:', sceneStarters.length);
       }
     } else {
       systemPrompt += `\\n\\nSCENE BEHAVIOR: Act naturally in the current setting.\\n`;
@@ -1599,7 +1610,7 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
   } else {
     // Fallback to original method if no template
     console.log('⚠️ No prompt template provided, using fallback method');
-    const basePrompt = buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext, sceneSystemPrompt);
+    const basePrompt = buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext, sceneSystemPrompt, sceneStarters);
     systemPrompt = basePrompt;
     
     if (kickoff) {
@@ -3507,12 +3518,13 @@ async function loadCharacterWithVoice(supabase: any, characterId: string): Promi
   console.log('🔄 Loading fresh character data for:', characterId);
   
   try {
-    // Load character with associated scenes (only preset scenes)
+    // Load character with optional associated scenes (only preset scenes)
+    // Note: Using LEFT JOIN since scenes are now optional - scene data comes from request body
     const { data: character, error: characterError } = await supabase
       .from('characters')
       .select(`
         *,
-        character_scenes!inner(
+        character_scenes(
           scene_rules,
           scene_starters,
           system_prompt,
