@@ -55,7 +55,9 @@ const MobileSimplifiedWorkspace = () => {
     exactCopyMode,
     setExactCopyMode,
     setBeginningRefImage,
+    setBeginningRefImageUrl,
     setEndingRefImage,
+    setEndingRefImageUrl,
     generate,
     deleteItem,
     clearItem,
@@ -113,17 +115,20 @@ const MobileSimplifiedWorkspace = () => {
     switch (type) {
       case 'single':
         setReferenceImage(null);
+        setReferenceImageUrl(null);
         setReferenceMetadata(null);
         setExactCopyMode(false);
         break;
       case 'start':
         setBeginningRefImage(null);
+        setBeginningRefImageUrl(null);
         break;
       case 'end':
         setEndingRefImage(null);
+        setEndingRefImageUrl(null);
         break;
     }
-  }, [setReferenceImage, setBeginningRefImage, setEndingRefImage, setReferenceMetadata, setExactCopyMode]);
+  }, [setReferenceImage, setReferenceImageUrl, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, setReferenceMetadata, setExactCopyMode]);
 
   // DEBUG: Track reference image state changes
   useEffect(() => {

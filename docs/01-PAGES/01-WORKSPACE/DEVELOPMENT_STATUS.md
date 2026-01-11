@@ -431,6 +431,7 @@ supabase/functions/
 - **UX Generation:** [UX_GENERATION.md](./UX_GENERATION.md) - Generation workflow specifications
 - **UX Controls:** [UX_CONTROLS.md](./UX_CONTROLS.md) - Control panel specifications
 - **UX Reference:** [UX_REFERENCE.md](./UX_REFERENCE.md) - Reference image/I2I workflow specifications
+- **Seedream I2I:** [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - **NEW:** Comprehensive Seedream I2I reference image guide (v4 Edit, v4.5 Edit, exact copy mode, NSFW enhancement)
 - **Prompting System:** [docs/03-SYSTEMS/PROMPTING_SYSTEM.md](../03-SYSTEMS/PROMPTING_SYSTEM.md) - Model routing details
 
 ---

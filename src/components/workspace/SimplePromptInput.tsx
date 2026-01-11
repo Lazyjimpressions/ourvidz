@@ -190,7 +190,9 @@ const ReferenceImageUpload: React.FC<{
       }
     }
   };
-  const clearReference = () => {
+  const clearReference = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     // Clear both file and URL
     onFileChange(null);
     if (onImageUrlChange) {
@@ -213,7 +215,12 @@ const ReferenceImageUpload: React.FC<{
   return <div className={`border border-border/30 bg-muted/10 rounded ${sizeClass} transition-all duration-200 overflow-hidden ${isDragOver ? 'border-primary bg-primary/10' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
       {displayImage ? <div className="relative w-full h-full">
           <img src={displayImage} alt={label} className="w-full h-full object-cover" />
-          <button onClick={clearReference} className="absolute -top-0.5 -right-0.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full w-3 h-3 flex items-center justify-center text-[10px]">
+          <button 
+            onClick={clearReference} 
+            type="button"
+            className="absolute -top-1 -right-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold z-10 cursor-pointer"
+            title="Clear reference image"
+          >
             ×
           </button>
         </div> : <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-muted-foreground hover:text-foreground transition-colors bg-muted/20">

@@ -446,4 +446,5 @@ These controls are model-specific parameters and may not apply to all models:
 - [PURPOSE.md](./PURPOSE.md) - Business requirements
 - [UX_GENERATION.md](./UX_GENERATION.md) - Generation workflow spec
 - [UX_REFERENCE.md](./UX_REFERENCE.md) - Reference image/I2I spec
+- [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - **NEW:** Comprehensive Seedream I2I reference image guide (v4 Edit, v4.5 Edit, exact copy mode, NSFW enhancement)
 - [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md) - Implementation status
