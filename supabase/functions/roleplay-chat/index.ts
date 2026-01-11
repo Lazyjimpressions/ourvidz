@@ -2163,9 +2163,34 @@ async function generateScene(
         isFirstScene = true;
       }
     } else if (previousSceneId && !previousSceneImageUrl) {
-      // Scene ID provided but no image URL - likely scene not completed yet
-      console.warn('⚠️ Previous scene ID provided but no image URL - treating as first scene');
-      isFirstScene = true;
+      // ✅ FIX: Scene ID provided but no image URL - query database to get it
+      console.log('🔄 Previous scene ID provided but no image URL - querying database...');
+      try {
+        const { data: prevScene, error: prevSceneError } = await supabase
+          .from('character_scenes')
+          .select('id, image_url')
+          .eq('id', previousSceneId)
+          .not('image_url', 'is', null)
+          .single();
+        
+        if (!prevSceneError && prevScene && prevScene.image_url) {
+          isFirstScene = false;
+          verifiedPreviousSceneImageUrl = prevScene.image_url;
+          console.log('✅ Previous scene image URL retrieved from database:', {
+            scene_id: previousSceneId,
+            has_image: !!prevScene.image_url
+          });
+        } else {
+          console.warn('⚠️ Previous scene ID provided but scene not found or missing image in database:', {
+            scene_id: previousSceneId,
+            error: prevSceneError?.message
+          });
+          isFirstScene = true; // Treat as first scene if previous scene doesn't exist or has no image
+        }
+      } catch (error) {
+        console.warn('⚠️ Error querying database for previous scene:', error);
+        isFirstScene = true;
+      }
     } else if (!previousSceneId && previousSceneImageUrl) {
       // Image URL provided but no scene ID - use the URL but log warning
       console.warn('⚠️ Previous scene image URL provided but no scene ID - using URL but treating as first scene for tracking');

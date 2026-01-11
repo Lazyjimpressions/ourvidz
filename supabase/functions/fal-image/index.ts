@@ -1299,16 +1299,22 @@ serve(async (req) => {
       if ((body.metadata?.destination === 'character_scene' || body.metadata?.destination === 'roleplay_scene') && body.metadata?.scene_id) {
         console.log('🎬 Updating character scene for:', body.metadata.scene_id, '(destination:', body.metadata.destination, ')');
 
+        // ✅ FIX: Get user_id from auth header (like character images) - user is already available from line 124
+        if (!user?.id) {
+          console.error('❌ No user available for scene auto-save');
+        }
+
         // ✅ FIX: Use persistent library path for character_scenes instead of workspace-temp
-        // First, save to library, then update character_scenes with library path
+        // Auto-save to library first (same pattern as character images), then update character_scenes
         let persistentScenePath = storagePath.startsWith('http') ? storagePath : null;
+        let libraryDestKey: string | null = null;
         
-        if (!persistentScenePath && !storagePath.startsWith('http')) {
-          // Copy to user-library for persistence
+        if (!persistentScenePath && !storagePath.startsWith('http') && user?.id) {
+          // Copy to user-library for persistence (same as character images)
           const sourceKey = storagePath.startsWith('workspace-temp/') 
-            ? storagePath 
-            : `workspace-temp/${storagePath}`;
-          const destKey = `user-library/${body.metadata.user_id}/scenes/${body.metadata.scene_id}_${Date.now()}.png`;
+            ? storagePath.replace('workspace-temp/', '')
+            : storagePath;
+          libraryDestKey = `${user.id}/scenes/${body.metadata.scene_id}_${Date.now()}.png`;
           
           try {
             const { data: fileData, error: downloadError } = await supabase.storage
@@ -1318,15 +1324,54 @@ serve(async (req) => {
             if (!downloadError && fileData) {
               const { error: uploadError } = await supabase.storage
                 .from('user-library')
-                .upload(destKey, fileData, {
+                .upload(libraryDestKey, fileData, {
                   contentType: 'image/png',
                   upsert: true
                 });
               
               if (!uploadError) {
-                persistentScenePath = `user-library/${destKey}`;
+                persistentScenePath = `user-library/${libraryDestKey}`;
                 console.log('✅ Scene saved to persistent library path:', persistentScenePath);
+                
+                // ✅ FIX: Create library record immediately (like character images)
+                const { data: libraryAsset, error: libraryError } = await supabase
+                  .from('user_library')
+                  .insert({
+                    user_id: user.id,
+                    asset_type: 'image',
+                    storage_path: libraryDestKey,
+                    thumbnail_path: null,
+                    file_size_bytes: fileSizeBytes || 0,
+                    mime_type: 'image/png',
+                    original_prompt: body.metadata?.original_scene_prompt || body.prompt,
+                    model_used: modelKey,
+                    generation_seed: generationSeed,
+                    width: falResult.images?.[0]?.width || falResult.width || 1024,
+                    height: falResult.images?.[0]?.height || falResult.height || 1024,
+                    tags: ['scene', 'roleplay'],
+                    roleplay_metadata: {
+                      type: 'roleplay_scene',
+                      scene_id: body.metadata.scene_id,
+                      character_id: body.metadata.character_id,
+                      character_name: body.metadata.character_name,
+                      conversation_id: body.metadata.conversation_id,
+                      generation_mode: body.metadata.generation_mode || 't2i'
+                    },
+                    content_category: 'scene'
+                  })
+                  .select()
+                  .single();
+                
+                if (!libraryError && libraryAsset) {
+                  console.log('✅ Scene saved to library:', libraryAsset.id);
+                } else {
+                  console.error('❌ Failed to create library record:', libraryError);
+                }
+              } else {
+                console.error('❌ Failed to upload scene to library:', uploadError);
               }
+            } else {
+              console.error('❌ Failed to download scene from workspace-temp:', downloadError);
             }
           } catch (error) {
             console.error('❌ Error copying scene to library:', error);
@@ -1365,77 +1410,6 @@ serve(async (req) => {
             scene_id: body.metadata.scene_id,
             image_url: sceneImagePath.substring(0, 60) + '...'
           });
-        }
-
-        // ✅ FIX 6.1: Auto-save roleplay scene to library (similar to character portraits)
-        if (!storagePath.startsWith('http')) {
-          console.log('🎬 Auto-saving scene to library:', body.metadata.scene_id);
-          
-          // Copy scene image from workspace-temp to user-library
-          const sourceKey = storagePath.startsWith('workspace-temp/') 
-            ? storagePath 
-            : `workspace-temp/${storagePath}`;
-          const destKey = `user-library/${body.metadata.user_id}/${body.metadata.scene_id}_${Date.now()}.png`;
-          
-          try {
-            // Download from workspace-temp
-            const { data: fileData, error: downloadError } = await supabase.storage
-              .from('workspace-temp')
-              .download(sourceKey);
-            
-            if (!downloadError && fileData) {
-              // Upload to user-library
-              const { error: uploadError } = await supabase.storage
-                .from('user-library')
-                .upload(destKey, fileData, {
-                  contentType: 'image/png',
-                  upsert: true
-                });
-              
-              if (!uploadError) {
-                // Create library record with roleplay metadata
-                const { data: libraryAsset, error: libraryError } = await supabase
-                  .from('user_library')
-                  .insert({
-                    user_id: body.metadata.user_id,
-                    asset_type: 'image',
-                    storage_path: destKey,
-                    thumbnail_path: null,
-                    file_size_bytes: fileSizeBytes || 0,
-                    mime_type: 'image/png',
-                    original_prompt: body.metadata?.original_scene_prompt || body.prompt,
-                    model_used: modelKey,
-                    generation_seed: generationSeed,
-                    width: falResult.images?.[0]?.width || falResult.width || 1024,
-                    height: falResult.images?.[0]?.height || falResult.height || 1024,
-                    tags: ['scene', 'roleplay'],
-                    roleplay_metadata: {
-                      type: 'roleplay_scene',
-                      scene_id: body.metadata.scene_id,
-                      character_id: body.metadata.character_id,
-                      character_name: body.metadata.character_name,
-                      conversation_id: body.metadata.conversation_id,
-                      generation_mode: body.metadata.generation_mode || 't2i'
-                    },
-                    content_category: 'scene'
-                  })
-                  .select()
-                  .single();
-                
-                if (!libraryError && libraryAsset) {
-                  console.log('✅ Scene saved to library:', libraryAsset.id);
-                } else {
-                  console.error('❌ Failed to create library record:', libraryError);
-                }
-              } else {
-                console.error('❌ Failed to upload scene to library:', uploadError);
-              }
-            } else {
-              console.error('❌ Failed to download scene from workspace-temp:', downloadError);
-            }
-          } catch (error) {
-            console.error('❌ Error auto-saving scene to library:', error);
-          }
         }
       }
 
