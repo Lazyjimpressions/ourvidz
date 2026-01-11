@@ -168,41 +168,70 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('nsfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('high');
   // Model Type Selection
-  const initializeSelectedModel = (): { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } => {
-    // Check localStorage for full model object (new format)
-    const savedModel = localStorage.getItem('workspace-selected-model');
-    if (savedModel) {
-      try {
-        const parsed = JSON.parse(savedModel);
-        if (parsed.id && parsed.type && parsed.display_name) {
-          return parsed;
-        }
-      } catch (e) {
-        console.warn('Failed to parse saved model, using default');
-      }
-    }
-
-    // Check old format for backwards compatibility
-    const saved = localStorage.getItem('workspace-model-type');
-    if (saved === 'replicate_rv51') {
-      // Legacy - will be upgraded by components that have access to real models
-      return { id: 'legacy-rv51', type: 'replicate', display_name: 'RV5.1' };
-    } else if (saved === 'sdxl') {
-      return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
-    }
-    
-    // Default to SDXL
-    return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
-  };
+  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string; model_key?: string }>({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
   
-  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string }>(() => {
-    try {
-      return initializeSelectedModel();
-    } catch (error) {
-      console.error('Failed to initialize selectedModel, using default:', error);
-      return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
-    }
-  });
+  // Load default model on mount
+  useEffect(() => {
+    const initializeSelectedModel = async () => {
+      // Check localStorage for full model object (new format)
+      const savedModel = localStorage.getItem('workspace-selected-model');
+      if (savedModel) {
+        try {
+          const parsed = JSON.parse(savedModel);
+          if (parsed.id && parsed.type && parsed.display_name) {
+            setSelectedModelInternal(parsed);
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse saved model, using default');
+        }
+      }
+
+      // Check old format for backwards compatibility
+      const saved = localStorage.getItem('workspace-model-type');
+      if (saved === 'replicate_rv51') {
+        // Legacy - will be upgraded by components that have access to real models
+        setSelectedModelInternal({ id: 'legacy-rv51', type: 'replicate', display_name: 'RV5.1' });
+        return;
+      } else if (saved === 'sdxl') {
+        setSelectedModelInternal({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
+        return;
+      }
+      
+      // Load default model from api_models table (non-local, is_default=true)
+      try {
+        const { data: defaultModel, error } = await supabase
+          .from('api_models')
+          .select('id, model_key, display_name, api_providers!inner(name)')
+          .eq('modality', 'image')
+          .eq('is_active', true)
+          .eq('is_default', true)
+          .order('priority', { ascending: true })
+          .limit(1)
+          .single();
+        
+        if (!error && defaultModel) {
+          const providerName = (defaultModel.api_providers as any)?.name || '';
+          const modelType = providerName === 'replicate' ? 'replicate' : 
+                           providerName === 'fal' ? 'fal' : 'sdxl';
+          setSelectedModelInternal({
+            id: defaultModel.id,
+            type: modelType,
+            display_name: defaultModel.display_name,
+            model_key: defaultModel.model_key
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not load default model from database:', err);
+      }
+      
+      // Fallback to SDXL if database query fails
+      setSelectedModelInternal({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
+    };
+    
+    initializeSelectedModel();
+  }, []);
   
   // Video-specific State
   const [beginningRefImage, setBeginningRefImage] = useState<File | null>(null);
@@ -271,15 +300,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           
           if (!error && modelData) {
             const capabilities = modelData.capabilities as any;
-              // Check if model supports I2I
+              // Check if model supports I2I using capabilities (no hard-coded checks)
               modelSupportsI2I = capabilities?.supports_i2i === true || 
-                                    capabilities?.reference_images === true ||
-                                    // Seedream edit models always support I2I
-                                    (modelData.model_key?.toLowerCase().includes('seedream') && 
-                                     modelData.model_key?.toLowerCase().includes('edit')) ||
-                                    // Also check display name for Seedream edit
-                                    (newModel.display_name?.toLowerCase().includes('seedream') && 
-                                     newModel.display_name?.toLowerCase().includes('edit'));
+                                    capabilities?.reference_images === true;
               
               console.log('🔍 Model I2I support check:', {
                 modelId: newModel.id,
@@ -292,29 +315,17 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         }
         
         // If model doesn't support I2I and we have a reference image, clear it
-        // BUT: Don't clear if this is clearly an I2I model (Seedream edit, etc.)
-        const isClearlyI2IModel = newModel.display_name?.toLowerCase().includes('edit') || 
-                                  newModel.display_name?.toLowerCase().includes('seedream') ||
-                                  newModel.id?.toLowerCase().includes('seedream');
-        
-        if (!modelSupportsI2I && !isClearlyI2IModel && (referenceImage || referenceImageUrl)) {
+        if (!modelSupportsI2I && (referenceImage || referenceImageUrl)) {
           console.log('🧹 Clearing reference image - selected model does not support I2I');
           setReferenceImage(null);
           setReferenceImageUrl(null);
           setReferenceMetadata(null);
           setExactCopyMode(false);
-        } else if (isClearlyI2IModel && !modelSupportsI2I) {
-          // Model looks like I2I but database check failed - keep the reference image anyway
-          console.warn('⚠️ Model appears to be I2I but database check failed - keeping reference image');
         }
       } catch (err) {
         console.warn('⚠️ Could not check model capabilities:', err);
-        // On error, DON'T clear reference image if model name suggests it's I2I
-        const isClearlyI2IModel = newModel.display_name?.toLowerCase().includes('edit') || 
-                                  newModel.display_name?.toLowerCase().includes('seedream') ||
-                                  newModel.id?.toLowerCase().includes('seedream');
-        
-        if (!isClearlyI2IModel && (referenceImage || referenceImageUrl)) {
+        // On error, clear reference image to be safe (assume T2I)
+        if (referenceImage || referenceImageUrl) {
           console.log('🧹 Clearing reference image - error checking model capabilities, assuming T2I');
           setReferenceImage(null);
           setReferenceImageUrl(null);
@@ -827,6 +838,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
       // Use the already computed reference strength from above
 
+      // Fetch model_key from database if we have a model ID (for API models)
+      let modelKey: string | undefined = selectedModel?.model_key;
+      if (!modelKey && selectedModel?.id && selectedModel.id !== 'sdxl') {
+        try {
+          const { data: modelData } = await supabase
+            .from('api_models')
+            .select('model_key')
+            .eq('id', selectedModel.id)
+            .single();
+          if (modelData) {
+            modelKey = modelData.model_key;
+          }
+        } catch (err) {
+          console.warn('⚠️ Could not fetch model_key:', err);
+        }
+      }
+      
       const generationRequest = {
         job_type: (mode === 'image'
           ? (selectedModel?.type === 'replicate'
@@ -844,6 +872,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         model_type: mode === 'image'
           ? (selectedModel?.type === 'replicate' ? 'rv51' : selectedModel?.type === 'fal' ? 'sdxl' : 'sdxl')
           : (selectedModel?.type === 'fal' ? 'sdxl' : 'wan'),
+        // Pass model_key for template lookup (preferred) or model_id as fallback
+        model_key: modelKey || selectedModel?.id,
+        model_id: selectedModel?.id,
         reference_image_url: effRefUrl,
         reference_strength: computedReferenceStrength,
         seed: finalSeed,
@@ -1080,14 +1111,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               .single();
             
             if (modelData) {
-              const modelKey = (modelData.model_key || '').toLowerCase();
-              isWanI2V = modelKey.includes('wan-i2v') || modelKey.includes('wan/v2.1');
-              
-              // Also check capabilities for reference_mode
+              // Check capabilities for I2V support (no hard-coded model key checks)
               const capabilities = modelData.capabilities as any;
-              if (capabilities?.video?.reference_mode === 'single') {
-                isWanI2V = true;
-              }
+              isWanI2V = capabilities?.supports_i2v === true || 
+                         capabilities?.video?.reference_mode === 'single' ||
+                         modelData.modality === 'video';
             }
           } catch (err) {
             console.warn('⚠️ Could not check model type, assuming non-WAN i2v');

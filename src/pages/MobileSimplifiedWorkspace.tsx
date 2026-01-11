@@ -153,16 +153,20 @@ const MobileSimplifiedWorkspace = () => {
       referenceImageUrlPreview: referenceImageUrl ? `${referenceImageUrl.substring(0, 50)}...` : 'none'
     });
     
-    // CRITICAL: Check if this is an I2I-capable model
-    // Seedream edit models require a reference image
-    // Check both model ID and display name for Seedream edit models
-    const modelIdLower = (selectedModel?.id || '').toLowerCase();
-    const modelDisplayNameLower = (selectedModel?.display_name || '').toLowerCase();
-    const isI2IModel = selectedModel?.type === 'fal' && 
-                       mode === 'image' && 
-                       (modelIdLower.includes('seedream') || 
-                        modelDisplayNameLower.includes('seedream') ||
-                        modelDisplayNameLower.includes('edit'));
+    // CRITICAL: Check if this is an I2I-capable model using capabilities (no hard-coded checks)
+    // Query model capabilities from database or use from imageModels hook
+    let isI2IModel = false;
+    if (selectedModel?.id && selectedModel.id !== 'sdxl') {
+      // For API models, check capabilities from imageModels hook
+      const modelData = imageModels?.find(m => m.id === selectedModel.id);
+      if (modelData?.capabilities) {
+        isI2IModel = modelData.capabilities.supports_i2i === true || 
+                     modelData.capabilities.reference_images === true;
+      }
+    } else if (selectedModel?.id === 'sdxl') {
+      // Local SDXL always supports I2I
+      isI2IModel = true;
+    }
     
     console.log('🔍 MOBILE WORKSPACE: I2I model detection:', {
       selectedModelId: selectedModel?.id,

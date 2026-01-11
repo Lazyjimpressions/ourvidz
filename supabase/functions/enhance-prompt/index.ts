@@ -545,9 +545,36 @@ class DynamicEnhancementOrchestrator {
       const contentMode = request.contentType || await this.detectContentMode(request.prompt)
       console.log('🔍 Content mode:', request.contentType ? `user-provided: ${contentMode}` : `auto-detected: ${contentMode}`)
 
-      // Get model type from job type
-      const modelType = this.getModelTypeFromJobType(request.job_type)
-      console.log('🤖 Model type selected:', modelType)
+      // Get model_key from request (preferred) or query from model_id, fallback to getModelTypeFromJobType
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      );
+      
+      let modelKey: string | null = null;
+      if (request.model_key) {
+        modelKey = request.model_key;
+        console.log('✅ Using model_key from request:', modelKey);
+      } else if (request.model_id) {
+        // Query model_key from database using model_id
+        try {
+          const { data: modelData, error: modelError } = await supabase
+            .from('api_models')
+            .select('model_key')
+            .eq('id', request.model_id)
+            .single();
+          if (!modelError && modelData?.model_key) {
+            modelKey = modelData.model_key;
+            console.log('✅ Fetched model_key from database:', modelKey);
+          }
+        } catch (err) {
+          console.warn('⚠️ Could not fetch model_key from model_id:', err);
+        }
+      }
+      
+      // Fallback to getModelTypeFromJobType if model_key not available
+      const modelType = modelKey || this.getModelTypeFromJobType(request.job_type);
+      console.log('🤖 Model type selected:', modelType, modelKey ? '(from model_key)' : '(from job_type fallback)')
 
       // Try cache first, then database fallback using 5-tuple
       let enhancementResult
@@ -671,8 +698,9 @@ class DynamicEnhancementOrchestrator {
       }
 
       // Apply model-specific token optimization with UI control consideration
-      const modelType = this.getModelTypeFromJobType(request.job_type)
-      const optimized = this.optimizeTokens(result.enhanced_prompt, modelType, adjustedTokenLimit)
+      // Use model_key from request if available, otherwise fallback to job_type mapping
+      const modelTypeForOptimization = request.model_key || this.getModelTypeFromJobType(request.job_type);
+      const optimized = this.optimizeTokens(result.enhanced_prompt, modelTypeForOptimization, adjustedTokenLimit)
 
       return {
         enhanced_prompt: optimized.enhanced_prompt,

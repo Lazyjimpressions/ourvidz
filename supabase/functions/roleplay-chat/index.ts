@@ -2980,8 +2980,34 @@ const sceneContext = analyzeSceneContent(response);
           const effectiveDenoiseStrength = consistencySettings?.denoise_strength;
 
           if (generationMode === 'modification' && effectiveReferenceImageUrl) {
-            // Modification mode: Use Seedream v4.5/edit with CURRENT scene as reference
-            i2iModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
+            // Modification mode: Use default I2I model with CURRENT scene as reference
+            // Query for default I2I model from database
+            const { data: defaultI2IModel } = await supabase
+              .from('api_models')
+              .select('model_key')
+              .eq('modality', 'image')
+              .eq('is_active', true)
+              .eq('is_default', true)
+              .contains('capabilities', { supports_i2i: true })
+              .order('priority', { ascending: true })
+              .limit(1)
+              .single();
+            
+            if (defaultI2IModel?.model_key) {
+              i2iModelOverride = defaultI2IModel.model_key;
+            } else {
+              // Fallback: query for any I2I-capable model
+              const { data: anyI2IModel } = await supabase
+                .from('api_models')
+                .select('model_key')
+                .eq('modality', 'image')
+                .eq('is_active', true)
+                .contains('capabilities', { supports_i2i: true })
+                .order('priority', { ascending: true })
+                .limit(1)
+                .single();
+              i2iModelOverride = anyI2IModel?.model_key || null;
+            }
             i2iReferenceImage = effectiveReferenceImageUrl; // Current scene image
             i2iStrength = effectiveDenoiseStrength ?? 0.5; // Use override or default for modifications
             console.log('🔧 Modification Mode: Using Seedream v4.5/edit with current scene', {
@@ -2989,9 +3015,37 @@ const sceneContext = analyzeSceneContent(response);
               strength_source: effectiveDenoiseStrength ? 'user_override' : 'default'
             });
           } else if (useI2IIteration && effectiveReferenceImageUrl) {
-            // ✅ I2I continuation mode: Use Seedream v4.5/edit with previous scene as reference
+            // ✅ I2I continuation mode: Use default I2I model with previous scene as reference
             // This block only executes if effectiveReferenceImageUrl is valid (enforced in mode detection)
-            i2iModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit'; // Override to Seedream edit model
+            // Query for default I2I model from database (reuse same logic as modification mode)
+            if (!i2iModelOverride) {
+              const { data: defaultI2IModel } = await supabase
+                .from('api_models')
+                .select('model_key')
+                .eq('modality', 'image')
+                .eq('is_active', true)
+                .eq('is_default', true)
+                .contains('capabilities', { supports_i2i: true })
+                .order('priority', { ascending: true })
+                .limit(1)
+                .single();
+              
+              if (defaultI2IModel?.model_key) {
+                i2iModelOverride = defaultI2IModel.model_key;
+              } else {
+                // Fallback: query for any I2I-capable model
+                const { data: anyI2IModel } = await supabase
+                  .from('api_models')
+                  .select('model_key')
+                  .eq('modality', 'image')
+                  .eq('is_active', true)
+                  .contains('capabilities', { supports_i2i: true })
+                  .order('priority', { ascending: true })
+                  .limit(1)
+                  .single();
+                i2iModelOverride = anyI2IModel?.model_key || null;
+              }
+            }
             i2iReferenceImage = effectiveReferenceImageUrl;
             i2iStrength = effectiveDenoiseStrength ?? 0.45; // Use override or default for scene-to-scene continuity
             console.log('🔄 I2I Iteration Mode: Using Seedream v4.5/edit with previous scene', {
@@ -3050,7 +3104,7 @@ const sceneContext = analyzeSceneContent(response);
               scene_type: 'chat_scene',
               consistency_method: finalConsistencyMethod,
               model_used: i2iModelOverride || modelConfig.model_key,
-              model_display_name: i2iModelOverride ? 'Seedream v4.5 Edit (I2I)' : modelConfig.display_name,
+              model_display_name: i2iModelOverride ? `${i2iModelOverride} (I2I)` : modelConfig.display_name,
               selected_image_model: selectedImageModel || null,
               effective_image_model: effectiveImageModel,
               provider_name: providerName,

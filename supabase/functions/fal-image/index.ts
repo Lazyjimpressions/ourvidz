@@ -292,8 +292,10 @@ serve(async (req) => {
     const hasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url);
     const generationMode = hasReferenceImage ? (isVideo ? 'i2v' : 'i2i') : (isVideo ? 'txt2vid' : 'txt2img');
     
-    // Check if this is WAN 2.1 i2v model (requires reference image)
-    const isWanI2V = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+    // Check capabilities from database (no hard-coded checks)
+    const capabilities = apiModel.capabilities || {};
+    const isWanI2V = capabilities?.supports_i2v === true || modelModality === 'video' || body.metadata?.is_wan_i2v === true;
+    const supportsI2I = capabilities?.supports_i2i === true || capabilities?.reference_images === true;
     
     // Validate reference image for WAN 2.1 i2v
     if (isVideo && isWanI2V && !hasReferenceImage) {
@@ -463,25 +465,40 @@ serve(async (req) => {
           );
         }
 
-        // Seedream edit models (v4/edit, v4.5/edit) require image_urls (plural, array)
-        // Other models use image_url (singular, string)
-        // ✅ I2I ITERATION: Use modelKey (potentially overridden) for detection
-        const modelKeyLowerForI2I = (modelKey || '').toLowerCase();
-        const isSeedreamEditForI2I = modelKeyLowerForI2I.includes('seedream') && modelKeyLowerForI2I.includes('edit');
+        // Check if model requires image_urls (array) vs image_url (string) based on capabilities
+        // Query model capabilities to determine parameter format (no hard-coded checks)
+        let requiresImageUrlsArray = false;
+        if (modelKeyOverride) {
+          // If model is overridden, query the override model's capabilities
+          const { data: overrideModel } = await supabase
+            .from('api_models')
+            .select('capabilities')
+            .eq('model_key', modelKeyOverride)
+            .single();
+          if (overrideModel?.capabilities) {
+            const overrideCaps = overrideModel.capabilities as any;
+            // Check if model requires image_urls array (typically Seedream edit models)
+            requiresImageUrlsArray = overrideCaps?.requires_image_urls_array === true || 
+                                     (overrideCaps?.supports_i2i === true && modelKeyOverride.includes('edit'));
+          }
+        } else {
+          // Use current model's capabilities
+          requiresImageUrlsArray = capabilities?.requires_image_urls_array === true ||
+                                   (supportsI2I && modelKey.includes('edit'));
+        }
 
         console.log('🔍 I2I parameter detection:', {
           model_key: modelKey,
-          model_key_lower: modelKeyLowerForI2I,
           is_overridden: isModelOverridden,
-          is_seedream_edit: isSeedreamEditForI2I,
-          will_use_image_urls: isSeedreamEditForI2I
+          requires_image_urls_array: requiresImageUrlsArray,
+          supports_i2i: supportsI2I
         });
 
-        if (isSeedreamEditForI2I) {
+        if (requiresImageUrlsArray) {
           modelInput.image_urls = [finalImageUrl];
           // Remove image_url if it was set by input_defaults
           delete modelInput.image_url;
-          console.log(`✅ I2I image_urls (array) set for Seedream edit model: ${finalImageUrl.substring(0, 60)}...`);
+          console.log(`✅ I2I image_urls (array) set: ${finalImageUrl.substring(0, 60)}...`);
         } else {
           modelInput.image_url = finalImageUrl;
           // Remove image_urls if it was set by input_defaults
@@ -491,7 +508,6 @@ serve(async (req) => {
 
         // Strength for i2i (default to 0.5 if not provided for modify mode)
         // Skip strength for WAN 2.1 i2v - it doesn't use this parameter
-        const isWanI2VForStrength = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
         if (!isWanI2VForStrength) {
           if (body.input?.strength !== undefined) {
             modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
@@ -506,7 +522,7 @@ serve(async (req) => {
     // Apply user input overrides
     if (body.input) {
       // Image size (skip for WAN 2.1 i2v - it uses aspect_ratio instead)
-      const isWanI2VCheck = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+      // Use capabilities check (already computed above)
       if (!isWanI2VCheck) {
         if (body.input.image_size) {
           modelInput.image_size = body.input.image_size;
@@ -517,7 +533,7 @@ serve(async (req) => {
 
       // Steps / inference steps (only set for non-WAN i2v or if explicitly provided for WAN)
       if (body.input.num_inference_steps !== undefined) {
-        if (isWanI2VCheck) {
+        if (isWanI2V) {
           // For WAN 2.1 i2v, only set if explicitly provided (default is 30)
           modelInput.num_inference_steps = Math.min(Math.max(body.input.num_inference_steps, 1), 50);
         } else {
@@ -526,7 +542,7 @@ serve(async (req) => {
       }
 
       // Guidance scale (skip for WAN 2.1 i2v - it uses guide_scale instead)
-      if (!isWanI2VCheck && body.input.guidance_scale !== undefined) {
+      if (!isWanI2V && body.input.guidance_scale !== undefined) {
         modelInput.guidance_scale = Math.min(Math.max(body.input.guidance_scale, 1), 20);
       }
 
@@ -712,20 +728,32 @@ serve(async (req) => {
       }
     }
 
-    // Final check: For Seedream edit models, ensure image_urls is set and image_url is removed
+    // Final check: For models that require image_urls array, ensure it's set and image_url is removed
     // This MUST run before sending to fal.ai API
-    // ✅ I2I ITERATION: Use modelKey (potentially overridden) for detection
-    const modelKeyLowerFinal = (modelKey || '').toLowerCase();
-    const isSeedreamEditFinal = modelKeyLowerFinal.includes('seedream') && modelKeyLowerFinal.includes('edit');
+    // Use capabilities check (no hard-coded model name checks)
+    let requiresImageUrlsArrayFinal = requiresImageUrlsArray;
+    if (modelKeyOverride && !requiresImageUrlsArrayFinal) {
+      // Re-check override model if needed
+      const { data: overrideModel } = await supabase
+        .from('api_models')
+        .select('capabilities')
+        .eq('model_key', modelKeyOverride)
+        .single();
+      if (overrideModel?.capabilities) {
+        const overrideCaps = overrideModel.capabilities as any;
+        requiresImageUrlsArrayFinal = overrideCaps?.requires_image_urls_array === true || 
+                                       (overrideCaps?.supports_i2i === true && modelKeyOverride.includes('edit'));
+      }
+    }
 
     // Re-check hasReferenceImage from request body (in case it wasn't detected earlier)
     const finalHasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
 
     console.log('🔍 FINAL CHECK - Model detection:', {
       model_key: modelKey,
-      model_key_lower: modelKeyLowerFinal,
       is_overridden: isModelOverridden,
-      is_seedream_edit: isSeedreamEditFinal,
+      requires_image_urls_array: requiresImageUrlsArrayFinal,
+      supports_i2i: supportsI2I,
       has_reference_image: hasReferenceImage,
       final_has_reference_image: finalHasReferenceImage,
       body_input_image_url: body.input?.image_url ? 'present' : 'missing',
@@ -736,8 +764,8 @@ serve(async (req) => {
       current_image_urls: modelInput.image_urls ? `present (${Array.isArray(modelInput.image_urls) ? modelInput.image_urls.length : 'not array'})` : 'missing'
     });
 
-    // For Seedream edit models, ALWAYS check if we need to set image_urls
-    if (isSeedreamEditFinal && finalHasReferenceImage) {
+    // For models requiring image_urls array, ALWAYS check if we need to set it
+    if (requiresImageUrlsArrayFinal && finalHasReferenceImage) {
       // Try to get the image URL from any source
       let imageUrlToUse = modelInput.image_url || 
                           body.input?.image_url || 
@@ -768,13 +796,13 @@ serve(async (req) => {
         }
         
         modelInput.image_urls = [imageUrlToUse];
-        console.log('🔄 FINAL CHECK: Set image_urls for Seedream edit model from request body');
+        console.log('🔄 FINAL CHECK: Set image_urls array from request body');
       }
       
-      // Always remove image_url for Seedream edit models
+      // Always remove image_url for models requiring image_urls array
       if (modelInput.image_url) {
         delete modelInput.image_url;
-        console.log('🗑️ FINAL CHECK: Removed image_url for Seedream edit model');
+        console.log('🗑️ FINAL CHECK: Removed image_url (model requires image_urls array)');
       }
       
       // Ensure image_urls is an array
@@ -785,16 +813,16 @@ serve(async (req) => {
       
       // CRITICAL: If image_urls is still missing, this is an error
       if (!modelInput.image_urls || !Array.isArray(modelInput.image_urls) || modelInput.image_urls.length === 0) {
-        console.error('❌ FINAL CHECK: Seedream edit model requires image_urls but it is missing!');
+        console.error('❌ FINAL CHECK: Model requires image_urls array but it is missing!');
         return new Response(
           JSON.stringify({ 
-            error: 'Seedream edit models require image_urls (array)',
+            error: 'Model requires image_urls (array)',
             details: 'Please provide a reference image URL in input.image_url, input.image, metadata.referenceImage, or metadata.reference_image_url'
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
-    } else if (!isSeedreamEditFinal && finalHasReferenceImage) {
+    } else if (!requiresImageUrlsArrayFinal && finalHasReferenceImage) {
       // For non-Seedream models, ensure image_url is set and image_urls is removed
       if (!modelInput.image_url && modelInput.image_urls && Array.isArray(modelInput.image_urls) && modelInput.image_urls.length > 0) {
         modelInput.image_url = modelInput.image_urls[0];
@@ -814,7 +842,8 @@ serve(async (req) => {
     });
 
     // FINAL VALIDATION: WAN 2.1 i2v parameter validation
-    const finalIsWanI2V = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+    // Use already computed isWanI2V from capabilities (no need to recompute)
+    const finalIsWanI2V = isWanI2V;
     if (isVideo && finalIsWanI2V) {
       // Validate required image_url
       if (!modelInput.image_url) {
@@ -852,7 +881,7 @@ serve(async (req) => {
     console.log('🔧 fal.ai input configuration (FINAL):', {
       model_key: modelKey,
       is_overridden: isModelOverridden,
-      is_seedream_edit: isSeedreamEditFinal,
+      requires_image_urls_array: requiresImageUrlsArrayFinal,
       is_wan_i2v: finalIsWanI2V,
       has_reference_image: hasReferenceImage,
       // Mask sensitive URLs in logs
