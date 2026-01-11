@@ -176,13 +176,30 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
           const ttl = isUserLibrary ? 86400 : 3600;
 
           try {
-            const { data: signedData } = await supabase.storage
+            const { data: signedData, error: signError } = await supabase.storage
               .from(bucket)
               .createSignedUrl(conv.last_scene_image, ttl);
+            
+            if (signError) {
+              // If file doesn't exist (400 error), clear the scene image reference
+              if (signError.statusCode === 400 || signError.message?.includes('not found')) {
+                console.warn(`⚠️ Scene image not found for conversation ${conv.id}, clearing reference`);
+                // Optionally update the conversation to clear last_scene_image
+                // For now, just return without the image
+                return { ...conv, last_scene_image: null };
+              }
+              throw signError;
+            }
+            
             if (signedData?.signedUrl) {
               return { ...conv, last_scene_image: signedData.signedUrl };
             }
-          } catch (err) {
+          } catch (err: any) {
+            // Handle 400 errors gracefully (file doesn't exist)
+            if (err?.statusCode === 400 || err?.message?.includes('not found')) {
+              console.warn(`⚠️ Scene image not found for conversation ${conv.id}, clearing reference`);
+              return { ...conv, last_scene_image: null };
+            }
             console.error(`Failed to sign URL for conversation ${conv.id} from ${bucket}:`, err);
           }
 

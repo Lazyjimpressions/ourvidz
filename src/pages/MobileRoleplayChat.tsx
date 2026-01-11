@@ -848,6 +848,17 @@ const MobileRoleplayChat: React.FC = () => {
         };
         setMessages([openerMessage]);
 
+        // ✅ FIX: Start subscription for kickoff scene generation job
+        if (data.scene_job_id) {
+          console.log('🎬 Starting subscription for kickoff scene job:', { 
+            jobId: data.scene_job_id, 
+            messageId: openerMessage.id 
+          });
+          subscribeToJobCompletion(data.scene_job_id, openerMessage.id);
+        } else {
+          console.log('⚠️ No scene_job_id in kickoff response - scene generation may have been skipped');
+        }
+
       } catch (error) {
         console.error('Error initializing conversation:', error);
         setKickoffError(error.message || 'Failed to start conversation');
@@ -1763,9 +1774,24 @@ const MobileRoleplayChat: React.FC = () => {
         id: data.message_id || Date.now().toString(),
         content: data.response || `Hello! I'm ${character.name}.`,
         sender: 'character',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        metadata: {
+          scene_generated: data.scene_generated || false,
+          job_id: data.scene_job_id || undefined,
+          scene_id: data.scene_id || undefined,
+          usedFallback: data.usedFallback || false
+        }
       };
       setMessages([openerMessage]);
+
+      // ✅ FIX: Start subscription for kickoff retry scene generation job
+      if (data.scene_job_id) {
+        console.log('🎬 Starting subscription for kickoff retry scene job:', { 
+          jobId: data.scene_job_id, 
+          messageId: openerMessage.id 
+        });
+        subscribeToJobCompletion(data.scene_job_id, openerMessage.id);
+      }
     } catch (error: any) {
       console.error('Retry kickoff error:', error);
       setKickoffError(error.message || 'Failed to retry');
@@ -1897,9 +1923,24 @@ const MobileRoleplayChat: React.FC = () => {
         id: data.message_id || Date.now().toString(),
         content: data.response || `Hello! I'm ${character.name}.`,
         sender: 'character',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        metadata: {
+          scene_generated: data.scene_generated || false,
+          job_id: data.scene_job_id || undefined,
+          scene_id: data.scene_id || undefined,
+          usedFallback: data.usedFallback || false
+        }
       };
       setMessages([openerMessage]);
+
+      // ✅ FIX: Start subscription for scene kickoff job
+      if (data.scene_job_id) {
+        console.log('🎬 Starting subscription for scene kickoff job:', { 
+          jobId: data.scene_job_id, 
+          messageId: openerMessage.id 
+        });
+        subscribeToJobCompletion(data.scene_job_id, openerMessage.id);
+      }
 
       // Show success toast
       toast({

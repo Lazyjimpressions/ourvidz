@@ -5,12 +5,14 @@ import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X, Pencil } from 'lucide-react';
+import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X, Pencil, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { MobileCharacterCard } from '@/components/roleplay/MobileCharacterCard';
 import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
+import { CharacterEditModal } from '@/components/roleplay/CharacterEditModal';
 import { DashboardSettings } from '@/components/roleplay/DashboardSettings';
 import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
 import { SceneGallery } from '@/components/roleplay/SceneGallery';
@@ -31,6 +33,8 @@ const MobileRoleplayDashboard = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showAddCharacterModal, setShowAddCharacterModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [editingCharacter, setEditingCharacter] = useState<any>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showScenarioWizard, setShowScenarioWizard] = useState(false);
   const [selectedScene, setSelectedScene] = useState<SceneTemplate | null>(null);
   const [showSceneSetup, setShowSceneSetup] = useState(false);
@@ -178,53 +182,111 @@ const MobileRoleplayDashboard = () => {
   // Subscribe to character image updates
   useCharacterImageUpdates();
 
+  // Store load functions in refs to avoid dependency issues
+  const loadPublicCharactersRef = React.useRef(loadPublicCharacters);
+  const loadUserCharactersRef = React.useRef(loadUserCharacters);
+  
+  // Update refs when functions change
+  React.useEffect(() => {
+    loadPublicCharactersRef.current = loadPublicCharacters;
+    loadUserCharactersRef.current = loadUserCharacters;
+  }, [loadPublicCharacters, loadUserCharacters]);
+
   // Subscribe to character table updates for image_url changes
   // This ensures character cards update when images are generated
   useEffect(() => {
+    if (!user?.id) return; // Don't subscribe if no user
+
     let isSubscribed = false;
-    const channel = supabase
-      .channel(`character-image-updates-${Date.now()}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'characters'
-        },
-        (payload) => {
-          const character = payload.new as any;
-          // Refresh if image_url is present (indicates image was added/updated)
-          if (character.image_url) {
-            console.log('🖼️ Character updated, refreshing lists:', character.id);
-            // Debounce rapid updates
-            setTimeout(() => {
-              loadPublicCharacters();
-              loadUserCharacters();
-            }, 500);
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let subscriptionAttempts = 0;
+    let hasGivenUp = false; // Track if we've given up to prevent re-subscription
+    let isCleanedUp = false; // Track if cleanup has been called
+    const MAX_RETRIES = 3;
+
+    const setupSubscription = () => {
+      // Don't retry if we've already given up or cleaned up
+      if (hasGivenUp || isCleanedUp) {
+        console.log('⏸️ Character updates subscription previously failed or cleaned up, skipping retry');
+        return null;
+      }
+
+      const channel = supabase
+        .channel(`character-image-updates-${Date.now()}-${subscriptionAttempts}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'characters'
+          },
+          (payload) => {
+            try {
+              const character = payload.new as any;
+              // Only refresh if image_url is present and character exists
+              if (character?.image_url && character?.id) {
+                console.log('🖼️ Character updated, refreshing lists:', character.id);
+                // Debounce rapid updates
+                setTimeout(() => {
+                  loadPublicCharactersRef.current();
+                  loadUserCharactersRef.current();
+                }, 500);
+              }
+            } catch (error) {
+              console.error('Error handling character update:', error);
+            }
           }
-        }
-      )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          isSubscribed = true;
-          console.log('✅ Subscribed to character updates');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Character updates channel error:', err);
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ Character updates subscription timed out');
-        }
-      });
+        )
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            isSubscribed = true;
+            subscriptionAttempts = 0; // Reset on success
+            hasGivenUp = false; // Reset on success
+            console.log('✅ Subscribed to character updates');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ Character updates channel error:', err);
+            isSubscribed = false;
+            // Retry with exponential backoff, but limit retries
+            if (subscriptionAttempts < MAX_RETRIES) {
+              subscriptionAttempts++;
+              const delay = Math.min(1000 * Math.pow(2, subscriptionAttempts - 1), 10000);
+              console.log(`🔄 Retrying character updates subscription in ${delay}ms (attempt ${subscriptionAttempts}/${MAX_RETRIES})`);
+              retryTimeout = setTimeout(() => {
+                setupSubscription();
+              }, delay);
+            } else {
+              hasGivenUp = true;
+              console.warn('⚠️ Max retries reached for character updates subscription, giving up');
+            }
+          } else if (status === 'TIMED_OUT') {
+            console.warn('⏱️ Character updates subscription timed out');
+            isSubscribed = false;
+          }
+        });
+
+      return channel;
+    };
+
+    const channel = setupSubscription();
+    if (!channel) return; // If setupSubscription returned null, we've given up
 
     return () => {
+      isCleanedUp = true; // Mark as cleaned up to prevent retries
+      
+      // Clear any pending retry
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+        retryTimeout = null;
+      }
       // Only remove channel if it was successfully subscribed
-      if (isSubscribed) {
+      if (isSubscribed && channel) {
         try {
           supabase.removeChannel(channel);
           console.log('🧹 Cleaned up character updates subscription');
         } catch (error) {
           console.error('Error removing character updates channel:', error);
         }
-      } else {
+      } else if (channel) {
         // Channel never connected, just unsubscribe to stop connection attempts
         try {
           channel.unsubscribe();
@@ -233,7 +295,7 @@ const MobileRoleplayDashboard = () => {
         }
       }
     };
-  }, [loadPublicCharacters, loadUserCharacters]);
+  }, [user?.id]); // Only depend on user.id, not the functions
 
   // Handle character deletion
   const handleDeleteCharacter = async (characterId: string) => {
@@ -283,6 +345,7 @@ const MobileRoleplayDashboard = () => {
 
   // Separate display arrays
   const myDisplayCharacters = myCharacters.map(toDisplayFormat);
+  const myPersonaDisplayCharacters = userPersonas.map(toDisplayFormat);
   const publicDisplayCharacters = publicFromOthers.map(toDisplayFormat);
 
   const handleCharacterSelect = (characterId: string) => {
@@ -303,6 +366,19 @@ const MobileRoleplayDashboard = () => {
     // Refresh both character lists after adding a new one
     loadPublicCharacters();
     loadUserCharacters();
+  };
+
+  const handleEditCharacter = (character: any) => {
+    setEditingCharacter(character);
+    setShowEditModal(true);
+  };
+
+  const handleCharacterUpdated = (updatedCharacter: any) => {
+    // Refresh character lists after update
+    loadPublicCharacters();
+    loadUserCharacters();
+    setShowEditModal(false);
+    setEditingCharacter(null);
   };
 
   const handleScenarioComplete = (payload: ScenarioSessionPayload) => {
@@ -327,6 +403,7 @@ const MobileRoleplayDashboard = () => {
   };
 
   const filteredMyCharacters = filterCharacters(myDisplayCharacters);
+  const filteredMyPersonas = filterCharacters(myPersonaDisplayCharacters);
   const filteredPublicCharacters = filterCharacters(publicDisplayCharacters);
 
   if (isLoading) {
@@ -615,13 +692,63 @@ const MobileRoleplayDashboard = () => {
           setSelectedFilter={setSelectedFilter}
         />
 
-        {/* My Characters Section */}
+        {/* My Personas Section */}
+        {filteredMyPersonas.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <User className="w-4 h-4 text-purple-400" />
+              <h2 className="text-base font-medium text-white">My Personas</h2>
+              <span className="text-xs text-muted-foreground">({filteredMyPersonas.length})</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Characters that represent you in roleplay</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {filteredMyPersonas.map((character) => (
+                <div key={character.id} className="relative">
+                  <MobileCharacterCard
+                    character={character}
+                    onSelect={() => handleCharacterSelect(character.id)}
+                    onPreview={() => handleCharacterPreview(character.id)}
+                    onDelete={handleDeleteCharacter}
+                    onEdit={() => handleEditCharacter(character)}
+                  />
+                  {/* Private/Public indicator */}
+                  {!character.is_public && (
+                    <div className="absolute top-2 right-8 z-10">
+                      <Shield className="w-3.5 h-3.5 text-yellow-400" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* My Characters Section (AI Companions) */}
         {filteredMyCharacters.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
-              <User className="w-4 h-4 text-blue-400" />
+              <Sparkles className="w-4 h-4 text-blue-400" />
               <h2 className="text-base font-medium text-white">My Characters</h2>
               <span className="text-xs text-muted-foreground">({filteredMyCharacters.length})</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">AI companions to roleplay with</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filteredMyCharacters.map((character) => (
@@ -673,6 +800,17 @@ const MobileRoleplayDashboard = () => {
           isOpen={showAddCharacterModal}
           onClose={() => setShowAddCharacterModal(false)}
           onCharacterAdded={handleCharacterAdded}
+        />
+
+        {/* Character Edit Modal */}
+        <CharacterEditModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingCharacter(null);
+          }}
+          character={editingCharacter}
+          onCharacterUpdated={handleCharacterUpdated}
         />
 
         {/* Dashboard Settings Sheet */}

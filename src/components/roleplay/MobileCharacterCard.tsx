@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
-import { Eye, Sparkles, Loader2, Save, Heart, MessageCircle, TrendingUp } from 'lucide-react';
+import { Eye, Sparkles, Loader2, Save, Heart, MessageCircle, TrendingUp, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -47,13 +47,15 @@ interface MobileCharacterCardProps {
   onSelect: () => void;
   onPreview: () => void;
   onDelete?: (characterId: string) => Promise<void>;
+  onEdit?: () => void;
 }
 
 export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   character,
   onSelect,
   onPreview,
-  onDelete
+  onDelete,
+  onEdit
 }) => {
   const { isMobile, isTouchDevice } = useMobileDetection();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -447,6 +449,22 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
               </Button>
             )}
             
+            {/* Edit Button - Only for user personas */}
+            {character.role === 'user' && onEdit && (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                size="sm"
+                variant="secondary"
+                className="w-6 h-6 p-0 bg-purple-600/80 hover:bg-purple-600 border-0"
+                title="Edit Character"
+              >
+                <Pencil className="w-3 h-3 text-white" />
+              </Button>
+            )}
+            
             {/* Preview Button - Small and unobtrusive */}
             <Button
               onClick={handlePreview}
@@ -467,7 +485,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
         isOpen={showPreview}
         onClose={handlePreviewClose}
         onStartChat={handleStartChat}
-        onEditCharacter={undefined} // TODO: Add edit functionality if needed
+        onEditCharacter={character.role === 'user' && onEdit ? onEdit : undefined}
         onFavorite={undefined} // TODO: Add favorite functionality if needed
         isFavorite={false}
         onDelete={onDelete ? () => onDelete(character.id) : undefined}

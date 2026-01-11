@@ -93,14 +93,15 @@ const cleanupOldConversations = (scenesMap: Map<string, PreviousSceneInfo>) => {
 const fetchLastSceneFromDB = async (convId: string): Promise<PreviousSceneInfo | null> => {
   try {
     // ✅ FIX 5: First try: Get scene with image_url
-    let { data, error } = await supabase
+    let { data: scenesData, error } = await supabase
       .from('character_scenes')
       .select('id, image_url, created_at')
       .eq('conversation_id', convId)
       .not('image_url', 'is', null)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
+
+    let data = scenesData?.[0] || null;
 
     // ✅ FIX 5: Fallback: If no scene with image_url, get most recent scene (image might be updating)
     if (error || !data?.image_url) {
@@ -110,11 +111,10 @@ const fetchLastSceneFromDB = async (convId: string): Promise<PreviousSceneInfo |
         .select('id, image_url, created_at')
         .eq('conversation_id', convId)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .limit(1);
       
-      if (!fallbackError && fallbackData) {
-        data = fallbackData;
+      if (!fallbackError && fallbackData && fallbackData.length > 0) {
+        data = fallbackData[0];
         error = null;
         console.log('🔄 Scene continuity: Found scene without image_url, will check again later', {
           sceneId: data.id,

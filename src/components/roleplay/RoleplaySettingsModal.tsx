@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +16,7 @@ import { useSceneContinuity } from '@/hooks/useSceneContinuity';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2, Upload, X, Loader2 } from 'lucide-react';
+import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2, Upload, X, Loader2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneStyle } from '@/types/roleplay';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -86,10 +89,41 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [signedAvatarUrl, setSignedAvatarUrl] = useState<string | null>(null);
   
+  // Quick edit state
+  const [quickEditData, setQuickEditData] = useState({
+    name: '',
+    description: '',
+    gender: '',
+    appearance_tags: [] as string[]
+  });
+  const [newTag, setNewTag] = useState('');
+  const [isSavingQuickEdit, setIsSavingQuickEdit] = useState(false);
+  
+  // Create persona state
+  const [showCreatePersonaModal, setShowCreatePersonaModal] = useState(false);
+  const [isCreatingPersona, setIsCreatingPersona] = useState(false);
+  const [personaFormData, setPersonaFormData] = useState({
+    name: '',
+    description: '',
+    gender: ''
+  });
+  
   // Get selected user character
   const selectedUserCharacter = localUserCharacterId 
     ? userCharacters.find(c => c.id === localUserCharacterId) || null
     : null;
+  
+  // Load character data for quick edit when character is selected
+  useEffect(() => {
+    if (selectedUserCharacter) {
+      setQuickEditData({
+        name: selectedUserCharacter.name || '',
+        description: selectedUserCharacter.description || '',
+        gender: selectedUserCharacter.gender || '',
+        appearance_tags: selectedUserCharacter.appearance_tags || []
+      });
+    }
+  }, [selectedUserCharacter]);
   
   // Helper to validate if a chat model is available
   const isValidChatModel = (modelValue: string): boolean => {
@@ -269,6 +303,98 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
       });
     } finally {
       setIsUploadingAvatar(false);
+    }
+  };
+
+  // Quick edit handlers
+  const handleQuickEditSave = async () => {
+    if (!localUserCharacterId) return;
+
+    setIsSavingQuickEdit(true);
+    try {
+      await updateUserCharacter(localUserCharacterId, {
+        name: quickEditData.name,
+        description: quickEditData.description,
+        gender: quickEditData.gender || null,
+        appearance_tags: quickEditData.appearance_tags.length > 0 ? quickEditData.appearance_tags : null
+      });
+
+      toast({
+        title: 'Character updated',
+        description: 'Your character has been updated successfully'
+      });
+    } catch (error) {
+      console.error('Failed to save quick edit:', error);
+      toast({
+        title: 'Save failed',
+        description: 'Failed to update character. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSavingQuickEdit(false);
+    }
+  };
+
+  const addTag = () => {
+    if (newTag.trim() && !quickEditData.appearance_tags.includes(newTag.trim())) {
+      setQuickEditData(prev => ({
+        ...prev,
+        appearance_tags: [...prev.appearance_tags, newTag.trim()]
+      }));
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setQuickEditData(prev => ({
+      ...prev,
+      appearance_tags: prev.appearance_tags.filter(tag => tag !== tagToRemove)
+    }));
+  };
+
+  // Create persona handler
+  const handleCreatePersona = async () => {
+    if (!personaFormData.name.trim() || !personaFormData.description.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Name and description are required',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsCreatingPersona(true);
+    try {
+      const newCharacter = await createUserCharacter({
+        name: personaFormData.name.trim(),
+        description: personaFormData.description.trim(),
+        gender: personaFormData.gender || undefined,
+        role: 'user',
+        content_rating: 'nsfw',
+        is_public: false
+      });
+
+      // Set as selected and default
+      setLocalUserCharacterId(newCharacter.id);
+      await setDefaultCharacter(newCharacter.id);
+      
+      // Reset form
+      setPersonaFormData({ name: '', description: '', gender: '' });
+      setShowCreatePersonaModal(false);
+
+      toast({
+        title: 'Persona created',
+        description: 'Your persona has been created and set as default'
+      });
+    } catch (error) {
+      console.error('Failed to create persona:', error);
+      toast({
+        title: 'Creation failed',
+        description: error instanceof Error ? error.message : 'Failed to create persona. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsCreatingPersona(false);
     }
   };
   
@@ -452,9 +578,21 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                   </SelectContent>
                 </Select>
                 {userCharacters.length === 0 && !userCharactersLoading && (
-                  <p className="text-xs text-blue-400 mt-1">
-                    Create a character in your profile settings to personalize your roleplay experience.
-                  </p>
+                  <div className="space-y-2 mt-2">
+                    <p className="text-xs text-blue-400">
+                      Create a persona to personalize your roleplay experience.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowCreatePersonaModal(true)}
+                      className="w-full"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create My Persona
+                    </Button>
+                  </div>
                 )}
 
                 {/* Set as Default Checkbox */}
@@ -553,6 +691,129 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                           </Button>
                         )}
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Edit Section */}
+                {localUserCharacterId && localUserCharacterId !== 'none' && selectedUserCharacter && (
+                  <div className="space-y-3 mt-4 pt-4 border-t border-gray-700">
+                    <Label className="flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Quick Edit
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Quickly update your character's basic information.
+                    </p>
+
+                    <div className="space-y-3">
+                      {/* Name */}
+                      <div className="space-y-1">
+                        <Label htmlFor="quick-edit-name" className="text-xs">Name</Label>
+                        <Input
+                          id="quick-edit-name"
+                          value={quickEditData.name}
+                          onChange={(e) => setQuickEditData(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="Character name"
+                          className="h-8 text-sm"
+                        />
+                      </div>
+
+                      {/* Description */}
+                      <div className="space-y-1">
+                        <Label htmlFor="quick-edit-description" className="text-xs">Description</Label>
+                        <Textarea
+                          id="quick-edit-description"
+                          value={quickEditData.description}
+                          onChange={(e) => setQuickEditData(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Character description"
+                          className="min-h-[60px] text-sm resize-none"
+                          rows={3}
+                        />
+                      </div>
+
+                      {/* Gender */}
+                      <div className="space-y-1">
+                        <Label htmlFor="quick-edit-gender" className="text-xs">Gender</Label>
+                        <Select
+                          value={quickEditData.gender || 'unspecified'}
+                          onValueChange={(value) => setQuickEditData(prev => ({ ...prev, gender: value === 'unspecified' ? '' : value }))}
+                        >
+                          <SelectTrigger id="quick-edit-gender" className="h-8 text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unspecified">Unspecified</SelectItem>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="non-binary">Non-binary</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Appearance Tags */}
+                      <div className="space-y-1">
+                        <Label className="text-xs">Appearance Tags</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            value={newTag}
+                            onChange={(e) => setNewTag(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addTag();
+                              }
+                            }}
+                            placeholder="Add tag"
+                            className="h-8 text-sm flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={addTag}
+                            className="h-8"
+                          >
+                            Add
+                          </Button>
+                        </div>
+                        {quickEditData.appearance_tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {quickEditData.appearance_tags.map((tag, idx) => (
+                              <Badge
+                                key={idx}
+                                variant="secondary"
+                                className="text-xs py-0 px-2 cursor-pointer"
+                                onClick={() => removeTag(tag)}
+                              >
+                                {tag}
+                                <X className="w-3 h-3 ml-1" />
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Save Button */}
+                      <Button
+                        type="button"
+                        onClick={handleQuickEditSave}
+                        disabled={isSavingQuickEdit || !quickEditData.name.trim() || !quickEditData.description.trim()}
+                        className="w-full mt-2"
+                        size="sm"
+                      >
+                        {isSavingQuickEdit ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Save Changes
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -1356,6 +1617,89 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
           </Button>
         </div>
       </SheetContent>
+
+      {/* Create Persona Dialog */}
+      <Dialog open={showCreatePersonaModal} onOpenChange={setShowCreatePersonaModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Create My Persona</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="persona-name">Name *</Label>
+              <Input
+                id="persona-name"
+                value={personaFormData.name}
+                onChange={(e) => setPersonaFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Your character's name"
+                className="h-9"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="persona-description">Description *</Label>
+              <Textarea
+                id="persona-description"
+                value={personaFormData.description}
+                onChange={(e) => setPersonaFormData(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Describe your character..."
+                className="min-h-[100px] resize-none"
+                rows={4}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="persona-gender">Gender</Label>
+              <Select
+                value={personaFormData.gender || 'unspecified'}
+                onValueChange={(value) => setPersonaFormData(prev => ({ ...prev, gender: value === 'unspecified' ? '' : value }))}
+              >
+                <SelectTrigger id="persona-gender" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unspecified">Unspecified</SelectItem>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="non-binary">Non-binary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              You can add an avatar and more details after creating your persona.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowCreatePersonaModal(false);
+                  setPersonaFormData({ name: '', description: '', gender: '' });
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreatePersona}
+                disabled={isCreatingPersona || !personaFormData.name.trim() || !personaFormData.description.trim()}
+              >
+                {isCreatingPersona ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Persona
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 };

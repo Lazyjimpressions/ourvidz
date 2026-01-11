@@ -144,8 +144,22 @@ export const useLocalModelHealth = () => {
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let interval: ReturnType<typeof setInterval> | null = null;
     let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let subscriptionAttempts = 0;
+    let hasGivenUp = false;
+    const MAX_RETRIES = 2; // Reduced retries to avoid spam
 
     const initialize = async () => {
+      // Clean up any existing channel before creating a new one
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+        channel = null;
+      }
+
       // Initial fetch to check if health checks are enabled
       if (mounted) {
         await fetchHealthStatus();
@@ -153,9 +167,9 @@ export const useLocalModelHealth = () => {
 
       // Set up real-time subscription for system_config updates
       // This runs regardless of isEnabled, so we can detect when toggle changes
-      if (mounted) {
+      if (mounted && !hasGivenUp) {
         const channelName = `local-model-health-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        channel = supabase
+        const newChannel = supabase
           .channel(channelName)
           .on(
             'postgres_changes',
@@ -172,10 +186,47 @@ export const useLocalModelHealth = () => {
             }
           );
 
-        // Subscribe only once
-        channel.subscribe((status) => {
+        // Subscribe with error handling
+        newChannel.subscribe((status, err) => {
           if (status === 'SUBSCRIBED' && mounted) {
+            channel = newChannel; // Only assign on success
             console.log('✅ Local model health subscription active');
+            subscriptionAttempts = 0; // Reset on success
+            hasGivenUp = false;
+          } else if (status === 'CHANNEL_ERROR' && mounted) {
+            // Only log first error to reduce spam
+            if (subscriptionAttempts === 0) {
+              console.error('❌ Local model health channel error:', err);
+            }
+            subscriptionAttempts++;
+            if (subscriptionAttempts < MAX_RETRIES) {
+              const delay = Math.min(2000 * subscriptionAttempts, 10000);
+              console.log(`🔄 Retrying local model health subscription in ${delay}ms (attempt ${subscriptionAttempts}/${MAX_RETRIES})`);
+              retryTimeout = setTimeout(() => {
+                if (mounted && !hasGivenUp) {
+                  initialize();
+                }
+              }, delay);
+            } else {
+              hasGivenUp = true;
+              console.warn('⚠️ Max retries reached for local model health subscription, giving up. Health checks will use polling only.');
+              // Clean up failed channel
+              try {
+                supabase.removeChannel(newChannel);
+              } catch (error) {
+                // Ignore cleanup errors
+              }
+            }
+          } else if (status === 'TIMED_OUT' && mounted) {
+            console.warn('⏱️ Local model health subscription timed out');
+            // Don't retry on timeout - just use polling
+            hasGivenUp = true;
+            // Clean up timed out channel
+            try {
+              supabase.removeChannel(newChannel);
+            } catch (error) {
+              // Ignore cleanup errors
+            }
           }
         });
       }
@@ -185,10 +236,19 @@ export const useLocalModelHealth = () => {
 
     return () => {
       mounted = false;
+      hasGivenUp = true; // Prevent retries after cleanup
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+        retryTimeout = null;
+      }
       if (interval) clearInterval(interval);
       if (healthCheckInterval) clearInterval(healthCheckInterval);
       if (channel) {
-        supabase.removeChannel(channel);
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          // Ignore cleanup errors
+        }
       }
     };
   }, []);
