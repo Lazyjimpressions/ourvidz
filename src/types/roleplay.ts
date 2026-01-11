@@ -60,6 +60,7 @@ export interface Message {
     sceneError?: boolean;
     canRetryScene?: boolean;
     usedFallback?: boolean;
+    generation_metadata?: any;
   };
 }
 

@@ -1297,8 +1297,42 @@ serve(async (req) => {
       if ((body.metadata?.destination === 'character_scene' || body.metadata?.destination === 'roleplay_scene') && body.metadata?.scene_id) {
         console.log('🎬 Updating character scene for:', body.metadata.scene_id, '(destination:', body.metadata.destination, ')');
 
-        // Determine the full image path - only prepend bucket if it's a storage path (not external URL)
-        const sceneImagePath = storagePath.startsWith('http') ? storagePath : `workspace-temp/${storagePath}`;
+        // ✅ FIX: Use persistent library path for character_scenes instead of workspace-temp
+        // First, save to library, then update character_scenes with library path
+        let persistentScenePath = storagePath.startsWith('http') ? storagePath : null;
+        
+        if (!persistentScenePath && !storagePath.startsWith('http')) {
+          // Copy to user-library for persistence
+          const sourceKey = storagePath.startsWith('workspace-temp/') 
+            ? storagePath 
+            : `workspace-temp/${storagePath}`;
+          const destKey = `user-library/${body.metadata.user_id}/scenes/${body.metadata.scene_id}_${Date.now()}.png`;
+          
+          try {
+            const { data: fileData, error: downloadError } = await supabase.storage
+              .from('workspace-temp')
+              .download(sourceKey);
+            
+            if (!downloadError && fileData) {
+              const { error: uploadError } = await supabase.storage
+                .from('user-library')
+                .upload(destKey, fileData, {
+                  contentType: 'image/png',
+                  upsert: true
+                });
+              
+              if (!uploadError) {
+                persistentScenePath = `user-library/${destKey}`;
+                console.log('✅ Scene saved to persistent library path:', persistentScenePath);
+              }
+            }
+          } catch (error) {
+            console.error('❌ Error copying scene to library:', error);
+          }
+        }
+        
+        // Use persistent path if available, otherwise fall back to workspace-temp
+        const sceneImagePath = persistentScenePath || (storagePath.startsWith('http') ? storagePath : `workspace-temp/${storagePath}`);
 
         const { error: sceneUpdateError } = await supabase
           .from('character_scenes')

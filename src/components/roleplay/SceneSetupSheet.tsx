@@ -339,21 +339,15 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
                 Choose how you appear in the roleplay. The AI will use your name and pronouns.
               </p>
               <Select
-                value={selectedUserCharacterId || 'none'}
+                value={selectedUserCharacterId || ''}
                 onValueChange={(value) => {
-                  setSelectedUserCharacterId(value === 'none' ? null : value);
+                  setSelectedUserCharacterId(value || null);
                 }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select your profile..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-gray-400" />
-                      <span>Anonymous (You)</span>
-                    </div>
-                  </SelectItem>
                   {isLoadingUserCharacters ? (
                     <SelectItem value="" disabled>Loading characters...</SelectItem>
                   ) : userCharacters.length === 0 ? (

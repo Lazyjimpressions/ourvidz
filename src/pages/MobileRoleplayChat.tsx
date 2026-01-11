@@ -610,14 +610,70 @@ const MobileRoleplayChat: React.FC = () => {
             .order('created_at', { ascending: true });
 
           if (!messagesError && existingMessages && existingMessages.length > 0) {
-            const formattedMessages: Message[] = existingMessages.map(msg => ({
-              id: msg.id,
-              content: msg.content,
-              sender: msg.sender === 'assistant' ? 'character' : msg.sender as 'user' | 'character',
-              timestamp: msg.created_at
-            }));
+            // ✅ FIX: Restore scene images from character_scenes or user_library for messages with scene metadata
+            const formattedMessages: Message[] = await Promise.all(
+              existingMessages.map(async (msg) => {
+                const baseMessage: Message = {
+                  id: msg.id,
+                  content: msg.content,
+                  sender: msg.sender === 'assistant' ? 'character' : msg.sender as 'user' | 'character',
+                  timestamp: msg.created_at,
+                  metadata: msg.metadata || {}
+                };
+
+                // ✅ FIX: If message has scene metadata but no valid image, restore from character_scenes or user_library
+                if (baseMessage.metadata?.scene_generated && baseMessage.metadata?.scene_id) {
+                  const sceneId = baseMessage.metadata.scene_id;
+                  
+                  // First, try to get image from character_scenes table
+                  const { data: sceneData } = await supabase
+                    .from('character_scenes')
+                    .select('image_url, scene_prompt, generation_metadata')
+                    .eq('id', sceneId)
+                    .single();
+
+                  if (sceneData?.image_url) {
+                    // Use scene image from character_scenes
+                    baseMessage.metadata.image_url = sceneData.image_url;
+                    baseMessage.metadata.scene_prompt = sceneData.scene_prompt;
+                    if (sceneData.generation_metadata) {
+                      baseMessage.metadata.generation_metadata = {
+                        ...baseMessage.metadata.generation_metadata,
+                        ...sceneData.generation_metadata
+                      };
+                    }
+                    console.log('✅ Restored scene image from character_scenes:', sceneId);
+                  } else {
+                    // Fallback: Try to find scene in user_library
+                    const { data: libraryScene } = await supabase
+                      .from('user_library')
+                      .select('storage_path, original_prompt')
+                      .eq('user_id', user.id)
+                      .eq('content_category', 'scene')
+                      .contains('roleplay_metadata', { scene_id: sceneId })
+                      .order('created_at', { ascending: false })
+                      .limit(1)
+                      .maybeSingle();
+
+                    if (libraryScene?.storage_path) {
+                      // Use library scene path
+                      baseMessage.metadata.image_url = `user-library/${libraryScene.storage_path}`;
+                      if (libraryScene.original_prompt) {
+                        baseMessage.metadata.scene_prompt = libraryScene.original_prompt;
+                      }
+                      console.log('✅ Restored scene image from user_library:', sceneId);
+                    } else {
+                      console.warn('⚠️ Scene image not found in character_scenes or user_library:', sceneId);
+                    }
+                  }
+                }
+
+                return baseMessage;
+              })
+            );
+
             setMessages(formattedMessages);
-            console.log(`📝 Loaded ${formattedMessages.length} existing messages`);
+            console.log(`📝 Loaded ${formattedMessages.length} existing messages with scene restoration`);
             
             // Cache conversation ID in localStorage for quick reuse
             localStorage.setItem(`conversation_${characterId}_${sceneId || 'general'}`, conversation.id);
