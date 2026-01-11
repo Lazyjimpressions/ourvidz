@@ -1215,8 +1215,12 @@ const MobileRoleplayChat: React.FC = () => {
               content_tier: contentTier,
               // ✅ FIX: Include scene template info if available
               scene_template_id: data.scene_template_id,
-              scene_template_name: data.scene_template_name
-            }
+              scene_template_name: data.scene_template_name,
+              original_scene_prompt: data.original_scene_prompt
+            },
+            // ✅ FIX: Include scene_id and scene prompt in message metadata
+            scene_id: data.scene_id,
+            scene_prompt: data.original_scene_prompt
           }
         };
 

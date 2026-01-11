@@ -106,6 +106,11 @@ interface RoleplayChatResponse {
   // ✅ ADMIN: Prompt template info for debugging
   prompt_template_id?: string; // Template ID from prompt_templates table
   prompt_template_name?: string; // Template name from prompt_templates table
+  // ✅ FIX: Scene generation metadata
+  scene_id?: string; // Scene ID from character_scenes table
+  scene_template_id?: string; // Scene narrative template ID
+  scene_template_name?: string; // Scene narrative template name
+  original_scene_prompt?: string; // Original scene prompt used for generation
 }
 
 interface Database {
@@ -571,8 +576,23 @@ serve(async (req) => {
         success: sceneGenerated,
         consistency_score: consistencyScore,
         job_id: sceneJobId,
+        scene_id: sceneResult?.scene_id,
         hasError: !!sceneResult?.error,
         errorMessage: sceneResult?.error
+      });
+    }
+
+    // ✅ FIX: Use scene template info directly from generateScene response (more reliable than fetching from DB)
+    const sceneTemplateId = sceneResult?.scene_template_id;
+    const sceneTemplateName = sceneResult?.scene_template_name;
+    const originalScenePrompt = sceneResult?.original_scene_prompt;
+    
+    if (sceneResult?.scene_id && (sceneTemplateId || sceneTemplateName || originalScenePrompt)) {
+      console.log('✅ Scene metadata from generateScene:', {
+        scene_id: sceneResult.scene_id,
+        hasTemplateId: !!sceneTemplateId,
+        hasTemplateName: !!sceneTemplateName,
+        hasOriginalPrompt: !!originalScenePrompt
       });
     }
 
@@ -594,7 +614,12 @@ serve(async (req) => {
       // ✅ ADMIN: Include prompt template info for debugging
       // Always include template info from request if available, even if template wasn't loaded
       prompt_template_id: promptTemplate?.id || prompt_template_id || null,
-      prompt_template_name: promptTemplate?.template_name || prompt_template_name || null
+      prompt_template_name: promptTemplate?.template_name || prompt_template_name || null,
+      // ✅ FIX: Include scene generation metadata
+      scene_id: sceneResult?.scene_id || undefined,
+      scene_template_id: sceneTemplateId || undefined,
+      scene_template_name: sceneTemplateName || undefined,
+      original_scene_prompt: originalScenePrompt || undefined
     };
 
     return new Response(JSON.stringify(responseData), {
@@ -2073,7 +2098,18 @@ async function generateScene(
   // Scene regeneration/modification parameters
   scenePromptOverride?: string, // User-edited prompt for regeneration (skips narrative generation)
   currentSceneImageUrl?: string // Current scene image for I2I modification mode
-): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string; debug?: any }> {
+): Promise<{ 
+  success: boolean; 
+  consistency_score?: number; 
+  job_id?: string; 
+  scene_id?: string; 
+  error?: string; 
+  debug?: any;
+  // ✅ FIX: Return scene template info directly
+  scene_template_id?: string;
+  scene_template_name?: string;
+  original_scene_prompt?: string;
+}> {
   try {
     // ✅ FIX 1.1: More robust first scene detection
     // A scene is "first" if no valid previous scene image exists
@@ -3158,7 +3194,11 @@ const sceneContext = analyzeSceneContent(response);
       success: true,
       consistency_score: character.reference_image_url ? 0.8 : 0.6, // Consistency via reference image, random seed for variety
       job_id: jobId,
-      scene_id: sceneId || undefined // ✅ FIX: Return scene_id for reference (convert null to undefined)
+      scene_id: sceneId || undefined, // ✅ FIX: Return scene_id for reference (convert null to undefined)
+      // ✅ FIX: Return scene template info directly (already available in scope)
+      scene_template_id: sceneTemplateId || undefined,
+      scene_template_name: sceneTemplateName || undefined,
+      original_scene_prompt: cleanScenePrompt || scenePrompt || undefined
     };
   } catch (error) {
     console.error('🎬❌ Scene generation error:', error);
