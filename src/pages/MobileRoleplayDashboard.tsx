@@ -42,6 +42,7 @@ const MobileRoleplayDashboard = () => {
   const [showSceneCreation, setShowSceneCreation] = useState(false);
   const [editingScene, setEditingScene] = useState<SceneTemplate | null>(null);
   const [sceneConfig, setSceneConfig] = useState<SceneSetupConfig | null>(null);
+  const [sceneGalleryRefreshTrigger, setSceneGalleryRefreshTrigger] = useState(0);
   // Track scene images that failed to load to prevent infinite re-render loops
   const [erroredSceneImages, setErroredSceneImages] = useState<Set<string>>(new Set());
 
@@ -117,8 +118,9 @@ const MobileRoleplayDashboard = () => {
 
   // Handle new scene created
   const handleSceneCreated = useCallback((scene: SceneTemplate) => {
-    console.log('🎬 New scene created:', scene.name);
+    console.log('🎬 Scene created/updated:', scene.name);
     loadSceneGallery();
+    setSceneGalleryRefreshTrigger(prev => prev + 1); // Trigger SceneGallery refresh
     setShowSceneCreation(false);
     setEditingScene(null);
   }, [loadSceneGallery]);
@@ -882,6 +884,7 @@ const MobileRoleplayDashboard = () => {
                     setShowSceneGallery(false);
                     handleSceneEdit(scene);
                   }}
+                  refreshTrigger={sceneGalleryRefreshTrigger}
                 />
               </div>
             </div>

@@ -101,7 +101,7 @@ export const SceneCreationModal = ({
           setContentRating(editScene.content_rating || 'nsfw');
           setScenarioType(editScene.scenario_type || null);
           setTags(Array.isArray(editScene.tags) ? editScene.tags : []);
-          setIsPublic(editScene.is_public ?? true);
+          setIsPublic(editScene.is_public !== undefined ? editScene.is_public : true);
           setScenePrompt(editScene.scene_prompt || '');
           setPreviewImageUrl(editScene.preview_image_url || null);
           // Handle scene_starters safely - ensure it's an array before joining

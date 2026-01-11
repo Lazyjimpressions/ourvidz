@@ -11,6 +11,7 @@ interface SceneGalleryProps {
   onSceneSelect: (scene: SceneTemplate) => void;
   onSceneEdit?: (scene: SceneTemplate) => void;
   className?: string;
+  refreshTrigger?: number; // Trigger refresh when this changes
 }
 
 const FILTER_OPTIONS: { value: SceneTemplateFilter; label: string }[] = [
@@ -23,13 +24,25 @@ const FILTER_OPTIONS: { value: SceneTemplateFilter; label: string }[] = [
 export const SceneGallery: React.FC<SceneGalleryProps> = ({
   onSceneSelect,
   onSceneEdit,
-  className
+  className,
+  refreshTrigger
 }) => {
   const [activeFilter, setActiveFilter] = useState<SceneTemplateFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
 
   const { scenes, isLoading, error, loadScenes, searchScenes } = useSceneGallery(activeFilter);
+
+  // Refresh scenes when refreshTrigger changes
+  React.useEffect(() => {
+    if (refreshTrigger !== undefined) {
+      if (searchQuery.trim()) {
+        searchScenes(searchQuery);
+      } else {
+        loadScenes(activeFilter);
+      }
+    }
+  }, [refreshTrigger, searchQuery, activeFilter, loadScenes, searchScenes]);
 
   const handleFilterChange = useCallback((filter: SceneTemplateFilter) => {
     setActiveFilter(filter);

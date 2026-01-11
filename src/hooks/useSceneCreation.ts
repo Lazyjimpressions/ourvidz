@@ -534,6 +534,15 @@ export const useSceneCreation = (): UseSceneCreationResult => {
       const { data, error } = await query.select().single();
 
       if (error) {
+        console.error('❌ Scene update error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          isAdmin,
+          sceneId,
+          userId: user.id
+        });
         throw error;
       }
 
