@@ -103,6 +103,9 @@ interface RoleplayChatResponse {
   processing_time?: number;
   message_id?: string; // For kickoff messages
   scene_job_id?: string; // For scene generation job polling
+  // Include fallback info so frontend can update UI
+  usedFallback?: boolean;
+  fallbackModel?: string;
   // ✅ ADMIN: Prompt template info for debugging
   prompt_template_id?: string; // Template ID from prompt_templates table
   prompt_template_name?: string; // Template name from prompt_templates table
@@ -309,7 +312,7 @@ serve(async (req) => {
     }
 
     // Load prompt template if provided
-    let promptTemplate = null;
+    let promptTemplate: { id: string; template_name: string; [key: string]: any } | null = null;
     if (prompt_template_id) {
       try {
         const { data: templateData, error: templateError } = await supabase
@@ -515,7 +518,20 @@ serve(async (req) => {
     // Handle scene generation if requested
     let sceneGenerated = false;
     let consistencyScore = 0;
-    let sceneJobId = null;
+    let sceneJobId: string | null = null;
+    // ✅ FIX: Declare sceneResult outside if block for scope access
+    let sceneResult: { 
+      success: boolean; 
+      consistency_score?: number; 
+      job_id?: string; 
+      scene_id?: string; 
+      error?: string; 
+      debug?: any;
+      scene_template_id?: string;
+      scene_template_name?: string;
+      original_scene_prompt?: string;
+    } | null = null;
+    
     if (scene_generation) {
       console.log('🎬 Scene generation requested:', {
         character_id,
@@ -530,7 +546,7 @@ serve(async (req) => {
       );
 
       // Pass user character and scene style for enhanced scene generation
-      const sceneResult = await generateScene(
+      sceneResult = await generateScene(
         supabase,
         character_id,
         response,
@@ -565,7 +581,7 @@ serve(async (req) => {
       } else {
         sceneGenerated = sceneResult.success;
         consistencyScore = sceneResult.consistency_score || 0;
-        sceneJobId = sceneResult.job_id || null;
+        sceneJobId = sceneResult.job_id || null as string | null;
         
         if (sceneResult.error) {
           console.error('❌ generateScene returned error:', sceneResult.error);
@@ -607,14 +623,14 @@ serve(async (req) => {
       consistency_score: consistencyScore,
       processing_time: totalTime,
       message_id: savedMessage?.id,
-      scene_job_id: sceneJobId,
+      scene_job_id: sceneJobId || undefined,
       // Include fallback info so frontend can update UI
       usedFallback,
       fallbackModel: usedFallback ? effectiveModelProvider : undefined,
       // ✅ ADMIN: Include prompt template info for debugging
       // Always include template info from request if available, even if template wasn't loaded
-      prompt_template_id: promptTemplate?.id || prompt_template_id || null,
-      prompt_template_name: promptTemplate?.template_name || prompt_template_name || null,
+      prompt_template_id: promptTemplate?.id || prompt_template_id || undefined,
+      prompt_template_name: promptTemplate?.template_name || prompt_template_name || undefined,
       // ✅ FIX: Include scene generation metadata
       scene_id: sceneResult?.scene_id || undefined,
       scene_template_id: sceneTemplateId || undefined,
@@ -2410,10 +2426,12 @@ const sceneContext = analyzeSceneContent(response);
     }];
 
     // Generate scene prompt: use override (regeneration) or AI-generated narrative
-    let scenePrompt: string;
+    let scenePrompt: string = '';
     // ✅ ADMIN: Store template info for metadata
     let sceneTemplateId: string | undefined;
     let sceneTemplateName: string | undefined;
+    // ✅ FIX: Initialize cleanScenePrompt at function scope to avoid scope issues
+    let cleanScenePrompt: string = '';
 
     if (scenePromptOverride) {
       // User-provided prompt override (regeneration/modification mode)
@@ -2525,7 +2543,7 @@ const sceneContext = analyzeSceneContent(response);
       // Fallback to extracting from scenePrompt if not provided (for backward compatibility)
       let finalSceneName: string | null = sceneName || null;
       let finalSceneDescription: string | null = sceneDescription || null;
-      let cleanScenePrompt = scenePrompt;
+      cleanScenePrompt = scenePrompt; // ✅ FIX: Update function-scoped variable
       
       // Only try to extract from prompt if not provided as parameters
       if (!finalSceneName || !finalSceneDescription) {
