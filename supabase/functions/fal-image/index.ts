@@ -297,6 +297,26 @@ serve(async (req) => {
     const isWanI2V = capabilities?.supports_i2v === true || modelModality === 'video' || body.metadata?.is_wan_i2v === true;
     const supportsI2I = capabilities?.supports_i2i === true || capabilities?.reference_images === true;
     
+    // Determine if model requires image_urls array (defined at top level for use in final check)
+    let requiresImageUrlsArray = false;
+    if (modelKeyOverride) {
+      // If model is overridden, query the override model's capabilities
+      const { data: overrideModel } = await supabase
+        .from('api_models')
+        .select('capabilities')
+        .eq('model_key', modelKeyOverride)
+        .single();
+      if (overrideModel?.capabilities) {
+        const overrideCaps = overrideModel.capabilities as any;
+        requiresImageUrlsArray = overrideCaps?.requires_image_urls_array === true || 
+                                 (overrideCaps?.supports_i2i === true && modelKeyOverride.includes('edit'));
+      }
+    } else {
+      // Use current model's capabilities
+      requiresImageUrlsArray = capabilities?.requires_image_urls_array === true ||
+                               (supportsI2I && modelKey.includes('edit'));
+    }
+    
     // Validate reference image for WAN 2.1 i2v
     if (isVideo && isWanI2V && !hasReferenceImage) {
       console.error('❌ WAN 2.1 i2v requires a reference image');
@@ -466,27 +486,7 @@ serve(async (req) => {
           );
         }
 
-        // Check if model requires image_urls (array) vs image_url (string) based on capabilities
-        // Query model capabilities to determine parameter format (no hard-coded checks)
-        let requiresImageUrlsArray = false;
-        if (modelKeyOverride) {
-          // If model is overridden, query the override model's capabilities
-          const { data: overrideModel } = await supabase
-            .from('api_models')
-            .select('capabilities')
-            .eq('model_key', modelKeyOverride)
-            .single();
-          if (overrideModel?.capabilities) {
-            const overrideCaps = overrideModel.capabilities as any;
-            // Check if model requires image_urls array (typically Seedream edit models)
-            requiresImageUrlsArray = overrideCaps?.requires_image_urls_array === true || 
-                                     (overrideCaps?.supports_i2i === true && modelKeyOverride.includes('edit'));
-          }
-        } else {
-          // Use current model's capabilities
-          requiresImageUrlsArray = capabilities?.requires_image_urls_array === true ||
-                                   (supportsI2I && modelKey.includes('edit'));
-        }
+        // Use requiresImageUrlsArray already computed above (no need to recompute)
 
         console.log('🔍 I2I parameter detection:', {
           model_key: modelKey,
@@ -729,107 +729,97 @@ serve(async (req) => {
 
     // Final check: For models that require image_urls array, ensure it's set and image_url is removed
     // This MUST run before sending to fal.ai API
-    // Use capabilities check (no hard-coded model name checks)
-    let requiresImageUrlsArrayFinal = requiresImageUrlsArray;
-    if (modelKeyOverride && !requiresImageUrlsArrayFinal) {
-      // Re-check override model if needed
-      const { data: overrideModel } = await supabase
-        .from('api_models')
-        .select('capabilities')
-        .eq('model_key', modelKeyOverride)
-        .single();
-      if (overrideModel?.capabilities) {
-        const overrideCaps = overrideModel.capabilities as any;
-        requiresImageUrlsArrayFinal = overrideCaps?.requires_image_urls_array === true || 
-                                       (overrideCaps?.supports_i2i === true && modelKeyOverride.includes('edit'));
-      }
-    }
+    // Skip for video I2V - handled separately in video section
+    // Use requiresImageUrlsArray already computed above (defined at top level, line 301)
+    if (!isVideo) {
+      const requiresImageUrlsArrayFinal = requiresImageUrlsArray;
 
-    // Re-check hasReferenceImage from request body (in case it wasn't detected earlier)
-    const finalHasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
+      // Re-check hasReferenceImage from request body (in case it wasn't detected earlier)
+      const finalHasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url);
 
-    console.log('🔍 FINAL CHECK - Model detection:', {
-      model_key: modelKey,
-      is_overridden: isModelOverridden,
-      requires_image_urls_array: requiresImageUrlsArrayFinal,
-      supports_i2i: supportsI2I,
-      has_reference_image: hasReferenceImage,
-      final_has_reference_image: finalHasReferenceImage,
-      body_input_image_url: body.input?.image_url ? 'present' : 'missing',
-      body_input_image: body.input?.image ? 'present' : 'missing',
-      body_metadata_referenceImage: body.metadata?.referenceImage ? 'present' : 'missing',
-      body_metadata_reference_image_url: body.metadata?.reference_image_url ? 'present' : 'missing',
-      current_image_url: modelInput.image_url ? 'present' : 'missing',
-      current_image_urls: modelInput.image_urls ? `present (${Array.isArray(modelInput.image_urls) ? modelInput.image_urls.length : 'not array'})` : 'missing'
-    });
+      console.log('🔍 FINAL CHECK - Model detection:', {
+        model_key: modelKey,
+        is_overridden: isModelOverridden,
+        requires_image_urls_array: requiresImageUrlsArrayFinal,
+        supports_i2i: supportsI2I,
+        has_reference_image: hasReferenceImage,
+        final_has_reference_image: finalHasReferenceImage,
+        body_input_image_url: body.input?.image_url ? 'present' : 'missing',
+        body_input_image: body.input?.image ? 'present' : 'missing',
+        body_metadata_referenceImage: body.metadata?.referenceImage ? 'present' : 'missing',
+        body_metadata_reference_image_url: body.metadata?.reference_image_url ? 'present' : 'missing',
+        current_image_url: modelInput.image_url ? 'present' : 'missing',
+        current_image_urls: modelInput.image_urls ? `present (${Array.isArray(modelInput.image_urls) ? modelInput.image_urls.length : 'not array'})` : 'missing'
+      });
 
-    // For models requiring image_urls array, ALWAYS check if we need to set it
-    if (requiresImageUrlsArrayFinal && finalHasReferenceImage) {
-      // Try to get the image URL from any source
-      let imageUrlToUse = modelInput.image_url || 
-                          body.input?.image_url || 
-                          body.input?.image || 
-                          body.metadata?.referenceImage || 
-                          body.metadata?.reference_image_url;
-      
-      // If we found an image URL but image_urls isn't set, set it now
-      if (imageUrlToUse && !modelInput.image_urls) {
-        // Sign URL if needed
-        if (typeof imageUrlToUse === 'string' && !imageUrlToUse.startsWith('http') && !imageUrlToUse.startsWith('data:')) {
-          const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
-          const parts = imageUrlToUse.split('/');
-          let bucket = '';
-          let path = '';
-          if (knownBuckets.includes(parts[0])) {
-            bucket = parts[0];
-            path = parts.slice(1).join('/');
-          } else {
-            bucket = 'user-library';
-            path = imageUrlToUse;
+      // For models requiring image_urls array, ALWAYS check if we need to set it
+      if (requiresImageUrlsArrayFinal && finalHasReferenceImage) {
+        // Try to get the image URL from any source
+        let imageUrlToUse = modelInput.image_url || 
+                            body.input?.image_url || 
+                            body.input?.image || 
+                            body.metadata?.referenceImage || 
+                            body.metadata?.reference_image_url;
+        
+        // If we found an image URL but image_urls isn't set, set it now
+        if (imageUrlToUse && !modelInput.image_urls) {
+          // Sign URL if needed
+          if (typeof imageUrlToUse === 'string' && !imageUrlToUse.startsWith('http') && !imageUrlToUse.startsWith('data:')) {
+            const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+            const parts = imageUrlToUse.split('/');
+            let bucket = '';
+            let path = '';
+            if (knownBuckets.includes(parts[0])) {
+              bucket = parts[0];
+              path = parts.slice(1).join('/');
+            } else {
+              bucket = 'user-library';
+              path = imageUrlToUse;
+            }
+            const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+            if (!signError && signed?.signedUrl) {
+              imageUrlToUse = signed.signedUrl;
+              console.log(`🔏 FINAL CHECK: Signed image URL for bucket "${bucket}"`);
+            }
           }
-          const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-          if (!signError && signed?.signedUrl) {
-            imageUrlToUse = signed.signedUrl;
-            console.log(`🔏 FINAL CHECK: Signed image URL for bucket "${bucket}"`);
-          }
+          
+          modelInput.image_urls = [imageUrlToUse];
+          console.log('🔄 FINAL CHECK: Set image_urls array from request body');
         }
         
-        modelInput.image_urls = [imageUrlToUse];
-        console.log('🔄 FINAL CHECK: Set image_urls array from request body');
-      }
-      
-      // Always remove image_url for models requiring image_urls array
-      if (modelInput.image_url) {
-        delete modelInput.image_url;
-        console.log('🗑️ FINAL CHECK: Removed image_url (model requires image_urls array)');
-      }
-      
-      // Ensure image_urls is an array
-      if (modelInput.image_urls && !Array.isArray(modelInput.image_urls)) {
-        modelInput.image_urls = [modelInput.image_urls];
-        console.log('🔄 FINAL CHECK: Converted image_urls to array');
-      }
-      
-      // CRITICAL: If image_urls is still missing, this is an error
-      if (!modelInput.image_urls || !Array.isArray(modelInput.image_urls) || modelInput.image_urls.length === 0) {
-        console.error('❌ FINAL CHECK: Model requires image_urls array but it is missing!');
-        return new Response(
-          JSON.stringify({ 
-            error: 'Model requires image_urls (array)',
-            details: 'Please provide a reference image URL in input.image_url, input.image, metadata.referenceImage, or metadata.reference_image_url'
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
-      }
-    } else if (!requiresImageUrlsArrayFinal && finalHasReferenceImage) {
-      // For non-Seedream models, ensure image_url is set and image_urls is removed
-      if (!modelInput.image_url && modelInput.image_urls && Array.isArray(modelInput.image_urls) && modelInput.image_urls.length > 0) {
-        modelInput.image_url = modelInput.image_urls[0];
-        console.log('🔄 FINAL CHECK: Converted image_urls to image_url for non-Seedream model');
-      }
-      if (modelInput.image_urls) {
-        delete modelInput.image_urls;
-        console.log('🗑️ FINAL CHECK: Removed image_urls for non-Seedream model');
+        // Always remove image_url for models requiring image_urls array
+        if (modelInput.image_url) {
+          delete modelInput.image_url;
+          console.log('🗑️ FINAL CHECK: Removed image_url (model requires image_urls array)');
+        }
+        
+        // Ensure image_urls is an array
+        if (modelInput.image_urls && !Array.isArray(modelInput.image_urls)) {
+          modelInput.image_urls = [modelInput.image_urls];
+          console.log('🔄 FINAL CHECK: Converted image_urls to array');
+        }
+        
+        // CRITICAL: If image_urls is still missing, this is an error
+        if (!modelInput.image_urls || !Array.isArray(modelInput.image_urls) || modelInput.image_urls.length === 0) {
+          console.error('❌ FINAL CHECK: Model requires image_urls array but it is missing!');
+          return new Response(
+            JSON.stringify({ 
+              error: 'Model requires image_urls (array)',
+              details: 'Please provide a reference image URL in input.image_url, input.image, metadata.referenceImage, or metadata.reference_image_url'
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+      } else if (!requiresImageUrlsArrayFinal && finalHasReferenceImage) {
+        // For non-Seedream models, ensure image_url is set and image_urls is removed
+        if (!modelInput.image_url && modelInput.image_urls && Array.isArray(modelInput.image_urls) && modelInput.image_urls.length > 0) {
+          modelInput.image_url = modelInput.image_urls[0];
+          console.log('🔄 FINAL CHECK: Converted image_urls to image_url for non-Seedream model');
+        }
+        if (modelInput.image_urls) {
+          delete modelInput.image_urls;
+          console.log('🗑️ FINAL CHECK: Removed image_urls for non-Seedream model');
+        }
       }
     }
 
@@ -880,7 +870,7 @@ serve(async (req) => {
     console.log('🔧 fal.ai input configuration (FINAL):', {
       model_key: modelKey,
       is_overridden: isModelOverridden,
-      requires_image_urls_array: requiresImageUrlsArrayFinal,
+      requires_image_urls_array: !isVideo ? requiresImageUrlsArray : false, // Only relevant for non-video
       is_wan_i2v: finalIsWanI2V,
       has_reference_image: hasReferenceImage,
       // Mask sensitive URLs in logs
