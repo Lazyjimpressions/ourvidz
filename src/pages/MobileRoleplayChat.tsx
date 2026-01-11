@@ -747,7 +747,10 @@ const MobileRoleplayChat: React.FC = () => {
           content_tier: contentTier
         });
 
-        const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        // Extract user role from location state
+        const userRole = locationState?.userRole || locationState?.sceneConfig?.userRole;
+
+        const { data, error} = await supabase.functions.invoke('roleplay-chat', {
           body: {
             kickoff: true,
             conversation_id: conversation.id,
@@ -761,6 +764,9 @@ const MobileRoleplayChat: React.FC = () => {
             scene_description: loadedScene?.description || null,
             scene_starters: loadedScene?.scene_starters || null,
             user_id: user.id,
+            // ✅ FIX: Pass user role and character for scene immersion
+            user_role: userRole || null,
+            user_character_id: effectiveUserCharacterId || null,
             // Add prompt template integration
             prompt_template_id: loadedPromptTemplate?.id || null,
             prompt_template_name: loadedPromptTemplate?.template_name || null,
@@ -787,7 +793,14 @@ const MobileRoleplayChat: React.FC = () => {
           id: data.message_id || Date.now().toString(),
           content: data.response || `Hello! I'm ${loadedCharacter.name}.`,
           sender: 'character',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          // ✅ FIX: Include scene metadata for image display and polling
+          metadata: {
+            scene_generated: data.scene_generated || false,
+            job_id: data.scene_job_id || undefined,
+            scene_id: data.scene_id || undefined,
+            usedFallback: data.usedFallback || false
+          }
         };
         setMessages([openerMessage]);
 

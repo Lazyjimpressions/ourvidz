@@ -45,6 +45,9 @@ interface RoleplayChatRequest {
   scene_name?: string; // Scene name for scene generation
   scene_description?: string; // Scene description for scene generation
   scene_starters?: string[]; // Conversation starters from scene template
+  // User context for scene immersion
+  user_role?: string; // User's role in the scene (e.g., "taking the shower")
+  user_character_id?: string; // User character ID for persona integration
   // Scene continuity (I2I iteration) fields
   previous_scene_id?: string; // ID of previous scene for linking
   previous_scene_image_url?: string; // URL of previous scene for I2I iteration
@@ -218,6 +221,9 @@ serve(async (req) => {
       scene_name,
       scene_description,
       scene_starters,
+      // User context for scene immersion
+      user_role,
+      user_character_id,
       // Scene continuity (I2I iteration) fields
       previous_scene_id,
       previous_scene_image_url,
@@ -429,7 +435,7 @@ serve(async (req) => {
     // Route to appropriate model provider
     if (effectiveModelProvider === 'chat_worker') {
       // Local Qwen model
-      const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate, scene_starters);
+      const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate, scene_starters, user_role, scene_description);
       response = await callChatWorkerWithHistory(character, recentMessages || [], systemPrompt, userMessage, content_tier);
       modelUsed = 'chat_worker';
     } else {
@@ -1517,7 +1523,7 @@ Remember: You ARE ${character.name}. Think, speak, and act as this character wou
 }
 
 // Build system prompt with template support and NSFW integration
-function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean, promptTemplate?: any, sceneStarters?: string[]): string {
+function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean, promptTemplate?: any, sceneStarters?: string[], userRole?: string, sceneDescription?: string): string {
   console.log('🔧 Building system prompt:', { 
     characterName: character.name,
     contentTier,
@@ -1596,6 +1602,18 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
       }
     } else {
       systemPrompt += `\\n\\nSCENE BEHAVIOR: Act naturally in the current setting.\\n`;
+    }
+
+    // ✅ Add scene description and user role for immersion
+    if (sceneDescription && sceneDescription.trim()) {
+      systemPrompt += `\\n\\nSCENE SETTING:\\n${sceneDescription}\\n`;
+      console.log('✅ Applied scene description to system prompt');
+    }
+
+    if (userRole && userRole.trim()) {
+      systemPrompt += `\\n\\nUSER'S ROLE: ${userRole}\\n`;
+      systemPrompt += `Address the user according to their role in this scene. Acknowledge their presence and actions as described.\\n`;
+      console.log('✅ Applied user role to system prompt:', userRole);
     }
     
     // Add kickoff-specific instructions
