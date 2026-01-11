@@ -106,10 +106,12 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
     try {
       // Build full prompt with Seedream continuity phrase
       const fullPromptModifier = `${preset.promptModifier}. ${preset.continuityPhrase}`;
+      // ✅ FIX: Use customStrength from slider if user adjusted it, otherwise use preset strength
+      const strengthToUse = customStrength !== 0.45 ? customStrength : preset.strength;
       await onSelectPreset({
         ...preset,
         promptModifier: fullPromptModifier
-      }, customStrength);
+      }, strengthToUse);
       onClose();
     } finally {
       setIsLoading(false);
@@ -138,30 +140,30 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
         className="rounded-t-2xl max-h-[85vh] overflow-y-auto"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
       >
-        <SheetHeader className="pb-4">
-          <SheetTitle className="text-left">Scene Actions</SheetTitle>
+        <SheetHeader className="pb-2">
+          <SheetTitle className="text-left text-base">Scene Actions</SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-5">
-          {/* Generation Mode Toggle */}
+        <div className="space-y-3">
+          {/* Generation Mode Toggle - More Compact */}
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setGenerationMode('modify')}
               disabled={isLoading}
               className={cn(
-                "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                "flex items-center gap-2 p-2.5 rounded-lg border-2 transition-all",
                 generationMode === 'modify'
                   ? "bg-purple-600/20 border-purple-500"
                   : "bg-card border-border hover:bg-accent"
               )}
             >
               <RefreshCw className={cn(
-                "w-6 h-6",
+                "w-4 h-4 shrink-0",
                 generationMode === 'modify' ? "text-purple-400" : "text-muted-foreground"
               )} />
-              <div className="text-center">
-                <div className="font-medium text-sm">Modify Current</div>
-                <div className="text-xs text-muted-foreground">I2I Edit</div>
+              <div className="text-left min-w-0">
+                <div className="font-medium text-xs">Modify</div>
+                <div className="text-[10px] text-muted-foreground">I2I Edit</div>
               </div>
             </button>
 
@@ -169,19 +171,19 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
               onClick={() => setGenerationMode('fresh')}
               disabled={isLoading}
               className={cn(
-                "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
+                "flex items-center gap-2 p-2.5 rounded-lg border-2 transition-all",
                 generationMode === 'fresh'
                   ? "bg-blue-600/20 border-blue-500"
                   : "bg-card border-border hover:bg-accent"
               )}
             >
               <Sparkles className={cn(
-                "w-6 h-6",
+                "w-4 h-4 shrink-0",
                 generationMode === 'fresh' ? "text-blue-400" : "text-muted-foreground"
               )} />
-              <div className="text-center">
-                <div className="font-medium text-sm">Fresh Scene</div>
-                <div className="text-xs text-muted-foreground">From Character</div>
+              <div className="text-left min-w-0">
+                <div className="font-medium text-xs">Fresh</div>
+                <div className="text-[10px] text-muted-foreground">From Character</div>
               </div>
             </button>
           </div>
@@ -189,34 +191,34 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
           {/* Modify Mode Content */}
           {generationMode === 'modify' && (
             <>
-              {/* Quick Presets */}
-              <div className="space-y-3">
+              {/* Quick Presets - More Compact */}
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium">Quick Presets</h4>
+                  <h4 className="text-xs font-medium">Quick Presets</h4>
                   {contentMode === 'nsfw' && (
-                    <Badge variant="outline" className="text-xs text-amber-400 border-amber-400/50">
+                    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-400/50 px-1.5 py-0">
                       NSFW
                     </Badge>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   {availablePresets.map((preset) => (
                     <button
                       key={preset.id}
                       onClick={() => handlePresetSelect(preset)}
                       disabled={isLoading}
                       className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg border transition-colors",
+                        "flex items-center gap-2 p-2 rounded-md border transition-colors",
                         "bg-card border-border hover:bg-accent hover:border-purple-500/50",
                         isLoading && "opacity-50 cursor-not-allowed"
                       )}
                     >
-                      <preset.icon className="w-5 h-5 text-purple-400 shrink-0" />
-                      <div className="text-left min-w-0">
-                        <div className="font-medium text-sm truncate">{preset.label}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {Math.round(preset.strength * 100)}% intensity
+                      <preset.icon className="w-4 h-4 text-purple-400 shrink-0" />
+                      <div className="text-left min-w-0 flex-1">
+                        <div className="font-medium text-xs truncate">{preset.label}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {Math.round(preset.strength * 100)}%
                         </div>
                       </div>
                     </button>
@@ -227,22 +229,22 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
                     onClick={handleCustomEdit}
                     disabled={isLoading}
                     className={cn(
-                      "flex items-center gap-3 p-3 rounded-lg border transition-colors",
+                      "flex items-center gap-2 p-2 rounded-md border transition-colors",
                       "bg-card border-border hover:bg-accent hover:border-blue-500/50",
                       isLoading && "opacity-50 cursor-not-allowed"
                     )}
                   >
-                    <Edit3 className="w-5 h-5 text-blue-400 shrink-0" />
-                    <div className="text-left min-w-0">
-                      <div className="font-medium text-sm">Custom Edit</div>
-                      <div className="text-xs text-muted-foreground">Edit prompt</div>
+                    <Edit3 className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div className="text-left min-w-0 flex-1">
+                      <div className="font-medium text-xs">Custom</div>
+                      <div className="text-[10px] text-muted-foreground">Edit prompt</div>
                     </div>
                   </button>
                 </div>
               </div>
 
-              {/* Intensity Selector */}
-              <div className="p-4 bg-muted/30 rounded-lg">
+              {/* Intensity Selector - More Compact */}
+              <div className="p-2.5 bg-muted/30 rounded-lg">
                 <IntensitySelector
                   value={customStrength}
                   onChange={setCustomStrength}
@@ -251,38 +253,36 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
                 />
               </div>
 
-              {/* NSFW Warning for Seedream */}
+              {/* NSFW Warning - More Compact */}
               {contentMode === 'nsfw' && (
-                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-300">
-                    Seedream has internal moderation - explicit content may be limited.
-                    For fully explicit NSFW, local WAN models work better.
+                <div className="flex items-start gap-1.5 p-2 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-amber-300 leading-relaxed">
+                    Seedream has moderation limits. For explicit NSFW, use local WAN models.
                   </p>
                 </div>
               )}
             </>
           )}
 
-          {/* Fresh Mode Content */}
+          {/* Fresh Mode Content - More Compact */}
           {generationMode === 'fresh' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                <p className="text-sm text-blue-300">
-                  Generate a completely new scene using the character's reference portrait.
-                  The current scene will be replaced with a fresh generation.
+            <div className="space-y-2">
+              <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                <p className="text-xs text-blue-300 leading-relaxed">
+                  Generate a new scene from character reference. Current scene will be replaced.
                 </p>
               </div>
 
               <Button
                 onClick={handleFreshGeneration}
                 disabled={isLoading}
-                className="w-full h-12 bg-blue-600 hover:bg-blue-700"
+                className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-sm"
               >
                 {isLoading ? (
-                  <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
-                  <Sparkles className="w-5 h-5 mr-2" />
+                  <Sparkles className="w-4 h-4 mr-2" />
                 )}
                 Generate Fresh Scene
               </Button>

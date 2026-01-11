@@ -36,18 +36,18 @@ export const IntensitySelector: React.FC<IntensitySelectorProps> = ({
   const activePreset = getActivePreset();
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-medium text-foreground">
-          Modification Intensity
+        <label className="text-xs font-medium text-foreground">
+          Intensity
         </label>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           {Math.round(value * 100)}%
         </span>
       </div>
 
-      {/* Preset buttons */}
-      <div className="flex gap-2">
+      {/* Preset buttons - More Compact */}
+      <div className="flex gap-1.5">
         {INTENSITY_PRESETS.map((preset) => (
           <Button
             key={preset.label}
@@ -56,19 +56,19 @@ export const IntensitySelector: React.FC<IntensitySelectorProps> = ({
             onClick={() => onChange(preset.value)}
             disabled={disabled}
             className={cn(
-              'flex-1 flex flex-col h-auto py-2',
+              'flex-1 flex flex-col h-auto py-1.5 text-xs',
               activePreset === preset.label && 'bg-purple-600 hover:bg-purple-700'
             )}
           >
-            <span className="font-medium">{preset.label}</span>
-            <span className="text-xs opacity-70">{preset.description}</span>
+            <span className="font-medium text-xs">{preset.label}</span>
+            <span className="text-[10px] opacity-70">{preset.description}</span>
           </Button>
         ))}
       </div>
 
-      {/* Fine-tune slider */}
+      {/* Fine-tune slider - More Compact */}
       {showSlider && (
-        <div className="pt-2">
+        <div className="pt-1">
           <Slider
             value={[value]}
             onValueChange={(vals) => onChange(vals[0])}
@@ -78,9 +78,9 @@ export const IntensitySelector: React.FC<IntensitySelectorProps> = ({
             disabled={disabled}
             className="w-full"
           />
-          <div className="flex justify-between text-xs text-muted-foreground mt-1">
-            <span>Preserve scene</span>
-            <span>Transform scene</span>
+          <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
+            <span>Preserve</span>
+            <span>Transform</span>
           </div>
         </div>
       )}

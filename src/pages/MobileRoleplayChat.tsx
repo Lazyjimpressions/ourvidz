@@ -788,13 +788,43 @@ const MobileRoleplayChat: React.FC = () => {
     console.log('🔄 Checking/subscribing to workspace_assets for job:', { jobId, messageId });
 
     // Helper to update message with asset data
-    const updateMessageWithAsset = (assetData: { temp_storage_path: string; id: string; scene_id?: string }) => {
+    const updateMessageWithAsset = async (assetData: { temp_storage_path: string; id: string; scene_id?: string }) => {
       console.log('🎬 updateMessageWithAsset called:', {
         messageId,
         assetId: assetData.id,
         tempStoragePath: assetData.temp_storage_path?.substring(0, 60) + '...',
         sceneId: assetData.scene_id
       });
+
+      // ✅ FIX: Fetch scene data from character_scenes if scene_id is available
+      let scenePrompt: string | undefined;
+      let originalScenePrompt: string | undefined;
+      let sceneTemplateId: string | undefined;
+      let sceneTemplateName: string | undefined;
+
+      if (assetData.scene_id) {
+        try {
+          const { data: sceneData } = await supabase
+            .from('character_scenes')
+            .select('scene_prompt, generation_metadata')
+            .eq('id', assetData.scene_id)
+            .single();
+
+          if (sceneData) {
+            scenePrompt = sceneData.scene_prompt;
+            originalScenePrompt = sceneData.generation_metadata?.original_scene_prompt;
+            sceneTemplateId = sceneData.generation_metadata?.scene_template_id;
+            sceneTemplateName = sceneData.generation_metadata?.scene_template_name;
+            console.log('✅ Fetched scene data:', {
+              hasScenePrompt: !!scenePrompt,
+              hasOriginalPrompt: !!originalScenePrompt,
+              hasTemplateInfo: !!(sceneTemplateId || sceneTemplateName)
+            });
+          }
+        } catch (error) {
+          console.error('❌ Error fetching scene data:', error);
+        }
+      }
 
       setMessages(prev => {
         const messageExists = prev.some(msg => msg.id === messageId);
@@ -812,7 +842,15 @@ const MobileRoleplayChat: React.FC = () => {
                 image_url: assetData.temp_storage_path,
                 asset_id: assetData.id,
                 scene_id: assetData.scene_id,
-                job_completed: true
+                scene_prompt: scenePrompt, // ✅ FIX: Store scene prompt
+                job_completed: true,
+                // ✅ FIX: Update generation_metadata with scene template info and original prompt
+                generation_metadata: {
+                  ...msg.metadata?.generation_metadata,
+                  scene_template_id: sceneTemplateId,
+                  scene_template_name: sceneTemplateName,
+                  original_scene_prompt: originalScenePrompt || scenePrompt
+                }
               }
             };
           }
@@ -909,7 +947,7 @@ const MobileRoleplayChat: React.FC = () => {
       console.log('✅ Asset already exists for job (sync provider):', jobId);
       // Extract scene_id from generation_settings if available
       const sceneId = (existingAsset.generation_settings as any)?.scene_id;
-      updateMessageWithAsset({ ...existingAsset, scene_id: sceneId });
+      await updateMessageWithAsset({ ...existingAsset, scene_id: sceneId });
       return; // No need to subscribe
     }
 
@@ -926,14 +964,14 @@ const MobileRoleplayChat: React.FC = () => {
           table: 'workspace_assets',
           filter: `job_id=eq.${jobId}`
         },
-        (payload) => {
+        async (payload) => {
           console.log('✅ Workspace asset created for job:', jobId, payload.new);
 
           const assetData = payload.new as { temp_storage_path?: string; id: string; generation_settings?: any };
           if (assetData?.temp_storage_path) {
             // Extract scene_id from generation_settings if available
             const sceneId = assetData.generation_settings?.scene_id;
-            updateMessageWithAsset({
+            await updateMessageWithAsset({
               temp_storage_path: assetData.temp_storage_path,
               id: assetData.id,
               scene_id: sceneId
@@ -1118,7 +1156,10 @@ const MobileRoleplayChat: React.FC = () => {
               chat_provider: data.usedFallback ? data.fallbackModel : modelProvider,
               processing_time: data.processing_time,
               memory_tier: memoryTier,
-              content_tier: contentTier
+              content_tier: contentTier,
+              // ✅ FIX: Include scene template info if available
+              scene_template_id: data.scene_template_id,
+              scene_template_name: data.scene_template_name
             }
           }
         };

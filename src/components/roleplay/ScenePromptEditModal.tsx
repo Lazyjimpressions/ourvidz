@@ -59,13 +59,16 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
   }, [isOpen, sceneId, jobId]);
 
   // Set prompt when currentPrompt or sceneData changes
+  // ✅ FIX: Prioritize original_scene_prompt from metadata (actual prompt used for generation)
   useEffect(() => {
-    if (currentPrompt) {
-      setEditedPrompt(currentPrompt);
-      setOriginalPrompt(currentPrompt);
-    } else if (sceneData?.scene_prompt) {
-      setEditedPrompt(sceneData.scene_prompt);
-      setOriginalPrompt(sceneData.scene_prompt);
+    // Priority: original_scene_prompt from metadata > scene_prompt from DB > currentPrompt prop
+    const actualPrompt = sceneData?.generation_metadata?.original_scene_prompt 
+      || sceneData?.scene_prompt 
+      || currentPrompt;
+    
+    if (actualPrompt) {
+      setEditedPrompt(actualPrompt);
+      setOriginalPrompt(actualPrompt);
     }
   }, [currentPrompt, sceneData]);
 

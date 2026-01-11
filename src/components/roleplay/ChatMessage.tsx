@@ -260,11 +260,21 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   // Handle preset selection from QuickModificationSheet
   const handlePresetSelect = async (preset: ModificationPreset, customStrength?: number) => {
-    if (!onSceneRegenerate || !message.metadata?.scene_prompt) return;
+    if (!onSceneRegenerate) return;
+
+    // ✅ FIX: Get actual prompt used for generation (original_scene_prompt from metadata or scene_prompt)
+    const actualPrompt = message.metadata?.generation_metadata?.original_scene_prompt 
+      || message.metadata?.scene_prompt;
+    
+    if (!actualPrompt) {
+      console.warn('⚠️ No scene prompt found in metadata');
+      return;
+    }
 
     // Combine original scene prompt with preset modifier (which already includes continuity phrase)
-    const modifiedPrompt = `${message.metadata.scene_prompt}. ${preset.promptModifier}`;
-    const strengthToUse = customStrength ?? preset.strength;
+    const modifiedPrompt = `${actualPrompt}. ${preset.promptModifier}`;
+    // ✅ FIX: Use customStrength from slider if provided, otherwise use preset strength
+    const strengthToUse = customStrength !== undefined ? customStrength : preset.strength;
 
     // Call regenerate with current scene image (I2I mode) and strength
     await onSceneRegenerate(
@@ -276,11 +286,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   // Handle fresh generation (T2I from character reference)
   const handleFreshGeneration = async () => {
-    if (!onSceneRegenerate || !message.metadata?.scene_prompt) return;
+    if (!onSceneRegenerate) return;
+
+    // ✅ FIX: Get actual prompt used for generation
+    const actualPrompt = message.metadata?.generation_metadata?.original_scene_prompt 
+      || message.metadata?.scene_prompt;
+    
+    if (!actualPrompt) {
+      console.warn('⚠️ No scene prompt found in metadata');
+      return;
+    }
 
     // Call regenerate WITHOUT current scene image (triggers T2I mode)
     await onSceneRegenerate(
-      message.metadata.scene_prompt,
+      actualPrompt,
       undefined,  // No image = T2I mode
       undefined   // No strength needed for T2I
     );
@@ -468,33 +487,61 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                       </Button>
                     </div>
                   ) : signedSceneImage ? (
-                    <img
-                      src={signedSceneImage}
-                      alt="Generated scene"
-                      className={cn(
-                        "w-full h-auto object-contain rounded-t-xl transition-opacity duration-300",
-                        isMobile ? "max-h-[60vh]" : "max-h-96",
-                        sceneImageLoading ? "opacity-0 h-0" : "opacity-100",
-                        onSceneRegenerate && "cursor-pointer"
+                    <div className="relative group/image">
+                      <img
+                        src={signedSceneImage}
+                        alt="Generated scene"
+                        className={cn(
+                          "w-full h-auto object-contain rounded-t-xl transition-opacity duration-300",
+                          isMobile ? "max-h-[60vh]" : "max-h-96",
+                          sceneImageLoading ? "opacity-0 h-0" : "opacity-100",
+                          onSceneRegenerate && "cursor-pointer"
+                        )}
+                        onClick={() => {
+                          if (onSceneRegenerate) {
+                            setShowQuickModSheet(true);
+                          }
+                        }}
+                        onLoad={() => {
+                          setSceneImageLoading(false);
+                          console.log('✅ Scene image loaded successfully');
+                        }}
+                        onError={(e) => {
+                          console.error('❌ Scene image failed to load:', {
+                            src: signedSceneImage?.substring(0, 100),
+                            error: e
+                          });
+                          setSceneImageLoading(false);
+                          setSceneImageError('Image failed to load');
+                        }}
+                      />
+                      {/* ✅ ADMIN: Info icon on hover for admin users */}
+                      {isAdmin && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover/image:opacity-100 transition-opacity bg-black/60 hover:bg-black/80 z-10"
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label="View admin debug info"
+                            >
+                              <Info className="w-4 h-4 text-white" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent 
+                            className="w-80 max-h-[80vh] overflow-y-auto p-3" 
+                            align="end"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <SceneDebugPanel 
+                              generationMetadata={message.metadata?.generation_metadata || message.metadata}
+                              sceneData={message.metadata}
+                            />
+                          </PopoverContent>
+                        </Popover>
                       )}
-                      onClick={() => {
-                        if (onSceneRegenerate) {
-                          setShowQuickModSheet(true);
-                        }
-                      }}
-                      onLoad={() => {
-                        setSceneImageLoading(false);
-                        console.log('✅ Scene image loaded successfully');
-                      }}
-                      onError={(e) => {
-                        console.error('❌ Scene image failed to load:', {
-                          src: signedSceneImage?.substring(0, 100),
-                          error: e
-                        });
-                        setSceneImageLoading(false);
-                        setSceneImageError('Image failed to load');
-                      }}
-                    />
+                    </div>
                   ) : !sceneImageLoading ? (
                     // No image and not loading - likely an error we haven't caught
                     <div className="w-full h-64 bg-gray-800 rounded-t-xl flex items-center justify-center flex-col gap-2">
@@ -577,7 +624,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           jobId={message.metadata?.job_id}
           conversationId={conversationId}
           characterId={character?.id}
-          currentPrompt={message.metadata?.scene_prompt}
+          currentPrompt={message.metadata?.generation_metadata?.original_scene_prompt || message.metadata?.scene_prompt}
           consistencySettings={consistencySettings}
           currentSceneImageUrl={signedSceneImage || message.metadata?.image_url}
           onRegenerate={onSceneRegenerate}
@@ -596,7 +643,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           }}
           onFreshGeneration={handleFreshGeneration}
           currentSceneImageUrl={signedSceneImage || message.metadata?.image_url}
-          currentScenePrompt={message.metadata?.scene_prompt || ''}
+          currentScenePrompt={message.metadata?.generation_metadata?.original_scene_prompt || message.metadata?.scene_prompt || ''}
           contentMode={contentMode}
         />
       )}

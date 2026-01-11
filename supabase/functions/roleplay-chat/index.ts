@@ -2393,13 +2393,15 @@ const sceneContext = analyzeSceneContent(response);
         const modelConfig = await getModelConfig(supabase, roleplayModel);
 
         if (modelConfig && modelConfig.provider_name === 'openrouter') {
+          // ✅ FIX: Use contentTier parameter instead of sceneContext.isNSFW (more reliable)
+          const effectiveContentTier = contentTier || (sceneContext.isNSFW ? 'nsfw' : 'sfw');
           const narrativeResult = await generateSceneNarrativeWithOpenRouter(
             character,
             sceneContext,
             conversationHistory,
             characterVisualDescription,
             roleplayModel,
-            sceneContext.isNSFW ? 'nsfw' : 'sfw',
+            effectiveContentTier, // ✅ FIX: Use contentTier parameter
             modelConfig,
             supabase,
             useI2IIteration  // ✅ FIX 3.3: PASS I2I FLAG
