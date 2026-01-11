@@ -116,36 +116,65 @@ export const uploadFile = async (
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
   try {
-    // Check authentication - try getUser first, fallback to getSession
+    // Check authentication - try getUser first, fallback to getSession, then refresh
     let user = null;
+    let authMethod = 'none';
+    
     try {
       const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
       if (getUserError) {
         console.warn('⚠️ getUser() failed, trying getSession():', getUserError.message);
         // Fallback to getSession if getUser fails
-        const { data: { session } } = await supabase.auth.getSession();
-        user = session?.user || null;
-      } else {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.warn('⚠️ getSession() also failed, trying refreshSession():', sessionError.message);
+          // Last resort: try refreshing the session (mobile session might be stale)
+          try {
+            const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+            if (!refreshError && refreshedSession?.user) {
+              user = refreshedSession.user;
+              authMethod = 'refreshSession';
+              console.log('✅ Session refreshed successfully');
+            } else {
+              console.error('❌ refreshSession() failed:', refreshError?.message);
+            }
+          } catch (refreshErr) {
+            console.error('❌ refreshSession() exception:', refreshErr);
+          }
+        } else if (session?.user) {
+          user = session.user;
+          authMethod = 'getSession';
+        }
+      } else if (getUserResult) {
         user = getUserResult;
+        authMethod = 'getUser';
       }
     } catch (authError) {
-      console.error('❌ Auth check failed:', authError);
+      console.error('❌ Auth check exception:', authError);
       // Try getSession as last resort
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        user = session?.user || null;
+        if (session?.user) {
+          user = session.user;
+          authMethod = 'getSession (fallback)';
+        }
       } catch (sessionError) {
-        console.error('❌ getSession() also failed:', sessionError);
+        console.error('❌ getSession() fallback also failed:', sessionError);
       }
     }
     
     if (!user) {
       const errorMsg = 'User must be authenticated to upload files. Please log in and try again.';
-      console.error('❌ Upload failed - no authenticated user');
+      console.error('❌ Upload failed - no authenticated user after all attempts');
+      console.error('🔍 Debug info:', {
+        hasLocalStorage: typeof localStorage !== 'undefined',
+        hasSessionStorage: typeof sessionStorage !== 'undefined',
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown'
+      });
       throw new Error(errorMsg);
     }
     
-    console.log('✅ User authenticated for upload:', user.id.substring(0, 8) + '...');
+    console.log(`✅ User authenticated for upload via ${authMethod}:`, user.id.substring(0, 8) + '...');
 
     // Create user-scoped path for private buckets
     const userScopedPath = bucket === 'system_assets' 

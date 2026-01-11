@@ -14,7 +14,6 @@ import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
 import { MobileReferenceImagePreview } from './MobileReferenceImagePreview';
 import { detectImageType, looksLikeImage, isHeicType, normalizeExtension } from '@/utils/imageTypeDetection';
 import { uploadAndSignReferenceImage } from '@/lib/storage';
-import { supabase } from '@/integrations/supabase/client';
 
 // Detect iOS Safari for special handling
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -249,21 +248,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       // This fixes iPhone persistence issues - File objects may not persist on iOS
       console.log('📤 MOBILE: Uploading reference image immediately (iPhone fix)...');
       
-      // Check authentication before attempting upload
-      try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-          console.error('❌ MOBILE: User not authenticated:', authError?.message || 'No user found');
-          toast.error('Please log in to upload images. Your session may have expired.');
-          return;
-        }
-        console.log('✅ MOBILE: User authenticated:', user.id.substring(0, 8) + '...');
-      } catch (authCheckError) {
-        console.error('❌ MOBILE: Auth check failed:', authCheckError);
-        toast.error('Authentication check failed. Please refresh the page and try again.');
-        return;
-      }
-      
+      // Don't pre-check auth - let upload function handle it (matches desktop behavior)
+      // The upload function has robust auth checking with fallbacks
       try {
         const signedUrl = await uploadAndSignReferenceImage(persistedFile);
         console.log('✅ MOBILE: Reference image uploaded and signed:', signedUrl.substring(0, 60) + '...');
