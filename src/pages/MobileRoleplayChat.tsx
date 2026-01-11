@@ -100,6 +100,10 @@ const MobileRoleplayChat: React.FC = () => {
     isLoading: userCharactersLoading
   } = useUserCharacters();
 
+  // Auth hook - must be called before using user
+  const { user, profile } = useAuth();
+  const { toast } = useToast();
+
   // User character state
   const [selectedUserCharacterId, setSelectedUserCharacterId] = useState<string | null>(null);
   const [signedUserCharacterImage, setSignedUserCharacterImage] = useState<string | null>(null);
@@ -244,10 +248,8 @@ const MobileRoleplayChat: React.FC = () => {
   const hasInitialized = useRef(false);
   const currentRouteRef = useRef<string>('');
 
-  // Hooks
-  const { user, profile } = useAuth();
+  // Signed URL hook for image URLs
   const { getSignedUrl } = useSignedImageUrls();
-  const { toast } = useToast();
 
   // Scene continuity hook - tracks previous scene for I2I iteration
   const {
@@ -257,6 +259,9 @@ const MobileRoleplayChat: React.FC = () => {
     setLastScene,
     clearLastScene
   } = useSceneContinuity(conversationId || undefined);
+
+  // Track active Realtime subscriptions for cleanup
+  const activeChannelsRef = useRef<Set<any>>(new Set());
 
   // Helper to get valid image model with fallback to first active Replicate model
   // Always returns a valid Replicate model UUID (never null) to avoid defaulting to local SDXL
@@ -281,11 +286,24 @@ const MobileRoleplayChat: React.FC = () => {
     return null;
   };
 
-  // Cleanup on unmount
+  // Cleanup on unmount - remove all active subscriptions
   useEffect(() => {
     return () => {
       hasInitialized.current = false;
       currentRouteRef.current = '';
+
+      // Clean up all active Realtime subscriptions
+      if (activeChannelsRef.current.size > 0) {
+        console.log('🧹 Cleaning up', activeChannelsRef.current.size, 'active Realtime subscriptions');
+        activeChannelsRef.current.forEach(channel => {
+          try {
+            supabase.removeChannel(channel);
+          } catch (error) {
+            console.error('Error removing channel:', error);
+          }
+        });
+        activeChannelsRef.current.clear();
+      }
     };
   }, []);
 
@@ -1087,15 +1105,51 @@ const MobileRoleplayChat: React.FC = () => {
           }
 
           // Cleanup subscription after success
-          supabase.removeChannel(channel);
+          try {
+            await supabase.removeChannel(channel);
+            activeChannelsRef.current.delete(channel);
+            console.log('✅ Cleaned up subscription for job:', jobId);
+          } catch (error) {
+            console.error('Error removing channel:', error);
+          }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        // Handle subscription status changes
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscribed to job completion channel:', jobId);
+          activeChannelsRef.current.add(channel);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Channel error for job:', jobId, err);
+          activeChannelsRef.current.delete(channel);
+
+          // Show user-friendly error (Realtime might not be enabled)
+          toast({
+            title: 'Connection issue',
+            description: 'Scene updates may be delayed. Your scene will still generate.',
+          });
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Subscription timed out for job:', jobId);
+          activeChannelsRef.current.delete(channel);
+        } else if (status === 'CLOSED') {
+          console.log('🔒 Channel closed for job:', jobId);
+          activeChannelsRef.current.delete(channel);
+        }
+      });
 
     // Fallback cleanup after 2 minutes
-    setTimeout(() => {
-      supabase.removeChannel(channel);
+    const timeoutId = setTimeout(async () => {
+      try {
+        await supabase.removeChannel(channel);
+        activeChannelsRef.current.delete(channel);
+        console.log('⏱️ Cleaned up subscription after timeout for job:', jobId);
+      } catch (error) {
+        console.error('Error removing channel on timeout:', error);
+      }
     }, 120000);
+
+    // Store timeout ID for potential early cleanup
+    (channel as any)._timeoutId = timeoutId;
   };
 
   const handleSendMessage = async (content: string) => {

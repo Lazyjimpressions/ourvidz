@@ -181,6 +181,7 @@ const MobileRoleplayDashboard = () => {
   // Subscribe to character table updates for image_url changes
   // This ensures character cards update when images are generated
   useEffect(() => {
+    let isSubscribed = false;
     const channel = supabase
       .channel(`character-image-updates-${Date.now()}`)
       .on(
@@ -203,10 +204,34 @@ const MobileRoleplayDashboard = () => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          isSubscribed = true;
+          console.log('✅ Subscribed to character updates');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Character updates channel error:', err);
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Character updates subscription timed out');
+        }
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      // Only remove channel if it was successfully subscribed
+      if (isSubscribed) {
+        try {
+          supabase.removeChannel(channel);
+          console.log('🧹 Cleaned up character updates subscription');
+        } catch (error) {
+          console.error('Error removing character updates channel:', error);
+        }
+      } else {
+        // Channel never connected, just unsubscribe to stop connection attempts
+        try {
+          channel.unsubscribe();
+        } catch (error) {
+          // Ignore errors during unsubscribe of non-connected channels
+        }
+      }
     };
   }, [loadPublicCharacters, loadUserCharacters]);
 

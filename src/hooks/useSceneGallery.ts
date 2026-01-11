@@ -216,22 +216,36 @@ export const useSceneGallery = (
    */
   const incrementUsage = async (sceneId: string): Promise<void> => {
     try {
-      const { error: rpcError } = await supabase.rpc('increment_scene_usage', {
-        scene_id: sceneId
-      });
+      // Fetch current usage count
+      const { data, error: fetchError } = await supabase
+        .from('scenes')
+        .select('usage_count')
+        .eq('id', sceneId)
+        .single();
 
-      // If RPC doesn't exist, do manual update
-      if (rpcError) {
-        await supabase
-          .from('scenes')
-          .update({ usage_count: supabase.rpc('increment', { x: 1 }) })
-          .eq('id', sceneId);
+      if (fetchError) {
+        console.warn('Could not fetch scene usage count:', fetchError);
+        return;
+      }
+
+      // Increment and update
+      const newCount = (data?.usage_count || 0) + 1;
+      const { error: updateError } = await supabase
+        .from('scenes')
+        .update({ usage_count: newCount })
+        .eq('id', sceneId);
+
+      if (updateError) {
+        console.warn('Could not update scene usage count:', updateError);
+        return;
       }
 
       // Update local state
       setScenes(prev => prev.map(s =>
-        s.id === sceneId ? { ...s, usage_count: s.usage_count + 1 } : s
+        s.id === sceneId ? { ...s, usage_count: newCount } : s
       ));
+
+      console.log('✅ Scene usage incremented:', sceneId, 'count:', newCount);
     } catch (err) {
       // Non-critical error, just log it
       console.warn('Could not increment scene usage:', err);

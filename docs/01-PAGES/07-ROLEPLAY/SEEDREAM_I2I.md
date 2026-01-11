@@ -271,13 +271,138 @@ Once the edge function changes are deployed, test the following:
 
 ---
 
+## Additional Bug Fixes
+
+### 7. Fixed Scene Usage Increment Causing Blank Screen ✅ FIXED
+
+**Location:** [src/hooks/useSceneGallery.ts](../../../src/hooks/useSceneGallery.ts#L217-253)
+
+**Problem:** When initiating a scene, the screen went blank due to database errors:
+- `POST .../rpc/increment_scene_usage 404 (Not Found)` - RPC function doesn't exist
+- `PATCH .../scenes?id=eq.... 400 (Bad Request)` - Invalid SQL syntax in fallback
+
+**Root Cause:**
+```typescript
+// OLD CODE - Lines 217-239
+const incrementUsage = async (sceneId: string): Promise<void> => {
+  try {
+    const { error: rpcError } = await supabase.rpc('increment_scene_usage', {
+      scene_id: sceneId
+    });
+
+    // If RPC doesn't exist, do manual update
+    if (rpcError) {
+      await supabase
+        .from('scenes')
+        .update({ usage_count: supabase.rpc('increment', { x: 1 }) })  // ❌ Invalid syntax
+        .eq('id', sceneId);
+    }
+    // ...
+  }
+};
+```
+
+**Fix Applied:**
+```typescript
+// NEW CODE - Lines 217-253
+const incrementUsage = async (sceneId: string): Promise<void> => {
+  try {
+    // Fetch current usage count
+    const { data, error: fetchError } = await supabase
+      .from('scenes')
+      .select('usage_count')
+      .eq('id', sceneId)
+      .single();
+
+    if (fetchError) {
+      console.warn('Could not fetch scene usage count:', fetchError);
+      return;
+    }
+
+    // Increment and update
+    const newCount = (data?.usage_count || 0) + 1;
+    const { error: updateError } = await supabase
+      .from('scenes')
+      .update({ usage_count: newCount })
+      .eq('id', sceneId);
+
+    if (updateError) {
+      console.warn('Could not update scene usage count:', updateError);
+      return;
+    }
+
+    // Update local state
+    setScenes(prev => prev.map(s =>
+      s.id === sceneId ? { ...s, usage_count: newCount } : s
+    ));
+
+    console.log('✅ Scene usage incremented:', sceneId, 'count:', newCount);
+  } catch (err) {
+    console.warn('Could not increment scene usage:', err);
+  }
+};
+```
+
+**Result:** Scene starts no longer cause blank screen. Usage tracking now works properly without requiring RPC functions.
+
+---
+
+### 8. Fixed "Cannot access 'user' before initialization" Error ✅ FIXED
+
+**Location:** [src/pages/MobileRoleplayChat.tsx](../../../src/pages/MobileRoleplayChat.tsx#L103-105)
+
+**Problem:** When navigating to scene chat, app crashed with error:
+```
+Uncaught ReferenceError: Cannot access 'user' before initialization at MobileRoleplayChat.tsx:131
+```
+
+**Root Cause:**
+The `useAuth()` hook was being called at line 248, but the `user` variable was being referenced much earlier at line 109 in a useEffect that loads the default user character.
+
+```typescript
+// Line 109 - USING user before it's declared
+useEffect(() => {
+  if (user?.id && defaultCharacterId && !selectedUserCharacterId) {
+    // ...
+  }
+}, [user?.id, defaultCharacterId]);
+
+// Line 248 - DECLARING user (too late!)
+const { user, profile } = useAuth();
+```
+
+**Fix Applied:**
+Moved `useAuth()` and `useToast()` hook calls to the top of the component (after other hooks, before any state that uses them):
+
+```typescript
+// Line 103-105 - Now declared BEFORE first use
+const { user, profile } = useAuth();
+const { toast } = useToast();
+
+// User character state
+const [selectedUserCharacterId, setSelectedUserCharacterId] = useState<string | null>(null);
+// ...
+
+// Line 112 - Now user is available
+useEffect(() => {
+  if (user?.id && defaultCharacterId && !selectedUserCharacterId) {
+    // ...
+  }
+}, [user?.id, defaultCharacterId]);
+```
+
+**Result:** Scene chat page loads without crashing. Hook ordering follows React best practices.
+
+---
+
 ## Next Steps
 
 1. ✅ Deploy frontend changes (build complete)
-2. 🔴 Update `roleplay-chat` edge function via Supabase dashboard (6 changes listed above)
-3. ✅ Test scene prompt with "A Steamy Shower" scenario
-4. 🔵 Investigate image inline delivery (scene images in workspace vs chat)
-5. 🔵 Investigate character image usage in scene generation
+2. ✅ Fixed scene usage increment blank screen issue
+3. 🔴 Update `roleplay-chat` edge function via Supabase dashboard (6 changes listed above)
+4. ✅ Test scene prompt with "A Steamy Shower" scenario
+5. 🔵 Investigate image inline delivery (scene images in workspace vs chat)
+6. 🔵 Investigate character image usage in scene generation
 
 ---
 
