@@ -75,21 +75,35 @@ const MobileSimplifiedWorkspace = () => {
       isValidUrl: url.startsWith('http://') || url.startsWith('https://')
     });
     
+    // CRITICAL FIX: Clear old image state FIRST to prevent visual conflicts
+    // This ensures the UI clears the old image before showing the new one
     switch (type) {
       case 'single':
-        setReferenceImageUrl(url);
-        setReferenceImage(null); // Clear File object - we have URL now
-        console.log('✅ MOBILE: Reference image URL set in hook state');
+        // Clear old state first
+        setReferenceImage(null);
+        setReferenceImageUrl(null);
+        // Use setTimeout to ensure state clears before setting new URL
+        // This prevents the preview from showing both old and new images
+        setTimeout(() => {
+          setReferenceImageUrl(url);
+          console.log('✅ MOBILE: Reference image URL set in hook state (after clear)');
+        }, 0);
         break;
       case 'start':
-        setBeginningRefImageUrl(url);
         setBeginningRefImage(null);
-        console.log('✅ MOBILE: Beginning reference image URL set in hook state');
+        setBeginningRefImageUrl(null);
+        setTimeout(() => {
+          setBeginningRefImageUrl(url);
+          console.log('✅ MOBILE: Beginning reference image URL set in hook state (after clear)');
+        }, 0);
         break;
       case 'end':
-        setEndingRefImageUrl(url);
         setEndingRefImage(null);
-        console.log('✅ MOBILE: Ending reference image URL set in hook state');
+        setEndingRefImageUrl(null);
+        setTimeout(() => {
+          setEndingRefImageUrl(url);
+          console.log('✅ MOBILE: Ending reference image URL set in hook state (after clear)');
+        }, 0);
         break;
     }
   }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage]);

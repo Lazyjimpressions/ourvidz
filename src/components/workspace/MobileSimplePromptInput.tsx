@@ -552,6 +552,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                     <>
                       <div className="flex items-center gap-2">
                         <MobileReferenceImagePreview
+                          key={referenceImageUrl || referenceImage?.name || 'ref-image'} // Force re-render when URL changes
                           file={referenceImage}
                           imageUrl={referenceImageUrl}
                           onRemove={() => removeReferenceImage('single')}
@@ -562,9 +563,14 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                           sizeClass="h-16 w-16"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium truncate">{referenceImage?.name || 'Workspace image'}</div>
+                          <div className="text-xs font-medium truncate">
+                            {referenceImage?.name || (referenceImageUrl ? 'Uploaded image' : 'Workspace image')}
+                          </div>
                           {referenceImage && (
                             <div className="text-xs text-muted-foreground">{(referenceImage.size / 1024).toFixed(0)}KB</div>
+                          )}
+                          {!referenceImage && referenceImageUrl && (
+                            <div className="text-xs text-muted-foreground">Ready</div>
                           )}
                         </div>
                       </div>

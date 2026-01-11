@@ -79,6 +79,14 @@ const MobileRoleplayDashboard = () => {
     localStorage.setItem('roleplay_scene_style', sceneStyle);
   }, [sceneStyle]);
 
+  // Clear selected scene after sheet closes (prevents blank screen race condition)
+  useEffect(() => {
+    if (!showSceneSetup && selectedScene) {
+      const timer = setTimeout(() => setSelectedScene(null), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [showSceneSetup, selectedScene]);
+
   // Load both public characters AND user's own characters
   const { characters: publicCharacters, isLoading: publicLoading, error: publicError, loadPublicCharacters } = usePublicCharacters();
   const {
@@ -654,7 +662,7 @@ const MobileRoleplayDashboard = () => {
           isOpen={showSceneSetup}
           onClose={() => {
             setShowSceneSetup(false);
-            setSelectedScene(null);
+            // Scene will be cleared by useEffect after animation completes
           }}
           onStart={handleSceneStart}
         />

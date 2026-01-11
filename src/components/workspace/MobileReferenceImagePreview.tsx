@@ -35,12 +35,15 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
   // Create blob URL for file (like desktop's URL.createObjectURL approach)
   // This is synchronous and reliable, unlike FileReader + Image validation
   const displayUrl = useMemo(() => {
-    // Clean up previous blob URL
+    // Clean up previous blob URL when file/imageUrl changes
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
+      console.log('📷 MOBILE REF: Cleaned up previous blob URL');
     }
 
+    // Priority: file > imageUrl
+    // If file exists, use it (for legacy workflow)
     if (file) {
       // Validate file type before creating URL
       const looksLikeImage = file.type
@@ -58,12 +61,14 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
       return url;
     }
 
-    // Fall back to imageUrl if no file (like desktop)
+    // Fall back to imageUrl if no file (preferred workflow - immediate upload)
     if (imageUrl) {
-      console.log('📷 MOBILE REF: Using imageUrl fallback');
+      console.log('📷 MOBILE REF: Using imageUrl (signed URL from immediate upload):', imageUrl.substring(0, 60) + '...');
       return imageUrl;
     }
 
+    // Both are null - nothing to display
+    console.log('📷 MOBILE REF: No file or imageUrl - clearing display');
     return null;
   }, [file, imageUrl]);
 
@@ -81,6 +86,7 @@ export const MobileReferenceImagePreview: React.FC<MobileReferenceImagePreviewPr
   useEffect(() => {
     setHasError(false);
     setErrorMessage(null);
+    console.log('📷 MOBILE REF: State reset - file:', !!file, 'imageUrl:', !!imageUrl);
   }, [file, imageUrl]);
 
   // Nothing to display
