@@ -397,8 +397,9 @@ serve(async (req) => {
 
     // I2I specific: reference image and strength (must be handled BEFORE other input overrides)
     // This needs to run even if body.input is empty, as long as hasReferenceImage is true
-    if (hasReferenceImage) {
-        const imageUrl = body.input.image_url || body.input.image || body.metadata?.referenceImage || body.metadata?.reference_image_url;
+    // Skip for video I2V - handled separately in video-specific section
+    if (hasReferenceImage && !isVideo) {
+        const imageUrl = body.input.image_url || body.input.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url;
 
         // Validate that image URL exists and is not empty for I2I requests
         if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.trim() === '')) {
@@ -508,7 +509,7 @@ serve(async (req) => {
 
         // Strength for i2i (default to 0.5 if not provided for modify mode)
         // Skip strength for WAN 2.1 i2v - it doesn't use this parameter
-        if (!isWanI2VForStrength) {
+        if (!isWanI2V) {
           if (body.input?.strength !== undefined) {
             modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
           } else {
@@ -523,7 +524,7 @@ serve(async (req) => {
     if (body.input) {
       // Image size (skip for WAN 2.1 i2v - it uses aspect_ratio instead)
       // Use capabilities check (already computed above)
-      if (!isWanI2VCheck) {
+      if (!isWanI2V) {
         if (body.input.image_size) {
           modelInput.image_size = body.input.image_size;
         } else if (body.input.width && body.input.height) {
@@ -558,9 +559,7 @@ serve(async (req) => {
 
       // Video-specific params
       if (isVideo) {
-        // Check if this is WAN 2.1 i2v model (already detected above, but check again for safety)
-        const isWanI2V = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
-        
+        // Use isWanI2V already computed from capabilities above (no duplicate check)
         if (isWanI2V) {
           // WAN 2.1 i2v uses specific parameter names
           // Map duration to num_frames and frames_per_second
