@@ -840,6 +840,9 @@ const MobileRoleplayChat: React.FC = () => {
 
   // Subscribe to workspace asset updates for job completion
   // ✅ FIX: Check for existing asset first (handles sync providers like fal.ai)
+  // ✅ FIX: Store scene_id per message for I2I continuity tracking
+  const messageSceneIdsRef = useRef<Map<string, string>>(new Map());
+
   const subscribeToJobCompletion = async (jobId: string, messageId: string) => {
     console.log('🔄 Checking/subscribing to workspace_assets for job:', { jobId, messageId });
 
@@ -897,7 +900,8 @@ const MobileRoleplayChat: React.FC = () => {
                 // metadata.image_url is the canonical location for scene images
                 image_url: assetData.temp_storage_path,
                 asset_id: assetData.id,
-                scene_id: assetData.scene_id,
+                // ✅ FIX: Preserve scene_id from message metadata if assetData doesn't have it
+                scene_id: assetData.scene_id || msg.metadata?.scene_id,
                 scene_prompt: scenePrompt, // ✅ FIX: Store scene prompt
                 job_completed: true,
                 // ✅ FIX: Update generation_metadata with scene template info and original prompt
@@ -916,14 +920,23 @@ const MobileRoleplayChat: React.FC = () => {
 
       // 🔄 Track this scene for I2I continuity
       if (conversationId && assetData.temp_storage_path) {
-        // Use scene_id if available, otherwise use asset_id as fallback
-        const sceneIdForTracking = assetData.scene_id || assetData.id;
+        // ✅ FIX: Get scene_id from multiple sources with priority:
+        // 1. generation_settings (after edge function deployment)
+        // 2. messageSceneIdsRef (stored when message was created)
+        // 3. message metadata (fallback)
+        // 4. asset_id (last resort)
+        let sceneIdForTracking = assetData.scene_id || messageSceneIdsRef.current.get(messageId) || assetData.id;
+        
         setLastScene(conversationId, sceneIdForTracking, assetData.temp_storage_path);
         console.log('🔄 Scene continuity: Tracked last scene for I2I iteration', {
           conversationId,
           sceneId: sceneIdForTracking,
-          imageUrl: assetData.temp_storage_path.substring(0, 60) + '...'
+          imageUrl: assetData.temp_storage_path.substring(0, 60) + '...',
+          source: assetData.scene_id ? 'generation_settings' : (messageSceneIdsRef.current.has(messageId) ? 'message_ref' : 'asset_id_fallback')
         });
+        
+        // Clean up the ref entry
+        messageSceneIdsRef.current.delete(messageId);
 
         // 📸 Persist last scene image to conversation for dashboard thumbnails
         // Copy from workspace-temp to user-library for persistence
@@ -1223,6 +1236,16 @@ const MobileRoleplayChat: React.FC = () => {
             scene_prompt: data.original_scene_prompt
           }
         };
+
+        // ✅ FIX: Store scene_id in ref for I2I continuity tracking (available when job completes)
+        if (data.scene_id && newJobId) {
+          messageSceneIdsRef.current.set(characterMessage.id, data.scene_id);
+          console.log('🔄 Scene continuity: Stored scene_id in ref for job completion', {
+            messageId: characterMessage.id,
+            sceneId: data.scene_id,
+            jobId: newJobId
+          });
+        }
 
         console.log('💬 Creating character message:', {
           messageId: characterMessage.id,

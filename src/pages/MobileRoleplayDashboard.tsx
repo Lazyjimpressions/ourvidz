@@ -24,7 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 const MobileRoleplayDashboard = () => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -496,8 +496,8 @@ const MobileRoleplayDashboard = () => {
                     } text-white`}>
                       {scene.content_rating.toUpperCase()}
                     </span>
-                    {/* Edit button - only shows for scenes the user owns */}
-                    {scene.creator_id === user?.id && (
+                    {/* Edit button - shows for scenes the user owns or if user is admin */}
+                    {(scene.creator_id === user?.id || isAdmin) && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

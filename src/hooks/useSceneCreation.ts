@@ -69,7 +69,7 @@ export interface UseSceneCreationResult {
  * Hook for creating scene templates with AI enhancement and preview generation
  */
 export const useSceneCreation = (): UseSceneCreationResult => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { toast } = useToast();
 
   // Enhancement state
@@ -510,7 +510,8 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         hasPreview: !!formData.preview_image_url
       });
 
-      const { data, error } = await supabase
+      // Build query with conditional creator_id check (admins can edit any scene)
+      let query = supabase
         .from('scenes')
         .update({
           name: formData.name.trim(),
@@ -523,10 +524,14 @@ export const useSceneCreation = (): UseSceneCreationResult => {
           preview_image_url: formData.preview_image_url,
           scene_starters: formData.scene_starters
         })
-        .eq('id', sceneId)
-        .eq('creator_id', user.id) // Ensure user owns the scene
-        .select()
-        .single();
+        .eq('id', sceneId);
+
+      // Only check creator_id if not admin
+      if (!isAdmin) {
+        query = query.eq('creator_id', user.id);
+      }
+
+      const { data, error } = await query.select().single();
 
       if (error) {
         throw error;
@@ -574,7 +579,7 @@ export const useSceneCreation = (): UseSceneCreationResult => {
     } finally {
       setIsCreating(false);
     }
-  }, [user?.id, toast]);
+  }, [user?.id, isAdmin, toast]);
 
   /**
    * Reset all state
