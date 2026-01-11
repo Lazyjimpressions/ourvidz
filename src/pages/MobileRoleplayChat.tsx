@@ -104,6 +104,32 @@ const MobileRoleplayChat: React.FC = () => {
   const [selectedUserCharacterId, setSelectedUserCharacterId] = useState<string | null>(null);
   const [signedUserCharacterImage, setSignedUserCharacterImage] = useState<string | null>(null);
 
+  // Load default character immediately (before models initialize)
+  useEffect(() => {
+    if (user?.id && defaultCharacterId && !selectedUserCharacterId) {
+      // Only set if no saved preference exists
+      const savedSettings = localStorage.getItem('roleplay-settings');
+      if (!savedSettings) {
+        // No saved settings, use default character
+        setSelectedUserCharacterId(defaultCharacterId);
+        console.log('✅ Loaded default character immediately:', defaultCharacterId);
+      } else {
+        try {
+          const parsed = JSON.parse(savedSettings);
+          if (!parsed.userCharacterId) {
+            // Saved settings exist but no user character selected, use default
+            setSelectedUserCharacterId(defaultCharacterId);
+            console.log('✅ Loaded default character (no saved selection):', defaultCharacterId);
+          }
+        } catch (error) {
+          // If parsing fails, use default character
+          setSelectedUserCharacterId(defaultCharacterId);
+          console.log('✅ Loaded default character (parse error):', defaultCharacterId);
+        }
+      }
+    }
+  }, [user?.id, defaultCharacterId]); // Run before model initialization
+
   // Initialize settings with saved values or database defaults (API models preferred)
   const initializeSettings = () => {
     const savedSettings = localStorage.getItem('roleplay-settings');

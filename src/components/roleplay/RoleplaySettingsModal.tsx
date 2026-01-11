@@ -13,10 +13,14 @@ import { useSceneContinuity } from '@/hooks/useSceneContinuity';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2 } from 'lucide-react';
+import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2, Upload, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneStyle } from '@/types/roleplay';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import useSignedImageUrls from '@/hooks/useSignedImageUrls';
+import { uploadFile } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface RoleplaySettingsModalProps {
   isOpen: boolean;
@@ -62,9 +66,11 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
 }) => {
   const { allModelOptions, defaultModel: defaultChatModel, isLoading: modelsLoading, chatWorkerHealthy } = useRoleplayModels();
   const { modelOptions: imageModelOptions, defaultModel: defaultImageModel, isLoading: imageModelsLoading, sdxlWorkerHealthy } = useImageModels();
-  const { characters: userCharacters, isLoading: userCharactersLoading, defaultCharacterId, setDefaultCharacter } = useUserCharacters();
+  const { characters: userCharacters, isLoading: userCharactersLoading, defaultCharacterId, setDefaultCharacter, updateUserCharacter } = useUserCharacters();
   const { isEnabled: sceneContinuityEnabled, setEnabled: setSceneContinuityEnabled, defaultStrength, setDefaultStrength } = useSceneContinuity();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const { getSignedUrl } = useSignedImageUrls();
 
   // Local state for form data
   const [localMemoryTier, setLocalMemoryTier] = useState(memoryTier);
@@ -74,6 +80,16 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   const [localUserCharacterId, setLocalUserCharacterId] = useState<string | null>(selectedUserCharacterId || null);
   const [localSceneStyle, setLocalSceneStyle] = useState<SceneStyle>(sceneStyle);
   const [setAsDefault, setSetAsDefault] = useState(false);
+  
+  // Avatar editing state
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [signedAvatarUrl, setSignedAvatarUrl] = useState<string | null>(null);
+  
+  // Get selected user character
+  const selectedUserCharacter = localUserCharacterId 
+    ? userCharacters.find(c => c.id === localUserCharacterId) || null
+    : null;
   
   // Helper to validate if a chat model is available
   const isValidChatModel = (modelValue: string): boolean => {
@@ -86,6 +102,30 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
     const model = imageModelOptions.find(m => m.value === modelValue);
     return model ? model.isAvailable : false;
   };
+
+  // Load signed avatar URL when character is selected
+  useEffect(() => {
+    const loadAvatarUrl = async () => {
+      if (!selectedUserCharacter?.image_url) {
+        setSignedAvatarUrl(null);
+        return;
+      }
+
+      if (selectedUserCharacter.image_url.startsWith('http')) {
+        setSignedAvatarUrl(selectedUserCharacter.image_url);
+      } else {
+        try {
+          const signed = await getSignedUrl(selectedUserCharacter.image_url, 'user-library');
+          setSignedAvatarUrl(signed);
+        } catch (error) {
+          console.error('Error signing avatar URL:', error);
+          setSignedAvatarUrl(null);
+        }
+      }
+    };
+
+    loadAvatarUrl();
+  }, [selectedUserCharacter?.image_url, getSignedUrl]);
 
   // Load saved settings from localStorage with validation (only when modal opens)
   const hasLoadedSettingsRef = useRef(false);
@@ -146,6 +186,91 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
       hasLoadedSettingsRef.current = false;
     }
   }, [isOpen, modelsLoading, imageModelsLoading, memoryTier, modelProvider, selectedImageModel, consistencySettings, allModelOptions, imageModelOptions, defaultChatModel, defaultImageModel]);
+
+  // Avatar upload handler
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id || !localUserCharacterId) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Invalid file type',
+        description: 'Please upload an image file',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      // Create file path in user-library
+      const fileExt = file.name.split('.').pop();
+      const filePath = `avatars/${localUserCharacterId}/${Date.now()}.${fileExt}`;
+
+      // Upload to user-library bucket
+      const result = await uploadFile('user-library', filePath, file);
+      
+      if (result.error || !result.data) {
+        throw result.error || new Error('Upload failed');
+      }
+
+      // Update character with new image path
+      await updateUserCharacter(localUserCharacterId, {
+        image_url: result.data.path
+      });
+
+      // Refresh signed URL
+      const signedUrl = await getSignedUrl(result.data.path, 'user-library');
+      setSignedAvatarUrl(signedUrl);
+      setAvatarPreview(null);
+
+      toast({
+        title: 'Avatar updated',
+        description: 'Your character avatar has been updated successfully'
+      });
+    } catch (error) {
+      console.error('Failed to upload avatar:', error);
+      toast({
+        title: 'Upload failed',
+        description: error instanceof Error ? error.message : 'Failed to upload avatar. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+      // Reset file input
+      event.target.value = '';
+    }
+  };
+
+  // Avatar remove handler
+  const handleAvatarRemove = async () => {
+    if (!localUserCharacterId || !selectedUserCharacter?.image_url) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      await updateUserCharacter(localUserCharacterId, {
+        image_url: null
+      });
+
+      setSignedAvatarUrl(null);
+      setAvatarPreview(null);
+
+      toast({
+        title: 'Avatar removed',
+        description: 'Your character avatar has been removed'
+      });
+    } catch (error) {
+      console.error('Failed to remove avatar:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to remove avatar. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
   
   // Save settings to localStorage
   const saveSettings = async () => {
@@ -354,6 +479,81 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                         <span>Set as default for new conversations</span>
                       )}
                     </label>
+                  </div>
+                )}
+
+                {/* Avatar Editor */}
+                {localUserCharacterId && localUserCharacterId !== 'none' && (
+                  <div className="space-y-2 mt-4 pt-4 border-t border-gray-700">
+                    <Label className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4" />
+                      Character Avatar
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Upload or update your character's avatar image.
+                    </p>
+                    
+                    <div className="flex items-center gap-4">
+                      {/* Avatar Preview */}
+                      <div className="relative">
+                        <div className="w-20 h-20 rounded-full overflow-hidden bg-gray-700 border-2 border-gray-600 flex items-center justify-center">
+                          {signedAvatarUrl || avatarPreview ? (
+                            <img
+                              src={avatarPreview || signedAvatarUrl || ''}
+                              alt={selectedUserCharacter?.name || 'Avatar'}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-8 h-8 text-gray-400" />
+                          )}
+                        </div>
+                        {isUploadingAvatar && (
+                          <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 text-white animate-spin" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Avatar Actions */}
+                      <div className="flex-1 flex flex-col gap-2">
+                        <label className="cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarUpload}
+                            className="hidden"
+                            disabled={isUploadingAvatar}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            disabled={isUploadingAvatar}
+                            asChild
+                          >
+                            <span className="flex items-center gap-2">
+                              <Upload className="w-4 h-4" />
+                              {signedAvatarUrl ? 'Change Avatar' : 'Upload Avatar'}
+                            </span>
+                          </Button>
+                        </label>
+                        
+                        {signedAvatarUrl && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full text-red-400 hover:text-red-300 hover:border-red-500"
+                            onClick={handleAvatarRemove}
+                            disabled={isUploadingAvatar}
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Remove Avatar
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

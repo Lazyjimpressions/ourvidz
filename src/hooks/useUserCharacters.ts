@@ -327,14 +327,20 @@ export const useUserCharacters = () => {
   }, [user?.id]);
 
   // Filter characters into AI companions vs user personas
+  // Primary: role field as source of truth
+  // Secondary: conversation usage and default status for edge cases
   // AI companions: Characters to roleplay WITH (shown in "My Characters")
   // User personas: Characters that represent the user in roleplay (shown in settings)
-  const aiCompanions = characters.filter(c =>
-    !userPersonaIds.has(c.id) && c.id !== defaultCharacterId
+  const userPersonas = characters.filter(c => 
+    c.role === 'user' || 
+    userPersonaIds.has(c.id) || 
+    c.id === defaultCharacterId
   );
 
-  const userPersonas = characters.filter(c =>
-    userPersonaIds.has(c.id) || c.id === defaultCharacterId
+  const aiCompanions = characters.filter(c => 
+    c.role === 'ai' && 
+    !userPersonaIds.has(c.id) && 
+    c.id !== defaultCharacterId
   );
 
   return {
