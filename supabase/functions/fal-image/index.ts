@@ -1110,6 +1110,8 @@ serve(async (req) => {
             content_mode: contentMode,
             generation_mode: generationMode,
             seed: generationSeed,
+            // ✅ FIX: Include scene_id for frontend to track scene continuity
+            scene_id: body.metadata?.scene_id,
             // ✅ ADMIN: Include scene template info if available (for roleplay scenes)
             scene_template_id: body.metadata?.scene_template_id,
             scene_template_name: body.metadata?.scene_template_name,
