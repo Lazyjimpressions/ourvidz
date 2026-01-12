@@ -480,7 +480,7 @@ const MobileRoleplayDashboard = () => {
         </div>
         
         {/* Continue Conversations Section - Shows conversations with messages (scene images preferred) */}
-        {userConversations.filter(c => (c.messages?.[0]?.count || 0) > 0).length > 0 && (
+        {userConversations.filter(c => (c.message_count || c.messages?.[0]?.count || 0) > 0).length > 0 && (
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <PlayCircle className="w-4 h-4 text-purple-400" />
@@ -488,7 +488,7 @@ const MobileRoleplayDashboard = () => {
             </div>
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {userConversations
-                .filter(conv => (conv.messages?.[0]?.count || 0) > 0) // ✅ FIX: Show conversations with messages, not just scene images
+                .filter(conv => (conv.message_count || conv.messages?.[0]?.count || 0) > 0) // ✅ FIX: Show conversations with messages, not just scene images
                 .sort((a, b) => {
                   // ✅ FIX: Prioritize conversations with scene images, then by updated_at
                   if (a.last_scene_image && !b.last_scene_image) return -1;
