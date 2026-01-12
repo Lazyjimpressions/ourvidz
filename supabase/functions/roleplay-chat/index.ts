@@ -2637,24 +2637,69 @@ const sceneContext = analyzeSceneContent(response);
       // This is the scene template's carefully crafted prompt from scenes table
       console.log('🎬 Using scene template prompt for first scene:', sceneTemplatePrompt.substring(0, 100) + '...');
       
-      // Combine template prompt with character description if needed
-      // Template prompt might be generic or might already include character name
-      if (sceneTemplatePrompt.toLowerCase().includes(character.name.toLowerCase())) {
-        // Template already includes character name
-        scenePrompt = sceneTemplatePrompt;
+      // ✅ CRITICAL FIX: Replace generic character descriptions with actual character visual description
+      // Template might contain generic terms like "busty secretary", "attractive woman", etc.
+      // We need to replace these with the actual character's visual description
+      let processedPrompt = sceneTemplatePrompt;
+      
+      // Check if template already includes character name
+      const hasCharacterName = processedPrompt.toLowerCase().includes(character.name.toLowerCase());
+      
+      // Replace common generic character descriptions with actual character visual description
+      const genericCharacterPatterns = [
+        /\b(busty|curvy|attractive|beautiful|sexy|hot|gorgeous)\s+(secretary|woman|girl|person|character|individual)\b/gi,
+        /\b(secretary|woman|girl|person|character|individual)\s+(in|with|wearing|dressed)\b/gi,
+        /\b(professional|business|office)\s+(woman|girl|person|character|individual)\b/gi
+      ];
+      
+      // Replace generic descriptions with actual character visual description
+      for (const pattern of genericCharacterPatterns) {
+        if (pattern.test(processedPrompt)) {
+          // Replace with character name and visual description
+          processedPrompt = processedPrompt.replace(pattern, (match) => {
+            // If character name already in prompt, just replace the generic description with visual description
+            if (hasCharacterName) {
+              return characterVisualDescription;
+            }
+            // Otherwise replace with character name + visual description
+            return `${character.name} (${characterVisualDescription})`;
+          });
+          break; // Only replace first match to avoid over-replacement
+        }
+      }
+      
+      // If template doesn't include character name, add it at the beginning
+      if (!hasCharacterName) {
+        // Check if prompt starts with a generic character reference
+        const startsWithGeneric = /^(A|An|The)\s+(busty|curvy|attractive|beautiful|secretary|woman|girl|person|character)/i.test(processedPrompt);
+        if (startsWithGeneric) {
+          // Replace generic start with character name
+          processedPrompt = processedPrompt.replace(/^(A|An|The)\s+(busty|curvy|attractive|beautiful|secretary|woman|girl|person|character)[\s,]/i, 
+            `${character.name} (${characterVisualDescription}), `);
+        } else {
+          // Prepend character name and visual description
+          processedPrompt = `${character.name} (${characterVisualDescription}), ${processedPrompt}`;
+        }
       } else {
-        // Template is generic - combine with character
-        // Example: "A steamy locker room shower" → "Mary in a steamy locker room shower"
-        scenePrompt = `${character.name} ${sceneTemplatePrompt}`;
+        // Character name exists, but ensure visual description is included
+        // Check if visual description is already present
+        if (!processedPrompt.includes(characterVisualDescription.substring(0, 30))) {
+          // Add visual description after character name
+          processedPrompt = processedPrompt.replace(
+            new RegExp(`(${character.name})`, 'i'),
+            `$1 (${characterVisualDescription})`
+          );
+        }
       }
       
       // Clean up the prompt (remove any dialogue markers, ensure third-person)
-      scenePrompt = scenePrompt
+      scenePrompt = processedPrompt
         .replace(/^["']|["']$/g, '') // Remove quotes
         .replace(/^(Hello|Hi|Hey),?\s+/i, '') // Remove greetings
+        .replace(/\s+/g, ' ') // Normalize whitespace
         .trim();
       
-      console.log('✅ Using template scene prompt (first scene):', scenePrompt.substring(0, 100) + '...');
+      console.log('✅ Using template scene prompt (first scene) with character visual description:', scenePrompt.substring(0, 150) + '...');
     } else {
       // Generate AI-powered scene narrative using OpenRouter
       console.log('🎬 Generating scene narrative for character:', character.name);
@@ -2922,14 +2967,31 @@ const sceneContext = analyzeSceneContent(response);
       console.log('🎬 Scene style: pov - first person view');
     } else {
       // Character only (default) - current behavior
-      // ✅ FIX: For I2I, remove redundant "maintain" phrase - the image already maintains appearance
-      if (useI2IIteration) {
-        enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}.`;
+      // ✅ CRITICAL FIX: Check if scenePrompt already includes character name and visual description
+      // If using template prompt, it may already have character info, so don't duplicate
+      const scenePromptLower = scenePrompt.toLowerCase();
+      const hasCharacterInPrompt = scenePromptLower.includes(character.name.toLowerCase());
+      const hasVisualDescInPrompt = scenePromptLower.includes(characterVisualDescription.substring(0, 30).toLowerCase());
+      
+      if (hasCharacterInPrompt && hasVisualDescInPrompt) {
+        // Scene prompt already includes character name and visual description (from template)
+        // Just use the prompt directly without adding character info again
+        if (useI2IIteration) {
+          enhancedScenePrompt = `Generate a scene in the following scenario: ${scenePrompt}.`;
+        } else {
+          enhancedScenePrompt = `Generate a scene in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
+        }
+        console.log('🎬 Scene style: character_only (template prompt already includes character info)');
       } else {
-        enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
+        // Scene prompt doesn't include character info, add it
+        // ✅ FIX: For I2I, remove redundant "maintain" phrase - the image already maintains appearance
+        if (useI2IIteration) {
+          enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}.`;
+        } else {
+          enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
+        }
+        console.log('🎬 Scene style: character_only (default)');
       }
-
-      console.log('🎬 Scene style: character_only (default)');
     }
 
     console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
