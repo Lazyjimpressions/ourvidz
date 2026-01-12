@@ -1,7 +1,107 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { logApiUsage, extractFalUsage } from '../_shared/api-usage-tracker.ts';
+
+// Inline API usage tracking functions to avoid shared module dependency issues
+interface UsageLogData {
+  providerId: string;
+  modelId?: string;
+  userId?: string;
+  requestType: 'chat' | 'image' | 'video';
+  endpointPath?: string;
+  requestPayload?: any;
+  tokensInput?: number;
+  tokensOutput?: number;
+  tokensTotal?: number;
+  tokensCached?: number;
+  costUsd?: number;
+  costCredits?: number;
+  responseStatus?: number;
+  responseTimeMs: number;
+  responsePayload?: any;
+  errorMessage?: string;
+  providerMetadata?: Record<string, any>;
+}
+
+async function logApiUsage(supabase: any, data: UsageLogData): Promise<void> {
+  try {
+    const { error: logError } = await supabase
+      .from('api_usage_logs')
+      .insert([{
+        provider_id: data.providerId,
+        model_id: data.modelId || null,
+        user_id: data.userId || null,
+        request_type: data.requestType,
+        endpoint_path: data.endpointPath || null,
+        request_payload: data.requestPayload || null,
+        tokens_input: data.tokensInput || null,
+        tokens_output: data.tokensOutput || null,
+        tokens_total: data.tokensTotal || null,
+        tokens_cached: data.tokensCached || null,
+        cost_usd: data.costUsd || null,
+        cost_credits: data.costCredits || null,
+        response_status: data.responseStatus || null,
+        response_time_ms: data.responseTimeMs,
+        response_payload: data.responsePayload || null,
+        error_message: data.errorMessage || null,
+        provider_metadata: data.providerMetadata || {}
+      }]);
+
+    if (logError) {
+      console.error('❌ Failed to log API usage:', logError);
+      return;
+    }
+
+    // Update aggregates (async, don't await)
+    updateAggregates(supabase, data).catch(err => {
+      console.error('❌ Failed to update aggregates:', err);
+    });
+  } catch (error) {
+    console.error('❌ Error in logApiUsage:', error);
+  }
+}
+
+async function updateAggregates(supabase: any, data: UsageLogData): Promise<void> {
+  try {
+    const now = new Date();
+    const dateBucket = now.toISOString().split('T')[0];
+    const hourBucket = now.getHours();
+
+    const { error } = await supabase.rpc('upsert_usage_aggregate', {
+      p_provider_id: data.providerId,
+      p_model_id: data.modelId || null,
+      p_date_bucket: dateBucket,
+      p_hour_bucket: hourBucket,
+      p_request_count: 1,
+      p_success_count: (data.responseStatus && data.responseStatus < 400) ? 1 : 0,
+      p_error_count: (data.responseStatus && data.responseStatus >= 400) ? 1 : 0,
+      p_tokens_input: data.tokensInput || 0,
+      p_tokens_output: data.tokensOutput || 0,
+      p_tokens_cached: data.tokensCached || 0,
+      p_cost_usd: data.costUsd || 0,
+      p_cost_credits: data.costCredits || 0,
+      p_response_time_ms: data.responseTimeMs
+    });
+
+    if (error) {
+      console.error('❌ Failed to update aggregate:', error);
+    }
+  } catch (error) {
+    console.error('❌ Error updating aggregates:', error);
+  }
+}
+
+function extractFalUsage(response: any): Partial<UsageLogData> {
+  return {
+    costUsd: response.cost || null,
+    providerMetadata: {
+      request_id: response.request_id,
+      status: response.status,
+      model: response.model,
+      created_at: response.created_at
+    }
+  };
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
