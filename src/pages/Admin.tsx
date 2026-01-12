@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { ApiProvidersTab } from '@/components/admin/ApiProvidersTab';
 import { ApiModelsTab } from '@/components/admin/ApiModelsTab';
+import { ApiUsageTab } from '@/components/admin/ApiUsageTab';
 
 const AdminContent = () => {
 
@@ -32,6 +33,7 @@ const AdminContent = () => {
     { id: 'prompt-testing', label: 'Prompt Testing', component: <PromptTestingTab /> },
     { id: 'api-providers', label: 'API Providers', component: <ApiProvidersTab /> },
     { id: 'api-models', label: 'API Models', component: <ApiModelsTab /> },
+    { id: 'api-usage', label: 'API Usage & Costs', component: <ApiUsageTab /> },
     { id: 'database', label: 'Database Manager', component: <AdminDatabaseManager /> }
   ];
 

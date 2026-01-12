@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCachedData, getDatabaseTemplate } from '../_shared/cache-utils.ts';
+import { logApiUsage, extractOpenRouterUsage } from '../_shared/api-usage-tracker.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -450,7 +451,7 @@ serve(async (req) => {
             usedFallback
           });
           // Use database-driven model configuration with user character
-          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character, scene_starters);
+          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character, scene_starters, user?.id);
           modelUsed = `${modelConfig.provider_name}:${effectiveModelProvider}`;
         } else {
           console.error('❌ Model config not found for:', effectiveModelProvider);
@@ -853,7 +854,7 @@ async function getModelConfig(supabase: any, modelKey: string): Promise<any> {
       .from('api_models')
       .select(`
         *,
-        api_providers!inner(name, display_name)
+        api_providers!inner(id, name, display_name)
       `)
       .eq('model_key', modelKey)
       .eq('is_active', true)
@@ -866,6 +867,7 @@ async function getModelConfig(supabase: any, modelKey: string): Promise<any> {
 
     return {
       ...data,
+      provider_id: data.api_providers.id,
       provider_name: data.api_providers.name,
       provider_display_name: data.api_providers.display_name
     };
@@ -887,7 +889,8 @@ async function callModelWithConfig(
   sceneContext?: string,
   sceneSystemPrompt?: string,
   userCharacter?: UserCharacterForTemplate | null,
-  sceneStarters?: string[]
+  sceneStarters?: string[],
+  userId?: string
 ): Promise<string> {
   console.log('🔧 Using database-driven model configuration:', {
     modelKey,
@@ -925,7 +928,11 @@ async function callModelWithConfig(
       userMessage,
       modelKey,
       contentTier,
-      modelConfig
+      modelConfig,
+      supabase,
+      modelConfig.provider_id || null,
+      modelConfig.id || null,
+      userId
     );
   }
 
@@ -1115,7 +1122,11 @@ async function callOpenRouterWithConfig(
   userMessage: string,
   modelKey: string,
   contentTier: string,
-  modelConfig: any
+  modelConfig: any,
+  supabase: any,
+  providerId?: string | null,
+  modelId?: string | null,
+  userId?: string | null
 ): Promise<string> {
   const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
@@ -1173,6 +1184,9 @@ async function callOpenRouterWithConfig(
     parameters: modelConfig.input_defaults
   });
 
+  const startTime = Date.now();
+  let responseTimeMs = 0;
+
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -1183,9 +1197,28 @@ async function callOpenRouterWithConfig(
       body: JSON.stringify(payload)
     });
 
+    responseTimeMs = Date.now() - startTime;
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ OpenRouter error ${response.status}:`, errorText);
+      
+      // Log error usage
+      if (providerId && supabase) {
+        logApiUsage(supabase, {
+          providerId,
+          modelId: modelId || undefined,
+          userId: userId || undefined,
+          requestType: 'chat',
+          endpointPath: '/chat/completions',
+          requestPayload: payload,
+          responseStatus: response.status,
+          responseTimeMs,
+          errorMessage: errorText,
+          providerMetadata: { model: modelKey }
+        }).catch(err => console.error('Failed to log error usage:', err));
+      }
+      
       throw new Error(`OpenRouter error: ${response.status} - ${errorText}`);
     }
 
@@ -1196,10 +1229,44 @@ async function callOpenRouterWithConfig(
       length: responseText.length,
       preview: responseText.substring(0, 100) + '...'
     });
+
+    // Extract usage data and log
+    if (providerId && supabase) {
+      const usageData = extractOpenRouterUsage(data);
+      logApiUsage(supabase, {
+        providerId,
+        modelId: modelId || undefined,
+        userId: userId || undefined,
+        requestType: 'chat',
+        endpointPath: '/chat/completions',
+        requestPayload: payload,
+        ...usageData,
+        responseStatus: response.status,
+        responseTimeMs,
+        responsePayload: data
+      }).catch(err => console.error('Failed to log usage:', err));
+    }
     
     return responseText;
   } catch (error) {
+    responseTimeMs = Date.now() - startTime;
     console.error('❌ OpenRouter request failed:', error);
+    
+    // Log error usage
+    if (providerId && supabase) {
+      logApiUsage(supabase, {
+        providerId,
+        modelId: modelId || undefined,
+        userId: userId || undefined,
+        requestType: 'chat',
+        endpointPath: '/chat/completions',
+        requestPayload: payload,
+        responseTimeMs,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        providerMetadata: { model: modelKey }
+      }).catch(err => console.error('Failed to log error usage:', err));
+    }
+    
     throw error;
   }
 }

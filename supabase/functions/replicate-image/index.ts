@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Replicate from "https://esm.sh/replicate@0.25.2";
 import { getDatabaseNegativePrompts } from '../_shared/cache-utils.ts';
+import { logApiUsage, extractReplicateUsage } from '../_shared/api-usage-tracker.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -789,6 +790,9 @@ serve(async (req) => {
     console.log('🔧 Creating prediction with version:', versionId, 'for model_key:', apiModel.model_key);
     console.log('🔧 Model input:', JSON.stringify(modelInput, null, 2));
 
+    const startTime = Date.now();
+    let responseTimeMs = 0;
+
     try {
       const prediction = await replicate.predictions.create({
         version: versionId,
@@ -797,11 +801,32 @@ serve(async (req) => {
         webhook_events_filter: ["start", "completed"]
       });
 
+      responseTimeMs = Date.now() - startTime;
+
       console.log("🚀 Prediction created successfully:", { 
         id: prediction.id, 
         status: prediction.status,
         webhook: webhookUrl
       });
+
+      // Log usage for prediction creation
+      const usageData = extractReplicateUsage(prediction);
+      logApiUsage(supabase, {
+        providerId: apiModel.api_providers.id,
+        modelId: apiModel.id,
+        userId: user.id,
+        requestType: 'image',
+        endpointPath: '/v1/predictions',
+        requestPayload: {
+          version: versionId,
+          input: modelInput,
+          webhook: webhookUrl
+        },
+        ...usageData,
+        responseStatus: 201, // Created
+        responseTimeMs,
+        responsePayload: prediction
+      }).catch(err => console.error('Failed to log usage:', err));
 
       // Update job with prediction info
       await supabase
@@ -830,14 +855,33 @@ serve(async (req) => {
       });
       
     } catch (predictionError) {
+      responseTimeMs = Date.now() - startTime;
       const err: any = predictionError;
-      const status = err?.response?.status;
+      const status = err?.response?.status || 500;
       const url = err?.request?.url;
       console.error("❌ Failed to create Replicate prediction:", {
         message: err?.message,
         status,
         url,
       });
+
+      // Log error usage
+      logApiUsage(supabase, {
+        providerId: apiModel.api_providers.id,
+        modelId: apiModel.id,
+        userId: user.id,
+        requestType: 'image',
+        endpointPath: '/v1/predictions',
+        requestPayload: {
+          version: versionId,
+          input: modelInput,
+          webhook: webhookUrl
+        },
+        responseStatus: status,
+        responseTimeMs,
+        errorMessage: err?.message || String(predictionError),
+        providerMetadata: { url }
+      }).catch(logErr => console.error('Failed to log error usage:', logErr));
 
       // Mark job as failed with richer error info
       const errorPayload: Record<string, unknown> = {

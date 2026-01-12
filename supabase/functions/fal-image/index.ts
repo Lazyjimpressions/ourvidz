@@ -1,6 +1,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { logApiUsage, extractFalUsage } from '../_shared/api-usage-tracker.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -925,6 +926,10 @@ serve(async (req) => {
       database_model: apiModel.model_key
     });
 
+    const startTime = Date.now();
+    let responseTimeMs = 0;
+    const requestType = apiModel.modality === 'video' ? 'video' : 'image';
+
     try {
       const falResponse = await fetch(falEndpoint, {
         method: 'POST',
@@ -934,6 +939,8 @@ serve(async (req) => {
         },
         body: JSON.stringify(modelInput)
       });
+
+      responseTimeMs = Date.now() - startTime;
 
       if (!falResponse.ok) {
         const errorText = await falResponse.text();
@@ -968,6 +975,20 @@ serve(async (req) => {
           })
           .eq('id', jobData.id);
 
+        // Log error usage
+        logApiUsage(supabase, {
+          providerId: apiModel.api_providers.id,
+          modelId: apiModel.id,
+          userId: user.id,
+          requestType,
+          endpointPath: `/${modelKey}`,
+          requestPayload: modelInput,
+          responseStatus: falResponse.status,
+          responseTimeMs,
+          errorMessage: errorDetails.message || errorText,
+          providerMetadata: { model_key: modelKey }
+        }).catch(logErr => console.error('Failed to log error usage:', logErr));
+
         return new Response(JSON.stringify({
           error: 'fal.ai API request failed',
           details: errorDetails.message || errorText,
@@ -995,6 +1016,21 @@ serve(async (req) => {
         has_images: !!falResult.images,
         has_video: !!falResult.video
       });
+
+      // Log usage for successful response
+      const usageData = extractFalUsage(falResult);
+      logApiUsage(supabase, {
+        providerId: apiModel.api_providers.id,
+        modelId: apiModel.id,
+        userId: user.id,
+        requestType,
+        endpointPath: `/${modelKey}`,
+        requestPayload: modelInput,
+        ...usageData,
+        responseStatus: falResponse.status,
+        responseTimeMs,
+        responsePayload: falResult
+      }).catch(err => console.error('Failed to log usage:', err));
 
       // Handle queued response (async model)
       if (falResult.status === 'IN_QUEUE' || falResult.status === 'IN_PROGRESS') {
