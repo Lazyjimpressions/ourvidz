@@ -68,6 +68,13 @@ export const SceneCreationModal = ({
   const [scenePrompt, setScenePrompt] = useState('');
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [sceneStarters, setSceneStarters] = useState('');
+  // ✅ PHASE 1: Enhanced narrative generation fields
+  const [sceneFocus, setSceneFocus] = useState<'setting' | 'character' | 'interaction' | 'atmosphere'>('setting');
+  const [narrativeStyle, setNarrativeStyle] = useState<'concise' | 'detailed' | 'atmospheric'>('concise');
+  const [visualPriority, setVisualPriority] = useState<string[]>(['setting', 'lighting', 'positioning']);
+  const [perspectiveHint, setPerspectiveHint] = useState<'third_person' | 'pov' | 'observer'>('third_person');
+  const [maxWords, setMaxWords] = useState(60);
+  const [showAdvancedNarrative, setShowAdvancedNarrative] = useState(false);
 
   // Model selection state - use "auto" as default value instead of empty string
   // (Radix UI Select has issues with empty string values)
@@ -109,6 +116,12 @@ export const SceneCreationModal = ({
             ? editScene.scene_starters.join('\n')
             : '';
           setSceneStarters(starters);
+          // ✅ PHASE 1: Load enhanced narrative fields
+          setSceneFocus(editScene.scene_focus || 'setting');
+          setNarrativeStyle(editScene.narrative_style || 'concise');
+          setVisualPriority(editScene.visual_priority || ['setting', 'lighting', 'positioning']);
+          setPerspectiveHint(editScene.perspective_hint || 'third_person');
+          setMaxWords(editScene.max_words || 60);
           setHasEnhanced(false);
           console.log('✅ Edit mode form populated');
         } catch (err) {
@@ -125,6 +138,13 @@ export const SceneCreationModal = ({
         setScenePrompt('');
         setPreviewImageUrl(null);
         setSceneStarters('');
+        // ✅ PHASE 1: Reset enhanced narrative fields to defaults
+        setSceneFocus('setting');
+        setNarrativeStyle('concise');
+        setVisualPriority(['setting', 'lighting', 'positioning']);
+        setPerspectiveHint('third_person');
+        setMaxWords(60);
+        setShowAdvancedNarrative(false);
         setSelectedChatModel('auto');
         setSelectedImageModel('auto');
         setHasEnhanced(false);
@@ -207,7 +227,13 @@ export const SceneCreationModal = ({
       is_public: isPublic,
       scene_prompt: scenePrompt || null,
       preview_image_url: previewImageUrl,
-      scene_starters: sceneStarters.split('\n').filter(s => s.trim())
+      scene_starters: sceneStarters.split('\n').filter(s => s.trim()),
+      // ✅ PHASE 1: Enhanced narrative generation fields
+      scene_focus: sceneFocus,
+      narrative_style: narrativeStyle,
+      visual_priority: visualPriority,
+      perspective_hint: perspectiveHint,
+      max_words: maxWords
     };
 
     // Use updateScene if editing, createScene if new
@@ -222,6 +248,7 @@ export const SceneCreationModal = ({
   }, [
     name, description, contentRating, scenarioType, tags,
     isPublic, scenePrompt, previewImageUrl, sceneStarters,
+    sceneFocus, narrativeStyle, visualPriority, perspectiveHint, maxWords,
     editScene, createScene, updateScene, onSceneCreated, onClose
   ]);
 
@@ -586,6 +613,143 @@ export const SceneCreationModal = ({
                 </p>
               </div>
             </TooltipProvider>
+
+            <Separator />
+
+            {/* ✅ PHASE 1: Advanced Narrative Settings */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label>Advanced Narrative Settings</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Control how scene descriptions are generated during roleplay
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAdvancedNarrative(!showAdvancedNarrative)}
+                  disabled={isLoading}
+                >
+                  {showAdvancedNarrative ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+
+              {showAdvancedNarrative && (
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Scene Focus</Label>
+                      <Select
+                        value={sceneFocus}
+                        onValueChange={(value) => setSceneFocus(value as typeof sceneFocus)}
+                        disabled={isLoading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="setting">Setting</SelectItem>
+                          <SelectItem value="character">Character</SelectItem>
+                          <SelectItem value="interaction">Interaction</SelectItem>
+                          <SelectItem value="atmosphere">Atmosphere</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        What aspect to emphasize in descriptions
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Narrative Style</Label>
+                      <Select
+                        value={narrativeStyle}
+                        onValueChange={(value) => setNarrativeStyle(value as typeof narrativeStyle)}
+                        disabled={isLoading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="concise">Concise (40-60 words)</SelectItem>
+                          <SelectItem value="detailed">Detailed (80-120 words)</SelectItem>
+                          <SelectItem value="atmospheric">Atmospheric (60-100 words)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Verbosity level for scene descriptions
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Visual Priority</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {['lighting', 'clothing', 'positioning', 'setting'].map((priority) => (
+                        <Badge
+                          key={priority}
+                          variant={visualPriority.includes(priority) ? 'default' : 'outline'}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            if (isLoading) return;
+                            setVisualPriority(prev =>
+                              prev.includes(priority)
+                                ? prev.filter(p => p !== priority)
+                                : [...prev, priority]
+                            );
+                          }}
+                        >
+                          {priority}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Click to toggle visual elements to prioritize
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Perspective</Label>
+                      <Select
+                        value={perspectiveHint}
+                        onValueChange={(value) => setPerspectiveHint(value as typeof perspectiveHint)}
+                        disabled={isLoading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="third_person">Third Person</SelectItem>
+                          <SelectItem value="pov">Point of View</SelectItem>
+                          <SelectItem value="observer">Observer</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Prevents first-person dialogue
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Max Words: {maxWords}</Label>
+                      <input
+                        type="range"
+                        min="20"
+                        max="200"
+                        value={maxWords}
+                        onChange={(e) => setMaxWords(Number(e.target.value))}
+                        disabled={isLoading}
+                        className="w-full"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Override default word limit (20-200)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <Separator />
 

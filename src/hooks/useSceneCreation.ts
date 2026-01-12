@@ -17,6 +17,12 @@ export interface SceneFormData {
   scene_prompt: string | null;
   preview_image_url: string | null;
   scene_starters: string[];
+  // ✅ PHASE 1: Enhanced narrative generation fields
+  scene_focus?: 'setting' | 'character' | 'interaction' | 'atmosphere';
+  narrative_style?: 'concise' | 'detailed' | 'atmospheric';
+  visual_priority?: string[];
+  perspective_hint?: 'third_person' | 'pov' | 'observer';
+  max_words?: number;
 }
 
 /**
@@ -423,6 +429,12 @@ export const useSceneCreation = (): UseSceneCreationResult => {
           scene_prompt: formData.scene_prompt,
           preview_image_url: formData.preview_image_url,
           scene_starters: formData.scene_starters,
+          // ✅ PHASE 1: Enhanced narrative generation fields
+          scene_focus: formData.scene_focus || 'setting',
+          narrative_style: formData.narrative_style || 'concise',
+          visual_priority: formData.visual_priority || ['setting', 'lighting', 'positioning'],
+          perspective_hint: formData.perspective_hint || 'third_person',
+          max_words: formData.max_words || 60,
           usage_count: 0
         })
         .select()
@@ -451,6 +463,12 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         preview_image_url: data.preview_image_url,
         scene_starters: data.scene_starters || [],
         scene_prompt: data.scene_prompt,
+        // ✅ PHASE 1: Enhanced narrative generation fields
+        scene_focus: data.scene_focus || 'setting',
+        narrative_style: data.narrative_style || 'concise',
+        visual_priority: data.visual_priority || ['setting', 'lighting', 'positioning'],
+        perspective_hint: data.perspective_hint || 'third_person',
+        max_words: data.max_words || 60,
         created_at: data.created_at,
         updated_at: data.updated_at
       };
@@ -522,7 +540,13 @@ export const useSceneCreation = (): UseSceneCreationResult => {
           is_public: formData.is_public,
           scene_prompt: formData.scene_prompt,
           preview_image_url: formData.preview_image_url,
-          scene_starters: formData.scene_starters
+          scene_starters: formData.scene_starters,
+          // ✅ PHASE 1: Enhanced narrative generation fields
+          scene_focus: formData.scene_focus || 'setting',
+          narrative_style: formData.narrative_style || 'concise',
+          visual_priority: formData.visual_priority || ['setting', 'lighting', 'positioning'],
+          perspective_hint: formData.perspective_hint || 'third_person',
+          max_words: formData.max_words || 60
         })
         .eq('id', sceneId);
 
@@ -565,6 +589,12 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         preview_image_url: data.preview_image_url,
         scene_starters: data.scene_starters || [],
         scene_prompt: data.scene_prompt,
+        // ✅ PHASE 1: Enhanced narrative generation fields
+        scene_focus: data.scene_focus || 'setting',
+        narrative_style: data.narrative_style || 'concise',
+        visual_priority: data.visual_priority || ['setting', 'lighting', 'positioning'],
+        perspective_hint: data.perspective_hint || 'third_person',
+        max_words: data.max_words || 60,
         created_at: data.created_at,
         updated_at: data.updated_at
       };

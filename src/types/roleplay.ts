@@ -621,6 +621,13 @@ export interface SceneTemplate {
   scene_starters: string[];
   scene_prompt?: string;
 
+  // ✅ PHASE 1: Enhanced narrative generation fields
+  scene_focus?: 'setting' | 'character' | 'interaction' | 'atmosphere';
+  narrative_style?: 'concise' | 'detailed' | 'atmospheric';
+  visual_priority?: string[]; // Array of: 'lighting', 'clothing', 'positioning', 'setting'
+  perspective_hint?: 'third_person' | 'pov' | 'observer';
+  max_words?: number; // 20-200 words
+
   created_at: string;
   updated_at: string;
 }
