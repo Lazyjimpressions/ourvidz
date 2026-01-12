@@ -116,7 +116,9 @@ Full-screen chat interface for roleplay conversations with AI characters. Suppor
 ### Message Interactions
 | Gesture | Action | Target |
 |---------|--------|--------|
-| Tap scene image | Open fullscreen lightbox | Scene images |
+| Tap scene image | Open `QuickModificationSheet` | Scene images |
+| Hover scene image | Reveal edit button (purple) | Scene images |
+| Tap edit button | Open `ScenePromptEditModal` | Scene images |
 | Long-press message | Copy text / report | Any message |
 | Tap regenerate | Regenerate scene | Scene images |
 | Swipe left | No action (reserved) | Messages |
@@ -141,11 +143,16 @@ Full-screen chat interface for roleplay conversations with AI characters. Suppor
 │           └──────────────────────┘ │
 │           ┌──────────────────────┐ │
 │           │   [Scene Image]      │ │
-│           │   📷 Regenerate      │ │
+│           │   [✏️ Edit] (hover)  │ │
 │           └──────────────────────┘ │
 │           12:34 PM                 │
 └────────────────────────────────────┘
 ```
+
+**Scene Image Actions:**
+- Tap image → Opens `QuickModificationSheet` with presets
+- Hover → Reveals purple edit button
+- Edit button → Opens `ScenePromptEditModal` for custom prompt editing
 
 ### User Message
 ```
@@ -236,10 +243,36 @@ Full-screen chat interface for roleplay conversations with AI characters. Suppor
 
 When enabled, maintains visual consistency across scenes:
 
-1. First scene in conversation: T2I (text-to-image)
+1. First scene in conversation: T2I (text-to-image) using character reference
 2. Subsequent scenes: I2I (image-to-image) using previous scene
-3. Reference passed via `useSceneContinuity` hook
-4. Strength setting controls how much previous scene influences new one
+3. Reference passed via `useSceneContinuity` hook with localStorage persistence + DB fallback
+4. Strength setting controls how much previous scene influences new one (default: 0.45)
+5. Persistence: Previous scenes stored in localStorage (max 25 conversations) with database fallback
+
+### Scene Regeneration & Modification
+
+Users can edit and regenerate scenes with two modes:
+
+**I2I Modification Mode:**
+- Edit button (hover-revealed) on scene images
+- Uses current scene as reference for I2I generation
+- Strength: 0.5 (higher for modifications)
+- Preserves visual context while applying prompt changes
+
+**Fresh Generation Mode:**
+- T2I from character reference (ignores scene continuity)
+- Useful for major scene changes or starting over
+- No reference image used
+
+### Quick Modification UI
+
+Bottom sheet (`QuickModificationSheet`) provides:
+- **NSFW Presets**: Remove Top, Remove Clothing, Change Position, More Intimate
+- **Intensity Selector**: Adjustable strength slider (0.25-0.70)
+- **Custom Edit**: Opens full prompt editor
+- **Fresh Generation**: T2I from character reference
+
+Presets automatically include continuity phrases to maintain character identity and environment.
 
 ---
 
@@ -248,9 +281,46 @@ When enabled, maintains visual consistency across scenes:
 - Supabase subscription on `messages` table
 - Streaming responses via edge function
 - Auto-scroll to latest message
-- Scene image updates via workspace asset polling
+- Scene image updates via workspace asset polling (`subscribeToJobCompletion`)
+- Scene continuity tracking via `useSceneContinuity` hook
+- Previous scene persistence (localStorage + DB fallback)
+
+## Scene Generation Flow
+
+### Automatic Scene Generation
+1. Character responds with scene-worthy content
+2. System auto-triggers scene generation (if enabled)
+3. Loading spinner in message area
+4. Scene image appears inline with message
+5. Previous scene tracked for continuity
+
+### Manual Scene Generation
+1. User taps camera icon in input area
+2. Scene generated from current conversation context
+3. Uses scene continuity if enabled and previous scene exists
+4. Scene appears inline in chat
+
+### Scene Regeneration
+1. User taps scene image → `QuickModificationSheet` opens
+2. Options:
+   - Select preset (Remove Top, Change Position, etc.)
+   - Adjust intensity slider
+   - Custom edit (full prompt editor)
+   - Fresh generation (T2I from character)
+3. Regenerated scene appears inline, replaces original
+4. Previous scene updated for next iteration
 
 ---
+
+## Related Components
+
+| Component | Purpose | Status |
+|-----------|---------|--------|
+| `ChatMessage` | Message display with scene images | ✅ Active |
+| `ScenePromptEditModal` | Full prompt editor for regeneration | ✅ Active |
+| `QuickModificationSheet` | Quick preset-based modifications | ✅ Active |
+| `IntensitySelector` | Strength slider for I2I modifications | ✅ Active |
+| `SceneDebugPanel` | Admin debugging (dev only) | ✅ Active |
 
 ## Related Docs
 
@@ -259,3 +329,4 @@ When enabled, maintains visual consistency across scenes:
 - [UX_CHARACTER.md](./UX_CHARACTER.md) - Character creation/edit
 - [UX_SCENE.md](./UX_SCENE.md) - Scene builder spec
 - [../../03-SYSTEMS/PROMPTING_SYSTEM.md](../../03-SYSTEMS/PROMPTING_SYSTEM.md) - Prompt templates
+- [../../06-DEVELOPMENT/ACTIVE/SCENE_CONTINUITY_DEVELOPMENT_PLAN.md](../../06-DEVELOPMENT/ACTIVE/SCENE_CONTINUITY_DEVELOPMENT_PLAN.md) - Scene continuity implementation

@@ -1,9 +1,9 @@
 # Scene Continuity Development Plan
 
 **Date:** 2026-01-08
-**Status:** Phase 1.6 Complete (Persistence Fix), Phase 2 Pending
+**Status:** Phase 2 Complete (Quick Modification UI), All Core Features Implemented
 **Priority:** HIGH - Core UX Enhancement
-**Last Updated:** 2026-01-09
+**Last Updated:** 2026-01-10
 
 ---
 
@@ -46,7 +46,7 @@ I2I iteration is **critical for NSFW content** because it:
 | **Phase 1** | ✅ Complete | Core I2I iteration infrastructure |
 | **Phase 1.5** | ✅ Complete | Scene regeneration/modification with I2I |
 | **Phase 1.6** | ✅ Complete | Persistence fix - localStorage + DB fallback |
-| **Phase 2** | 🔲 Pending | Quick modification UI & NSFW presets |
+| **Phase 2** | ✅ Complete | Quick modification UI & NSFW presets |
 
 ---
 
@@ -381,55 +381,67 @@ Props passed to ChatMessage:
 
 Phase 2 adds the **Quick Modification UI** - a user-facing interface for targeted scene modifications using I2I.
 
+**Status:** ✅ Complete (2026-01-10)
+
 ### 6.1 Quick Modification Bottom Sheet
 
-**Status:** 🔲 Pending
+**Status:** ✅ Complete
 **Priority:** High
+**File:** `src/components/roleplay/QuickModificationSheet.tsx`
 
-Add a bottom sheet that appears when user taps a scene image:
+Bottom sheet (`QuickModificationSheet`) that appears when user taps a scene image:
 
-```
-┌────────────────────────────────────────┐
-│ Scene Options                      [X] │
-├────────────────────────────────────────┤
-│                                        │
-│ Quick Modifications                    │
-│ ┌──────────┐ ┌──────────┐ ┌──────────┐│
-│ │Regenerate│ │  Modify  │ │   Save   ││
-│ └──────────┘ └──────────┘ └──────────┘│
-│                                        │
-│ NSFW Actions (if content_tier = nsfw)  │
-│ ┌──────────┐ ┌──────────┐ ┌──────────┐│
-│ │ Undress  │ │Change Pos│ │  More... ││
-│ └──────────┘ └──────────┘ └──────────┘│
-│                                        │
-│ Intensity   [Subtle] [Moderate] [Bold] │
-│                                        │
-└────────────────────────────────────────┘
-```
+**Implementation Details:**
+- **Trigger**: Tap on scene image in `ChatMessage` component
+- **Layout**: Bottom sheet with drag handle, max-height 85vh
+- **Generation Mode Toggle**: Modify (I2I) vs Fresh (T2I)
+- **Preset Buttons**: Grid layout with icons and labels
+- **Intensity Selector**: Slider component with preset buttons
+- **Actions**: Custom Edit, Fresh Generation buttons
+
+**Key Features:**
+- Filters NSFW presets based on `contentMode` prop
+- Custom strength support via `IntensitySelector`
+- Automatic continuity phrases in preset modifiers
+- Loading states during generation
 
 ### 6.2 NSFW Modification Presets
 
-**Status:** 🔲 Pending
+**Status:** ✅ Complete
 **Priority:** High
+**File:** `src/components/roleplay/QuickModificationSheet.tsx` (lines 28-69)
 
-| Preset | Prompt Template | Strength |
-|--------|-----------------|----------|
-| Remove Top | "Remove upper clothing, maintain pose and setting" | 0.35 |
-| Remove All Clothing | "Remove all clothing, maintain pose and setting" | 0.45 |
-| Change Position | "Change position to {{position}}, maintain clothing and setting" | 0.40 |
-| Intimate Progression | "Progress to more intimate interaction" | 0.30 |
+| Preset | Prompt Modifier | Continuity Phrase | Strength | Category |
+|--------|-----------------|-------------------|----------|----------|
+| Remove Top | "topless, bare chest, removed shirt" | "maintain same character identity, keep same lighting" | 0.35 | clothing |
+| Remove All Clothing | "fully nude, no clothes, naked" | "maintain same character identity, keep same environment" | 0.45 | clothing |
+| Change Position | "different pose, new position" | "maintain same character, subtle change" | 0.40 | position |
+| Intimate Progression | "more intimate, closer contact" | "maintain same characters, keep same setting" | 0.30 | intensity |
+
+**Implementation Notes:**
+- Presets include both `promptModifier` and `continuityPhrase`
+- Full prompt: `${originalPrompt}. ${promptModifier}. ${continuityPhrase}`
+- NSFW presets filtered when `contentMode === 'sfw'`
+- Strength values match development plan specifications
 
 ### 6.3 Intensity Presets
 
-**Status:** 🔲 Pending
+**Status:** ✅ Complete
 **Priority:** Medium
+**File:** `src/components/roleplay/IntensitySelector.tsx`
 
 | Intensity | Strength | Use Case |
 |-----------|----------|----------|
 | Subtle | 0.25-0.35 | Minor adjustments, same scene |
 | Moderate | 0.40-0.50 | Noticeable changes, same characters |
 | Bold | 0.55-0.70 | Major changes, may alter setting |
+
+**Implementation Details:**
+- Slider component with preset buttons
+- Range: 0.25-0.70 (clamped)
+- Default: 0.45 (moderate)
+- Custom strength can override preset values
+- Visual feedback with preset highlighting
 
 ### 6.4 New Prompt Templates
 
@@ -628,8 +640,10 @@ GROUP BY generation_mode;
 - [x] Image cropping fixed (object-cover → object-contain for full image display)
 - [x] Browser testing completed (2026-01-09) - See SCENE_CONTINUITY_BROWSER_TEST_RESULTS.md
 - [x] Supabase verification completed - All prompt templates present, database schema correct, edge function deployed
-- [ ] NSFW presets work correctly (BLOCKED: Scene generation error "No job ID returned")
-- [ ] Intensity presets affect strength parameter (BLOCKED: Scene generation error)
+- [x] NSFW presets work correctly - Preset selection triggers I2I modification
+- [x] Intensity presets affect strength parameter - Slider value passed to edge function
+- [x] Custom edit opens ScenePromptEditModal - Full prompt editor functional
+- [x] Fresh generation mode works - T2I from character reference when no image provided
 - [ ] Admin debug panel is collapsible (low priority)
 
 **Browser Test Results (2026-01-09):**
@@ -701,12 +715,12 @@ Move scene continuity preference to database:
 |------|---------|
 | `src/hooks/useSceneContinuity.ts` | Scene continuity state management |
 
-### Phase 2 Files (To Be Created)
+### Phase 2 Files (Created)
 
-| File | Purpose |
-|------|---------|
-| `src/components/roleplay/SceneModificationSheet.tsx` | Quick modification bottom sheet |
-| `src/components/roleplay/NSFWPresets.tsx` | NSFW modification presets |
+| File | Purpose | Status |
+|------|---------|--------|
+| `src/components/roleplay/QuickModificationSheet.tsx` | Quick modification bottom sheet with presets | ✅ Complete |
+| `src/components/roleplay/IntensitySelector.tsx` | Intensity slider with preset buttons | ✅ Complete |
 
 ---
 

@@ -1,24 +1,35 @@
 # Roleplay Development Status - Consolidated
 
-**Last Updated:** January 4, 2026
-**Status:** **85% Complete - Production Ready**
+**Last Updated:** January 10, 2026
+**Status:** **90% Complete - Production Ready**
 **Purpose:** Single source of truth for roleplay development status, implementation details, and next steps
 
 ---
 
 ## Current Implementation Status
 
-### Production Ready (85% Complete)
+### Production Ready (90% Complete)
 
 **Core Features:**
 - Mobile-first pages: MobileRoleplayDashboard.tsx, MobileRoleplayChat.tsx
 - Character selection with immediate chat start (no modal blockers)
 - Chat interface with streaming responses
 - Scene generation with image consistency
+- **Scene continuity system (I2I iteration)** - Maintains visual consistency across scenes
+- **Scene regeneration & modification** - Edit prompts and regenerate with I2I
+- **Quick modification UI** - Preset-based scene modifications with intensity control
 - Non-blocking drawers for settings and character info
 - 3rd party API integration (OpenRouter, Replicate, fal.ai)
 
-**Missing (15% Remaining):**
+**Recently Completed (5%):**
+- ✅ Scene continuity system (I2I iteration) - Phase 1, 1.5, 1.6 complete
+- ✅ Scene regeneration with I2I modification mode
+- ✅ Quick modification UI with NSFW presets (Phase 2)
+- ✅ Inline scene display in chat messages
+- ✅ Scene persistence (localStorage + DB fallback)
+- ✅ Intensity selector for I2I strength control
+
+**Missing (10% Remaining):**
 - Three-tier memory system (conversation, character, profile)
 - Character scene templates integration
 - Dynamic greeting generation
@@ -90,7 +101,7 @@ src/pages/
 └── MobileRoleplayChat.tsx (632 lines) - Chat interface
 ```
 
-### Components (16 active files)
+### Components (20 active files)
 ```
 src/components/roleplay/
 ├── MobileCharacterCard.tsx - Character cards with stats
@@ -100,7 +111,7 @@ src/components/roleplay/
 ├── ChatBottomNav.tsx - Bottom navigation bar
 ├── QuickSettingsDrawer.tsx - Mobile settings sheet
 ├── DesktopChatLayout.tsx - Side-by-side desktop layout
-├── ChatMessage.tsx - Message display with timestamps
+├── ChatMessage.tsx - Message display with scene images & edit
 ├── ContextMenu.tsx - Message context menu
 ├── CharacterGrid.tsx - Dashboard grid
 ├── QuickStartSection.tsx - Dashboard quick start
@@ -108,16 +119,21 @@ src/components/roleplay/
 ├── CharacterPreviewModal.tsx - Character preview (optional)
 ├── RoleplayHeader.tsx - Desktop header
 ├── RoleplaySettingsModal.tsx - Full settings modal
-└── CharacterInfoDrawer.tsx - Character info sheet
+├── CharacterInfoDrawer.tsx - Character info sheet
+├── ScenePromptEditModal.tsx - Full prompt editor for regeneration
+├── QuickModificationSheet.tsx - Quick preset-based modifications
+├── IntensitySelector.tsx - Strength slider with presets
+└── SceneDebugPanel.tsx - Admin debugging (dev only)
 ```
 
-### Hooks (4 key files)
+### Hooks (5 key files)
 ```
 src/hooks/
 ├── useLocalModelHealth.ts - Worker health monitoring
 ├── useRoleplayModels.ts - Chat model loading
 ├── useKeyboardVisible.ts - Mobile keyboard detection
-└── useRoleplaySettings.ts - Shared settings state
+├── useRoleplaySettings.ts - Shared settings state
+└── useSceneContinuity.ts - Scene continuity tracking (localStorage + DB)
 ```
 
 ### Services (2 files)

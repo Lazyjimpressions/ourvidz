@@ -1,7 +1,7 @@
 # Roleplay Purpose & PRD (Product Requirements Document)
 
-**Last Updated:** January 4, 2026
-**Status:** ✅ **85% Complete - Production Ready**
+**Last Updated:** January 10, 2026
+**Status:** ✅ **90% Complete - Production Ready**
 **Priority:** **HIGH** - Core MVP Feature
 
 ## **🎯 Purpose Statement**
@@ -38,8 +38,11 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 5. **Character & Scene Editing** - Full editing capabilities for owners and admins
 6. **Memory System** - Three-tier memory (conversation, character, profile)
 7. **Image Consistency** - Hybrid approach using i2i reference (70%+ consistency)
-8. **Non-Blocking UI** - Drawers for character info, scenes, and settings (no modal blockers)
-9. **Model Selection** - Dynamic model selection from `api_models` table with health-based availability
+8. **Scene Continuity** - I2I iteration maintains visual consistency across scenes (Phase 1-2 complete)
+9. **Scene Regeneration** - Edit and regenerate scenes with I2I modification or fresh T2I generation
+10. **Quick Modification UI** - Preset-based scene modifications with intensity control (Phase 2 complete)
+11. **Non-Blocking UI** - Drawers for character info, scenes, and settings (no modal blockers)
+12. **Model Selection** - Dynamic model selection from `api_models` table with health-based availability
 
 **Model Selection Details:**
 - **Settings Drawer**: Quick access to model selection in chat interface
@@ -52,10 +55,13 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 
 ### **Secondary Features (Phase 2)**
 1. **Custom Character Creation** - Character builder with real-time preview
-2. **Scene Generation** - Dynamic scene creation with consistency controls
-3. **Model Management** - Admin/power user model selection and configuration
-4. **Advanced Mobile Gestures** - Swipe navigation, advanced touch gestures, pinch-to-zoom
-5. **Long-Press Actions** - Context menus and advanced message actions
+2. **Scene Generation** - Dynamic scene creation with consistency controls ✅ Complete
+3. **Scene Continuity System** - I2I iteration for visual consistency ✅ Complete
+4. **Scene Regeneration & Modification** - Edit prompts, regenerate with I2I or T2I ✅ Complete
+5. **Quick Modification UI** - Preset-based modifications with intensity control ✅ Complete
+6. **Model Management** - Admin/power user model selection and configuration
+7. **Advanced Mobile Gestures** - Swipe navigation, advanced touch gestures, pinch-to-zoom
+8. **Long-Press Actions** - Context menus and advanced message actions
 
 ## **🎨 UX/UI Design Requirements**
 
@@ -71,7 +77,8 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 2. **Character Selection**: Tap character card → start chat immediately (preview optional via long-press or button)
 3. **Scene Integration**: Auto-select best available scene, or start without scene (select later in chat)
 4. **Chat Interface**: Full-screen chat with character avatars, scene integration, and optional drawers
-5. **Scene Generation**: Automatic scene generation with consistency controls (Phase 2)
+5. **Scene Generation**: Automatic scene generation with I2I continuity (Phase 1-2 complete)
+6. **Scene Modification**: Tap scene image → Quick modification sheet with presets or custom edit
 
 ### **Key Interactions**
 - **Touch-Optimized Cards**: Large touch targets with proper spacing (44px minimum)
