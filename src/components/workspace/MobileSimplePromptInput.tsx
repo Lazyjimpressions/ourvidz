@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Slider } from '@/components/ui/slider';
 import { Camera, Video, Upload, X, Image, ChevronUp, ChevronDown, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
@@ -45,6 +46,10 @@ export interface MobileSimplePromptInputProps {
   onCollapsedChange?: (collapsed: boolean) => void;
   exactCopyMode?: boolean;
   onExactCopyModeChange?: (mode: boolean) => void;
+  referenceStrength?: number;
+  onReferenceStrengthChange?: (strength: number) => void;
+  onClearWorkspace?: () => void;
+  onDeleteAllWorkspace?: () => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -73,7 +78,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onAspectRatioChange,
   onCollapsedChange,
   exactCopyMode = false,
-  onExactCopyModeChange
+  onExactCopyModeChange,
+  referenceStrength = 0.8,
+  onReferenceStrengthChange,
+  onClearWorkspace,
+  onDeleteAllWorkspace
 }) => {
   // Use hook state for reference images instead of local state
   const hasReferenceImage = !!referenceImage;
@@ -336,7 +345,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
       {/* Hidden file input for iOS reliability - must be in DOM */}
       <input
         ref={fileInputRef}
@@ -381,7 +390,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                 variant={currentMode === 'image' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => onModeToggle('image')}
-                className="flex items-center gap-1 flex-1"
+                className="flex items-center gap-1 flex-1 min-h-[44px]"
               >
                 <Camera className="h-4 w-4" />
                 Image
@@ -391,7 +400,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                 variant={currentMode === 'video' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => onModeToggle('video')}
-                className="flex items-center gap-1 flex-1"
+                className="flex items-center gap-1 flex-1 min-h-[44px]"
               >
                 <Video className="h-4 w-4" />
                 Video
@@ -593,7 +602,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                             variant={exactCopyMode ? "default" : "outline"}
                             size="sm"
                             onClick={() => onExactCopyModeChange(!exactCopyMode)}
-                            className="min-w-[60px]"
+                            className="min-w-[60px] min-h-[44px]"
                           >
                             {exactCopyMode ? "COPY" : "MOD"}
                           </Button>
@@ -602,6 +611,28 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                               ? "Exact copy - preserves image exactly" 
                               : "Modify - allows changes to image"}
                           </span>
+                        </div>
+                      )}
+                      {/* Reference Strength Control - Only show in modify mode */}
+                      {!exactCopyMode && (referenceImage || referenceImageUrl) && onReferenceStrengthChange && (
+                        <div className="space-y-1 pt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground">
+                              Variation: {Math.round((1 - referenceStrength) * 100)}%
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Strength: {referenceStrength.toFixed(2)}
+                            </span>
+                          </div>
+                          <Slider
+                            value={[referenceStrength]}
+                            onValueChange={(value) => onReferenceStrengthChange(value[0])}
+                            min={0.1}
+                            max={0.9}
+                            step={0.05}
+                            size="sm"
+                            className="w-full"
+                          />
                         </div>
                       )}
                     </>
@@ -671,6 +702,28 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                                 ? "Exact copy - preserves image exactly" 
                                 : "Modify - allows changes to image"}
                             </span>
+                          </div>
+                        )}
+                        {/* Reference Strength Control - Only show in modify mode */}
+                        {!exactCopyMode && (beginningRefImage || beginningRefImageUrl) && onReferenceStrengthChange && (
+                          <div className="space-y-1 pt-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">
+                                Variation: {Math.round((1 - referenceStrength) * 100)}%
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                Strength: {referenceStrength.toFixed(2)}
+                              </span>
+                            </div>
+                            <Slider
+                              value={[referenceStrength]}
+                              onValueChange={(value) => onReferenceStrengthChange(value[0])}
+                              min={0.1}
+                              max={0.9}
+                              step={0.05}
+                              size="sm"
+                              className="w-full"
+                            />
                           </div>
                         )}
                       </>
@@ -771,6 +824,34 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                 )
               )}
             </div>
+
+            {/* Workspace Actions - Clear All and Delete All */}
+            {(onClearWorkspace || onDeleteAllWorkspace) && (
+              <div className="flex items-center gap-2 pt-2 border-t">
+                {onClearWorkspace && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onClearWorkspace()}
+                    className="flex-1 min-h-[44px]"
+                  >
+                    Clear All
+                  </Button>
+                )}
+                {onDeleteAllWorkspace && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onDeleteAllWorkspace()}
+                    className="flex-1 text-destructive min-h-[44px]"
+                  >
+                    Delete All
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </CollapsibleContent>
 
@@ -784,7 +865,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               onChange={(e) => onPromptChange(e.target.value)}
               disabled={isGenerating}
             />
-            <Button type="submit" disabled={isGenerating} className="w-full">
+            <Button type="submit" disabled={isGenerating} className="w-full min-h-[44px]">
               {isGenerating ? 'Generating...' : 'Generate'}
             </Button>
           </form>

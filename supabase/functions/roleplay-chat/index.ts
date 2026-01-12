@@ -554,6 +554,7 @@ serve(async (req) => {
       );
 
       // Pass user character and scene style for enhanced scene generation
+      // ✅ CRITICAL FIX: Pass scene_context (template's scene_prompt) for first scene generation
       sceneResult = await generateScene(
         supabase,
         character_id,
@@ -569,6 +570,8 @@ serve(async (req) => {
         content_tier, // ✅ FIX: Pass content_tier to respect NSFW setting
         scene_name, // ✅ FIX: Pass scene_name from request body
         scene_description, // ✅ FIX: Pass scene_description from request body
+        // ✅ CRITICAL FIX: Pass scene_context (template's scene_prompt) for image generation
+        scene_context || undefined, // Template's scene_prompt from scenes table
         // Scene continuity (I2I iteration) parameters
         previous_scene_id,
         previous_scene_image_url,
@@ -2157,6 +2160,8 @@ async function generateScene(
   contentTier: 'sfw' | 'nsfw' = 'nsfw', // ✅ FIX: Add content_tier parameter, default NSFW
   sceneName?: string, // ✅ FIX: Add scene_name parameter
   sceneDescription?: string, // ✅ FIX: Add scene_description parameter
+  // ✅ CRITICAL FIX: Template's scene_prompt from scenes table (for first scene generation)
+  sceneTemplatePrompt?: string, // scene_prompt from scenes table template
   // Scene continuity (I2I iteration) parameters
   previousSceneId?: string, // ID of previous scene for linking
   previousSceneImageUrl?: string, // URL of previous scene for I2I iteration
@@ -2357,7 +2362,8 @@ async function generateSceneNarrativeWithOpenRouter(
   modelConfig: any,
   supabase: any,
   useI2IIteration: boolean = false,  // ✅ FIX 3.1: ADD I2I FLAG PARAMETER
-  previousSceneId?: string  // ✅ FIX: Add previous scene ID to fetch previous scene context
+  previousSceneId?: string,  // ✅ FIX: Add previous scene ID to fetch previous scene context
+  characterResponse?: string  // ✅ FIX: Add character response for direct scene description extraction
 ): Promise<{ scenePrompt: string; templateId: string; templateName: string; templateUseCase: string; templateContentMode: string }> {
   const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
@@ -2394,6 +2400,7 @@ async function generateSceneNarrativeWithOpenRouter(
   // ✅ FIX: For I2I, get location/setting from previous scene to maintain continuity
   let previousSceneContext: any = null;
   let previousSceneSetting: string | null = null;
+  let previousSceneTemplatePrompt: string | null = null; // ✅ CRITICAL FIX: Store template prompt for reference
   
   if (useI2IIteration && previousSceneId) {
     try {
@@ -2410,6 +2417,9 @@ async function generateSceneNarrativeWithOpenRouter(
               : prevScene.generation_metadata.scene_context)
           : null;
         
+        // ✅ CRITICAL FIX: Get template prompt from previous scene metadata
+        previousSceneTemplatePrompt = prevScene.generation_metadata?.scene_template_prompt || null;
+        
         // Extract setting from previous scene context or prompt
         if (previousSceneContext?.setting) {
           previousSceneSetting = previousSceneContext.setting;
@@ -2424,7 +2434,8 @@ async function generateSceneNarrativeWithOpenRouter(
         console.log('🔄 I2I: Retrieved previous scene context:', {
           previousSceneId,
           previousSceneSetting,
-          hasContext: !!previousSceneContext
+          hasContext: !!previousSceneContext,
+          hasTemplatePrompt: !!previousSceneTemplatePrompt
         });
       }
     } catch (error) {
@@ -2460,27 +2471,38 @@ async function generateSceneNarrativeWithOpenRouter(
 OUTPUT FORMAT:
 [Character name] [action/position] in [setting]. [Lighting/atmosphere details]. [Clothing/appearance state]. [Expression/interaction if applicable].`;
 
+  // ✅ CRITICAL FIX: Extract direct scene description from character response if present
+  const directSceneDescription = characterResponse ? extractDirectSceneDescription(characterResponse) : null;
+  
+  // ✅ CRITICAL FIX: Restructure prompt to emphasize context FIRST
   const scenePrompt = basePrompt
     + criticalConstraints
-    + `\n\nSTORYLINE CONTEXT (from full conversation - for reference only, DO NOT include dialogue):\n`
-    + `Location: ${storylineLocation}\n`
-    + `Key Events: ${storylineContext.keyEvents.join(', ') || 'conversation'}\n`
-    + `Relationship Tone: ${storylineContext.relationshipProgression}\n`
-    + `Current Activity: ${storylineContext.currentActivity}\n`
-    + `\nCURRENT SCENE CONTEXT:\n`
+    + `\n\n⚠️ CRITICAL: YOU MUST USE THE SCENE CONTEXT PROVIDED BELOW. DO NOT INVENT NEW LOCATIONS OR SETTINGS.\n\n`
+    + `REQUIRED SCENE CONTEXT (YOU MUST USE THIS):\n`
     + `Setting: ${sceneContext.setting}\n`
+    + `Location: ${storylineLocation}\n`
     + `Mood: ${sceneContext.mood}\n`
-    + `Actions: ${sceneContext.actions.join(', ')}\n`
-    + `Visual Elements: ${sceneContext.visualElements.join(', ')}\n`
-    + `Positioning: ${sceneContext.positioning.join(', ')}\n`
+    + `Actions: ${sceneContext.actions.join(', ') || 'none specified'}\n`
+    + `Visual Elements: ${sceneContext.visualElements.join(', ') || 'none specified'}\n`
+    + `Positioning: ${sceneContext.positioning.join(', ') || 'none specified'}\n`
+    + (directSceneDescription 
+        ? `\nDIRECT SCENE DESCRIPTION FROM DIALOGUE (USE THIS AS PRIMARY REFERENCE):\n${directSceneDescription}\n`
+        : '')
     + (useI2IIteration && previousSceneContext 
         ? `\nPREVIOUS SCENE CONTEXT (for continuity):\n`
         + `Previous Setting: ${previousSceneSetting || previousSceneContext.setting || 'same location'}\n`
         + `Previous Mood: ${previousSceneContext.mood || sceneContext.mood}\n`
+        + (previousSceneTemplatePrompt 
+            ? `Original Template Context: ${previousSceneTemplatePrompt.substring(0, 150)}...\n`
+            : '')
         + `IMPORTANT: The scene must remain in the SAME LOCATION as the previous scene (${previousSceneSetting || previousSceneContext.setting || storylineLocation}). Only describe what changes, not the location.\n`
         : '')
+    + `\nSTORYLINE CONTEXT (for reference only, DO NOT include dialogue):\n`
+    + `Key Events: ${storylineContext.keyEvents.join(', ') || 'conversation'}\n`
+    + `Relationship Tone: ${storylineContext.relationshipProgression}\n`
+    + `Current Activity: ${storylineContext.currentActivity}\n`
     + `\nRECENT CONVERSATION (last 10 exchanges - for reference only, DO NOT include dialogue):\n${conversationContext}\n\n`
-    + `FINAL INSTRUCTION: Generate ONLY the scene description text. ${useI2IIteration && previousSceneSetting ? `The scene MUST remain in the SAME LOCATION: ${previousSceneSetting}. Only describe what changes in the scene, not the location or environment.` : `Focus on the current location (${storylineLocation}) and what is happening now.`} The scene must be consistent with what has happened in the conversation. Start directly with the description of the scene. DO NOT include character dialogue, thoughts, or first-person narration.`;
+    + `⚠️ FINAL INSTRUCTION: Generate ONLY the scene description text using the REQUIRED SCENE CONTEXT above. ${useI2IIteration && previousSceneSetting ? `The scene MUST remain in the SAME LOCATION: ${previousSceneSetting}. Only describe what changes in the scene, not the location or environment.` : `The scene MUST be set in: ${sceneContext.setting} at location: ${storylineLocation}. DO NOT change the location or setting.`} Start directly with the description of the scene. DO NOT include character dialogue, thoughts, or first-person narration. DO NOT invent new locations like rooftops, cityscapes, or other settings not mentioned in the context.`;
 
   console.log('🎬 Scene generation prompt built, calling OpenRouter with model:', modelKey);
 
@@ -2578,7 +2600,11 @@ const sceneContext = analyzeSceneContent(response);
       mood: sceneContext.mood,
       actionsCount: sceneContext.actions.length,
       visualElementsCount: sceneContext.visualElements.length,
-      isNSFW: sceneContext.isNSFW
+      positioningCount: sceneContext.positioning.length,
+      isNSFW: sceneContext.isNSFW,
+      actions: sceneContext.actions.slice(0, 3),
+      visualElements: sceneContext.visualElements.slice(0, 3),
+      positioning: sceneContext.positioning.slice(0, 3)
     });
     
     // ✅ ENHANCED: Build comprehensive character visual context
@@ -2591,7 +2617,10 @@ const sceneContext = analyzeSceneContent(response);
       referenceImage: character.reference_image_url || character.image_url || character.preview_image_url
     }];
 
-    // Generate scene prompt: use override (regeneration) or AI-generated narrative
+    // ✅ CRITICAL FIX: Determine if this is the first scene
+    const isFirstScene = !previousSceneId && !previousSceneImageUrl;
+    
+    // Generate scene prompt: use override (regeneration) or template prompt or AI-generated narrative
     let scenePrompt: string = '';
     // ✅ ADMIN: Store template info for metadata
     let sceneTemplateId: string | undefined;
@@ -2603,6 +2632,29 @@ const sceneContext = analyzeSceneContent(response);
       // User-provided prompt override (regeneration/modification mode)
       scenePrompt = scenePromptOverride;
       console.log('🎬 Using user-provided scene prompt override:', scenePrompt.substring(0, 100) + '...');
+    } else if (sceneTemplatePrompt && isFirstScene) {
+      // ✅ CRITICAL FIX: FIRST SCENE - Use template's scene_prompt directly
+      // This is the scene template's carefully crafted prompt from scenes table
+      console.log('🎬 Using scene template prompt for first scene:', sceneTemplatePrompt.substring(0, 100) + '...');
+      
+      // Combine template prompt with character description if needed
+      // Template prompt might be generic or might already include character name
+      if (sceneTemplatePrompt.toLowerCase().includes(character.name.toLowerCase())) {
+        // Template already includes character name
+        scenePrompt = sceneTemplatePrompt;
+      } else {
+        // Template is generic - combine with character
+        // Example: "A steamy locker room shower" → "Mary in a steamy locker room shower"
+        scenePrompt = `${character.name} ${sceneTemplatePrompt}`;
+      }
+      
+      // Clean up the prompt (remove any dialogue markers, ensure third-person)
+      scenePrompt = scenePrompt
+        .replace(/^["']|["']$/g, '') // Remove quotes
+        .replace(/^(Hello|Hi|Hey),?\s+/i, '') // Remove greetings
+        .trim();
+      
+      console.log('✅ Using template scene prompt (first scene):', scenePrompt.substring(0, 100) + '...');
     } else {
       // Generate AI-powered scene narrative using OpenRouter
       console.log('🎬 Generating scene narrative for character:', character.name);
@@ -2625,7 +2677,8 @@ const sceneContext = analyzeSceneContent(response);
             modelConfig,
             supabase,
             useI2IIteration,  // ✅ FIX 3.3: PASS I2I FLAG
-            previousSceneId  // ✅ FIX: Pass previous scene ID for location continuity
+            previousSceneId,  // ✅ FIX: Pass previous scene ID for location continuity
+            response  // ✅ CRITICAL FIX: Pass character response for direct scene description extraction
           );
           scenePrompt = narrativeResult.scenePrompt;
           // ✅ ADMIN: Store template info for metadata (will be used in scene generation metadata)
@@ -2760,7 +2813,9 @@ const sceneContext = analyzeSceneContent(response);
             scene_template_id: sceneTemplateId,
             scene_template_name: sceneTemplateName,
             // ✅ ADMIN: Store original scene prompt used for generation
-            original_scene_prompt: cleanScenePrompt || scenePrompt
+            original_scene_prompt: cleanScenePrompt || scenePrompt,
+            // ✅ CRITICAL FIX: Store template prompt for subsequent scene reference
+            scene_template_prompt: sceneTemplatePrompt || null
           },
           job_id: null, // Will be updated when job is queued
           priority: 0
@@ -3459,14 +3514,22 @@ const sceneContext = analyzeSceneContent(response);
 }
 
 // Advanced scene detection patterns from archived system
+// ✅ FIX: Enhanced with more keywords for better context extraction
 const SCENE_DETECTION_PATTERNS = {
   roleplayActions: [/\*[^*]+\*/g, /\([^)]+\)/g],
-  movement: ['moves', 'walks', 'sits', 'stands', 'leans', 'approaches', 'steps', 'turns', 'reaches', 'bends'],
+  movement: ['moves', 'walks', 'sits', 'stands', 'leans', 'approaches', 'steps', 'turns', 'reaches', 'bends', 'kneels', 'balances'],
   physicalInteractions: ['touches', 'kisses', 'embraces', 'holds', 'caresses', 'grabs', 'pulls', 'pushes', 'strokes', 'rubs'],
-  environmental: ['in the', 'at the', 'on the', 'bedroom', 'kitchen', 'bathroom', 'hotel', 'car', 'office', 'cafe', 'beach', 'forest'],
-  visual: ['wearing', 'dressed', 'naked', 'nude', 'clothing', 'outfit', 'lingerie', 'shirt', 'pants', 'dress', 'skirt'],
-  emotional: ['passionate', 'intimate', 'romantic', 'seductive', 'sensual', 'aroused', 'excited', 'nervous', 'confident', 'playful'],
-  positioning: ['close', 'near', 'against', 'beside', 'behind', 'in front of', 'on top of', 'under', 'between']
+  // ✅ FIX: Expanded environmental keywords to catch more locations
+  environmental: [
+    'in the', 'at the', 'on the', 'inside', 'within',
+    'bedroom', 'kitchen', 'bathroom', 'shower', 'locker room', 'locker', 'changing room',
+    'hotel', 'car', 'office', 'cafe', 'beach', 'forest', 'rooftop', 'balcony',
+    'steamy', 'misty', 'tiled', 'wet', 'water', 'streaming', 'dripping',
+    'gym', 'spa', 'sauna', 'pool', 'jacuzzi', 'bath', 'tub'
+  ],
+  visual: ['wearing', 'dressed', 'naked', 'nude', 'clothing', 'outfit', 'lingerie', 'shirt', 'pants', 'dress', 'skirt', 'wet', 'dripping', 'clinging'],
+  emotional: ['passionate', 'intimate', 'romantic', 'seductive', 'sensual', 'aroused', 'excited', 'nervous', 'confident', 'playful', 'sultry', 'forbidden'],
+  positioning: ['close', 'near', 'against', 'beside', 'behind', 'in front of', 'on top of', 'under', 'between', 'under the', 'stands under']
 };
 
 interface SceneContext {
@@ -3573,6 +3636,64 @@ function validateSceneNarrative(
   return narrative;
 }
 
+/**
+ * ✅ CRITICAL FIX: Extract direct scene description from response
+ * Looks for sentences that describe the scene visually (not dialogue)
+ */
+function extractDirectSceneDescription(response: string): string | null {
+  // Look for scene description patterns
+  // Pattern 1: "As [character] [action], [description]"
+  // Pattern 2: "The [setting] [description]"
+  // Pattern 3: Sentences with visual descriptors (water, light, clothing, positioning)
+  
+  const sentences = response.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 20);
+  
+  const sceneIndicators = [
+    'stands', 'sits', 'leans', 'water', 'streams', 'dripping', 'clinging',
+    'light', 'glow', 'shadows', 'steamy', 'misty', 'tiled', 'wall',
+    'wearing', 'dressed', 'naked', 'nude', 'clothing', 'hair', 'eyes',
+    'against', 'under', 'beside', 'behind', 'in front of'
+  ];
+  
+  const sceneDescriptions: string[] = [];
+  
+  for (const sentence of sentences) {
+    const lowerSentence = sentence.toLowerCase();
+    
+    // Skip dialogue (quotes, "I said", "she said", etc.)
+    if (sentence.match(/^["']|["']$/) || lowerSentence.match(/\b(said|says|replied|asked|whispered|exclaimed)\b/)) {
+      continue;
+    }
+    
+    // Skip first-person dialogue
+    if (lowerSentence.match(/^(hello|hi|hey|i'm|i am|you|we|they said)/)) {
+      continue;
+    }
+    
+    // Check if sentence contains scene indicators
+    const hasSceneIndicators = sceneIndicators.some(indicator => lowerSentence.includes(indicator));
+    
+    if (hasSceneIndicators) {
+      sceneDescriptions.push(sentence);
+    }
+  }
+  
+  if (sceneDescriptions.length > 0) {
+    // Return the most descriptive sentence (longest, most scene indicators)
+    const bestDescription = sceneDescriptions
+      .sort((a, b) => {
+        const aScore = sceneIndicators.filter(i => a.toLowerCase().includes(i)).length;
+        const bScore = sceneIndicators.filter(i => b.toLowerCase().includes(i)).length;
+        return bScore - aScore || b.length - a.length;
+      })[0];
+    
+    console.log('✅ Extracted direct scene description:', bestDescription.substring(0, 100) + '...');
+    return bestDescription;
+  }
+  
+  return null;
+}
+
 function extractStorylineContext(conversationHistory: string[]): {
   locations: string[];
   keyEvents: string[];
@@ -3642,13 +3763,38 @@ function analyzeSceneContent(response: string): SceneContext {
     }
   });
   
-  // Detect environment
+  // ✅ FIX: Enhanced environment detection - prioritize specific locations
   let setting = 'intimate indoor setting';
+  const detectedEnvironments: string[] = [];
+  
+  // First pass: detect all matching environments
   SCENE_DETECTION_PATTERNS.environmental.forEach(env => {
     if (lowerResponse.includes(env)) {
-      setting = env;
+      detectedEnvironments.push(env);
     }
   });
+  
+  // Prioritize specific locations over generic patterns
+  const specificLocations = ['shower', 'locker room', 'bedroom', 'kitchen', 'bathroom', 'hotel', 'office', 'cafe', 'beach', 'rooftop', 'gym', 'spa', 'sauna', 'pool'];
+  const foundSpecific = detectedEnvironments.find(e => specificLocations.some(sl => e.includes(sl)));
+  
+  if (foundSpecific) {
+    setting = foundSpecific;
+  } else if (detectedEnvironments.length > 0) {
+    // Use the most specific match (longest)
+    setting = detectedEnvironments.sort((a, b) => b.length - a.length)[0];
+  }
+  
+  // ✅ FIX: Enhance setting with descriptive words if found
+  if (lowerResponse.includes('steamy') && !setting.includes('steamy')) {
+    setting = `steamy ${setting}`;
+  }
+  if (lowerResponse.includes('misty') && !setting.includes('misty')) {
+    setting = `misty ${setting}`;
+  }
+  if (lowerResponse.includes('tiled') && !setting.includes('tiled')) {
+    setting = `${setting} with tiled walls`;
+  }
   
   // Detect mood
   let mood = 'neutral';

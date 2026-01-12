@@ -38,6 +38,7 @@ const MobileSimplifiedWorkspace = () => {
     aspectRatio,
     referenceImage, // NEW: Get reference image state from hook
     referenceImageUrl, // NEW: Get reference image URL state from hook
+    referenceStrength, // Get reference strength from hook
     beginningRefImage, // NEW: Get beginning ref image state
     beginningRefImageUrl, // NEW: Get beginning ref image URL state
     endingRefImage, // NEW: Get ending ref image state
@@ -51,6 +52,7 @@ const MobileSimplifiedWorkspace = () => {
     setAspectRatio,
     setReferenceImage,
     setReferenceImageUrl,
+    setReferenceStrength,
     setReferenceMetadata,
     exactCopyMode,
     setExactCopyMode,
@@ -61,6 +63,8 @@ const MobileSimplifiedWorkspace = () => {
     generate,
     deleteItem,
     clearItem,
+    clearWorkspace,
+    deleteAllWorkspace,
     setLightboxIndex: setWorkspaceLightboxIndex,
     // URL Management
     signedUrls,
@@ -444,18 +448,21 @@ const MobileSimplifiedWorkspace = () => {
 
   useEffect(() => {
     const handleResize = () => {
-      // Detect keyboard by viewport height change
-      // On mobile, keyboard typically reduces viewport by 40-50%
+      // Enhanced keyboard detection for iOS Safari
+      // More accurate detection for iOS (keyboard behavior differs from Android)
       if (window.visualViewport) {
         const viewportHeight = window.visualViewport.height;
         const windowHeight = window.innerHeight;
-        const isKeyboardVisible = viewportHeight < windowHeight * 0.75;
+        // More accurate threshold for iOS (keyboard typically reduces viewport by 50-60%)
+        const isKeyboardVisible = viewportHeight < windowHeight * 0.7;
         setKeyboardVisible(isKeyboardVisible);
       }
     };
 
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
+      // Also check on initial load
+      handleResize();
       return () => {
         window.visualViewport?.removeEventListener('resize', handleResize);
       };
@@ -468,6 +475,8 @@ const MobileSimplifiedWorkspace = () => {
         {/* Main Content */}
         <div className={`
           flex-1 overflow-y-auto p-4
+          overscroll-behavior-contain
+          -webkit-overflow-scrolling-touch
           ${keyboardVisible ? 'pb-4' : isControlsExpanded ? 'pb-80' : 'pb-32'}
           pb-[max(1rem,env(safe-area-inset-bottom))]
           pt-[env(safe-area-inset-top)]
@@ -551,6 +560,10 @@ const MobileSimplifiedWorkspace = () => {
           onCollapsedChange={setIsControlsExpanded}
           exactCopyMode={exactCopyMode}
           onExactCopyModeChange={setExactCopyMode}
+          referenceStrength={referenceStrength}
+          onReferenceStrengthChange={setReferenceStrength}
+          onClearWorkspace={clearWorkspace}
+          onDeleteAllWorkspace={deleteAllWorkspace}
         />
 
         {/* Lightbox */}
