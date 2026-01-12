@@ -40,6 +40,27 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(racing with)\b/gi, replacement: 'showing' },
   ];
   
+  // ✅ FIX: Replace animation-triggering phrases that cause characters to appear animated
+  const animationPatterns = [
+    { pattern: /\b(playful dance of)\b/gi, replacement: 'playful exchange of' },
+    { pattern: /\b(dance of words)\b/gi, replacement: 'exchange of words' },
+    { pattern: /\b(dance of glances)\b/gi, replacement: 'exchange of glances' },
+    { pattern: /\b(eyes sparkle)\b/gi, replacement: 'eyes gleam' },
+    { pattern: /\b(sparkle with)\b/gi, replacement: 'gleam with' },
+    { pattern: /\b(sparkling)\b/gi, replacement: 'gleaming' },
+    { pattern: /\b(click rhythmically)\b/gi, replacement: 'click' },
+    { pattern: /\b(strides confidently)\b/gi, replacement: 'walks confidently' },
+    { pattern: /\b(strides)\b/gi, replacement: 'walks' },
+    { pattern: /\b(catching the light)\b/gi, replacement: 'reflecting the light' },
+    { pattern: /\b(catching light)\b/gi, replacement: 'reflecting light' },
+    { pattern: /\b(inviting a)\b/gi, replacement: 'suggesting a' },
+    { pattern: /\b(inviting)\b/gi, replacement: 'suggesting' },
+  ];
+  
+  animationPatterns.forEach(({ pattern, replacement }) => {
+    sanitized = sanitized.replace(pattern, replacement);
+  });
+  
   suggestivePatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });

@@ -42,6 +42,25 @@ The sanitization function is located in **two places**:
 | `dances on` | `appears on` |
 | `racing with` | `showing` |
 
+### 2a. Animation-Triggering Patterns (NEW)
+**Purpose:** Replace motion/action words that cause characters to appear animated in generated images.
+
+| Pattern | Replacement | Reason |
+|---------|-------------|--------|
+| `playful dance of` | `playful exchange of` | "dance" triggers animation |
+| `dance of words` | `exchange of words` | Motion word |
+| `dance of glances` | `exchange of glances` | Motion word |
+| `eyes sparkle` | `eyes gleam` | "sparkle" suggests movement |
+| `sparkle with` | `gleam with` | Motion word |
+| `sparkling` | `gleaming` | Motion word |
+| `click rhythmically` | `click` | "rhythmically" suggests continuous motion |
+| `strides confidently` | `walks confidently` | "strides" more dynamic than "walks" |
+| `strides` | `walks` | Motion word |
+| `catching the light` | `reflecting the light` | "catching" suggests movement |
+| `catching light` | `reflecting light` | Motion word |
+| `inviting a` | `suggesting a` | "inviting" can suggest motion |
+| `inviting` | `suggesting` | Motion word |
+
 ### 3. Emotional/Physical State Patterns
 **Purpose:** Remove overly descriptive emotional/physical states that could be flagged.
 
@@ -51,7 +70,7 @@ The sanitization function is located in **two places**:
 | `excitement and anticipation` | `engagement` |
 | `anticipation` | `interest` |
 
-### 4. Cleanup Rules
+### 5. Cleanup Rules
 **Purpose:** Normalize and clean up the prompt text.
 
 - **Multiple spaces**: Replaced with single space
