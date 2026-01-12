@@ -555,7 +555,7 @@ serve(async (req) => {
             usedFallback
           });
           // Use database-driven model configuration with user character
-          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character, scene_starters, user?.id);
+          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character, scene_starters, user_id);
           modelUsed = `${modelConfig.provider_name}:${effectiveModelProvider}`;
         } else {
           console.error('❌ Model config not found for:', effectiveModelProvider);
