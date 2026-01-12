@@ -2465,6 +2465,24 @@ async function generateSceneNarrativeWithOpenRouter(
     narrative = narrative.replace(/\s+/g, ' ').trim();
     console.log('🧹 Cleaned T2I narrative (removed asterisks and scene prefix)');
   }
+  
+  // ✅ SAFEGUARD: Ensure narrative is not empty or too short after cleanup
+  const originalNarrativeLength = data.choices?.[0]?.message?.content?.trim().length || narrative.length;
+  if (!narrative || narrative.trim().length < 20) {
+    console.error('❌ CRITICAL: Scene narrative is too short or empty after cleanup! Using fallback.');
+    // Fallback to basic scene description
+    const fallbackNarrative = `A scene showing ${character.name} in ${sceneContext?.setting || 'an intimate setting'}, ${sceneContext?.mood || 'engaging'}.`;
+    console.warn('⚠️ Using fallback narrative:', fallbackNarrative);
+    narrative = fallbackNarrative;
+  }
+  
+  // ✅ SAFEGUARD: Warn if narrative was heavily modified (more than 30% reduction)
+  const reductionPercent = originalNarrativeLength > 0 
+    ? ((originalNarrativeLength - narrative.length) / originalNarrativeLength) * 100 
+    : 0;
+  if (reductionPercent > 30) {
+    console.warn(`⚠️ WARNING: Scene narrative was heavily modified (${reductionPercent.toFixed(1)}% reduction). Some details may be lost.`);
+  }
 
   console.log('✅ Scene narrative generated via OpenRouter:', narrative.substring(0, 100) + '...');
   
@@ -4073,6 +4091,25 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
   const finalTokens = Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN);
   console.log(`✅ Optimized prompt: ${finalTokens} tokens (target: ${MAX_CLIP_TOKENS}, max: 77)`);
   console.log(`📝 Optimized preview: ${optimized.substring(0, 150)}...`);
+  
+  // ✅ SAFEGUARD: Ensure prompt is not empty or too short after optimization
+  if (!optimized || optimized.trim().length < 10) {
+    console.error('❌ CRITICAL: Optimized prompt is too short or empty! Using fallback.');
+    // Fallback to minimal prompt with character name and essential tags
+    const fallbackPrompt = charName && visualTags 
+      ? `${charName}, ${visualTags}`
+      : (charName || visualTags || 'scene');
+    console.warn('⚠️ Using fallback prompt:', fallbackPrompt);
+    return fallbackPrompt;
+  }
+  
+  // ✅ SAFEGUARD: Warn if prompt was heavily truncated (more than 50% reduction)
+  const originalLength = fullPrompt.length;
+  const reductionPercent = ((originalLength - optimized.length) / originalLength) * 100;
+  if (reductionPercent > 50) {
+    console.warn(`⚠️ WARNING: Prompt was heavily truncated (${reductionPercent.toFixed(1)}% reduction). Some details may be lost.`);
+    console.warn(`⚠️ Original: ${originalLength} chars, Optimized: ${optimized.length} chars`);
+  }
   
   return optimized;
 }
