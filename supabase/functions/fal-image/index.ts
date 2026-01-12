@@ -32,7 +32,7 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(shy smile dances on her lips)\b/gi, replacement: 'gentle smile' },
     { pattern: /\b(fingers playfully tracing)\b/gi, replacement: 'hands resting' },
     { pattern: /\b(heart racing with a mix of excitement and anticipation)\b/gi, replacement: 'expressive demeanor' },
-    { pattern: /\b(heart racing)\b/gi, replacement: 'animated expression' },
+    { pattern: /\b(heart racing)\b/gi, replacement: 'falling in love' },
     { pattern: /\b(leaning in)\b/gi, replacement: 'positioned nearby' },
     { pattern: /\b(playfully tracing)\b/gi, replacement: 'resting on' },
     { pattern: /\b(playfully)\b/gi, replacement: 'gently' },

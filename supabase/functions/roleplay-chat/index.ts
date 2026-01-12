@@ -2018,7 +2018,7 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(shy smile dances on her lips)\b/gi, replacement: 'gentle smile' },
     { pattern: /\b(fingers playfully tracing)\b/gi, replacement: 'hands resting' },
     { pattern: /\b(heart racing with a mix of excitement and anticipation)\b/gi, replacement: 'expressive demeanor' },
-    { pattern: /\b(heart racing)\b/gi, replacement: 'animated expression' },
+    { pattern: /\b(heart racing)\b/gi, replacement: 'falling love' },
     { pattern: /\b(leaning in)\b/gi, replacement: 'positioned nearby' },
     { pattern: /\b(playfully tracing)\b/gi, replacement: 'resting on' },
     { pattern: /\b(playfully)\b/gi, replacement: 'gently' },
@@ -2335,7 +2335,8 @@ async function generateSceneNarrativeWithOpenRouter(
   contentTier: string,
   modelConfig: any,
   supabase: any,
-  useI2IIteration: boolean = false  // ✅ FIX 3.1: ADD I2I FLAG PARAMETER
+  useI2IIteration: boolean = false,  // ✅ FIX 3.1: ADD I2I FLAG PARAMETER
+  previousSceneId?: string  // ✅ FIX: Add previous scene ID to fetch previous scene context
 ): Promise<{ scenePrompt: string; templateId: string; templateName: string; templateUseCase: string; templateContentMode: string }> {
   const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
@@ -2369,11 +2370,56 @@ async function generateSceneNarrativeWithOpenRouter(
   // ✅ ENHANCED: Use more conversation history (10 messages) for better storyline context
   const conversationContext = conversationHistory.slice(-10).join(' | ');
 
+  // ✅ FIX: For I2I, get location/setting from previous scene to maintain continuity
+  let previousSceneContext: any = null;
+  let previousSceneSetting: string | null = null;
+  
+  if (useI2IIteration && previousSceneId) {
+    try {
+      const { data: prevScene, error: prevSceneError } = await supabase
+        .from('character_scenes')
+        .select('generation_metadata, scene_prompt')
+        .eq('id', previousSceneId)
+        .single();
+      
+      if (!prevSceneError && prevScene) {
+        previousSceneContext = prevScene.generation_metadata?.scene_context 
+          ? (typeof prevScene.generation_metadata.scene_context === 'string' 
+              ? JSON.parse(prevScene.generation_metadata.scene_context) 
+              : prevScene.generation_metadata.scene_context)
+          : null;
+        
+        // Extract setting from previous scene context or prompt
+        if (previousSceneContext?.setting) {
+          previousSceneSetting = previousSceneContext.setting;
+        } else if (prevScene.scene_prompt) {
+          // Try to extract location from previous scene prompt
+          const locationMatch = prevScene.scene_prompt.match(/(?:in|at|inside|within)\s+(?:the\s+)?([^,\.]+?)(?:,|\.|$)/i);
+          if (locationMatch) {
+            previousSceneSetting = locationMatch[1].trim();
+          }
+        }
+        
+        console.log('🔄 I2I: Retrieved previous scene context:', {
+          previousSceneId,
+          previousSceneSetting,
+          hasContext: !!previousSceneContext
+        });
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to fetch previous scene context:', error);
+    }
+  }
+
   // ✅ ENHANCED: Extract storyline elements from full conversation
   const storylineContext = extractStorylineContext(conversationHistory);
-  const storylineLocation = storylineContext.locations.length > 0
-    ? storylineContext.locations[storylineContext.locations.length - 1] // Most recent location
-    : sceneContext.setting;
+  
+  // ✅ FIX: For I2I, prioritize previous scene's location over conversation history
+  const storylineLocation = useI2IIteration && previousSceneSetting
+    ? previousSceneSetting  // Use previous scene's location for continuity
+    : (storylineContext.locations.length > 0
+        ? storylineContext.locations[storylineContext.locations.length - 1] // Most recent location from conversation
+        : sceneContext.setting);
 
   const scenePrompt = template.system_prompt
     .replace(/\{\{character_name\}\}/g, character.name)
@@ -2390,8 +2436,14 @@ async function generateSceneNarrativeWithOpenRouter(
     + `Actions: ${sceneContext.actions.join(', ')}\n`
     + `Visual Elements: ${sceneContext.visualElements.join(', ')}\n`
     + `Positioning: ${sceneContext.positioning.join(', ')}\n`
+    + (useI2IIteration && previousSceneContext 
+        ? `\nPREVIOUS SCENE CONTEXT (for continuity):\n`
+        + `Previous Setting: ${previousSceneSetting || previousSceneContext.setting || 'same location'}\n`
+        + `Previous Mood: ${previousSceneContext.mood || sceneContext.mood}\n`
+        + `IMPORTANT: The scene must remain in the SAME LOCATION as the previous scene (${previousSceneSetting || previousSceneContext.setting || storylineLocation}). Only describe what changes, not the location.\n`
+        : '')
     + `\nRECENT CONVERSATION (last 10 exchanges):\n${conversationContext}\n\n`
-    + `IMPORTANT: Generate ONLY the scene description text (no "A scene showing..." prefix, no "Generate a scene..." prefix). Focus on the current location (${storylineLocation}) and what is happening now. The scene must be consistent with what has happened in the conversation. Start directly with the description of the scene.`;
+    + `IMPORTANT: Generate ONLY the scene description text (no "A scene showing..." prefix, no "Generate a scene..." prefix). ${useI2IIteration && previousSceneSetting ? `The scene MUST remain in the SAME LOCATION: ${previousSceneSetting}. Only describe what changes in the scene, not the location or environment.` : `Focus on the current location (${storylineLocation}) and what is happening now.`} The scene must be consistent with what has happened in the conversation. Start directly with the description of the scene.`;
 
   console.log('🎬 Scene generation prompt built, calling OpenRouter with model:', modelKey);
 
@@ -2565,7 +2617,8 @@ const sceneContext = analyzeSceneContent(response);
             effectiveContentTier, // ✅ FIX: Use contentTier parameter
             modelConfig,
             supabase,
-            useI2IIteration  // ✅ FIX 3.3: PASS I2I FLAG
+            useI2IIteration,  // ✅ FIX 3.3: PASS I2I FLAG
+            previousSceneId  // ✅ FIX: Pass previous scene ID for location continuity
           );
           scenePrompt = narrativeResult.scenePrompt;
           // ✅ ADMIN: Store template info for metadata (will be used in scene generation metadata)
