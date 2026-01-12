@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-interface ApiProviderBalance {
+export interface ApiProviderBalance {
   id: string;
   provider_id: string;
   balance_usd: number | null;
@@ -20,7 +20,7 @@ interface ApiProviderBalance {
   };
 }
 
-interface ApiUsageAggregate {
+export interface ApiUsageAggregate {
   id: string;
   provider_id: string;
   model_id: string | null;
@@ -49,7 +49,7 @@ interface ApiUsageAggregate {
   } | null;
 }
 
-interface ApiUsageLog {
+export interface ApiUsageLog {
   id: string;
   provider_id: string;
   model_id: string | null;
