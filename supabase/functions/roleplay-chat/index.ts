@@ -2617,8 +2617,8 @@ const sceneContext = analyzeSceneContent(response);
       referenceImage: character.reference_image_url || character.image_url || character.preview_image_url
     }];
 
-    // ✅ CRITICAL FIX: Determine if this is the first scene
-    const isFirstScene = !previousSceneId && !previousSceneImageUrl;
+    // ✅ CRITICAL FIX: isFirstScene is already determined earlier in the function (line 2188)
+    // Use the existing variable - don't redeclare it
     
     // Generate scene prompt: use override (regeneration) or template prompt or AI-generated narrative
     let scenePrompt: string = '';
