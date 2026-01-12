@@ -247,6 +247,8 @@ const MobileRoleplayChat: React.FC = () => {
   // Idempotency ref to prevent multiple initializations
   const hasInitialized = useRef(false);
   const currentRouteRef = useRef<string>('');
+  // ✅ CRITICAL FIX: Ref-based lock to prevent duplicate initialization
+  const initializationLock = useRef(false);
 
   // Signed URL hook for image URLs
   const { getSignedUrl } = useSignedImageUrls();
@@ -441,11 +443,20 @@ const MobileRoleplayChat: React.FC = () => {
     const initializeConversation = async () => {
       const routeKey = `${characterId}-${sceneId || 'none'}`;
       
+      // ✅ CRITICAL FIX: Prevent duplicate initialization with ref lock
+      if (initializationLock.current) {
+        console.log('🔒 Already initializing, preventing duplicate');
+        return;
+      }
+      
       // Prevent reinitialization for same route
       if (hasInitialized.current && currentRouteRef.current === routeKey) {
         console.log('🔒 Preventing duplicate initialization for route:', routeKey);
         return;
       }
+      
+      // Set lock immediately
+      initializationLock.current = true;
 
       if (!user || !characterId) {
         setIsInitializing(false);
@@ -727,6 +738,7 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
+        // ✅ CRITICAL FIX: Check for existing conversation before creating (prevent duplicates)
         // Create new conversation if none exists or forcing new conversation (fresh scene start)
         const userCharacterIdFromState = locationState?.userCharacterId;
         const effectiveUserCharacterId = userCharacterIdFromState !== undefined
@@ -734,42 +746,71 @@ const MobileRoleplayChat: React.FC = () => {
           : selectedUserCharacterId;
 
         if (!conversation || forceNewConversation) {
-          console.log('🆕 Creating new conversation', forceNewConversation ? '(fresh scene start)' : '');
+          // ✅ CRITICAL FIX: Double-check database for existing conversation (prevent race condition duplicates)
+          if (!forceNewConversation) {
+            const { data: existingConv } = await supabase
+              .from('conversations')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('character_id', characterId)
+              .eq('status', 'active')
+              .eq('conversation_type', sceneIdFromUrl ? 'scene_roleplay' : 'character_roleplay')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            
+            if (existingConv) {
+              console.log('🔄 Found existing conversation during creation check, reusing:', existingConv.id);
+              conversation = existingConv;
+              setConversationId(existingConv.id);
+              // Cache for future use
+              localStorage.setItem(cacheKey, existingConv.id);
+              // Skip creation
+            }
+          }
+          
+          // Only create if we still don't have a conversation
+          if (!conversation) {
+            console.log('🆕 Creating new conversation', forceNewConversation ? '(fresh scene start)' : '');
 
-          // Get scene name from location state or loaded scene
-          const sceneName = locationState?.sceneConfig?.scene?.name || locationState?.scenarioPayload?.sceneName;
-          const userRole = locationState?.userRole;
+            // Get scene name from location state or loaded scene
+            const sceneName = locationState?.sceneConfig?.scene?.name || locationState?.scenarioPayload?.sceneName;
+            const userRole = locationState?.userRole;
 
-          const conversationTitle = sceneIdFromUrl && sceneName
-            ? `${loadedCharacter.name} - ${sceneName}`
-            : loadedScene
-            ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
-            : `Roleplay: ${loadedCharacter.name}`;
+            const conversationTitle = sceneIdFromUrl && sceneName
+              ? `${loadedCharacter.name} - ${sceneName}`
+              : loadedScene
+              ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
+              : `Roleplay: ${loadedCharacter.name}`;
 
-          const { data: newConversation, error: insertError } = await supabase
-            .from('conversations')
-            .insert({
-              user_id: user.id,
-              character_id: characterId,
-              conversation_type: sceneIdFromUrl ? 'scene_roleplay' : 'character_roleplay',
-              title: conversationTitle,
-              status: 'active',
-              memory_tier: memoryTier,
-              memory_data: sceneIdFromUrl ? {
-                scene_id: sceneIdFromUrl,
-                scene_name: sceneName || null,
-                user_character_id: effectiveUserCharacterId || null,
-                user_role: userRole || null
-              } : {},
-              user_character_id: effectiveUserCharacterId || null
-            })
-            .select()
-            .single();
+            const { data: newConversation, error: insertError } = await supabase
+              .from('conversations')
+              .insert({
+                user_id: user.id,
+                character_id: characterId,
+                conversation_type: sceneIdFromUrl ? 'scene_roleplay' : 'character_roleplay',
+                title: conversationTitle,
+                status: 'active',
+                memory_tier: memoryTier,
+                memory_data: sceneIdFromUrl ? {
+                  scene_id: sceneIdFromUrl,
+                  scene_name: sceneName || null,
+                  user_character_id: effectiveUserCharacterId || null,
+                  user_role: userRole || null
+                } : {},
+                user_character_id: effectiveUserCharacterId || null
+              })
+              .select()
+              .single();
 
-          if (insertError) throw insertError;
-          conversation = newConversation;
-          setConversationId(newConversation.id);
-          console.log('✅ Created new conversation with user_character_id:', effectiveUserCharacterId);
+            if (insertError) throw insertError;
+            conversation = newConversation;
+            setConversationId(newConversation.id);
+            console.log('✅ Created new conversation with user_character_id:', effectiveUserCharacterId);
+            
+            // Cache immediately
+            localStorage.setItem(cacheKey, newConversation.id);
+          }
         }
 
         // Show "Setting the scene..." indicator
@@ -874,6 +915,10 @@ const MobileRoleplayChat: React.FC = () => {
       } finally {
         setIsLoading(false);
         setIsInitializing(false);
+        // ✅ CRITICAL FIX: Release lock after initialization completes
+        initializationLock.current = false;
+        hasInitialized.current = true;
+        currentRouteRef.current = routeKey;
       }
     };
 

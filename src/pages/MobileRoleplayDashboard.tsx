@@ -479,8 +479,8 @@ const MobileRoleplayDashboard = () => {
           </div>
         </div>
         
-        {/* Continue Conversations Section - Shows conversations with scene images */}
-        {userConversations.filter(c => c.last_scene_image).length > 0 && (
+        {/* Continue Conversations Section - Shows conversations with messages (scene images preferred) */}
+        {userConversations.filter(c => (c.messages?.[0]?.count || 0) > 0).length > 0 && (
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-3">
               <PlayCircle className="w-4 h-4 text-purple-400" />
@@ -488,14 +488,20 @@ const MobileRoleplayDashboard = () => {
             </div>
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {userConversations
-                .filter(conv => conv.last_scene_image)
+                .filter(conv => (conv.messages?.[0]?.count || 0) > 0) // ✅ FIX: Show conversations with messages, not just scene images
+                .sort((a, b) => {
+                  // ✅ FIX: Prioritize conversations with scene images, then by updated_at
+                  if (a.last_scene_image && !b.last_scene_image) return -1;
+                  if (!a.last_scene_image && b.last_scene_image) return 1;
+                  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+                })
                 .slice(0, 6)
                 .map((conversation) => {
-                  // Determine image source - use character avatar if scene image errored
+                  // ✅ FIX: Determine image source - prefer scene image, fallback to character avatar
                   const sceneImageErrored = erroredSceneImages.has(conversation.id);
-                  const displayImage = sceneImageErrored
-                    ? conversation.character?.image_url
-                    : conversation.last_scene_image;
+                  const displayImage = (conversation.last_scene_image && !sceneImageErrored)
+                    ? conversation.last_scene_image
+                    : conversation.character?.image_url; // Fallback to character image if no scene image
 
                   return (
                     <div

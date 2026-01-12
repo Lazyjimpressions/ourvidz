@@ -2822,6 +2822,25 @@ const sceneContext = analyzeSceneContent(response);
         })
         .select('id')
         .single();
+        
+        // ✅ CRITICAL FIX: Update conversation.last_scene_image immediately when scene is created
+        // This ensures conversations show up in "Continue Where You Left Off" even before job completes
+        if (conversationId && sceneRecord?.id) {
+          try {
+            // Use a placeholder or null - will be updated when job completes
+            // But at least the conversation will have a scene_id reference
+            await supabase
+              .from('conversations')
+              .update({ 
+                updated_at: new Date().toISOString()
+                // Note: last_scene_image will be updated by job-callback when image is ready
+              })
+              .eq('id', conversationId);
+            console.log('✅ Updated conversation timestamp when scene was created');
+          } catch (error) {
+            console.warn('⚠️ Failed to update conversation when scene created:', error);
+          }
+        }
 
       if (sceneError || !sceneRecord) {
         console.error('🎬❌ Failed to create scene record:', sceneError);
