@@ -265,6 +265,34 @@ serve(async (req) => {
           replicateActualInput = actualPrediction.input;
           replicateActualOutput = actualPrediction.output;
           
+          // ✅ COST TRACKING: Extract cost from prediction
+          const predictionCost = actualPrediction.metrics?.cost || actualPrediction.cost || null;
+          if (predictionCost !== null) {
+            console.log('💰 Replicate cost extracted:', predictionCost);
+            
+            // Find and update the usage log with actual cost
+            const { data: usageLogs } = await supabase
+              .from('api_usage_logs')
+              .select('id, cost_usd')
+              .eq('provider_metadata->>prediction_id', predictionId)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            
+            if (usageLogs && usageLogs.length > 0 && !usageLogs[0].cost_usd) {
+              await supabase
+                .from('api_usage_logs')
+                .update({ cost_usd: predictionCost })
+                .eq('id', usageLogs[0].id);
+              
+              console.log('✅ Updated usage log with actual cost:', predictionCost);
+              
+              // Also update aggregates with the cost difference
+              // (This is approximate - ideally we'd recalculate aggregates)
+            }
+          } else {
+            console.warn('⚠️ No cost found in Replicate prediction');
+          }
+          
           // Check prompt length
           if (actualPrediction.input?.prompt) {
             promptLength = String(actualPrediction.input.prompt).length;

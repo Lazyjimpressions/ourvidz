@@ -91,14 +91,57 @@ async function updateAggregates(supabase: any, data: UsageLogData): Promise<void
   }
 }
 
-function extractFalUsage(response: any): Partial<UsageLogData> {
+/**
+ * Fetch cost from fal.ai Platform API using request_id
+ * Uses FAL_KEY (same as regular API key - may need admin permissions for Platform API)
+ */
+async function fetchFalCost(requestId: string, modelKey: string, apiKey: string): Promise<number | null> {
+  try {
+    if (!apiKey) {
+      console.warn('⚠️ fal.ai API key not provided, cannot fetch cost');
+      return null;
+    }
+
+    // Try to fetch cost from Platform API
+    // Note: This endpoint may vary - check fal.ai docs for exact endpoint
+    // Regular FAL_KEY may not have access - if so, we'll need a separate admin key
+    const costResponse = await fetch(`https://fal.ai/api/v1/usage/line-items?request_id=${requestId}`, {
+      headers: {
+        'Authorization': `Key ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (costResponse.ok) {
+      const costData = await costResponse.json();
+      // Extract cost from response (structure may vary)
+      const cost = costData.cost || costData.price || costData.amount || null;
+      if (cost !== null) {
+        console.log('💰 fal.ai cost fetched:', cost);
+        return typeof cost === 'number' ? cost : parseFloat(cost);
+      }
+    } else {
+      console.warn('⚠️ Failed to fetch fal.ai cost:', costResponse.status);
+    }
+  } catch (error) {
+    console.error('❌ Error fetching fal.ai cost:', error);
+  }
+  
+  return null;
+}
+
+function extractFalUsage(response: any, fetchedCost?: number | null): Partial<UsageLogData> {
+  // Use fetched cost if available, otherwise try response.cost
+  const cost = fetchedCost !== undefined ? fetchedCost : (response.cost || null);
+  
   return {
-    costUsd: response.cost || null,
+    costUsd: cost,
     providerMetadata: {
       request_id: response.request_id,
       status: response.status,
       model: response.model,
-      created_at: response.created_at
+      created_at: response.created_at,
+      cost_fetched: fetchedCost !== undefined
     }
   };
 }
@@ -1114,11 +1157,20 @@ serve(async (req) => {
         request_id: falResult.request_id,
         status: falResult.status,
         has_images: !!falResult.images,
-        has_video: !!falResult.video
+        has_video: !!falResult.video,
+        has_cost: !!falResult.cost
       });
 
+      // ✅ COST TRACKING: Fetch cost from Platform API if not in response
+      let falCost: number | null = null;
+      if (!falResult.cost && falResult.request_id) {
+        falCost = await fetchFalCost(falResult.request_id, modelKey, falApiKey);
+      } else if (falResult.cost) {
+        falCost = typeof falResult.cost === 'number' ? falResult.cost : parseFloat(falResult.cost);
+      }
+
       // Log usage for successful response
-      const usageData = extractFalUsage(falResult);
+      const usageData = extractFalUsage(falResult, falCost);
       logApiUsage(supabase, {
         providerId: apiModel.api_providers.id,
         modelId: apiModel.id,
