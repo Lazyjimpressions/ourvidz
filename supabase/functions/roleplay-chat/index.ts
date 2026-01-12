@@ -965,7 +965,13 @@ async function getModelConfig(supabase: any, modelKey: string): Promise<any> {
       .single();
 
     if (error || !data) {
-      console.log(`⚠️ Model config not found for: ${modelKey}`);
+      console.log(`⚠️ Model config not found for: ${modelKey}`, error?.message || 'No data');
+      return null;
+    }
+
+    // ✅ CRITICAL FIX: Check if api_providers exists before accessing
+    if (!data.api_providers) {
+      console.error(`❌ Model config found but api_providers is missing for: ${modelKey}`);
       return null;
     }
 
@@ -976,7 +982,7 @@ async function getModelConfig(supabase: any, modelKey: string): Promise<any> {
       provider_display_name: data.api_providers.display_name
     };
   } catch (error) {
-    console.error('Error getting model config:', error);
+    console.error('❌ Error getting model config:', error);
     return null;
   }
 }
@@ -996,11 +1002,20 @@ async function callModelWithConfig(
   sceneStarters?: string[],
   userId?: string
 ): Promise<string> {
+  // ✅ CRITICAL FIX: Validate modelConfig before using
+  if (!modelConfig) {
+    throw new Error('Model config is required');
+  }
+  if (!modelConfig.provider_name) {
+    throw new Error('Model config missing provider_name');
+  }
+  
   console.log('🔧 Using database-driven model configuration:', {
     modelKey,
     provider: modelConfig.provider_name,
     capabilities: modelConfig.capabilities,
-    inputDefaults: modelConfig.input_defaults
+    inputDefaults: modelConfig.input_defaults,
+    hasProviderId: !!modelConfig.provider_id
   });
 
   // Get template with priority: model-specific > universal
@@ -1025,6 +1040,16 @@ async function callModelWithConfig(
 
   // Route to appropriate provider based on model config
   if (modelConfig.provider_name === 'openrouter') {
+    // ✅ CRITICAL FIX: Ensure provider_id exists before calling
+    if (!modelConfig.provider_id) {
+      console.error('❌ Model config missing provider_id:', {
+        modelKey,
+        provider_name: modelConfig.provider_name,
+        hasId: !!modelConfig.id
+      });
+      throw new Error(`Model config missing provider_id for model: ${modelKey}`);
+    }
+    
     return await callOpenRouterWithConfig(
       character,
       recentMessages,
@@ -1034,7 +1059,7 @@ async function callModelWithConfig(
       contentTier,
       modelConfig,
       supabase,
-      modelConfig.provider_id || null,
+      modelConfig.provider_id,
       modelConfig.id || null,
       userId
     );
