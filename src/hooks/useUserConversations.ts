@@ -63,6 +63,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
           status,
           created_at,
           updated_at,
+          last_scene_image,
           messages(count),
           character:characters!character_id(
             id,
@@ -82,21 +83,50 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
       const conversationsWithSceneImage = data as Array<typeof data[number] & { last_scene_image?: string | null }> | null;
       const conversationIds = (conversationsWithSceneImage || []).map(c => c.id);
 
-      // Step 2: Fetch latest scene images via character_scenes -> workspace_assets
-      // character_scenes.image_url may be NULL, but workspace_assets has the actual images
+      // Step 2: Fetch latest scene images from multiple sources:
+      // 1. user_library table (primary - scenes are persisted here)
+      // 2. character_scenes table (fallback)
+      // 3. workspace_assets (temporary fallback)
       const sceneImageMap: Record<string, string> = {};
 
       if (conversationIds.length > 0) {
-        // First get the job_ids from character_scenes for these conversations
-        const { data: sceneData } = await supabase
-          .from('character_scenes')
-          .select('conversation_id, job_id, image_url, created_at')
-          .in('conversation_id', conversationIds)
-          .not('job_id', 'is', null)
-          .order('created_at', { ascending: false });
+        // First, check user_library for persisted scene images
+        // Scenes are stored with roleplay_metadata containing conversation_id
+        // We need to query all user's scene images and filter by conversation_id in metadata
+        const { data: libraryScenes } = await supabase
+          .from('user_library')
+          .select('storage_path, roleplay_metadata, created_at')
+          .eq('user_id', user.id)
+          .eq('asset_type', 'image')
+          .eq('content_category', 'scene')
+          .order('created_at', { ascending: false })
+          .limit(100); // Reasonable limit for user's scene images
+
+        // Filter library scenes by conversation_id in roleplay_metadata
+        if (libraryScenes) {
+          for (const libraryScene of libraryScenes) {
+            const metadata = libraryScene.roleplay_metadata as any;
+            const convId = metadata?.conversation_id;
+            if (convId && conversationIds.includes(convId) && !sceneImageMap[convId] && libraryScene.storage_path) {
+              // Prepend bucket name for consistency
+              sceneImageMap[convId] = libraryScene.storage_path.startsWith('user-library/') 
+                ? libraryScene.storage_path 
+                : `user-library/${libraryScene.storage_path}`;
+            }
+          }
+        }
+
+        // Fallback: Get scene images from character_scenes for conversations not found in library
+        const missingConversationIds = conversationIds.filter(id => !sceneImageMap[id]);
+        if (missingConversationIds.length > 0) {
+          const { data: sceneData } = await supabase
+            .from('character_scenes')
+            .select('conversation_id, job_id, image_url, created_at')
+            .in('conversation_id', missingConversationIds)
+            .order('created_at', { ascending: false });
 
         if (sceneData && sceneData.length > 0) {
-          // Collect job_ids that need workspace_assets lookup
+          // Collect job_ids that need workspace_assets lookup (only if image_url is missing)
           const jobIds = sceneData
             .filter(s => s.job_id && !s.image_url)
             .map(s => s.job_id as string);
@@ -119,6 +149,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
           }
 
           // Build map of conversation_id -> most recent scene image
+          // Process in order (most recent first) so we get the latest scene per conversation
           for (const scene of sceneData) {
             if (scene.conversation_id && !sceneImageMap[scene.conversation_id]) {
               // Prefer image_url from character_scenes, fallback to workspace_assets
@@ -129,6 +160,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
               }
             }
           }
+        }
         }
       }
 

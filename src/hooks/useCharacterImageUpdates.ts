@@ -8,6 +8,7 @@ export const useCharacterImageUpdates = () => {
     let hasGivenUp = false;
     let retryTimeout: NodeJS.Timeout | null = null;
     let subscriptionAttempts = 0;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
     const MAX_RETRIES = 2; // Limit retries to avoid spam
 
     const setupSubscription = () => {
@@ -16,8 +17,18 @@ export const useCharacterImageUpdates = () => {
         return null;
       }
 
+      // Clean up any existing channel before creating a new one
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          // Ignore cleanup errors
+        }
+        channel = null;
+      }
+
       // Subscribe to job updates for character image generation
-      const channel = supabase
+      channel = supabase
         .channel(`character-image-updates-${Date.now()}`)
         .on(
           'postgres_changes',
@@ -111,29 +122,34 @@ export const useCharacterImageUpdates = () => {
       return channel;
     };
 
-    const channel = setupSubscription();
+    // Use a small delay to avoid race conditions during rapid mount/unmount
+    const initTimeout = setTimeout(() => {
+      if (!hasGivenUp) {
+        setupSubscription();
+      }
+    }, 100);
 
     return () => {
       hasGivenUp = true; // Prevent retries after cleanup
+      clearTimeout(initTimeout);
       if (retryTimeout) {
         clearTimeout(retryTimeout);
         retryTimeout = null;
       }
-      // Only remove channel if it was successfully subscribed
-      if (isSubscribed && channel) {
+      // Clean up channel if it exists
+      if (channel) {
         try {
-          supabase.removeChannel(channel);
-          console.log('🧹 Cleaned up character image updates subscription');
+          if (isSubscribed) {
+            supabase.removeChannel(channel);
+            console.log('🧹 Cleaned up character image updates subscription');
+          } else {
+            // Channel never connected, just unsubscribe to stop connection attempts
+            channel.unsubscribe();
+          }
         } catch (error) {
           // Ignore cleanup errors
         }
-      } else if (channel) {
-        // Channel never connected, just unsubscribe to stop connection attempts
-        try {
-          channel.unsubscribe();
-        } catch (error) {
-          // Ignore errors during unsubscribe of non-connected channels
-        }
+        channel = null;
       }
     };
   }, []);

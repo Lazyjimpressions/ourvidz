@@ -32,15 +32,24 @@ export const SceneGallery: React.FC<SceneGalleryProps> = ({
   const [isSearching, setIsSearching] = useState(false);
 
   const { scenes, isLoading, error, loadScenes, searchScenes } = useSceneGallery(activeFilter);
+  const prevRefreshTriggerRef = React.useRef<number | undefined>(undefined);
 
-  // Refresh scenes when refreshTrigger changes
+  // Refresh scenes when refreshTrigger changes (but not on initial mount)
   React.useEffect(() => {
-    if (refreshTrigger !== undefined) {
-      if (searchQuery.trim()) {
-        searchScenes(searchQuery);
-      } else {
-        loadScenes(activeFilter);
-      }
+    // Only refresh if refreshTrigger actually changed (not on initial mount)
+    if (refreshTrigger !== undefined && refreshTrigger !== prevRefreshTriggerRef.current) {
+      prevRefreshTriggerRef.current = refreshTrigger;
+      // Use a small delay to avoid race conditions with other state updates
+      const timeoutId = setTimeout(() => {
+        if (searchQuery.trim()) {
+          searchScenes(searchQuery);
+        } else {
+          loadScenes(activeFilter);
+        }
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    } else if (refreshTrigger !== undefined) {
+      prevRefreshTriggerRef.current = refreshTrigger;
     }
   }, [refreshTrigger, searchQuery, activeFilter, loadScenes, searchScenes]);
 
