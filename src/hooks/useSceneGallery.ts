@@ -55,10 +55,10 @@ export const useSceneGallery = (
         name: row.name,
         description: row.description,
         creator_id: row.creator_id,
-        scenario_type: row.scenario_type,
+        scenario_type: row.scenario_type as SceneTemplate['scenario_type'],
         setting: row.setting,
-        atmosphere: row.atmosphere as SceneTemplate['atmosphere'],
-        time_of_day: row.time_of_day,
+        atmosphere: row.atmosphere as unknown as SceneTemplate['atmosphere'],
+        time_of_day: row.time_of_day as SceneTemplate['time_of_day'],
         min_characters: row.min_characters ?? 1,
         max_characters: row.max_characters ?? 2,
         suggested_user_role: row.suggested_user_role,
@@ -94,13 +94,30 @@ export const useSceneGallery = (
     }
 
     try {
+      // Convert SceneTemplate types to database-compatible types
+      const dbData = {
+        name: sceneData.name,
+        description: sceneData.description,
+        scenario_type: sceneData.scenario_type,
+        setting: sceneData.setting,
+        atmosphere: sceneData.atmosphere as any,
+        time_of_day: sceneData.time_of_day,
+        min_characters: sceneData.min_characters,
+        max_characters: sceneData.max_characters,
+        suggested_user_role: sceneData.suggested_user_role,
+        content_rating: sceneData.content_rating,
+        tags: sceneData.tags,
+        is_public: sceneData.is_public,
+        preview_image_url: sceneData.preview_image_url,
+        scene_starters: sceneData.scene_starters,
+        scene_prompt: sceneData.scene_prompt,
+        creator_id: user.id,
+        usage_count: 0
+      };
+      
       const { data, error: insertError } = await supabase
         .from('scenes')
-        .insert({
-          ...sceneData,
-          creator_id: user.id,
-          usage_count: 0
-        })
+        .insert(dbData)
         .select()
         .single();
 
@@ -111,14 +128,14 @@ export const useSceneGallery = (
         name: data.name,
         description: data.description,
         creator_id: data.creator_id,
-        scenario_type: data.scenario_type,
+        scenario_type: data.scenario_type as SceneTemplate['scenario_type'],
         setting: data.setting,
-        atmosphere: data.atmosphere,
-        time_of_day: data.time_of_day,
+        atmosphere: data.atmosphere as unknown as SceneTemplate['atmosphere'],
+        time_of_day: data.time_of_day as SceneTemplate['time_of_day'],
         min_characters: data.min_characters ?? 1,
         max_characters: data.max_characters ?? 2,
         suggested_user_role: data.suggested_user_role,
-        content_rating: data.content_rating || 'sfw',
+        content_rating: (data.content_rating || 'sfw') as ContentRating,
         tags: data.tags || [],
         is_public: data.is_public ?? true,
         usage_count: 0,
@@ -146,12 +163,30 @@ export const useSceneGallery = (
     updates: Partial<Omit<SceneTemplate, 'id' | 'created_at' | 'creator_id'>>
   ): Promise<SceneTemplate | null> => {
     try {
+      // Convert updates to database-compatible types
+      const dbUpdates: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      };
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.scenario_type !== undefined) dbUpdates.scenario_type = updates.scenario_type;
+      if (updates.setting !== undefined) dbUpdates.setting = updates.setting;
+      if (updates.atmosphere !== undefined) dbUpdates.atmosphere = updates.atmosphere as any;
+      if (updates.time_of_day !== undefined) dbUpdates.time_of_day = updates.time_of_day;
+      if (updates.min_characters !== undefined) dbUpdates.min_characters = updates.min_characters;
+      if (updates.max_characters !== undefined) dbUpdates.max_characters = updates.max_characters;
+      if (updates.suggested_user_role !== undefined) dbUpdates.suggested_user_role = updates.suggested_user_role;
+      if (updates.content_rating !== undefined) dbUpdates.content_rating = updates.content_rating;
+      if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.is_public !== undefined) dbUpdates.is_public = updates.is_public;
+      if (updates.preview_image_url !== undefined) dbUpdates.preview_image_url = updates.preview_image_url;
+      if (updates.scene_starters !== undefined) dbUpdates.scene_starters = updates.scene_starters;
+      if (updates.scene_prompt !== undefined) dbUpdates.scene_prompt = updates.scene_prompt;
+      if (updates.usage_count !== undefined) dbUpdates.usage_count = updates.usage_count;
+      
       const { data, error: updateError } = await supabase
         .from('scenes')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString()
-        })
+        .update(dbUpdates)
         .eq('id', sceneId)
         .select()
         .single();
@@ -163,14 +198,14 @@ export const useSceneGallery = (
         name: data.name,
         description: data.description,
         creator_id: data.creator_id,
-        scenario_type: data.scenario_type,
+        scenario_type: data.scenario_type as SceneTemplate['scenario_type'],
         setting: data.setting,
-        atmosphere: data.atmosphere,
-        time_of_day: data.time_of_day,
+        atmosphere: data.atmosphere as unknown as SceneTemplate['atmosphere'],
+        time_of_day: data.time_of_day as SceneTemplate['time_of_day'],
         min_characters: data.min_characters ?? 1,
         max_characters: data.max_characters ?? 2,
         suggested_user_role: data.suggested_user_role,
-        content_rating: data.content_rating || 'sfw',
+        content_rating: (data.content_rating || 'sfw') as ContentRating,
         tags: data.tags || [],
         is_public: data.is_public ?? true,
         usage_count: data.usage_count ?? 0,
@@ -279,14 +314,14 @@ export const useSceneGallery = (
         name: row.name,
         description: row.description,
         creator_id: row.creator_id,
-        scenario_type: row.scenario_type,
+        scenario_type: row.scenario_type as SceneTemplate['scenario_type'],
         setting: row.setting,
-        atmosphere: row.atmosphere,
-        time_of_day: row.time_of_day,
+        atmosphere: row.atmosphere as unknown as SceneTemplate['atmosphere'],
+        time_of_day: row.time_of_day as SceneTemplate['time_of_day'],
         min_characters: row.min_characters ?? 1,
         max_characters: row.max_characters ?? 2,
         suggested_user_role: row.suggested_user_role,
-        content_rating: row.content_rating || 'sfw',
+        content_rating: (row.content_rating || 'sfw') as ContentRating,
         tags: row.tags || [],
         is_public: row.is_public ?? true,
         usage_count: row.usage_count ?? 0,

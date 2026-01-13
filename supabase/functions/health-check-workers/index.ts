@@ -31,7 +31,21 @@ serve(async (req) => {
     }
 
     const config = currentConfig?.config || {}
-    const healthResults = {}
+    
+    interface WorkerHealth {
+      isHealthy: boolean;
+      lastChecked: string;
+      responseTimeMs: number | null;
+      healthError: string | null;
+      workerUrl: string | null;
+    }
+    
+    interface HealthResults {
+      wanWorker?: WorkerHealth;
+      chatWorker?: WorkerHealth;
+    }
+    
+    const healthResults: HealthResults = {}
 
     // Check WAN Worker (from get-active-worker-url)
     if (config.workerUrl) {
@@ -184,7 +198,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       error: 'Failed to check worker health',
       success: false,
-      details: error.message
+      details: error instanceof Error ? error.message : String(error)
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500
