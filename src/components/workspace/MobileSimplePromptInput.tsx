@@ -333,14 +333,44 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || isGenerating) return;
+    
+    console.log('📱 MOBILE INPUT: handleSubmit called', {
+      prompt: prompt?.substring(0, 50),
+      promptLength: prompt?.length,
+      isGenerating,
+      exactCopyMode,
+      hasReferenceImage: !!referenceImage,
+      hasReferenceImageUrl: !!referenceImageUrl,
+      currentMode,
+      selectedModel
+    });
+    
+    // Block if already generating - with feedback
+    if (isGenerating) {
+      toast.info('Generation in progress, please wait...');
+      return;
+    }
+    
+    // Check for valid generation conditions
+    // Allow generation if: prompt exists OR exactCopyMode with reference
+    const hasReference = !!referenceImage || !!referenceImageUrl;
+    const canGenerateWithExactCopy = exactCopyMode && hasReference;
+    
+    if (!prompt.trim() && !canGenerateWithExactCopy) {
+      toast.error('Enter a prompt or use exact copy mode with a reference image');
+      return;
+    }
+    
+    // Show generation starting feedback
+    toast.success('Starting generation...', { duration: 2000 });
 
     console.log('📱 MOBILE INPUT: Submitting with model:', selectedModel, 'quality:', quality);
 
     onGenerate(prompt.trim(), { 
       mode: currentMode,
       selectedModel,
-      quality
+      quality,
+      exactCopyMode
     });
   };
 
@@ -866,7 +896,14 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               disabled={isGenerating}
             />
             <Button type="submit" disabled={isGenerating} className="w-full min-h-[44px]">
-              {isGenerating ? 'Generating...' : 'Generate'}
+              {isGenerating ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  <span>Generating...</span>
+                </div>
+              ) : (
+                'Generate'
+              )}
             </Button>
           </form>
         </div>
