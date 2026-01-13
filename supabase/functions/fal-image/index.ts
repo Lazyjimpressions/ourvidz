@@ -92,56 +92,67 @@ async function updateAggregates(supabase: any, data: UsageLogData): Promise<void
 }
 
 /**
- * Fetch cost from fal.ai Platform API using request_id
- * Uses FAL_KEY (same as regular API key - may need admin permissions for Platform API)
+ * Static pricing map for fal.ai models (USD per generation)
+ * Based on fal.ai pricing: https://fal.ai/pricing
+ * Updated: 2025-01
  */
-async function fetchFalCost(requestId: string, modelKey: string, apiKey: string): Promise<number | null> {
-  try {
-    if (!apiKey) {
-      console.warn('⚠️ fal.ai API key not provided, cannot fetch cost');
-      return null;
-    }
+const FAL_PRICING: Record<string, number> = {
+  // Image models
+  'fal-ai/bytedance/seedream/v4/text-to-image': 0.025,
+  'fal-ai/bytedance/seedream/v4.5/edit': 0.035,
+  'fal-ai/seedream/v4/text-to-image': 0.025,
+  'fal-ai/seedream/v4.5/edit': 0.035,
+  'bytedance/seedream/v4/text-to-image': 0.025,
+  'bytedance/seedream/v4.5/edit': 0.035,
+  // Video models - price per 5 second video
+  'fal-ai/wan-i2v': 0.25,
+  'fal-ai/wan/i2v': 0.25,
+  'wan-i2v': 0.25,
+  'wan/i2v': 0.25,
+  // Default fallbacks
+  'default_image': 0.03,
+  'default_video': 0.25
+};
 
-    // Try to fetch cost from Platform API
-    // Note: This endpoint may vary - check fal.ai docs for exact endpoint
-    // Regular FAL_KEY may not have access - if so, we'll need a separate admin key
-    const costResponse = await fetch(`https://fal.ai/api/v1/usage/line-items?request_id=${requestId}`, {
-      headers: {
-        'Authorization': `Key ${apiKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (costResponse.ok) {
-      const costData = await costResponse.json();
-      // Extract cost from response (structure may vary)
-      const cost = costData.cost || costData.price || costData.amount || null;
-      if (cost !== null) {
-        console.log('💰 fal.ai cost fetched:', cost);
-        return typeof cost === 'number' ? cost : parseFloat(cost);
-      }
-    } else {
-      console.warn('⚠️ Failed to fetch fal.ai cost:', costResponse.status);
-    }
-  } catch (error) {
-    console.error('❌ Error fetching fal.ai cost:', error);
+/**
+ * Calculate cost for fal.ai generation using static pricing
+ * Falls back to default pricing if model not found
+ */
+function calculateFalCost(modelKey: string, modality: string): number {
+  // Try exact match first
+  if (FAL_PRICING[modelKey]) {
+    return FAL_PRICING[modelKey];
   }
   
-  return null;
+  // Try normalized key (remove fal-ai/ prefix if present)
+  const normalizedKey = modelKey.replace(/^fal-ai\//, '');
+  if (FAL_PRICING[normalizedKey]) {
+    return FAL_PRICING[normalizedKey];
+  }
+  
+  // Try partial match for model family
+  for (const [key, price] of Object.entries(FAL_PRICING)) {
+    if (modelKey.includes(key) || key.includes(normalizedKey)) {
+      return price;
+    }
+  }
+  
+  // Return default based on modality
+  const defaultCost = modality === 'video' ? FAL_PRICING['default_video'] : FAL_PRICING['default_image'];
+  console.log(`💰 Using default fal.ai pricing for ${modelKey}: $${defaultCost} (${modality})`);
+  return defaultCost;
 }
 
-function extractFalUsage(response: any, fetchedCost?: number | null): Partial<UsageLogData> {
-  // Use fetched cost if available, otherwise try response.cost
-  const cost = fetchedCost !== undefined ? fetchedCost : (response.cost || null);
-  
+function extractFalUsage(response: any, calculatedCost: number): Partial<UsageLogData> {
+  // Use calculated cost (static pricing) - response.cost is typically not available
   return {
-    costUsd: cost,
+    costUsd: calculatedCost,
     providerMetadata: {
       request_id: response.request_id,
       status: response.status,
       model: response.model,
       created_at: response.created_at,
-      cost_fetched: fetchedCost !== undefined
+      cost_source: 'static_pricing'
     }
   };
 }
@@ -1171,13 +1182,11 @@ serve(async (req) => {
         has_cost: !!falResult.cost
       });
 
-      // ✅ COST TRACKING: Fetch cost from Platform API if not in response
-      let falCost: number | null = null;
-      if (!falResult.cost && falResult.request_id) {
-        falCost = await fetchFalCost(falResult.request_id, modelKey, falApiKey);
-      } else if (falResult.cost) {
-        falCost = typeof falResult.cost === 'number' ? falResult.cost : parseFloat(falResult.cost);
-      }
+      // ✅ COST TRACKING: Use static pricing for reliable cost tracking
+      // fal.ai API doesn't return cost in response, so we calculate using known pricing
+      const falCost = calculateFalCost(modelKey, modelModality);
+      console.log(`💰 fal.ai cost calculated: $${falCost.toFixed(4)} for ${modelKey} (${modelModality})`);
+
 
       // Log usage for successful response
       const usageData = extractFalUsage(falResult, falCost);

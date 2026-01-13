@@ -79,6 +79,23 @@ export interface ApiUsageLog {
   } | null;
 }
 
+export interface ApiModel {
+  id: string;
+  display_name: string;
+  model_key: string;
+  modality: string;
+  task: string;
+  pricing: Record<string, any>;
+  is_active: boolean;
+  is_default: boolean;
+  priority: number;
+  api_providers: {
+    id: string;
+    name: string;
+    display_name: string;
+  };
+}
+
 interface UsageLogFilters {
   providerId?: string;
   modelId?: string;
@@ -103,13 +120,41 @@ export const useApiBalances = () => {
           *,
           api_providers!inner(id, name, display_name)
         `)
-        .order('api_providers.display_name');
+        .order('updated_at', { ascending: false });
 
       if (error) throw error;
       return data as ApiProviderBalance[];
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 5 * 60 * 1000,
+  });
+};
+
+/**
+ * Hook to fetch ALL API models from database (for dynamic model inventory)
+ */
+export const useApiModels = () => {
+  return useQuery({
+    queryKey: ['api-models-all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('api_models')
+        .select(`
+          id, display_name, model_key, modality, task, pricing, is_active, is_default, priority,
+          api_providers!inner(id, name, display_name)
+        `)
+        .order('priority', { ascending: true });
+
+      if (error) throw error;
+      
+      // Cast the nested api_providers to the correct type
+      return (data || []).map(model => ({
+        ...model,
+        api_providers: model.api_providers as unknown as ApiModel['api_providers']
+      })) as ApiModel[];
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000,
   });
 };
 
@@ -251,5 +296,127 @@ export const useApiUsageLogs = (filters: UsageLogFilters = {}) => {
     },
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 2 * 60 * 1000,
+  });
+};
+
+/**
+ * Hook to fetch performance metrics per model
+ */
+export const useApiPerformanceMetrics = (
+  timeRange: '24h' | '7d' | '30d' | 'all' = '7d',
+  providerId?: string | null
+) => {
+  return useQuery({
+    queryKey: ['api-performance-metrics', timeRange, providerId],
+    queryFn: async () => {
+      const now = new Date();
+      let startDate: string;
+
+      switch (timeRange) {
+        case '24h':
+          startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+          break;
+        default:
+          startDate = '2000-01-01T00:00:00.000Z';
+      }
+
+      let query = supabase
+        .from('api_usage_logs')
+        .select(`
+          model_id,
+          response_time_ms,
+          response_status,
+          api_models!inner(id, display_name, model_key, modality),
+          api_providers!inner(id, name, display_name)
+        `)
+        .gte('created_at', startDate)
+        .not('model_id', 'is', null);
+
+      if (providerId) {
+        query = query.eq('provider_id', providerId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Aggregate metrics per model
+      const metricsMap = new Map<string, {
+        modelId: string;
+        modelName: string;
+        modelKey: string;
+        modality: string;
+        providerName: string;
+        providerId: string;
+        totalRequests: number;
+        successCount: number;
+        errorCount: number;
+        responseTimes: number[];
+      }>();
+
+      for (const log of data || []) {
+        if (!log.model_id || !log.api_models) continue;
+        
+        const key = log.model_id;
+        const existing = metricsMap.get(key) || {
+          modelId: log.model_id,
+          modelName: (log.api_models as any).display_name,
+          modelKey: (log.api_models as any).model_key,
+          modality: (log.api_models as any).modality,
+          providerName: (log.api_providers as any).display_name,
+          providerId: (log.api_providers as any).id,
+          totalRequests: 0,
+          successCount: 0,
+          errorCount: 0,
+          responseTimes: []
+        };
+
+        existing.totalRequests++;
+        if (log.response_status && log.response_status < 400) {
+          existing.successCount++;
+        } else {
+          existing.errorCount++;
+        }
+        if (log.response_time_ms) {
+          existing.responseTimes.push(log.response_time_ms);
+        }
+
+        metricsMap.set(key, existing);
+      }
+
+      // Calculate final metrics
+      return Array.from(metricsMap.values()).map(m => {
+        const sortedTimes = [...m.responseTimes].sort((a, b) => a - b);
+        const avgTime = sortedTimes.length > 0 
+          ? sortedTimes.reduce((a, b) => a + b, 0) / sortedTimes.length 
+          : 0;
+        const p95Index = Math.floor(sortedTimes.length * 0.95);
+        const p99Index = Math.floor(sortedTimes.length * 0.99);
+        
+        return {
+          modelId: m.modelId,
+          modelName: m.modelName,
+          modelKey: m.modelKey,
+          modality: m.modality,
+          providerName: m.providerName,
+          providerId: m.providerId,
+          totalRequests: m.totalRequests,
+          successRate: m.totalRequests > 0 ? (m.successCount / m.totalRequests) * 100 : 0,
+          errorRate: m.totalRequests > 0 ? (m.errorCount / m.totalRequests) * 100 : 0,
+          avgResponseTime: avgTime,
+          p95ResponseTime: sortedTimes[p95Index] || 0,
+          p99ResponseTime: sortedTimes[p99Index] || 0,
+          status: avgTime > 30000 ? 'slow' : avgTime > 10000 ? 'moderate' : 'good'
+        };
+      }).sort((a, b) => b.totalRequests - a.totalRequests);
+    },
+    staleTime: 1 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 };
