@@ -472,14 +472,14 @@ const MobileSimplifiedWorkspace = () => {
 
   return (
     <OurVidzDashboardLayout>
-      <div className="flex flex-col min-h-screen bg-background">
+      <div className="flex flex-col min-h-screen bg-background overflow-x-hidden">
         {/* Main Content */}
         <div className={`
-          flex-1 overflow-y-auto p-4
+          flex-1 overflow-y-auto overflow-x-hidden p-4
           overscroll-behavior-contain
           -webkit-overflow-scrolling-touch
-          ${keyboardVisible ? 'pb-4' : isControlsExpanded ? 'pb-80' : 'pb-32'}
-          pb-[max(1rem,env(safe-area-inset-bottom))]
+          pb-safe
+          ${keyboardVisible ? '' : isControlsExpanded ? 'pb-80' : 'pb-32'}
           pt-[env(safe-area-inset-top)]
         `}>
           {/* Progress Indicator */}
@@ -521,17 +521,19 @@ const MobileSimplifiedWorkspace = () => {
           />
         </div>
 
-                {/* Debug Panel - Collapsed by default, can be expanded */}
-                <div className="p-1 border-t bg-muted/20">
-                  <MobileDebugPanel
-                    referenceImage={referenceImage}
-                    referenceImageUrl={referenceImageUrl || null}
-                    selectedModel={selectedModel}
-                    mode={mode}
-                    isOpen={showDebugPanel}
-                    onToggle={() => setShowDebugPanel(!showDebugPanel)}
-                  />
-                </div>
+                {/* Debug Panel - Only show in development mode */}
+                {import.meta.env.DEV && (
+                  <div className="p-1 border-t bg-muted/20">
+                    <MobileDebugPanel
+                      referenceImage={referenceImage}
+                      referenceImageUrl={referenceImageUrl || null}
+                      selectedModel={selectedModel}
+                      mode={mode}
+                      isOpen={showDebugPanel}
+                      onToggle={() => setShowDebugPanel(!showDebugPanel)}
+                    />
+                  </div>
+                )}
 
                 {/* Fixed Bottom Input */}
                 <MobileSimplePromptInput
