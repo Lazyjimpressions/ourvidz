@@ -337,14 +337,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string) => {
     try {
-      // Attempt global sign out to ensure clean state
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-        console.log('Global signout failed, continuing with signup');
-      }
-      
       const redirectUrl = `${window.location.origin}/`;
       
       const { error } = await supabase.auth.signUp({
@@ -364,14 +356,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      // Attempt global sign out to ensure clean state
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-        console.log('Global signout failed, continuing with signin');
-      }
-      
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -386,14 +370,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signInWithGoogle = async () => {
     try {
-      // Attempt global sign out to ensure clean state
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-        console.log('Global signout failed, continuing with Google signin');
-      }
-      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
