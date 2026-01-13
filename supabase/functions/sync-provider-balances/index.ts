@@ -217,14 +217,23 @@ async function syncReplicateBalance(provider: any): Promise<BalanceData> {
  * Sync fal.ai usage/spend data
  * fal.ai is pay-as-you-go, so we track total spend instead of balance
  * Uses the Usage API: https://api.fal.ai/v1/models/usage
+ * 
+ * PRIORITY: FAL_ADMIN_KEY > FAL_KEY (admin key required for Usage API)
  */
 async function syncFalBalance(provider: any, supabase: any): Promise<BalanceData> {
-  const apiKey = Deno.env.get(provider.secret_name || 'FAL_KEY');
+  // Prioritize ADMIN key for Usage API access (required for historical spend data)
+  const adminKey = Deno.env.get('FAL_ADMIN_KEY');
+  const regularKey = Deno.env.get(provider.secret_name || 'FAL_KEY');
+  const apiKey = adminKey || regularKey;
+  
   if (!apiKey) {
-    throw new Error(`API key not found for secret: ${provider.secret_name}`);
+    throw new Error('FAL_KEY or FAL_ADMIN_KEY not configured');
   }
 
-  // First, try the fal.ai Usage API for spend tracking
+  const keyType = adminKey ? 'ADMIN' : 'regular';
+  console.log(`🔑 fal.ai sync using ${keyType} key`);
+
+  // Try the fal.ai Usage API for spend tracking
   try {
     const response = await fetch('https://api.fal.ai/v1/models/usage?timezone=UTC&bound_to_timeframe=false', {
       headers: { 
@@ -254,7 +263,7 @@ async function syncFalBalance(provider: any, supabase: any): Promise<BalanceData
         }
       }
 
-      console.log(`✅ fal.ai Usage API: Total spend $${totalSpend.toFixed(2)}`);
+      console.log(`✅ fal.ai Usage API (${keyType}): Total spend $${totalSpend.toFixed(2)}`);
 
       return {
         balanceUsd: null, // fal.ai doesn't have prepaid balance
@@ -262,12 +271,17 @@ async function syncFalBalance(provider: any, supabase: any): Promise<BalanceData
         metadata: {
           total_spend_usd: totalSpend,
           usage_by_model: usageByModel,
-          data_source: 'usage_api',
-          note: 'Pay-as-you-go billing - showing total spend from Usage API'
+          data_source: adminKey ? 'usage_api_admin' : 'usage_api',
+          key_type: keyType,
+          note: 'Pay-as-you-go billing - showing total spend from fal.ai Usage API'
         }
       };
     } else if (response.status === 401 || response.status === 403) {
-      console.warn('⚠️ fal.ai Usage API requires admin permissions, falling back to database');
+      const errorText = await response.text();
+      console.warn(`⚠️ fal.ai Usage API auth failed (${keyType} key): ${response.status} - ${errorText}`);
+      if (!adminKey) {
+        console.warn('💡 Tip: Add FAL_ADMIN_KEY secret for Usage API access');
+      }
     } else {
       console.warn(`⚠️ fal.ai Usage API returned ${response.status}, falling back to database`);
     }
@@ -299,7 +313,7 @@ async function syncFalBalance(provider: any, supabase: any): Promise<BalanceData
         total_spend_usd: totalSpend,
         request_count: requestCount,
         data_source: 'database_logs',
-        note: 'Pay-as-you-go billing - showing total spend from logged API calls'
+        note: 'Pay-as-you-go billing - showing total spend from logged API calls (Usage API unavailable)'
       }
     };
   } catch (dbError) {
