@@ -2,7 +2,7 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Code, Database, Settings, FileText } from 'lucide-react';
+import { Code, Database, Settings, FileText, Layers, Image as ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SceneDebugPanelProps {
@@ -31,12 +31,27 @@ interface SceneDebugPanelProps {
     processing_time?: number;
     memory_tier?: string;
     content_tier?: string;
+    // ✅ NEW: I2I-specific debug fields
+    generation_mode?: 'text_to_image' | 'image_to_image' | 'modification' | 't2i' | 'i2i';
+    i2i_model_id?: string;
+    i2i_model_name?: string;
+    i2i_model_key?: string;
+    reference_image_url?: string;
+    previous_scene_image_url?: string;
+    seedream_mode?: boolean;
+    preserve_change_format?: boolean;
+    use_i2i_iteration?: boolean;
+    is_first_scene?: boolean;
+    scene_continuity_enabled?: boolean;
+    effective_image_model?: string;
+    selected_image_model?: string;
     [key: string]: any;
   };
   sceneData?: {
     scene_prompt?: string;
     scene_type?: string;
     effective_image_model?: string;
+    generation_mode?: string;
     [key: string]: any;
   };
   className?: string;
@@ -111,6 +126,80 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
                 <p className="text-gray-200 text-xs font-mono">{metadata.scene_template_name}</p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ✅ NEW: Generation Mode & I2I Info */}
+        {(metadata.generation_mode || metadata.use_i2i_iteration !== undefined || metadata.seedream_mode !== undefined) && (
+          <div>
+            <Label className="text-xs text-gray-400 mb-1 flex items-center gap-1">
+              <Layers className="w-3 h-3" />
+              Generation Mode
+            </Label>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {/* Generation Mode Badge */}
+              {metadata.generation_mode && (
+                <Badge 
+                  variant="outline" 
+                  className={cn(
+                    "text-xs",
+                    metadata.generation_mode === 'i2i' || metadata.generation_mode === 'image_to_image' 
+                      ? "bg-purple-900/50 border-purple-500 text-purple-300"
+                      : metadata.generation_mode === 'modification'
+                        ? "bg-amber-900/50 border-amber-500 text-amber-300"
+                        : "bg-blue-900/50 border-blue-500 text-blue-300"
+                  )}
+                >
+                  {metadata.generation_mode === 'i2i' || metadata.generation_mode === 'image_to_image' 
+                    ? 'I2I (Iteration)' 
+                    : metadata.generation_mode === 'modification'
+                      ? 'Modification'
+                      : 'T2I (Fresh)'}
+                </Badge>
+              )}
+              
+              {/* Seedream Mode Badge */}
+              {metadata.seedream_mode && (
+                <Badge variant="outline" className="text-xs bg-green-900/50 border-green-500 text-green-300">
+                  Seedream Edit
+                </Badge>
+              )}
+              
+              {/* First Scene Badge */}
+              {metadata.is_first_scene && (
+                <Badge variant="outline" className="text-xs bg-gray-800 border-gray-600">
+                  First Scene
+                </Badge>
+              )}
+              
+              {/* Scene Continuity Enabled */}
+              {metadata.scene_continuity_enabled && !metadata.is_first_scene && (
+                <Badge variant="outline" className="text-xs bg-gray-800 border-gray-600">
+                  Continuity ON
+                </Badge>
+              )}
+            </div>
+            
+            {/* I2I Model Info */}
+            {(metadata.i2i_model_name || metadata.i2i_model_key) && (
+              <div className="mt-2 space-y-0.5">
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-gray-500">I2I Model:</span>
+                  <span className="text-purple-300 font-mono">{metadata.i2i_model_name || metadata.i2i_model_key}</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Reference Image Indicator */}
+            {(metadata.reference_image_url || metadata.previous_scene_image_url) && (
+              <div className="mt-2 flex items-center gap-2">
+                <ImageIcon className="w-3 h-3 text-gray-400" />
+                <span className="text-[10px] text-gray-400">Reference image attached</span>
+                <Badge variant="outline" className="text-[10px] bg-gray-800 border-gray-600">
+                  {(metadata.reference_image_url || metadata.previous_scene_image_url || '').substring(0, 30)}...
+                </Badge>
+              </div>
+            )}
           </div>
         )}
 

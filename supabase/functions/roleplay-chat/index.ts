@@ -157,6 +157,7 @@ interface RoleplayChatRequest {
   previous_scene_id?: string; // ID of previous scene for linking
   previous_scene_image_url?: string; // URL of previous scene for I2I iteration
   scene_continuity_enabled?: boolean; // Whether to use I2I for subsequent scenes
+  selected_i2i_model?: string; // User-selected I2I model override (for scene iterations)
   // Scene regeneration/modification fields
   scene_prompt_override?: string; // User-edited prompt for regeneration
   current_scene_image_url?: string; // Current scene image for I2I modification
@@ -683,7 +684,9 @@ serve(async (req) => {
         scene_continuity_enabled ?? true, // Default to enabled
         // Scene regeneration/modification parameters
         scene_prompt_override,
-        current_scene_image_url
+        current_scene_image_url,
+        // ✅ NEW: Pass I2I model override for scene iterations
+        requestBody.selected_i2i_model
       );
       // ✅ ENHANCED: Validate generateScene response
       if (!sceneResult) {
@@ -2364,7 +2367,9 @@ async function generateScene(
   sceneContinuityEnabled: boolean = true, // Whether to use I2I for subsequent scenes (default: enabled)
   // Scene regeneration/modification parameters
   scenePromptOverride?: string, // User-edited prompt for regeneration (skips narrative generation)
-  currentSceneImageUrl?: string // Current scene image for I2I modification mode
+  currentSceneImageUrl?: string, // Current scene image for I2I modification mode
+  // ✅ NEW: I2I model override - user can select specific I2I model for iterations
+  i2iModelOverride?: string // User-selected I2I model (e.g., Seedream v4.5 Edit)
 ): Promise<{ 
   success: boolean; 
   consistency_score?: number; 
@@ -3520,92 +3525,92 @@ const sceneContext = analyzeSceneContent(response);
           }
 
           // ✅ I2I ITERATION: Determine model and reference image based on generation mode
-          let i2iModelOverride: string | null = null;
+          // ✅ NEW: Check if user provided an I2I model override in settings
+          let effectiveI2IModelOverride: string | null = null;
           let i2iReferenceImage: string | undefined;
           let i2iStrength: number = 0.7; // Default strength
 
           // ✅ FIX: Use denoise_strength from consistency_settings when provided (for user-selected intensity)
           const effectiveDenoiseStrength = consistencySettings?.denoise_strength;
 
-          if (generationMode === 'modification' && effectiveReferenceImageUrl) {
-            // Modification mode: Use default I2I model with CURRENT scene as reference
-            // Query for default I2I model from database
+          // ✅ NEW: Helper function to get I2I model (user selection, default, or fallback)
+          const getI2IModelKey = async (): Promise<string | null> => {
+            // Priority 1: User-selected I2I model (not 'auto')
+            if (i2iModelOverride && i2iModelOverride !== 'auto') {
+              // User provided specific I2I model - query by ID to get model_key
+              const { data: userSelectedModel } = await supabase
+                .from('api_models')
+                .select('model_key, display_name')
+                .eq('id', i2iModelOverride)
+                .eq('is_active', true)
+                .single();
+              
+              if (userSelectedModel?.model_key) {
+                console.log('✅ Using user-selected I2I model:', userSelectedModel.display_name);
+                return userSelectedModel.model_key;
+              }
+            }
+            
+            // Priority 2: Default I2I model from database
             const { data: defaultI2IModel } = await supabase
               .from('api_models')
-              .select('model_key')
-              .eq('modality', 'image')
+              .select('model_key, display_name')
+              .eq('task', 'style_transfer')
               .eq('is_active', true)
               .eq('is_default', true)
-              .contains('capabilities', { supports_i2i: true })
               .order('priority', { ascending: true })
               .limit(1)
               .single();
             
             if (defaultI2IModel?.model_key) {
-              i2iModelOverride = defaultI2IModel.model_key;
-            } else {
-              // Fallback: query for any I2I-capable model
-              const { data: anyI2IModel } = await supabase
-                .from('api_models')
-                .select('model_key')
-                .eq('modality', 'image')
-                .eq('is_active', true)
-                .contains('capabilities', { supports_i2i: true })
-                .order('priority', { ascending: true })
-                .limit(1)
-                .single();
-              i2iModelOverride = anyI2IModel?.model_key || null;
+              console.log('✅ Using default I2I model:', defaultI2IModel.display_name);
+              return defaultI2IModel.model_key;
             }
+            
+            // Priority 3: Any active I2I-capable model
+            const { data: anyI2IModel } = await supabase
+              .from('api_models')
+              .select('model_key, display_name')
+              .eq('task', 'style_transfer')
+              .eq('is_active', true)
+              .order('priority', { ascending: true })
+              .limit(1)
+              .single();
+            
+            if (anyI2IModel?.model_key) {
+              console.log('✅ Using fallback I2I model:', anyI2IModel.display_name);
+              return anyI2IModel.model_key;
+            }
+            
+            return null;
+          };
+
+          if (generationMode === 'modification' && effectiveReferenceImageUrl) {
+            // Modification mode: Use I2I model with CURRENT scene as reference
+            effectiveI2IModelOverride = await getI2IModelKey();
             i2iReferenceImage = effectiveReferenceImageUrl; // Current scene image
             i2iStrength = effectiveDenoiseStrength ?? 0.5; // Use override or default for modifications
-            console.log('🔧 Modification Mode: Using Seedream v4.5/edit with current scene', {
-              strength: i2iStrength,
-              strength_source: effectiveDenoiseStrength ? 'user_override' : 'default'
-            });
-          } else if (useI2IIteration && effectiveReferenceImageUrl) {
-            // ✅ I2I continuation mode: Use default I2I model with previous scene as reference
-            // This block only executes if effectiveReferenceImageUrl is valid (enforced in mode detection)
-            // Query for default I2I model from database (reuse same logic as modification mode)
-            if (!i2iModelOverride) {
-              const { data: defaultI2IModel } = await supabase
-                .from('api_models')
-                .select('model_key')
-                .eq('modality', 'image')
-                .eq('is_active', true)
-                .eq('is_default', true)
-                .contains('capabilities', { supports_i2i: true })
-                .order('priority', { ascending: true })
-                .limit(1)
-                .single();
-              
-              if (defaultI2IModel?.model_key) {
-                i2iModelOverride = defaultI2IModel.model_key;
-              } else {
-                // Fallback: query for any I2I-capable model
-                const { data: anyI2IModel } = await supabase
-                  .from('api_models')
-                  .select('model_key')
-                  .eq('modality', 'image')
-                  .eq('is_active', true)
-                  .contains('capabilities', { supports_i2i: true })
-                  .order('priority', { ascending: true })
-                  .limit(1)
-                  .single();
-                i2iModelOverride = anyI2IModel?.model_key || null;
-              }
-            }
-            i2iReferenceImage = effectiveReferenceImageUrl;
-            i2iStrength = effectiveDenoiseStrength ?? 0.45; // Use override or default for scene-to-scene continuity
-            console.log('🔄 I2I Iteration Mode: Using Seedream v4.5/edit with previous scene', {
+            console.log('🔧 Modification Mode: Using I2I model with current scene', {
+              model: effectiveI2IModelOverride,
               strength: i2iStrength,
               strength_source: effectiveDenoiseStrength ? 'user_override' : 'default',
-              previous_scene_id: previousSceneId
+              user_selected_i2i: i2iModelOverride || 'auto'
+            });
+          } else if (useI2IIteration && effectiveReferenceImageUrl) {
+            // ✅ I2I continuation mode: Use I2I model with previous scene as reference
+            effectiveI2IModelOverride = await getI2IModelKey();
+            i2iReferenceImage = effectiveReferenceImageUrl;
+            i2iStrength = effectiveDenoiseStrength ?? 0.45; // Use override or default for scene-to-scene continuity
+            console.log('🔄 I2I Iteration Mode: Using I2I model with previous scene', {
+              model: effectiveI2IModelOverride,
+              strength: i2iStrength,
+              strength_source: effectiveDenoiseStrength ? 'user_override' : 'default',
+              previous_scene_id: previousSceneId,
+              user_selected_i2i: i2iModelOverride || 'auto'
             });
           } else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
             // ✅ Fallback: Continuity enabled but no previous scene - use T2I with character reference
-            // This ensures we don't try to use I2I model without a reference image
             console.log('📝 Scene continuity enabled but no previous scene - using T2I mode with character reference');
-            // Continue with T2I mode (no model override, will use v4 text-to-image)
           } else {
             // T2I mode: Use character reference image if available
             i2iReferenceImage = character.reference_image_url || undefined;
@@ -3628,7 +3633,7 @@ const sceneContext = analyzeSceneContent(response);
             prompt: sanitizedPrompt, // ✅ Use sanitized prompt for fal.ai compliance
             apiModelId: modelConfig.id,
             // Override model_key for I2I iteration
-            model_key_override: i2iModelOverride || undefined,
+            model_key_override: effectiveI2IModelOverride || undefined,
             job_type: 'fal_image',
             quality: 'high',
             input: {
@@ -3651,8 +3656,8 @@ const sceneContext = analyzeSceneContent(response);
               conversation_id: conversationId || null,
               scene_type: 'chat_scene',
               consistency_method: finalConsistencyMethod,
-              model_used: i2iModelOverride || modelConfig.model_key,
-              model_display_name: i2iModelOverride ? `${i2iModelOverride} (I2I)` : modelConfig.display_name,
+              model_used: effectiveI2IModelOverride || modelConfig.model_key,
+              model_display_name: effectiveI2IModelOverride ? `${effectiveI2IModelOverride} (I2I)` : modelConfig.display_name,
               selected_image_model: selectedImageModel || null,
               effective_image_model: effectiveImageModel,
               provider_name: providerName,
@@ -3676,7 +3681,7 @@ const sceneContext = analyzeSceneContent(response);
             consistency_method: finalConsistencyMethod,
             generation_mode: generationMode,
             use_i2i_iteration: useI2IIteration,
-            i2i_model_override: i2iModelOverride,
+            i2i_model_override: effectiveI2IModelOverride,
             has_reference_image: !!i2iReferenceImage,
             reference_image_type: useI2IIteration ? 'previous_scene' : 'character_reference',
             reference_strength: i2iStrength,
