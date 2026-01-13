@@ -3019,6 +3019,22 @@ const sceneContext = analyzeSceneContent(response);
       }
     }
 
+    // ✅ CRITICAL FIX: Fetch image model config EARLY for Seedream detection and prompt structure
+    let imageModelConfig: any = null;
+    if (effectiveImageModel && !isLocalSDXL) {
+      const { data: modelData, error: modelFetchError } = await supabase
+        .from('api_models')
+        .select('id, model_key, display_name, provider_id, input_defaults, capabilities')
+        .eq('id', effectiveImageModel)
+        .eq('is_active', true)
+        .single();
+      
+      if (!modelFetchError && modelData) {
+        imageModelConfig = modelData;
+        console.log('✅ Image model config loaded early:', modelData.display_name, `(${modelData.model_key})`);
+      }
+    }
+
     // ✅ FIX: Create scene record in character_scenes table before generating image
     let sceneId: string | null = null;
     try {
@@ -3167,8 +3183,9 @@ const sceneContext = analyzeSceneContent(response);
 
     // ✅ SEEDREAM DETECTION: Check if we're using Seedream edit models (which don't use strength parameter)
     // For Seedream edit, the prompt itself controls preservation vs change
-    const isSeedreamEdit = (effectiveImageModel && typeof effectiveImageModel === 'string' && effectiveImageModel.includes('seedream') && effectiveImageModel.includes('edit')) ||
-                           (modelConfig?.model_key && modelConfig.model_key.includes('seedream') && modelConfig.model_key.includes('edit'));
+    // ✅ CRITICAL FIX: Use imageModelConfig (fetched earlier) instead of undefined modelConfig
+    const isSeedreamEdit = imageModelConfig?.model_key?.includes('seedream') && 
+                           imageModelConfig?.model_key?.includes('edit');
 
     // ✅ FIX: For I2I iterations, prioritize scene action/changes first
     if (useI2IIteration || generationMode === 'modification') {
@@ -3312,22 +3329,10 @@ const sceneContext = analyzeSceneContent(response);
       // ✅ ENHANCED: Use API model for scene generation
       console.log('🎨 Using API model for scene generation:', effectiveImageModel);
       
-      // Get model configuration from database
-      const { data: modelConfig, error: modelError } = await supabase
-        .from('api_models')
-        .select(`
-          id,
-          model_key,
-          display_name,
-          provider_id,
-          input_defaults,
-          capabilities
-        `)
-        .eq('id', effectiveImageModel)
-        .eq('is_active', true)
-        .single();
+      // ✅ CRITICAL FIX: Reuse imageModelConfig fetched earlier instead of duplicate query
+      const modelConfig = imageModelConfig;
       
-      if (modelError || !modelConfig) {
+      if (!modelConfig) {
         console.error('🎨❌ API model not found:', effectiveImageModel);
         // Fallback to SDXL
         imageResponse = await supabase.functions.invoke('queue-job', {
