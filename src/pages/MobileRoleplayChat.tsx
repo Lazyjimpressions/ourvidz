@@ -544,7 +544,8 @@ const MobileRoleplayChat: React.FC = () => {
 
             if (!sceneError && sceneData) {
               loadedScene = sceneData;
-              setSelectedScene(sceneData);
+              // Cast scenes table data to CharacterScene (add required character_id)
+              setSelectedScene({ ...sceneData, character_id: characterId || '' } as CharacterScene);
               console.log('🎬 Loaded scene template:', sceneData.name, '-', sceneData.scene_prompt?.substring(0, 50) + '...');
             } else {
               console.error('❌ Failed to load scene template:', sceneError);
@@ -669,12 +670,14 @@ const MobileRoleplayChat: React.FC = () => {
             // ✅ FIX: Restore scene images from character_scenes or user_library for messages with scene metadata
             const formattedMessages: Message[] = await Promise.all(
               existingMessages.map(async (msg) => {
+                // Type assertion for messages with metadata from database
+                const msgWithMeta = msg as typeof msg & { metadata?: Record<string, any> };
                 const baseMessage: Message = {
                   id: msg.id,
                   content: msg.content,
                   sender: msg.sender === 'assistant' ? 'character' : msg.sender as 'user' | 'character',
                   timestamp: msg.created_at,
-                  metadata: msg.metadata || {}
+                  metadata: msgWithMeta.metadata || {}
                 };
 
                 // ✅ FIX: If message has scene metadata but no valid image, restore from character_scenes or user_library
@@ -690,12 +693,12 @@ const MobileRoleplayChat: React.FC = () => {
 
                   if (sceneData?.image_url) {
                     // Use scene image from character_scenes
-                    baseMessage.metadata.image_url = sceneData.image_url;
-                    baseMessage.metadata.scene_prompt = sceneData.scene_prompt;
+                    baseMessage.metadata!.image_url = sceneData.image_url;
+                    baseMessage.metadata!.scene_prompt = sceneData.scene_prompt;
                     if (sceneData.generation_metadata) {
-                      baseMessage.metadata.generation_metadata = {
-                        ...baseMessage.metadata.generation_metadata,
-                        ...sceneData.generation_metadata
+                      baseMessage.metadata!.generation_metadata = {
+                        ...(baseMessage.metadata?.generation_metadata || {}),
+                        ...(sceneData.generation_metadata as Record<string, any> || {})
                       };
                     }
                     console.log('✅ Restored scene image from character_scenes:', sceneId);
@@ -774,8 +777,8 @@ const MobileRoleplayChat: React.FC = () => {
             console.log('🆕 Creating new conversation', forceNewConversation ? '(fresh scene start)' : '');
 
             // Get scene name from location state or loaded scene
-            const sceneName = locationState?.sceneConfig?.scene?.name || locationState?.scenarioPayload?.sceneName;
-            const userRole = locationState?.userRole;
+            const sceneName = locationState?.sceneConfig?.scene?.name || (locationState?.scenarioPayload as any)?.sceneName;
+            const userRole = (locationState as any)?.userRole;
 
             const conversationTitle = sceneIdFromUrl && sceneName
               ? `${loadedCharacter.name} - ${sceneName}`
@@ -833,7 +836,7 @@ const MobileRoleplayChat: React.FC = () => {
         });
 
         // Extract user role from location state
-        const userRole = locationState?.userRole || locationState?.sceneConfig?.userRole;
+        const userRole = (locationState as any)?.userRole || locationState?.sceneConfig?.userRole;
 
         const { data, error} = await supabase.functions.invoke('roleplay-chat', {
           body: {
@@ -984,9 +987,10 @@ const MobileRoleplayChat: React.FC = () => {
 
           if (sceneData) {
             scenePrompt = sceneData.scene_prompt;
-            originalScenePrompt = sceneData.generation_metadata?.original_scene_prompt;
-            sceneTemplateId = sceneData.generation_metadata?.scene_template_id;
-            sceneTemplateName = sceneData.generation_metadata?.scene_template_name;
+            const genMeta = sceneData.generation_metadata as Record<string, any> | null;
+            originalScenePrompt = genMeta?.original_scene_prompt;
+            sceneTemplateId = genMeta?.scene_template_id;
+            sceneTemplateName = genMeta?.scene_template_name;
             console.log('✅ Fetched scene data:', {
               hasScenePrompt: !!scenePrompt,
               hasOriginalPrompt: !!originalScenePrompt,

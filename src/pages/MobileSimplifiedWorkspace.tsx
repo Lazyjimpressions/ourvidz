@@ -212,9 +212,10 @@ const MobileSimplifiedWorkspace = () => {
     if (selectedModel?.id && selectedModel.id !== 'sdxl') {
       // For API models, check capabilities from imageModels hook
       const modelData = imageModels?.find(m => m.id === selectedModel.id);
-      if (modelData?.capabilities) {
-        isI2IModel = modelData.capabilities.supports_i2i === true || 
-                     modelData.capabilities.reference_images === true;
+      const capabilities = (modelData as any)?.capabilities;
+      if (capabilities) {
+        isI2IModel = capabilities.supports_i2i === true || 
+                     capabilities.reference_images === true;
       }
     } else if (selectedModel?.id === 'sdxl') {
       // Local SDXL always supports I2I
