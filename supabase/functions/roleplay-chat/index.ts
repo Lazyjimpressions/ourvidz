@@ -2501,6 +2501,28 @@ async function generateScene(
       });
     }
 
+    // ✅ CRITICAL DEBUG LOGGING: Track scene continuity for I2I
+    console.log('📸 SCENE_CONTINUITY_DEBUG:', {
+      // Request info
+      requestedPreviousSceneId: previousSceneId || null,
+      requestedPreviousSceneImageUrl: previousSceneImageUrl ? previousSceneImageUrl.substring(0, 80) + '...' : null,
+      sceneContinuityEnabled,
+      // Verification results
+      isFirstScene,
+      verifiedPreviousSceneImageUrl: verifiedPreviousSceneImageUrl ? verifiedPreviousSceneImageUrl.substring(0, 80) + '...' : null,
+      // Mode decisions
+      canUseI2I,
+      generationMode,
+      useI2IIteration,
+      // Effective values for generation
+      effectiveReferenceImageUrl: effectiveReferenceImageUrl ? effectiveReferenceImageUrl.substring(0, 80) + '...' : null,
+      // Additional context
+      isPromptOverride,
+      hasCurrentSceneImage,
+      characterId,
+      conversationId: conversationId || null
+    });
+
     console.log('🎬 Starting scene generation:', {
       characterId,
       responseLength: response.length,
@@ -3135,25 +3157,37 @@ const sceneContext = analyzeSceneContent(response);
     }
 
     // ✅ ENHANCED: Build comprehensive scene prompt with character and user visual context
+    // ✅ PHASE 5 FIX: For I2I mode, restructure prompt to emphasize CHANGES first
     let enhancedScenePrompt: string;
 
     // Get scene style tokens
     const styleTokens = SCENE_STYLE_TOKENS[sceneStyle] || [];
     const styleTokensStr = styleTokens.length > 0 ? `, ${styleTokens.join(', ')}` : '';
 
-    if (sceneStyle === 'both_characters' && userCharacter) {
-      // Both characters in scene - include user visual description
+    // ✅ FIX: For I2I iterations, prioritize scene action/changes first
+    if (useI2IIteration || generationMode === 'modification') {
+      // I2I MODE: Emphasize changes first, then brief character identity
+      // This ensures the scene action isn't truncated by CLIP's 77-token limit
+      
+      const briefCharacterIdentity = `${character.name}, ${(character.appearance_tags || []).slice(0, 3).join(', ')}`;
+      
+      if (sceneStyle === 'both_characters' && userCharacter) {
+        const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
+        enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting, natural progression. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+      } else if (sceneStyle === 'pov') {
+        enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer, POV perspective.`;
+      } else {
+        enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same character identity, same lighting. [CHARACTER] ${briefCharacterIdentity}.`;
+      }
+      
+      console.log('🎬 I2I prompt structure: Changes first, brief character ID');
+    } else if (sceneStyle === 'both_characters' && userCharacter) {
+      // T2I MODE: Both characters in scene - include user visual description
       const userVisualDescription = buildUserVisualDescriptionForScene(
         userCharacter.gender,
         userCharacter.appearance_tags || []
       );
-
-      // ✅ FIX: For I2I, remove redundant "maintain" phrase - the image already maintains appearance
-      if (useI2IIteration) {
-        enhancedScenePrompt = `Generate a scene showing ${character.name} (${characterVisualDescription}) and ${userCharacter.name} (${userVisualDescription}) together${styleTokensStr}, in the following scenario: ${scenePrompt}. Composition: two people interacting.`;
-      } else {
-        enhancedScenePrompt = `Generate a scene showing ${character.name} (${characterVisualDescription}) and ${userCharacter.name} (${userVisualDescription}) together${styleTokensStr}, in the following scenario: ${scenePrompt}. Both characters should maintain their distinctive appearances. Composition: two people interacting.`;
-      }
+      enhancedScenePrompt = `Generate a scene showing ${character.name} (${characterVisualDescription}) and ${userCharacter.name} (${userVisualDescription}) together${styleTokensStr}, in the following scenario: ${scenePrompt}. Both characters should maintain their distinctive appearances. Composition: two people interacting.`;
 
       console.log('🎬 Scene style: both_characters - including user:', userCharacter.name);
     } else if (sceneStyle === 'pov' && userCharacter) {
@@ -3162,30 +3196,16 @@ const sceneContext = analyzeSceneContent(response);
 
       console.log('🎬 Scene style: pov - first person view');
     } else {
-      // Character only (default) - current behavior
-      // ✅ CRITICAL FIX: Check if scenePrompt already includes character name and visual description
-      // If using template prompt, it may already have character info, so don't duplicate
+      // Character only (default) - T2I mode with full character description
       const scenePromptLower = scenePrompt.toLowerCase();
       const hasCharacterInPrompt = scenePromptLower.includes(character.name.toLowerCase());
       const hasVisualDescInPrompt = scenePromptLower.includes(characterVisualDescription.substring(0, 30).toLowerCase());
       
       if (hasCharacterInPrompt && hasVisualDescInPrompt) {
-        // Scene prompt already includes character name and visual description (from template)
-        // Just use the prompt directly without adding character info again
-        if (useI2IIteration) {
-          enhancedScenePrompt = `Generate a scene in the following scenario: ${scenePrompt}.`;
-        } else {
-          enhancedScenePrompt = `Generate a scene in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
-        }
+        enhancedScenePrompt = `Generate a scene in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
         console.log('🎬 Scene style: character_only (template prompt already includes character info)');
       } else {
-        // Scene prompt doesn't include character info, add it
-        // ✅ FIX: For I2I, remove redundant "maintain" phrase - the image already maintains appearance
-        if (useI2IIteration) {
-          enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}.`;
-        } else {
-          enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
-        }
+        enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
         console.log('🎬 Scene style: character_only (default)');
       }
     }

@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 const STORAGE_KEY = 'scene-continuity-settings';
 const SCENES_STORAGE_KEY = 'scene-continuity-scenes';
 const MAX_STORED_CONVERSATIONS = 25;
+const SCENE_POLL_INTERVAL_MS = 2000; // Poll every 2s for scene image updates
+const SCENE_POLL_MAX_ATTEMPTS = 15; // Max 30s of polling
 
 interface SceneContinuitySettings {
   enabled: boolean;
@@ -14,6 +16,7 @@ interface PreviousSceneInfo {
   sceneId: string;
   imageUrl: string;
   timestamp: number;
+  isPending?: boolean; // True if scene exists but image not yet generated
 }
 
 const DEFAULT_SETTINGS: SceneContinuitySettings = {
@@ -34,6 +37,9 @@ interface UseSceneContinuityResult {
   setLastScene: (conversationId: string, sceneId: string, imageUrl: string) => void;
   clearLastScene: (conversationId: string) => void;
   getPreviousScene: (conversationId: string) => PreviousSceneInfo | null;
+  
+  // ✅ NEW: Refresh method for manual updates
+  refreshSceneFromDB: (conversationId: string) => Promise<void>;
 
   // State
   isLoading: boolean;
@@ -61,7 +67,11 @@ const loadScenesFromStorage = (): Map<string, PreviousSceneInfo> => {
     if (savedScenes) {
       const parsed = JSON.parse(savedScenes);
       Object.entries(parsed).forEach(([convId, sceneInfo]) => {
-        map.set(convId, sceneInfo as PreviousSceneInfo);
+        // Filter out pending scenes without image URLs
+        const scene = sceneInfo as PreviousSceneInfo;
+        if (scene.imageUrl && scene.imageUrl.trim() !== '') {
+          map.set(convId, scene);
+        }
       });
       console.log('🔄 Scene continuity: Loaded', map.size, 'scenes from localStorage');
     }
@@ -90,9 +100,9 @@ const cleanupOldConversations = (scenesMap: Map<string, PreviousSceneInfo>) => {
  * Fetch last scene from database (fallback when localStorage misses)
  * ✅ FIX 5: Improved fallback - first try scenes with image_url, then any scene
  */
-const fetchLastSceneFromDB = async (convId: string): Promise<PreviousSceneInfo | null> => {
+const fetchLastSceneFromDB = async (convId: string, retryForImage: boolean = false): Promise<PreviousSceneInfo | null> => {
   try {
-    // ✅ FIX 5: First try: Get scene with image_url
+    // ✅ FIX: First try: Get scene with image_url (completed scenes only)
     let { data: scenesData, error } = await supabase
       .from('character_scenes')
       .select('id, image_url, created_at')
@@ -103,48 +113,57 @@ const fetchLastSceneFromDB = async (convId: string): Promise<PreviousSceneInfo |
 
     let data = scenesData?.[0] || null;
 
-    // ✅ FIX 5: Fallback: If no scene with image_url, get most recent scene (image might be updating)
-    if (error || !data?.image_url) {
-      console.log('🔄 Scene continuity: No scene with image_url, checking for any scene...');
-      const { data: fallbackData, error: fallbackError } = await supabase
+    // If we found a scene with image, return it
+    if (!error && data?.image_url) {
+      console.log('🔄 Scene continuity: Found previous scene in DB with image', {
+        conversationId: convId,
+        sceneId: data.id,
+        imageUrl: data.image_url.substring(0, 60) + '...'
+      });
+
+      return {
+        sceneId: data.id,
+        imageUrl: data.image_url,
+        timestamp: new Date(data.created_at).getTime()
+      };
+    }
+
+    // ✅ FIX: If retryForImage is true, we're polling - return pending scene for tracking
+    if (retryForImage) {
+      const { data: pendingData, error: pendingError } = await supabase
         .from('character_scenes')
         .select('id, image_url, created_at')
         .eq('conversation_id', convId)
         .order('created_at', { ascending: false })
         .limit(1);
       
-      if (!fallbackError && fallbackData && fallbackData.length > 0) {
-        data = fallbackData[0];
-        error = null;
-        console.log('🔄 Scene continuity: Found scene without image_url, will check again later', {
-          sceneId: data.id,
-          hasImage: !!data.image_url
+      if (!pendingError && pendingData && pendingData.length > 0) {
+        const pendingScene = pendingData[0];
+        if (pendingScene.image_url) {
+          console.log('🔄 Scene continuity: Polling found scene image is now ready', {
+            sceneId: pendingScene.id,
+            imageUrl: pendingScene.image_url.substring(0, 60) + '...'
+          });
+          return {
+            sceneId: pendingScene.id,
+            imageUrl: pendingScene.image_url,
+            timestamp: new Date(pendingScene.created_at).getTime()
+          };
+        }
+        console.log('🔄 Scene continuity: Scene still pending (no image_url yet)', {
+          sceneId: pendingScene.id
         });
+        return {
+          sceneId: pendingScene.id,
+          imageUrl: '', // Empty = pending
+          timestamp: new Date(pendingScene.created_at).getTime(),
+          isPending: true
+        };
       }
     }
 
-    if (error || !data) {
-      console.log('🔄 Scene continuity: No previous scene in DB for conversation', convId);
-      return null;
-    }
-
-    // Only return if we have an image URL (required for I2I)
-    if (!data.image_url) {
-      console.log('🔄 Scene continuity: Scene found but no image_url yet - will retry later');
-      return null;
-    }
-
-    console.log('🔄 Scene continuity: Found previous scene in DB', {
-      conversationId: convId,
-      sceneId: data.id,
-      imageUrl: data.image_url.substring(0, 60) + '...'
-    });
-
-    return {
-      sceneId: data.id,
-      imageUrl: data.image_url,
-      timestamp: new Date(data.created_at).getTime()
-    };
+    console.log('🔄 Scene continuity: No previous scene with image in DB for conversation', convId);
+    return null;
   } catch (error) {
     console.warn('🔄 Scene continuity: Failed to fetch scene from DB:', error);
     return null;
@@ -298,6 +317,64 @@ export const useSceneContinuity = (conversationId?: string): UseSceneContinuityR
     return previousScenesRef.current.get(convId) || null;
   }, []);
 
+  // ✅ NEW: Manual refresh method to fetch latest scene from DB
+  const refreshSceneFromDB = useCallback(async (convId: string): Promise<void> => {
+    console.log('🔄 Scene continuity: Manual refresh requested for', convId);
+    const scene = await fetchLastSceneFromDB(convId, false);
+    if (scene && scene.imageUrl) {
+      previousScenesRef.current.set(convId, scene);
+      cleanupOldConversations(previousScenesRef.current);
+      persistScenesToStorage(previousScenesRef.current);
+      if (convId === conversationId) {
+        setCurrentPreviousScene(scene);
+      }
+      console.log('🔄 Scene continuity: Refreshed scene from DB', {
+        sceneId: scene.sceneId,
+        imageUrl: scene.imageUrl.substring(0, 60) + '...'
+      });
+    }
+  }, [conversationId]);
+
+  // ✅ NEW: Set up realtime subscription for scene image updates
+  useEffect(() => {
+    if (!conversationId) return;
+
+    // Subscribe to character_scenes updates for this conversation
+    const channel = supabase
+      .channel(`scene-continuity-${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'character_scenes',
+          filter: `conversation_id=eq.${conversationId}`
+        },
+        (payload) => {
+          const updatedScene = payload.new as { id: string; image_url?: string; created_at: string };
+          if (updatedScene.image_url) {
+            console.log('🔄 Scene continuity: Realtime update - scene image now available', {
+              sceneId: updatedScene.id,
+              imageUrl: updatedScene.image_url.substring(0, 60) + '...'
+            });
+            const sceneInfo: PreviousSceneInfo = {
+              sceneId: updatedScene.id,
+              imageUrl: updatedScene.image_url,
+              timestamp: new Date(updatedScene.created_at).getTime()
+            };
+            previousScenesRef.current.set(conversationId, sceneInfo);
+            persistScenesToStorage(previousScenesRef.current);
+            setCurrentPreviousScene(sceneInfo);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId]);
+
   return {
     // Settings
     isEnabled: settings.enabled,
@@ -311,6 +388,7 @@ export const useSceneContinuity = (conversationId?: string): UseSceneContinuityR
     setLastScene,
     clearLastScene,
     getPreviousScene,
+    refreshSceneFromDB,
 
     // State
     isLoading: !isInitialized

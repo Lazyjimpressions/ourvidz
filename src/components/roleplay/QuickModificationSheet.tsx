@@ -32,7 +32,7 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Shirt,
     promptModifier: 'topless, bare chest, removed shirt',
     continuityPhrase: 'maintain same character identity, keep same lighting',
-    strength: 0.35, // ✅ Adjusted to match plan (was 0.55)
+    strength: 0.50, // ✅ Increased for visible clothing changes (was 0.35)
     category: 'clothing',
     nsfwOnly: true
   },
@@ -42,7 +42,7 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Shirt,
     promptModifier: 'fully nude, no clothes, naked',
     continuityPhrase: 'maintain same character identity, keep same environment',
-    strength: 0.45, // ✅ Adjusted to match plan (was 0.65)
+    strength: 0.60, // ✅ Increased for significant clothing changes (was 0.45)
     category: 'clothing',
     nsfwOnly: true
   },
@@ -50,9 +50,9 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     id: 'change_position',
     label: 'Change Position',
     icon: Move,
-    promptModifier: 'different pose, new position',
-    continuityPhrase: 'maintain same character, subtle change',
-    strength: 0.40, // ✅ Adjusted to match plan (was 0.50)
+    promptModifier: 'different pose, new position, changed stance',
+    continuityPhrase: 'same character identity, same lighting, same setting',
+    strength: 0.55, // ✅ Increased for visible position changes (was 0.40)
     category: 'position',
     nsfwOnly: false
   },
@@ -60,9 +60,9 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     id: 'intimate_progression',
     label: 'More Intimate',
     icon: Heart,
-    promptModifier: 'more intimate, closer contact',
-    continuityPhrase: 'maintain same characters, keep same setting',
-    strength: 0.30, // ✅ Adjusted to match plan (was 0.55)
+    promptModifier: 'more intimate, closer contact, increased intimacy',
+    continuityPhrase: 'same characters, same setting, natural progression',
+    strength: 0.40, // ✅ Increased for perceptible changes (was 0.30)
     category: 'intensity',
     nsfwOnly: true
   }
