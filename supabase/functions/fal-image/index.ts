@@ -674,7 +674,13 @@ serve(async (req) => {
 
         // Strength for i2i (default to 0.5 if not provided for modify mode)
         // Skip strength for WAN 2.1 i2v - it doesn't use this parameter
-        if (!isWanI2V) {
+        // ✅ CRITICAL: Skip strength for Seedream Edit models - they don't support it!
+        // Seedream edit models use prompt-based control, not strength parameter
+        const isSeedreamEdit = modelKey.includes('seedream') && modelKey.includes('edit');
+        const modelCapabilities = apiModel.capabilities as Record<string, any> || {};
+        const usesStrengthParam = modelCapabilities?.uses_strength_param !== false;
+        
+        if (!isWanI2V && usesStrengthParam && !isSeedreamEdit) {
           if (body.input?.strength !== undefined) {
             modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
           } else {
@@ -682,6 +688,10 @@ serve(async (req) => {
             modelInput.strength = 0.5;
             console.log('📊 Using default I2I strength: 0.5');
           }
+        } else if (isSeedreamEdit || !usesStrengthParam) {
+          // Remove strength if model doesn't support it
+          delete modelInput.strength;
+          console.log('🎯 Model does not support strength parameter (Seedream Edit or capability flag), skipped');
         }
       }
 
