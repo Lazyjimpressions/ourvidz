@@ -11,12 +11,13 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
+import { useI2IModels } from '@/hooks/useI2IModels';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useSceneContinuity } from '@/hooks/useSceneContinuity';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2, Upload, X, Loader2, Plus } from 'lucide-react';
+import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2, Upload, X, Loader2, Plus, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneStyle } from '@/types/roleplay';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -36,6 +37,9 @@ interface RoleplaySettingsModalProps {
   onSelectedImageModelChange: (model: string) => void;
   consistencySettings: ConsistencySettings;
   onConsistencySettingsChange: (settings: ConsistencySettings) => void;
+  // I2I model for scene iteration
+  selectedI2IModel?: string;
+  onSelectedI2IModelChange?: (model: string) => void;
   // User character and scene style
   selectedUserCharacterId?: string | null;
   onUserCharacterChange?: (characterId: string | null) => void;
@@ -60,6 +64,8 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   onSelectedImageModelChange,
   consistencySettings,
   onConsistencySettingsChange,
+  selectedI2IModel,
+  onSelectedI2IModelChange,
   selectedUserCharacterId,
   onUserCharacterChange,
   sceneStyle = 'character_only',
@@ -69,6 +75,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
 }) => {
   const { allModelOptions, defaultModel: defaultChatModel, isLoading: modelsLoading, chatWorkerHealthy } = useRoleplayModels();
   const { modelOptions: imageModelOptions, defaultModel: defaultImageModel, isLoading: imageModelsLoading, sdxlWorkerHealthy } = useImageModels();
+  const { modelOptions: i2iModelOptions, isLoading: i2iModelsLoading, defaultModel: defaultI2IModel } = useI2IModels();
   const { characters: userCharacters, isLoading: userCharactersLoading, defaultCharacterId, setDefaultCharacter, updateUserCharacter, createUserCharacter } = useUserCharacters();
   const { isEnabled: sceneContinuityEnabled, setEnabled: setSceneContinuityEnabled, defaultStrength, setDefaultStrength } = useSceneContinuity();
   const { toast } = useToast();
@@ -79,6 +86,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   const [localMemoryTier, setLocalMemoryTier] = useState(memoryTier);
   const [localModelProvider, setLocalModelProvider] = useState(modelProvider);
   const [localSelectedImageModel, setLocalSelectedImageModel] = useState(selectedImageModel);
+  const [localSelectedI2IModel, setLocalSelectedI2IModel] = useState(selectedI2IModel || 'auto');
   const [localConsistencySettings, setLocalConsistencySettings] = useState(consistencySettings);
   const [localUserCharacterId, setLocalUserCharacterId] = useState<string | null>(selectedUserCharacterId || null);
   const [localSceneStyle, setLocalSceneStyle] = useState<SceneStyle>(sceneStyle);
@@ -404,6 +412,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
       memoryTier: localMemoryTier,
       modelProvider: localModelProvider,
       selectedImageModel: localSelectedImageModel,
+      selectedI2IModel: localSelectedI2IModel,
       consistencySettings: localConsistencySettings,
       userCharacterId: localUserCharacterId,
       sceneStyle: localSceneStyle
@@ -430,6 +439,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
     onMemoryTierChange(localMemoryTier);
     onModelProviderChange(localModelProvider);
     onSelectedImageModelChange(localSelectedImageModel);
+    onSelectedI2IModelChange?.(localSelectedI2IModel);
     onConsistencySettingsChange(localConsistencySettings);
     onUserCharacterChange?.(localUserCharacterId);
     onSceneStyleChange?.(localSceneStyle);
@@ -1078,6 +1088,62 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 {imageModelOptions.length === 0 && !imageModelsLoading && (
                   <p className="text-xs text-yellow-400 mt-1">
                     ⚠️ No image models configured. Please add models in Admin settings.
+                  </p>
+                )}
+              </div>
+
+              {/* I2I Model Selection (Scene Iteration) */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Layers className="w-4 h-4" />
+                  Scene Iteration Model (I2I)
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Used for iterating existing scenes. Seedream Edit models don't use strength - the prompt controls preservation.
+                </p>
+                <Select
+                  key={`i2i-model-${localSelectedI2IModel || 'auto'}`}
+                  value={localSelectedI2IModel || 'auto'}
+                  onValueChange={(value) => {
+                    console.log('🔄 I2I model changed:', value);
+                    setLocalSelectedI2IModel(value);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select I2I model..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {i2iModelsLoading ? (
+                      <SelectItem value="__loading__" disabled>Loading I2I models...</SelectItem>
+                    ) : i2iModelOptions.length === 0 ? (
+                      <SelectItem value="__none__" disabled>No I2I models available</SelectItem>
+                    ) : (
+                      i2iModelOptions.map((model) => (
+                        <SelectItem
+                          key={model.value}
+                          value={model.value}
+                        >
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <span>{model.label}</span>
+                            {model.isDefault && model.value !== 'auto' && (
+                              <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400">
+                                Default
+                              </Badge>
+                            )}
+                            {model.capabilities?.uses_strength_param === false && (
+                              <Badge variant="outline" className="ml-2 text-xs text-purple-400 border-purple-400">
+                                No Strength
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {localSelectedI2IModel === 'auto' && defaultI2IModel && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Will use: {defaultI2IModel.label}
                   </p>
                 )}
               </div>
