@@ -59,7 +59,7 @@ serve(async (req) => {
             balanceData = await syncReplicateBalance(provider);
             break;
           case 'fal':
-            balanceData = await syncFalBalance(provider);
+            balanceData = await syncFalBalance(provider, supabase);
             break;
           default:
             console.log(`⚠️ No sync function for provider: ${provider.name}`);
@@ -92,7 +92,12 @@ serve(async (req) => {
             error: updateError.message 
           });
         } else {
-          console.log(`✅ Synced balance for ${provider.name}: $${balanceData.balanceUsd || 0}`);
+          const displayValue = balanceData.balanceUsd !== null 
+            ? `$${balanceData.balanceUsd.toFixed(2)} balance`
+            : balanceData.metadata?.total_spend_usd !== undefined
+              ? `$${balanceData.metadata.total_spend_usd.toFixed(2)} spent`
+              : 'N/A';
+          console.log(`✅ Synced ${provider.name}: ${displayValue}`);
           results.push({ provider: provider.name, status: 'success' });
         }
 
@@ -209,48 +214,102 @@ async function syncReplicateBalance(provider: any): Promise<BalanceData> {
 }
 
 /**
- * Sync fal.ai balance
- * Note: fal.ai may not have a direct balance endpoint - this is a placeholder
+ * Sync fal.ai usage/spend data
+ * fal.ai is pay-as-you-go, so we track total spend instead of balance
+ * Uses the Usage API: https://api.fal.ai/v1/models/usage
  */
-async function syncFalBalance(provider: any): Promise<BalanceData> {
+async function syncFalBalance(provider: any, supabase: any): Promise<BalanceData> {
   const apiKey = Deno.env.get(provider.secret_name || 'FAL_KEY');
   if (!apiKey) {
     throw new Error(`API key not found for secret: ${provider.secret_name}`);
   }
 
-  // Try fal.ai balance endpoint (may need to verify actual endpoint)
+  // First, try the fal.ai Usage API for spend tracking
   try {
-    const response = await fetch('https://fal.ai/api/v1/account/balance', {
-      headers: { 'Authorization': `Key ${apiKey}` }
+    const response = await fetch('https://api.fal.ai/v1/models/usage?timezone=UTC&bound_to_timeframe=false', {
+      headers: { 
+        'Authorization': `Key ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
     });
 
     if (response.ok) {
       const data = await response.json();
+      
+      // Sum all costs from time_series
+      let totalSpend = 0;
+      const usageByModel: Record<string, { cost: number; count: number }> = {};
+      
+      for (const bucket of data.time_series || []) {
+        for (const result of bucket.results || []) {
+          const cost = result.cost || 0;
+          totalSpend += cost;
+          
+          const endpointId = result.endpoint_id || 'unknown';
+          if (!usageByModel[endpointId]) {
+            usageByModel[endpointId] = { cost: 0, count: 0 };
+          }
+          usageByModel[endpointId].cost += cost;
+          usageByModel[endpointId].count += result.quantity || 1;
+        }
+      }
+
+      console.log(`✅ fal.ai Usage API: Total spend $${totalSpend.toFixed(2)}`);
+
       return {
-        balanceUsd: data.balance || 0,
+        balanceUsd: null, // fal.ai doesn't have prepaid balance
         balanceCredits: null,
-        metadata: data
+        metadata: {
+          total_spend_usd: totalSpend,
+          usage_by_model: usageByModel,
+          data_source: 'usage_api',
+          note: 'Pay-as-you-go billing - showing total spend from Usage API'
+        }
       };
-    } else if (response.status === 404) {
-      // Balance endpoint may not exist - return null
-      console.log('⚠️ fal.ai balance endpoint not found, returning null');
-      return {
-        balanceUsd: null,
-        balanceCredits: null,
-        metadata: { note: 'Balance endpoint not available' }
-      };
+    } else if (response.status === 401 || response.status === 403) {
+      console.warn('⚠️ fal.ai Usage API requires admin permissions, falling back to database');
     } else {
-      throw new Error(`fal.ai API error: ${response.status} - ${await response.text()}`);
+      console.warn(`⚠️ fal.ai Usage API returned ${response.status}, falling back to database`);
     }
-  } catch (error) {
-    // If endpoint doesn't exist or fails, return null balance
-    console.warn('⚠️ fal.ai balance sync failed:', error);
+  } catch (usageError) {
+    console.warn('⚠️ fal.ai Usage API failed:', usageError);
+  }
+
+  // Fallback: Calculate total spend from our database logs
+  try {
+    const { data: logs, error: logsError } = await supabase
+      .from('api_usage_logs')
+      .select('cost_usd, created_at')
+      .eq('provider_id', provider.id)
+      .not('cost_usd', 'is', null);
+
+    if (logsError) {
+      throw logsError;
+    }
+
+    const totalSpend = logs?.reduce((sum: number, log: any) => sum + (log.cost_usd || 0), 0) || 0;
+    const requestCount = logs?.length || 0;
+
+    console.log(`✅ fal.ai spend from database: $${totalSpend.toFixed(2)} (${requestCount} requests)`);
+
+    return {
+      balanceUsd: null, // fal.ai doesn't have prepaid balance
+      balanceCredits: null,
+      metadata: {
+        total_spend_usd: totalSpend,
+        request_count: requestCount,
+        data_source: 'database_logs',
+        note: 'Pay-as-you-go billing - showing total spend from logged API calls'
+      }
+    };
+  } catch (dbError) {
+    console.error('❌ Failed to calculate fal.ai spend from database:', dbError);
     return {
       balanceUsd: null,
       balanceCredits: null,
-      metadata: { 
-        error: error instanceof Error ? error.message : String(error),
-        note: 'Balance sync not available for fal.ai'
+      metadata: {
+        error: dbError instanceof Error ? dbError.message : String(dbError),
+        note: 'Unable to retrieve fal.ai usage data'
       }
     };
   }
