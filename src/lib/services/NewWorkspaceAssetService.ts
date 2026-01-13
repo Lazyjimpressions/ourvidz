@@ -1,5 +1,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 export interface WorkspaceAsset {
   id: string;
@@ -59,7 +60,13 @@ export class NewWorkspaceAssetService {
         throw error;
       }
 
-      return data.signedUrl;
+      // CRITICAL: Normalize to absolute URL
+      const absoluteUrl = normalizeSignedUrl(data.signedUrl);
+      if (!absoluteUrl) {
+        throw new Error('Failed to normalize signed URL');
+      }
+
+      return absoluteUrl;
     } catch (error) {
       console.error('Signed URL generation error:', error);
       throw error;

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 const useSignedImageUrls = () => {
   const [loading, setLoading] = useState(false);
@@ -57,8 +58,10 @@ const useSignedImageUrls = () => {
         .createSignedUrl(cleanPath, 3600); // 1 hour expiry
 
       if (!error && data?.signedUrl) {
+        // CRITICAL: Normalize to absolute URL
+        const absoluteUrl = normalizeSignedUrl(data.signedUrl);
         console.log(`✅ Success: Generated signed URL for "${cleanPath}" in bucket "${bucket}"`);
-        return data.signedUrl;
+        return absoluteUrl;
       }
       
       if (error) {

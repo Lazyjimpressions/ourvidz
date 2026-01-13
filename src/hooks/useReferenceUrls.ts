@@ -1,6 +1,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 interface ReferenceUrlState {
   url: string;
@@ -47,12 +48,13 @@ export const useReferenceUrls = () => {
         return cached?.url || null;
       }
 
-      // Update cache
+      // Update cache with normalized URL
+      const absoluteUrl = normalizeSignedUrl(data.signedUrl) || data.signedUrl;
       const expiresAt = new Date(Date.now() + 14400 * 1000); // 4 hours
       setUrlCache(prev => ({
         ...prev,
         [path]: {
-          url: data.signedUrl,
+          url: absoluteUrl,
           expiresAt,
           isRefreshing: false
         }

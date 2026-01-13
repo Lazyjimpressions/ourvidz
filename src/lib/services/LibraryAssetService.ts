@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 export interface LibraryAsset {
   id: string;
@@ -119,8 +120,14 @@ export class LibraryAssetService {
       throw error;
     }
 
+    // CRITICAL: Normalize to absolute URL
+    const absoluteUrl = normalizeSignedUrl(data.signedUrl);
+    if (!absoluteUrl) {
+      throw new Error('Failed to normalize signed URL');
+    }
+
     console.log(`✅ Successfully generated signed URL for asset ${asset.id}`);
-    return data.signedUrl;
+    return absoluteUrl;
   }
 
   /**

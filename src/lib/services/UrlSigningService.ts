@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 export type SignOptions = { 
   ttlSec: number;
@@ -253,39 +254,36 @@ export class UrlSigningService {
     // Use concurrency limiter to prevent overwhelming the system
     return concurrencyLimiter.execute(async () => {
       try {
-        // CRITICAL FIX: Ensure user is authenticated before creating signed URL
-        // This is especially important on mobile where auth state can be inconsistent
+        // RELAXED AUTH: Try getSession first (cheap, local), only fail after retries
         let user = null;
-        try {
-          const { data: { user: getUserResult }, error: getUserError } = await supabase.auth.getUser();
-          if (getUserError) {
-            // Fallback to getSession
-            const { data: { session } } = await supabase.auth.getSession();
-            user = session?.user || null;
-          } else {
-            user = getUserResult;
-          }
-        } catch (authError) {
-          console.error('❌ UrlSigningService: Auth check failed:', authError);
-          // Try getSession as last resort
+        let retries = 0;
+        const maxRetries = 3;
+        const retryDelayMs = 200;
+
+        while (!user && retries < maxRetries) {
           try {
+            // Prefer getSession (local, fast) over getUser (network call)
             const { data: { session } } = await supabase.auth.getSession();
             user = session?.user || null;
-          } catch (sessionError) {
-            console.error('❌ UrlSigningService: getSession() also failed:', sessionError);
+            
+            if (!user && retries < maxRetries - 1) {
+              // Wait before retry - auth may still be initializing
+              await new Promise(r => setTimeout(r, retryDelayMs));
+            }
+          } catch (authError) {
+            console.warn(`⚠️ UrlSigningService: Auth check attempt ${retries + 1} failed:`, authError);
           }
+          retries++;
         }
 
         if (!user) {
-          const error = new Error('User must be authenticated to generate signed URLs');
-          console.error(`❌ UrlSigningService: No authenticated user for ${bucket}:${path}`);
-          throw error;
+          console.error(`❌ UrlSigningService: No authenticated user after ${maxRetries} attempts for ${bucket}:${path}`);
+          throw new Error('User must be authenticated to generate signed URLs');
         }
 
         // Use longer expiration on mobile (24 hours) to reduce network issues
-        // Mobile networks can be slower/intermittent, so longer URLs help
         const isMobile = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const effectiveExpiry = isMobile ? Math.max(opts.ttlSec, 86400) : opts.ttlSec; // At least 24h on mobile
+        const effectiveExpiry = isMobile ? Math.max(opts.ttlSec, 86400) : opts.ttlSec;
         
         console.log(`🔐 UrlSigningService: Generating signed URL for ${bucket}/${path.substring(0, 40)}... (user: ${user.id.substring(0, 8)}..., expiry: ${Math.round(effectiveExpiry / 3600)}h)`);
 
@@ -302,15 +300,21 @@ export class UrlSigningService {
           throw new Error(`No signed URL returned for ${bucket}:${path}`);
         }
 
+        // CRITICAL: Normalize to absolute URL (Supabase may return relative paths)
+        const absoluteUrl = normalizeSignedUrl(data.signedUrl);
+        if (!absoluteUrl) {
+          throw new Error(`Failed to normalize signed URL for ${bucket}:${path}`);
+        }
+
         // Cache the result (use effectiveExpiry for cache TTL)
         const cacheKey = `${bucket}:${path}`;
         this.cache.set(cacheKey, {
-          url: data.signedUrl,
+          url: absoluteUrl,
           expiresAt: Date.now() + (effectiveExpiry * 1000) - 60000 // Expire 1min early
         });
 
         console.log(`✅ UrlSigningService: Generated signed URL (expires in ${Math.round(effectiveExpiry / 3600)}h)`);
-        return data.signedUrl;
+        return absoluteUrl;
       } catch (error) {
         console.error(`❌ UrlSigningService: Error signing URL ${bucket}:${path}:`, error);
         throw error;
