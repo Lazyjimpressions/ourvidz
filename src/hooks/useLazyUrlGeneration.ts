@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { UnifiedAsset } from '@/lib/services/OptimizedAssetService';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 interface UseLazyUrlGenerationProps {
   assets: UnifiedAsset[];
@@ -86,8 +87,10 @@ export const useLazyUrlGeneration = ({
           .createSignedUrl(cleanPath, 3600); // 1 hour expiry
         
         if (data?.signedUrl) {
-          results.push(data.signedUrl);
-          newUrls[cacheKey] = data.signedUrl;
+          // CRITICAL: Normalize to absolute URL
+          const absoluteUrl = normalizeSignedUrl(data.signedUrl) || data.signedUrl;
+          results.push(absoluteUrl);
+          newUrls[cacheKey] = absoluteUrl;
         } else {
           console.warn(`Failed to generate signed URL for ${cleanPath} in ${bucket}:`, error);
         }

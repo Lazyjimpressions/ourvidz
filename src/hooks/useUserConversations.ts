@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/contexts/AuthContext';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 /**
  * Character info included with conversation for display
@@ -224,7 +225,8 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
             }
             
             if (signedData?.signedUrl) {
-              return { ...conv, last_scene_image: signedData.signedUrl };
+              const absoluteUrl = normalizeSignedUrl(signedData.signedUrl);
+              return { ...conv, last_scene_image: absoluteUrl };
             }
           } catch (err: any) {
             // Handle 400 errors gracefully (file doesn't exist)

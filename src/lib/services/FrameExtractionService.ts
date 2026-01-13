@@ -7,6 +7,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getOptimalExtractionPercentage } from '@/types/storyboard';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 export interface ExtractedFrame {
   blob: Blob;
@@ -143,7 +144,8 @@ export class FrameExtractionService {
       throw signError;
     }
 
-    return signedData.signedUrl;
+    // CRITICAL: Normalize to absolute URL
+    return normalizeSignedUrl(signedData.signedUrl) || signedData.signedUrl;
   }
 
   /**
@@ -199,6 +201,7 @@ export class FrameExtractionService {
       throw error;
     }
 
-    return data.signedUrl;
+    // CRITICAL: Normalize to absolute URL
+    return normalizeSignedUrl(data.signedUrl) || data.signedUrl;
   }
 }

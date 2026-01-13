@@ -338,8 +338,16 @@ const MobileSimplifiedWorkspace = () => {
         signOriginal: async () => {
           const existing = signedUrls.get(asset.id);
           if (existing) return existing;
-          // Fallback - should rarely be needed with proper lazy loading
-          return asset.originalPath || '';
+          // CRITICAL FIX: Never return raw storage path - use centralized signing service
+          if (asset.originalPath) {
+            const { urlSigningService } = await import('@/lib/services/UrlSigningService');
+            try {
+              return await urlSigningService.getSignedUrl(asset.originalPath, 'workspace-temp');
+            } catch (e) {
+              console.error('❌ signOriginal fallback failed:', e);
+            }
+          }
+          return ''; // Return empty string instead of raw path
         }
       };
     });

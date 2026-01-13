@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 // URL Cache with TTL and smart invalidation
 interface CachedUrl {
@@ -285,11 +286,17 @@ export const getSignedUrl = async (
       return { data: null, error: new Error('No signed URL returned') };
     }
 
+    // CRITICAL: Normalize to absolute URL (Supabase may return relative paths)
+    const absoluteUrl = normalizeSignedUrl(data.signedUrl);
+    if (!absoluteUrl) {
+      return { data: null, error: new Error('Failed to normalize signed URL') };
+    }
+
     // Cache successful result (use effectiveExpiry for cache TTL)
-    urlCache.set(bucket, filePath, data.signedUrl, effectiveExpiry);
+    urlCache.set(bucket, filePath, absoluteUrl, effectiveExpiry);
     console.log(`✅ Generated signed URL for: ${bucket}/${cleanPath.slice(0, 30)}... (expires in ${Math.round(effectiveExpiry / 3600)}h)`);
     
-    return { data, error: null };
+    return { data: { signedUrl: absoluteUrl }, error: null };
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

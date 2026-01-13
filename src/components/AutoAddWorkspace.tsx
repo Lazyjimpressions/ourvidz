@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
 
 interface AutoAddWorkspaceProps {
   onAutoAdd: (url: string, jobId: string, prompt: string, type: 'image' | 'video', quality?: string, modelType?: string) => void;
@@ -129,16 +130,18 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
                   .createSignedUrl(normalizedPath, 3600);
 
                 if (data?.signedUrl) {
-                  result[normalizedPath] = data.signedUrl;
-                  updatedCache[key] = data.signedUrl;
+                  // CRITICAL: Normalize to absolute URL
+                  const absoluteUrl = normalizeSignedUrl(data.signedUrl) || data.signedUrl;
+                  result[normalizedPath] = absoluteUrl;
+                  updatedCache[key] = absoluteUrl;
                   
                   // Preload image for better UX
                   const preload = new Image();
-                  preload.src = data.signedUrl;
+                  preload.src = absoluteUrl;
                   
                   // Auto-add new URLs to workspace
                   if (onAutoAddRef.current) {
-                    onAutoAddRef.current(data.signedUrl, job.id, jobPrompt, 'image', jobQuality, jobModelType);
+                    onAutoAddRef.current(absoluteUrl, job.id, jobPrompt, 'image', jobQuality, jobModelType);
                   }
                 } else {
                   console.warn(`Failed to sign URL for ${normalizedPath.substring(0, 50)}...`);
@@ -233,12 +236,14 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
                   .createSignedUrl(normalizedPath, 3600);
 
                 if (data?.signedUrl) {
-                  result[normalizedPath] = data.signedUrl;
-                  updatedCache[key] = data.signedUrl;
+                  // CRITICAL: Normalize to absolute URL
+                  const absoluteUrl = normalizeSignedUrl(data.signedUrl) || data.signedUrl;
+                  result[normalizedPath] = absoluteUrl;
+                  updatedCache[key] = absoluteUrl;
                   
                   // Auto-add new URLs to workspace
                   if (onAutoAddRef.current) {
-                    onAutoAddRef.current(data.signedUrl, job.id, jobPrompt, 'video', jobQuality, jobModelType);
+                    onAutoAddRef.current(absoluteUrl, job.id, jobPrompt, 'video', jobQuality, jobModelType);
                   }
                   break;
                 } else {
