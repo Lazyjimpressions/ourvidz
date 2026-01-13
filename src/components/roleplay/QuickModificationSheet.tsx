@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,8 @@ import {
   Shirt,
   Move,
   Heart,
-  AlertTriangle
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { IntensitySelector } from './IntensitySelector';
@@ -20,11 +21,14 @@ export interface ModificationPreset {
   icon: React.ComponentType<{ className?: string }>;
   promptModifier: string;
   continuityPhrase: string;
+  // For Seedream edit models: prompt controls everything, no strength needed
+  seedreamPrompt?: string; // Full Seedream-optimized prompt with PRESERVE/CHANGE structure
   strength: number;
   category: 'clothing' | 'position' | 'intensity' | 'custom';
   nsfwOnly?: boolean;
 }
 
+// Standard presets for models that use strength parameter (SDXL, etc.)
 const MODIFICATION_PRESETS: ModificationPreset[] = [
   {
     id: 'remove_top',
@@ -32,7 +36,9 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Shirt,
     promptModifier: 'topless, bare chest, removed shirt',
     continuityPhrase: 'maintain same character identity, keep same lighting',
-    strength: 0.50, // ✅ Increased for visible clothing changes (was 0.35)
+    // Seedream: No strength - prompt controls everything
+    seedreamPrompt: '[PRESERVE] Maintain exact character identity, facial features, hair color and style, same lighting, same environment. [CHANGE] Character is now topless with shirt removed, bare chest visible.',
+    strength: 0.50,
     category: 'clothing',
     nsfwOnly: true
   },
@@ -42,7 +48,8 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Shirt,
     promptModifier: 'fully nude, no clothes, naked',
     continuityPhrase: 'maintain same character identity, keep same environment',
-    strength: 0.60, // ✅ Increased for significant clothing changes (was 0.45)
+    seedreamPrompt: '[PRESERVE] Maintain exact character identity, facial features, hair color and style, same lighting, same environment, same pose. [CHANGE] Character is now fully nude with all clothing removed.',
+    strength: 0.60,
     category: 'clothing',
     nsfwOnly: true
   },
@@ -52,7 +59,8 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Move,
     promptModifier: 'different pose, new position, changed stance',
     continuityPhrase: 'same character identity, same lighting, same setting',
-    strength: 0.55, // ✅ Increased for visible position changes (was 0.40)
+    seedreamPrompt: '[PRESERVE] Maintain exact character identity, facial features, hair color and style, same lighting, same clothing state, same environment. [CHANGE] Character has moved to a different pose and position.',
+    strength: 0.55,
     category: 'position',
     nsfwOnly: false
   },
@@ -62,7 +70,8 @@ const MODIFICATION_PRESETS: ModificationPreset[] = [
     icon: Heart,
     promptModifier: 'more intimate, closer contact, increased intimacy',
     continuityPhrase: 'same characters, same setting, natural progression',
-    strength: 0.40, // ✅ Increased for perceptible changes (was 0.30)
+    seedreamPrompt: '[PRESERVE] Maintain exact character identity, facial features, hair color and style, same lighting, same environment. [CHANGE] Scene progresses to more intimate interaction, closer physical contact.',
+    strength: 0.40,
     category: 'intensity',
     nsfwOnly: true
   }
@@ -77,7 +86,15 @@ interface QuickModificationSheetProps {
   currentSceneImageUrl?: string;
   currentScenePrompt: string;
   contentMode: 'sfw' | 'nsfw';
+  selectedImageModel?: string; // ✅ NEW: To detect Seedream models
 }
+
+// Helper to detect Seedream edit models (which don't use strength parameter)
+const isSeedreamEditModel = (modelId?: string): boolean => {
+  if (!modelId) return false;
+  const modelLower = modelId.toLowerCase();
+  return modelLower.includes('seedream') && modelLower.includes('edit');
+};
 
 export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
   isOpen,
@@ -87,11 +104,15 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
   onFreshGeneration,
   currentSceneImageUrl,
   currentScenePrompt,
-  contentMode
+  contentMode,
+  selectedImageModel
 }) => {
   const [generationMode, setGenerationMode] = useState<'modify' | 'fresh'>('modify');
   const [customStrength, setCustomStrength] = useState(0.45);
   const [isLoading, setIsLoading] = useState(false);
+
+  // ✅ Detect if using Seedream edit model (no strength control)
+  const isSeedream = useMemo(() => isSeedreamEditModel(selectedImageModel), [selectedImageModel]);
 
   // Filter presets based on content mode
   const availablePresets = MODIFICATION_PRESETS.filter(preset => {
@@ -104,14 +125,23 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
   const handlePresetSelect = async (preset: ModificationPreset) => {
     setIsLoading(true);
     try {
-      // Build full prompt with Seedream continuity phrase
-      const fullPromptModifier = `${preset.promptModifier}. ${preset.continuityPhrase}`;
-      // ✅ FIX: Use customStrength from slider if user adjusted it, otherwise use preset strength
-      const strengthToUse = customStrength !== 0.45 ? customStrength : preset.strength;
-      await onSelectPreset({
-        ...preset,
-        promptModifier: fullPromptModifier
-      }, strengthToUse);
+      // ✅ SEEDREAM FIX: For Seedream models, use the seedreamPrompt (no strength)
+      // For other models, use the standard promptModifier + continuityPhrase
+      if (isSeedream && preset.seedreamPrompt) {
+        // Seedream: Use full PRESERVE/CHANGE prompt, ignore strength
+        await onSelectPreset({
+          ...preset,
+          promptModifier: preset.seedreamPrompt
+        }, undefined); // No strength for Seedream
+      } else {
+        // Standard models: Use strength-based approach
+        const fullPromptModifier = `${preset.promptModifier}. ${preset.continuityPhrase}`;
+        const strengthToUse = customStrength !== 0.45 ? customStrength : preset.strength;
+        await onSelectPreset({
+          ...preset,
+          promptModifier: fullPromptModifier
+        }, strengthToUse);
+      }
       onClose();
     } finally {
       setIsLoading(false);
@@ -243,15 +273,27 @@ export const QuickModificationSheet: React.FC<QuickModificationSheetProps> = ({
                 </div>
               </div>
 
-              {/* Intensity Selector - More Compact */}
-              <div className="p-2.5 bg-muted/30 rounded-lg">
-                <IntensitySelector
-                  value={customStrength}
-                  onChange={setCustomStrength}
-                  disabled={isLoading}
-                  showSlider={true}
-                />
-              </div>
+              {/* Intensity Selector - Hide for Seedream (prompt controls everything) */}
+              {!isSeedream && (
+                <div className="p-2.5 bg-muted/30 rounded-lg">
+                  <IntensitySelector
+                    value={customStrength}
+                    onChange={setCustomStrength}
+                    disabled={isLoading}
+                    showSlider={true}
+                  />
+                </div>
+              )}
+
+              {/* Seedream Info Banner */}
+              {isSeedream && (
+                <div className="flex items-start gap-1.5 p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                  <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-blue-300 leading-relaxed">
+                    Seedream uses prompt-based control. Changes are described in the prompt, not with strength slider.
+                  </p>
+                </div>
+              )}
 
               {/* NSFW Warning - More Compact */}
               {contentMode === 'nsfw' && (

@@ -3158,11 +3158,17 @@ const sceneContext = analyzeSceneContent(response);
 
     // ✅ ENHANCED: Build comprehensive scene prompt with character and user visual context
     // ✅ PHASE 5 FIX: For I2I mode, restructure prompt to emphasize CHANGES first
+    // ✅ SEEDREAM FIX: Use PRESERVE/CHANGE prompt structure for Seedream edit models (no strength control)
     let enhancedScenePrompt: string;
 
     // Get scene style tokens
     const styleTokens = SCENE_STYLE_TOKENS[sceneStyle] || [];
     const styleTokensStr = styleTokens.length > 0 ? `, ${styleTokens.join(', ')}` : '';
+
+    // ✅ SEEDREAM DETECTION: Check if we're using Seedream edit models (which don't use strength parameter)
+    // For Seedream edit, the prompt itself controls preservation vs change
+    const isSeedreamEdit = (effectiveImageModel && typeof effectiveImageModel === 'string' && effectiveImageModel.includes('seedream') && effectiveImageModel.includes('edit')) ||
+                           (modelConfig?.model_key && modelConfig.model_key.includes('seedream') && modelConfig.model_key.includes('edit'));
 
     // ✅ FIX: For I2I iterations, prioritize scene action/changes first
     if (useI2IIteration || generationMode === 'modification') {
@@ -3171,16 +3177,35 @@ const sceneContext = analyzeSceneContent(response);
       
       const briefCharacterIdentity = `${character.name}, ${(character.appearance_tags || []).slice(0, 3).join(', ')}`;
       
-      if (sceneStyle === 'both_characters' && userCharacter) {
-        const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
-        enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting, natural progression. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
-      } else if (sceneStyle === 'pov') {
-        enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer, POV perspective.`;
+      // ✅ SEEDREAM-SPECIFIC: Use PRESERVE/CHANGE structure for Seedream edit models
+      // Since Seedream has no strength parameter, the prompt controls everything
+      if (isSeedreamEdit) {
+        // Seedream Edit: Front-load PRESERVE phrases, then describe CHANGE
+        const preservePhrase = 'Maintain exact character identity, facial features, hair color and style, same lighting conditions, same environment';
+        
+        if (sceneStyle === 'both_characters' && userCharacter) {
+          const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
+          enhancedScenePrompt = `[PRESERVE] ${preservePhrase}, same character positions relative to each other. [CHANGE] ${scenePrompt}. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+        } else if (sceneStyle === 'pov') {
+          enhancedScenePrompt = `[PRESERVE] ${preservePhrase}, POV camera angle. [CHANGE] ${scenePrompt}${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer.`;
+        } else {
+          enhancedScenePrompt = `[PRESERVE] ${preservePhrase}. [CHANGE] ${scenePrompt}. [CHARACTER] ${briefCharacterIdentity}.`;
+        }
+        
+        console.log('🎬 Seedream Edit I2I: Using PRESERVE/CHANGE prompt structure (no strength parameter)');
       } else {
-        enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same character identity, same lighting. [CHARACTER] ${briefCharacterIdentity}.`;
+        // Non-Seedream models: Use standard I2I prompt structure
+        if (sceneStyle === 'both_characters' && userCharacter) {
+          const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
+          enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting, natural progression. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+        } else if (sceneStyle === 'pov') {
+          enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer, POV perspective.`;
+        } else {
+          enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same character identity, same lighting. [CHARACTER] ${briefCharacterIdentity}.`;
+        }
+        
+        console.log('🎬 Standard I2I prompt structure: Changes first, brief character ID');
       }
-      
-      console.log('🎬 I2I prompt structure: Changes first, brief character ID');
     } else if (sceneStyle === 'both_characters' && userCharacter) {
       // T2I MODE: Both characters in scene - include user visual description
       const userVisualDescription = buildUserVisualDescriptionForScene(
@@ -3212,17 +3237,31 @@ const sceneContext = analyzeSceneContent(response);
 
     console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
     
-    // ✅ CRITICAL FIX: Optimize prompt for CLIP's 77-token limit
-    // CLIP tokenizes prompts and truncates everything after 77 tokens
-    // We need to compress the prompt while preserving the most important parts (actions + scenario)
-    const optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt, character.appearance_tags || [], sceneContext);
-    console.log('🔧 CLIP optimization:', {
-      original_length: enhancedScenePrompt.length,
-      optimized_length: optimizedPrompt.length,
-      original_estimated_tokens: estimateCLIPTokens(enhancedScenePrompt),
-      optimized_estimated_tokens: estimateCLIPTokens(optimizedPrompt),
-      scenario_preserved: optimizedPrompt.includes(scenePrompt.substring(0, 50))
-    });
+    // ✅ SEEDREAM FIX: Skip CLIP optimization for Seedream models (they use character limits, not CLIP tokens)
+    // Seedream supports 8,000-12,000 character prompts, no 77-token CLIP limit
+    let optimizedPrompt: string;
+    
+    if (isSeedreamEdit) {
+      // Seedream: No CLIP truncation needed, just check character limit (10,000 chars)
+      const charLimit = 10000;
+      if (enhancedScenePrompt.length > charLimit) {
+        optimizedPrompt = enhancedScenePrompt.substring(0, charLimit);
+        console.log(`🎯 Seedream: Prompt truncated to ${charLimit} characters (no CLIP limit)`);
+      } else {
+        optimizedPrompt = enhancedScenePrompt;
+        console.log(`🎯 Seedream: Full prompt used (${enhancedScenePrompt.length} chars, no CLIP limit)`);
+      }
+    } else {
+      // Non-Seedream: Apply CLIP optimization
+      optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt, character.appearance_tags || [], sceneContext);
+      console.log('🔧 CLIP optimization:', {
+        original_length: enhancedScenePrompt.length,
+        optimized_length: optimizedPrompt.length,
+        original_estimated_tokens: estimateCLIPTokens(enhancedScenePrompt),
+        optimized_estimated_tokens: estimateCLIPTokens(optimizedPrompt),
+        scenario_preserved: optimizedPrompt.includes(scenePrompt.substring(0, 50))
+      });
+    }
     
     // ✅ ENHANCED: Determine image model routing (effectiveImageModel already determined above)
     let imageResponse;
