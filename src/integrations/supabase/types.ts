@@ -146,6 +146,56 @@ export type Database = {
           },
         ]
       }
+      api_provider_balances: {
+        Row: {
+          balance_credits: number | null
+          balance_metadata: Json | null
+          balance_usd: number | null
+          currency: string | null
+          id: string
+          last_synced_at: string | null
+          provider_id: string
+          sync_error: string | null
+          sync_method: string | null
+          sync_status: string | null
+          updated_at: string
+        }
+        Insert: {
+          balance_credits?: number | null
+          balance_metadata?: Json | null
+          balance_usd?: number | null
+          currency?: string | null
+          id?: string
+          last_synced_at?: string | null
+          provider_id: string
+          sync_error?: string | null
+          sync_method?: string | null
+          sync_status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          balance_credits?: number | null
+          balance_metadata?: Json | null
+          balance_usd?: number | null
+          currency?: string | null
+          id?: string
+          last_synced_at?: string | null
+          provider_id?: string
+          sync_error?: string | null
+          sync_method?: string | null
+          sync_status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_provider_balances_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: true
+            referencedRelation: "api_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_providers: {
         Row: {
           auth_header_name: string | null
@@ -191,21 +241,220 @@ export type Database = {
         }
         Relationships: []
       }
+      api_usage_aggregates: {
+        Row: {
+          avg_response_time_ms: number | null
+          cost_credits_total: number | null
+          cost_usd_total: number | null
+          date_bucket: string
+          error_count: number
+          hour_bucket: number | null
+          id: string
+          model_id: string | null
+          p95_response_time_ms: number | null
+          p99_response_time_ms: number | null
+          provider_id: string
+          request_count: number
+          success_count: number
+          tokens_cached_total: number | null
+          tokens_input_total: number | null
+          tokens_output_total: number | null
+        }
+        Insert: {
+          avg_response_time_ms?: number | null
+          cost_credits_total?: number | null
+          cost_usd_total?: number | null
+          date_bucket: string
+          error_count?: number
+          hour_bucket?: number | null
+          id?: string
+          model_id?: string | null
+          p95_response_time_ms?: number | null
+          p99_response_time_ms?: number | null
+          provider_id: string
+          request_count?: number
+          success_count?: number
+          tokens_cached_total?: number | null
+          tokens_input_total?: number | null
+          tokens_output_total?: number | null
+        }
+        Update: {
+          avg_response_time_ms?: number | null
+          cost_credits_total?: number | null
+          cost_usd_total?: number | null
+          date_bucket?: string
+          error_count?: number
+          hour_bucket?: number | null
+          id?: string
+          model_id?: string | null
+          p95_response_time_ms?: number | null
+          p99_response_time_ms?: number | null
+          provider_id?: string
+          request_count?: number
+          success_count?: number
+          tokens_cached_total?: number | null
+          tokens_input_total?: number | null
+          tokens_output_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_usage_aggregates_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "api_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_usage_aggregates_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "api_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_usage_logs: {
+        Row: {
+          cost_credits: number | null
+          cost_usd: number | null
+          created_at: string
+          endpoint_path: string | null
+          error_message: string | null
+          id: string
+          model_id: string | null
+          provider_id: string
+          provider_metadata: Json | null
+          request_payload: Json | null
+          request_type: string
+          response_payload: Json | null
+          response_status: number | null
+          response_time_ms: number
+          tokens_cached: number | null
+          tokens_input: number | null
+          tokens_output: number | null
+          tokens_total: number | null
+          user_id: string | null
+        }
+        Insert: {
+          cost_credits?: number | null
+          cost_usd?: number | null
+          created_at?: string
+          endpoint_path?: string | null
+          error_message?: string | null
+          id?: string
+          model_id?: string | null
+          provider_id: string
+          provider_metadata?: Json | null
+          request_payload?: Json | null
+          request_type: string
+          response_payload?: Json | null
+          response_status?: number | null
+          response_time_ms: number
+          tokens_cached?: number | null
+          tokens_input?: number | null
+          tokens_output?: number | null
+          tokens_total?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          cost_credits?: number | null
+          cost_usd?: number | null
+          created_at?: string
+          endpoint_path?: string | null
+          error_message?: string | null
+          id?: string
+          model_id?: string | null
+          provider_id?: string
+          provider_metadata?: Json | null
+          request_payload?: Json | null
+          request_type?: string
+          response_payload?: Json | null
+          response_status?: number | null
+          response_time_ms?: number
+          tokens_cached?: number | null
+          tokens_input?: number | null
+          tokens_output?: number | null
+          tokens_total?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_usage_logs_model_id_fkey"
+            columns: ["model_id"]
+            isOneToOne: false
+            referencedRelation: "api_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_usage_logs_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "api_providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_usage_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      character_role_audit: {
+        Row: {
+          character_id: string
+          created_at: string | null
+          id: string
+          new_role: string | null
+          old_role: string | null
+          reason: string | null
+        }
+        Insert: {
+          character_id: string
+          created_at?: string | null
+          id?: string
+          new_role?: string | null
+          old_role?: string | null
+          reason?: string | null
+        }
+        Update: {
+          character_id?: string
+          created_at?: string | null
+          id?: string
+          new_role?: string | null
+          old_role?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_role_audit_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       character_scenes: {
         Row: {
           character_id: string | null
           conversation_id: string | null
           created_at: string | null
           generation_metadata: Json | null
+          generation_mode: string | null
           id: string
           image_url: string | null
           job_id: string | null
+          previous_scene_id: string | null
+          previous_scene_image_url: string | null
           priority: number | null
           scene_description: string | null
           scene_name: string | null
           scene_prompt: string
           scene_rules: string | null
           scene_starters: string[] | null
+          scene_type: string | null
           system_prompt: string | null
           updated_at: string | null
         }
@@ -214,15 +463,19 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           generation_metadata?: Json | null
+          generation_mode?: string | null
           id?: string
           image_url?: string | null
           job_id?: string | null
+          previous_scene_id?: string | null
+          previous_scene_image_url?: string | null
           priority?: number | null
           scene_description?: string | null
           scene_name?: string | null
           scene_prompt: string
           scene_rules?: string | null
           scene_starters?: string[] | null
+          scene_type?: string | null
           system_prompt?: string | null
           updated_at?: string | null
         }
@@ -231,15 +484,19 @@ export type Database = {
           conversation_id?: string | null
           created_at?: string | null
           generation_metadata?: Json | null
+          generation_mode?: string | null
           id?: string
           image_url?: string | null
           job_id?: string | null
+          previous_scene_id?: string | null
+          previous_scene_image_url?: string | null
           priority?: number | null
           scene_description?: string | null
           scene_name?: string | null
           scene_prompt?: string
           scene_rules?: string | null
           scene_starters?: string[] | null
+          scene_type?: string | null
           system_prompt?: string | null
           updated_at?: string | null
         }
@@ -263,6 +520,13 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "character_scenes_previous_scene_id_fkey"
+            columns: ["previous_scene_id"]
+            isOneToOne: false
+            referencedRelation: "character_scenes"
             referencedColumns: ["id"]
           },
         ]
@@ -423,6 +687,7 @@ export type Database = {
           conversation_type: string
           created_at: string
           id: string
+          last_scene_image: string | null
           memory_data: Json | null
           memory_tier: string | null
           project_id: string | null
@@ -437,6 +702,7 @@ export type Database = {
           conversation_type?: string
           created_at?: string
           id?: string
+          last_scene_image?: string | null
           memory_data?: Json | null
           memory_tier?: string | null
           project_id?: string | null
@@ -451,6 +717,7 @@ export type Database = {
           conversation_type?: string
           created_at?: string
           id?: string
+          last_scene_image?: string | null
           memory_data?: Json | null
           memory_tier?: string | null
           project_id?: string | null
@@ -1115,6 +1382,7 @@ export type Database = {
           is_active: boolean | null
           job_type: string | null
           metadata: Json | null
+          provider: string | null
           system_prompt: string
           target_model: string | null
           template_name: string
@@ -1134,6 +1402,7 @@ export type Database = {
           is_active?: boolean | null
           job_type?: string | null
           metadata?: Json | null
+          provider?: string | null
           system_prompt: string
           target_model?: string | null
           template_name: string
@@ -1153,6 +1422,7 @@ export type Database = {
           is_active?: boolean | null
           job_type?: string | null
           metadata?: Json | null
+          provider?: string | null
           system_prompt?: string
           target_model?: string | null
           template_name?: string
@@ -1165,47 +1435,95 @@ export type Database = {
       }
       scenes: {
         Row: {
-          approved: boolean | null
+          atmosphere: Json | null
+          content_rating: string | null
           created_at: string | null
+          creator_id: string | null
           description: string
-          enhanced_prompt: string | null
-          final_stitched_url: string | null
           id: string
           image_url: string | null
-          project_id: string
-          scene_number: number
+          is_public: boolean | null
+          max_characters: number | null
+          max_words: number | null
+          min_characters: number | null
+          name: string
+          narrative_style: string | null
+          perspective_hint: string | null
+          preview_image_url: string | null
+          scenario_type: string | null
+          scene_focus: string | null
+          scene_prompt: string | null
+          scene_starters: string[] | null
+          setting: string | null
+          suggested_user_role: string | null
+          tags: string[] | null
+          time_of_day: string | null
           updated_at: string | null
+          usage_count: number | null
+          visual_priority: string[] | null
         }
         Insert: {
-          approved?: boolean | null
+          atmosphere?: Json | null
+          content_rating?: string | null
           created_at?: string | null
+          creator_id?: string | null
           description: string
-          enhanced_prompt?: string | null
-          final_stitched_url?: string | null
           id?: string
           image_url?: string | null
-          project_id: string
-          scene_number: number
+          is_public?: boolean | null
+          max_characters?: number | null
+          max_words?: number | null
+          min_characters?: number | null
+          name: string
+          narrative_style?: string | null
+          perspective_hint?: string | null
+          preview_image_url?: string | null
+          scenario_type?: string | null
+          scene_focus?: string | null
+          scene_prompt?: string | null
+          scene_starters?: string[] | null
+          setting?: string | null
+          suggested_user_role?: string | null
+          tags?: string[] | null
+          time_of_day?: string | null
           updated_at?: string | null
+          usage_count?: number | null
+          visual_priority?: string[] | null
         }
         Update: {
-          approved?: boolean | null
+          atmosphere?: Json | null
+          content_rating?: string | null
           created_at?: string | null
+          creator_id?: string | null
           description?: string
-          enhanced_prompt?: string | null
-          final_stitched_url?: string | null
           id?: string
           image_url?: string | null
-          project_id?: string
-          scene_number?: number
+          is_public?: boolean | null
+          max_characters?: number | null
+          max_words?: number | null
+          min_characters?: number | null
+          name?: string
+          narrative_style?: string | null
+          perspective_hint?: string | null
+          preview_image_url?: string | null
+          scenario_type?: string | null
+          scene_focus?: string | null
+          scene_prompt?: string | null
+          scene_starters?: string[] | null
+          setting?: string | null
+          suggested_user_role?: string | null
+          tags?: string[] | null
+          time_of_day?: string | null
           updated_at?: string | null
+          usage_count?: number | null
+          visual_priority?: string[] | null
         }
         Relationships: [
           {
-            foreignKeyName: "scenes_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: "scenes_creator_id_fkey"
+            columns: ["creator_id"]
             isOneToOne: false
-            referencedRelation: "projects"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1875,6 +2193,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      backfill_usage_aggregates: {
+        Args: { p_end_date?: string; p_start_date?: string }
+        Returns: number
+      }
       clean_orphaned_jobs: { Args: never; Returns: number }
       cleanup_expired_workspace_assets: { Args: never; Returns: number }
       cleanup_old_profile_audit_logs: { Args: never; Returns: number }
@@ -1904,6 +2226,24 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      upsert_usage_aggregate: {
+        Args: {
+          p_cost_credits: number
+          p_cost_usd: number
+          p_date_bucket: string
+          p_error_count: number
+          p_hour_bucket: number
+          p_model_id: string
+          p_provider_id: string
+          p_request_count: number
+          p_response_time_ms: number
+          p_success_count: number
+          p_tokens_cached: number
+          p_tokens_input: number
+          p_tokens_output: number
+        }
+        Returns: undefined
       }
       verify_user_age: { Args: { user_birth_date: string }; Returns: boolean }
     }

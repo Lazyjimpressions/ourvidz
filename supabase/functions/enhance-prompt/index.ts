@@ -601,8 +601,8 @@ class DynamicEnhancementOrchestrator {
         )
         
         if (cachedTemplate) {
-          enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
-          enhancementResult.fallback_level = 0
+          enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode) as typeof enhancementResult & { fallback_level: number }
+          ;(enhancementResult as any).fallback_level = 0
           console.log('✅ Using cached template:', cachedTemplate.template_name || 'unnamed')
         } else {
           throw new Error('No cached template found')
@@ -621,14 +621,14 @@ class DynamicEnhancementOrchestrator {
             'enhancement',       // useCase
             contentMode         // contentMode
           )
-          enhancementResult = await this.enhanceWithTemplate(request, template, contentMode)
-          enhancementResult.fallback_level = 1
+          enhancementResult = await this.enhanceWithTemplate(request, template, contentMode) as typeof enhancementResult & { fallback_level: number }
+          ;(enhancementResult as any).fallback_level = 1
           console.log('✅ Using database template:', template.template_name || 'unnamed')
         } catch (dbError) {
           console.log('⚠️ Database template failed, using hardcoded fallback:', dbError instanceof Error ? dbError.message : String(dbError))
-          enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
-          enhancementResult.fallback_level = 2
-          enhancementResult.template_name = 'hardcoded_fallback'
+          enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode) as typeof enhancementResult & { fallback_level: number }
+          ;(enhancementResult as any).fallback_level = 2
+          ;(enhancementResult as any).template_name = 'hardcoded_fallback'
         }
       }
 
@@ -641,7 +641,7 @@ class DynamicEnhancementOrchestrator {
         token_count: enhancementResult.token_count,
         compressed: enhancementResult.compressed,
         enhancement_time_ms: Date.now() - startTime,
-        fallback_level: enhancementResult.fallback_level
+        fallback_level: (enhancementResult as any).fallback_level
       }
 
     } catch (error) {
@@ -950,7 +950,7 @@ class DynamicEnhancementOrchestrator {
       }
     };
 
-    const template = fallbackTemplates[modelType]?.[contentMode] || fallbackTemplates['sdxl']['nsfw'];
+    const template = (fallbackTemplates as Record<string, Record<string, { system_prompt: string; token_limit: number }>>)[modelType]?.[contentMode] || fallbackTemplates['sdxl']['nsfw'];
     
     // Apply simple rule-based enhancement using hardcoded template
     let enhanced = request.prompt;
@@ -1150,7 +1150,7 @@ CRITICAL FOR MALE CHARACTERS:
       'qwen_base': 150
     };
     
-    const targetLimit = customLimit || limits[modelType] || 75;
+    const targetLimit = customLimit || (limits as Record<string, number>)[modelType] || 75;
     const estimatedTokens = this.estimateTokens(prompt);
     
     console.log('🔧 Token optimization:', {

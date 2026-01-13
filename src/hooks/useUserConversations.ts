@@ -214,7 +214,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
             
             if (signError) {
               // If file doesn't exist (400 error), clear the scene image reference
-              if (signError.statusCode === 400 || signError.message?.includes('not found')) {
+              if ((signError as any).statusCode === 400 || signError.message?.includes('not found')) {
                 console.warn(`⚠️ Scene image not found for conversation ${conv.id}, clearing reference`);
                 // Optionally update the conversation to clear last_scene_image
                 // For now, just return without the image

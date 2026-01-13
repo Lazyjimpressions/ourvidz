@@ -141,7 +141,23 @@ serve(async (req) => {
 
     // If successful, create workspace assets (support both legacy and new formats)
     if (payload.status === 'completed') {
-      let assetsToCreate = [];
+      interface AssetToCreate {
+        user_id: string;
+        job_id: string;
+        asset_type: string;
+        temp_storage_path: string;
+        thumbnail_path?: string | null;
+        file_size_bytes: number;
+        mime_type: string;
+        duration_seconds?: number;
+        asset_index: number;
+        generation_seed: number;
+        original_prompt: string;
+        model_used: string;
+        generation_settings: Record<string, any>;
+      }
+      
+      let assetsToCreate: AssetToCreate[] = [];
       
       // Handle legacy format
       if (payload.results?.assets) {
@@ -224,12 +240,12 @@ serve(async (req) => {
               template_name: payload.metadata?.template_name || job.template_name || job.metadata?.enhancement_metadata?.template_name,
               reference_image_url: job.metadata?.reference_image_url,
               reference_strength: job.metadata?.reference_strength, // legacy
-               denoise_strength: asset.metadata?.denoise_strength ?? payload.metadata?.denoise_strength ?? job.metadata?.denoise_strength ?? null, // NEW
-               guidance_scale: asset.metadata?.guidance_scale ?? payload.metadata?.guidance_scale ?? job.metadata?.guidance_scale ?? null, // NEW
-               steps: asset.metadata?.steps ?? payload.metadata?.steps ?? job.metadata?.steps ?? null, // NEW
-               // Also store worker-reported values for auditing
-               worker_reported_steps: asset.metadata?.num_inference_steps ?? payload.metadata?.num_inference_steps ?? null,
-               worker_reported_guidance_scale: asset.metadata?.guidance_scale ?? payload.metadata?.guidance_scale ?? null,
+              denoise_strength: (asset.metadata as any)?.denoise_strength ?? payload.metadata?.denoise_strength ?? job.metadata?.denoise_strength ?? null,
+              guidance_scale: (asset.metadata as any)?.guidance_scale ?? payload.metadata?.guidance_scale ?? job.metadata?.guidance_scale ?? null,
+              steps: (asset.metadata as any)?.steps ?? payload.metadata?.steps ?? job.metadata?.steps ?? null,
+              // Also store worker-reported values for auditing
+              worker_reported_steps: (asset.metadata as any)?.num_inference_steps ?? payload.metadata?.num_inference_steps ?? null,
+              worker_reported_guidance_scale: (asset.metadata as any)?.guidance_scale ?? payload.metadata?.guidance_scale ?? null,
               width: asset.metadata?.width,
               height: asset.metadata?.height,
               frame_num: payload.metadata?.frame_num,

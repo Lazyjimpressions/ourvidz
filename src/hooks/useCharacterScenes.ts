@@ -48,7 +48,13 @@ export const useCharacterScenes = (characterId?: string, sceneFilter: SceneFilte
 
       if (error) throw error;
 
-      setScenes(data || []);
+      // Cast data to CharacterScene[] with proper typing
+      setScenes((data || []).map(scene => ({
+        ...scene,
+        scene_type: (scene.scene_type === 'preset' || scene.scene_type === 'conversation') 
+          ? scene.scene_type 
+          : undefined
+      })) as CharacterScene[]);
     } catch (err) {
       console.error('Error loading character scenes:', err);
       setError(err instanceof Error ? err.message : 'Failed to load scenes');
@@ -68,7 +74,13 @@ export const useCharacterScenes = (characterId?: string, sceneFilter: SceneFilte
       if (error) throw error;
       
       if (data) {
-        setScenes(prev => [data, ...prev]);
+        const newScene: CharacterScene = {
+          ...data,
+          scene_type: (data.scene_type === 'preset' || data.scene_type === 'conversation') 
+            ? data.scene_type 
+            : undefined
+        };
+        setScenes(prev => [newScene, ...prev]);
       }
       
       return data;
@@ -99,7 +111,13 @@ export const useCharacterScenes = (characterId?: string, sceneFilter: SceneFilte
       if (error) throw error;
       
       if (data) {
-        setScenes(prev => prev.map(s => s.id === sceneId ? data : s));
+        const updatedScene: CharacterScene = {
+          ...data,
+          scene_type: (data.scene_type === 'preset' || data.scene_type === 'conversation') 
+            ? data.scene_type 
+            : undefined
+        };
+        setScenes(prev => prev.map(s => s.id === sceneId ? updatedScene : s));
       }
       
       return data;

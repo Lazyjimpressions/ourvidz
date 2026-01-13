@@ -1115,7 +1115,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               const capabilities = modelData.capabilities as any;
               isWanI2V = capabilities?.supports_i2v === true || 
                          capabilities?.video?.reference_mode === 'single' ||
-                         modelData.modality === 'video';
+                         (modelData as any).modality === 'video';
             }
           } catch (err) {
             console.warn('⚠️ Could not check model type, assuming non-WAN i2v');

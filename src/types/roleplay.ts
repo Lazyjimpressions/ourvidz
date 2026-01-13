@@ -61,6 +61,11 @@ export interface Message {
     canRetryScene?: boolean;
     usedFallback?: boolean;
     generation_metadata?: any;
+    scene_prompt?: string;
+    scene_id?: string;
+    errorDetails?: string;
+    is_regeneration?: boolean;
+    [key: string]: any;
   };
 }
 

@@ -286,7 +286,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       error: 'Failed to get active worker URL',
       success: false,
-      details: error.message
+      details: error instanceof Error ? error.message : String(error)
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500

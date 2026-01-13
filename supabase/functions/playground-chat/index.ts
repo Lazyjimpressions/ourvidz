@@ -172,7 +172,7 @@ serve(async (req) => {
         console.log('🔄 Cache miss, fetching roleplay template from database...');
         try {
         const dbTemplate = await getDatabaseTemplate(
-            null,                    // target_model
+            '',                      // target_model (empty string instead of null)
             roleplaySettings?.enhancementModel || 'qwen_instruct', // enhancer_model from settings
             'chat',                  // job_type
             'character_roleplay',    // use_case
@@ -262,22 +262,22 @@ serve(async (req) => {
           
           // Add response style guidance
           if (roleplaySettings.responseStyle) {
-            const styleGuidance = {
+            const styleGuidance: Record<string, string> = {
               'casual': '\n\n**Response Style**: Keep responses casual and friendly, 1-2 sentences.',
               'detailed': '\n\n**Response Style**: Provide rich, descriptive responses with vivid details.',
               'immersive': '\n\n**Response Style**: Create deeply immersive experiences with extensive detail and atmosphere.'
             };
-            processedFinal += styleGuidance[roleplaySettings.responseStyle] || '';
+            processedFinal += styleGuidance[roleplaySettings.responseStyle as string] || '';
           }
           
           // Add response length guidance
           if (roleplaySettings.responseLength) {
-            const lengthGuidance = {
+            const lengthGuidance: Record<string, string> = {
               'short': '\n\n**Response Length**: Keep responses to 1-2 sentences maximum.',
               'medium': '\n\n**Response Length**: Use 2-4 sentences for balanced responses.',
               'long': '\n\n**Response Length**: Write detailed paragraphs with rich descriptions.'
             };
-            processedFinal += lengthGuidance[roleplaySettings.responseLength] || '';
+            processedFinal += lengthGuidance[roleplaySettings.responseLength as string] || '';
           }
         }
         
@@ -372,7 +372,7 @@ You say: ...`;
         }
         
         const dbTemplate = await getDatabaseTemplate(
-          null,                    // target_model (null in template)
+          '',                      // target_model (empty string instead of null)
           'qwen_instruct',         // enhancer_model  
           'chat',                  // job_type
           useCase,                 // use_case
@@ -480,7 +480,7 @@ You say: ...`;
     // Verify user owns the conversation and get character info if provided
     const { data: conversation, error: conversationError } = await supabaseClient
       .from('conversations')
-      .select('*')
+      .select('id, user_id, project_id, character_id, user_character_id, title, conversation_type, status, created_at, updated_at')
       .eq('id', conversation_id)
       .eq('user_id', user.id)
       .single();
@@ -493,7 +493,7 @@ You say: ...`;
     if (character_id && character_id !== conversation.character_id) {
       await supabaseClient
         .from('conversations')
-        .update({ character_id })
+        .update({ character_id } as any)
         .eq('id', conversation_id);
     }
 
@@ -506,18 +506,18 @@ You say: ...`;
       .select('age_verified')
       .eq('id', user.id)
       .maybeSingle();
-    const ageVerified = profile?.age_verified === true;
+    const ageVerified = (profile as any)?.age_verified === true;
 
     // Save user message in background (non-blocking)
     waitUntil(
-      supabaseClient
+      (supabaseClient
         .from('messages')
         .insert({
           conversation_id,
           sender: 'user',
           content: message,
-        })
-        .then(({ error }) => {
+        }) as Promise<any>)
+        .then(({ error }: { error: any }) => {
           if (error) console.error('Failed to save user message:', error);
         })
     );
