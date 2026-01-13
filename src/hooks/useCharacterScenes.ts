@@ -96,6 +96,61 @@ export const useCharacterScenes = (characterId?: string, sceneFilter: SceneFilte
     }
   }, [characterId, sceneFilter]);
 
+  // ✅ NEW: Add realtime subscription for scene image updates
+  useEffect(() => {
+    if (!characterId) return;
+
+    const channel = supabase
+      .channel(`character-scenes-${characterId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'character_scenes',
+          filter: `character_id=eq.${characterId}`
+        },
+        (payload) => {
+          const updatedScene = payload.new as CharacterScene;
+          // Only update if we now have an image_url
+          if (updatedScene.image_url) {
+            setScenes(prev => prev.map(s => 
+              s.id === updatedScene.id ? { ...s, ...updatedScene } : s
+            ));
+            console.log('🔄 Character scenes: Realtime update - scene image ready', {
+              sceneId: updatedScene.id,
+              hasImage: !!updatedScene.image_url
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'character_scenes',
+          filter: `character_id=eq.${characterId}`
+        },
+        (payload) => {
+          const newScene = payload.new as CharacterScene;
+          setScenes(prev => {
+            // Avoid duplicates
+            if (prev.some(s => s.id === newScene.id)) return prev;
+            return [newScene, ...prev];
+          });
+          console.log('🔄 Character scenes: Realtime insert - new scene added', {
+            sceneId: newScene.id
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [characterId]);
+
   const updateScene = async (sceneId: string, updates: Partial<CharacterScene>) => {
     try {
       const { data, error } = await supabase
