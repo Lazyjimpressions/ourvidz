@@ -26,6 +26,7 @@ const MobileSimplifiedWorkspace = () => {
   const { data: imageModels, isLoading: modelsLoading } = useImageModels();
   
   // Use the proper library-first workspace hook with RV5.1 routing
+  // Disable URL optimization - we use useSignedAssets for immediate signing instead
   const {
     // Core State
     mode,
@@ -69,7 +70,7 @@ const MobileSimplifiedWorkspace = () => {
     setLightboxIndex: setWorkspaceLightboxIndex,
     // URL Management (not used - we use useSignedAssets instead for immediate signing)
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
-  } = useLibraryFirstWorkspace();
+  } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
 
   // NEW: Handle signed URL from immediate upload (preferred workflow)
   const handleReferenceImageUrlSet = useCallback((url: string, type: 'single' | 'start' | 'end') => {

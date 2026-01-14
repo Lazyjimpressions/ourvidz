@@ -249,8 +249,8 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
           </div>
         </header>
 
-        {/* Main Content Area - No padding on mobile workspace/chat for full-width */}
-        <main className={`flex-1 bg-[#0a0a0a] ${isCompactRoute ? 'p-0 md:p-6' : 'p-6'}`}>
+        {/* Main Content Area - Scrollable, no padding on mobile workspace/chat for full-width */}
+        <main className={`flex-1 bg-[#0a0a0a] overflow-y-auto ${isCompactRoute ? 'p-0 md:p-6' : 'p-6'}`}>
           {children}
         </main>
 

@@ -7,7 +7,6 @@ import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
-import { useMobileDetection } from '@/hooks/useMobileDetection';
 
 // Global concurrency control for original image loading
 class OriginalImageLoader {
@@ -91,10 +90,13 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
     registerAssetRef?.(element, assetId);
   }, [registerAssetRef]);
 
-  // Loading state
+  // Loading state - CSS-only responsive grid with auto-fit
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+      <div 
+        className="grid gap-3"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}
+      >
         {Array.from({ length: 12 }).map((_, i) => (
           <Skeleton key={i} className="aspect-square rounded-lg" />
         ))}
@@ -111,10 +113,12 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
     );
   }
 
+  // CSS-only responsive grid using auto-fit minmax - no breakpoint reliance
   return (
     <div 
       ref={gridRef}
-      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3"
+      className="grid gap-3"
+      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}
     >
       {assets.map((asset) => (
         <SharedGridCard
@@ -152,7 +156,9 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [generatedVideoThumbnail, setGeneratedVideoThumbnail] = useState<string | null>(null);
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
-  const { isMobile } = useMobileDetection();
+  
+  // Use CSS media query for mobile detection (stable, no resize flicker)
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
 
   // Register ref for lazy loading
   React.useEffect(() => {
