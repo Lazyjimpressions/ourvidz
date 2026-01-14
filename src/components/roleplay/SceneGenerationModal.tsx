@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from '@/components/ui/responsive-modal';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -11,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useScenePromptEnhancement } from '@/hooks/useScenePromptEnhancement';
-import { useSceneContinuity } from '@/hooks/useSceneContinuity'; // ✅ FIX 4.3: ADD continuity hook
+import { useSceneContinuity } from '@/hooks/useSceneContinuity';
 import { User, Sparkles, Wand2, Undo2, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -222,11 +227,11 @@ export const SceneGenerationModal = ({
 
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground max-w-sm max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-lg">Generate Scene</DialogTitle>
-        </DialogHeader>
+    <ResponsiveModal open={isOpen} onOpenChange={onClose}>
+      <ResponsiveModalContent className="bg-background border-border text-foreground max-w-sm">
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle className="text-lg">Generate Scene</ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
         <div className="space-y-3">
           <div>
@@ -429,7 +434,7 @@ export const SceneGenerationModal = ({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 };

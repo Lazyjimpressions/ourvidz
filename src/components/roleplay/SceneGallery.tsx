@@ -156,7 +156,7 @@ export const SceneGallery: React.FC<SceneGalleryProps> = ({
 
       {/* Scene grid */}
       {!isLoading && !error && scenes.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {scenes.map((scene) => (
             <SceneTemplateCard
               key={scene.id}

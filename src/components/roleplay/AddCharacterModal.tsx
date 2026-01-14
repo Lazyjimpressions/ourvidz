@@ -1,6 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from '@/components/ui/responsive-modal';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -474,14 +479,14 @@ export const AddCharacterModal = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <ResponsiveModal open={isOpen} onOpenChange={onClose}>
+      <ResponsiveModalContent className="bg-background border-border max-w-3xl">
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle className="flex items-center gap-2">
             <Plus className="w-5 h-5" />
             Add Character
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -1014,7 +1019,7 @@ export const AddCharacterModal = ({
             )}
           </TabsContent>
         </Tabs>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 };

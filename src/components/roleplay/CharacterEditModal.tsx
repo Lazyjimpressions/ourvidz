@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from '@/components/ui/responsive-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -337,17 +343,17 @@ export const CharacterEditModal = ({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <ResponsiveModal open={isOpen} onOpenChange={onClose}>
+      <ResponsiveModalContent className="bg-background border-border max-w-2xl">
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle className="flex items-center gap-2">
             <Edit3 className="w-5 h-5" />
             Edit {character?.name || 'Character'}
             {isAdmin && !isOwner && (
               <Badge variant="outline" className="ml-2">Admin Edit</Badge>
             )}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
@@ -562,8 +568,7 @@ export const CharacterEditModal = ({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 };
-

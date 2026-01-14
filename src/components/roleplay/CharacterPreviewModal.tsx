@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -317,29 +322,27 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   };
 
   return (
-    <Dialog 
+    <ResponsiveModal
       open={isOpen} 
       onOpenChange={(open) => {
-        // Only close if explicitly set to false (prevents accidental closes)
         if (!open) {
           handleClose();
         }
       }}
     >
-      <DialogContent 
+      <ResponsiveModalContent 
         className={`
-          max-w-lg w-[95vw] h-[90vh] flex flex-col
+          max-w-lg w-[95vw] flex flex-col
           bg-card border-border p-0
-          ${isMobile ? 'rounded-none' : 'rounded-lg'}
         `}
-        hideClose={true} // Hide the built-in close button
+        hideClose={true}
       >
         {/* Header - Fixed */}
-        <DialogHeader className="p-4 pb-2 flex-shrink-0 border-b border-border">
+        <ResponsiveModalHeader className="p-4 pb-2 flex-shrink-0 border-b border-border">
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold text-white line-clamp-1">
+            <ResponsiveModalTitle className="text-lg font-semibold text-white line-clamp-1">
               {character.name}
-            </DialogTitle>
+            </ResponsiveModalTitle>
             <Button
               variant="ghost"
               size="sm"
@@ -349,7 +352,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               <X className="w-4 h-4" />
             </Button>
           </div>
-        </DialogHeader>
+        </ResponsiveModalHeader>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -755,7 +758,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
             </div>
           )}
         </div>
-      </DialogContent>
+      </ResponsiveModalContent>
 
       {/* Scene Edit Modal */}
       <SceneEditModal
@@ -800,6 +803,6 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           });
         }}
       />
-    </Dialog>
+    </ResponsiveModal>
   );
 };

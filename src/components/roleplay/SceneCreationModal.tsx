@@ -1,6 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from '@/components/ui/responsive-modal';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -276,13 +281,13 @@ export const SceneCreationModal = ({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
+    <ResponsiveModal open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <ResponsiveModalContent className="max-w-2xl">
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle>
             {isEditMode ? 'Edit Scene Template' : 'Create Scene Template'}
-          </DialogTitle>
-        </DialogHeader>
+          </ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
         <div className="space-y-6 py-4">
           {/* Scene Name */}
@@ -790,8 +795,8 @@ export const SceneCreationModal = ({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 };
 
