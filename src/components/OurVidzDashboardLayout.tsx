@@ -1,9 +1,8 @@
 import React from 'react';
 import { useAuth } from "@/contexts/AuthContext";
-import { Home, FileText, Play, Image, Library, Settings, User, LogOut, Brain, Users, Menu } from "lucide-react";
+import { Home, FileText, Play, Image, Library, Settings, LogOut, Brain, Users, Menu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 
 interface OurVidzDashboardLayoutProps {
@@ -14,7 +13,6 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   const { profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const isMobile = useIsMobile();
 
   const handleSignOut = async () => {
     await signOut();
@@ -90,16 +88,16 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   ];
 
   // Check if we're on workspace, chat, or roleplay dashboard route for mobile optimization
+  // IMPORTANT: avoid JS-driven width detection to prevent "reverting" on resize/viewport quirks.
   const isWorkspaceRoute = location.pathname === '/workspace';
   const isChatRoute = location.pathname.startsWith('/roleplay/chat');
   const isRoleplayDashboard = location.pathname === '/roleplay';
-  const shouldHideSidebar = isMobile && (isWorkspaceRoute || isChatRoute || isRoleplayDashboard);
+  const isCompactRoute = isWorkspaceRoute || isChatRoute || isRoleplayDashboard;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">
-      {/* Left Sidebar - Hidden on mobile workspace */}
-      {!shouldHideSidebar && (
-        <div className="w-64 bg-[#111111] flex flex-col">
+      {/* Left Sidebar - hide on small screens for compact routes (CSS breakpoint, no JS) */}
+      <div className={`w-64 bg-[#111111] flex-col ${isCompactRoute ? 'hidden md:flex' : 'flex'}`}>
         {/* Logo */}
         <div className="p-6">
           <h1 className="text-2xl font-bold text-white">OurVidz</h1>
@@ -191,13 +189,12 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
             </ul>
           </div>
         </nav>
-        </div>
-      )}
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Header - Compact on mobile workspace */}
-        <header className={`bg-[#111111] border-b border-gray-800 ${shouldHideSidebar ? 'px-3 py-2' : 'px-6 py-4'}`}>
+        <header className={`bg-[#111111] border-b border-gray-800 ${isCompactRoute ? 'px-3 py-2 md:px-6 md:py-4' : 'px-6 py-4'}`}>
           <div className="flex justify-between items-center">
             {/* Mobile Menu Button - Only show on mobile workspace */}
             {shouldHideSidebar && (
@@ -211,45 +208,41 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
               </Button>
             )}
             <div className="flex justify-end items-center flex-1">
-              <div className={`flex items-center ${shouldHideSidebar ? 'gap-2' : 'gap-4'}`}>
-                {!shouldHideSidebar && (
-                  <Button
+              <div className={`flex items-center ${isCompactRoute ? 'gap-2 md:gap-4' : 'gap-4'}`}>
+                <Button
                     variant="outline"
                     size="sm"
-                    className="text-white border-gray-600 hover:bg-gray-800"
+                    className={`text-white border-gray-600 hover:bg-gray-800 ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
                   >
                     Upgrade
                   </Button>
-                )}
-                {!shouldHideSidebar && isAdmin && (
+                {isAdmin && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => navigate("/admin")}
-                    className="gap-2 text-white border-gray-600 hover:bg-gray-800"
+                    className={`gap-2 text-white border-gray-600 hover:bg-gray-800 ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
                   >
                     <Settings className="h-4 w-4" />
                     Admin
                   </Button>
                 )}
-                <div className={`flex items-center ${shouldHideSidebar ? 'gap-2' : 'gap-3'} text-sm`}>
+                <div className={`flex items-center ${isCompactRoute ? 'gap-2 md:gap-3' : 'gap-3'} text-sm`}>
                   <div className="flex items-center gap-2 text-gray-300">
-                    <div className={`${shouldHideSidebar ? 'w-6 h-6' : 'w-8 h-8'} bg-blue-600 rounded-full flex items-center justify-center text-white font-medium`}>
+                    <div className={`${isCompactRoute ? 'w-6 h-6' : 'w-8 h-8'} bg-blue-600 rounded-full flex items-center justify-center text-white font-medium`}>
                       {profile?.username?.[0]?.toUpperCase() || 'U'}
                     </div>
-                    {!shouldHideSidebar && <span>{profile?.username || 'User'}</span>}
+                    <span className={isCompactRoute ? 'hidden md:inline' : ''}>{profile?.username || 'User'}</span>
                   </div>
-                  {!shouldHideSidebar && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleSignOut}
-                      className="gap-2 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Sign Out
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSignOut}
+                    className={`gap-2 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </Button>
                 </div>
               </div>
             </div>
@@ -257,13 +250,12 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
         </header>
 
         {/* Main Content Area - No padding on mobile workspace/chat for full-width */}
-        <main className={`flex-1 bg-[#0a0a0a] ${shouldHideSidebar ? 'p-0' : 'p-6'}`}>
+        <main className={`flex-1 bg-[#0a0a0a] ${isCompactRoute ? 'p-0 md:p-6' : 'p-6'}`}>
           {children}
         </main>
 
         {/* Footer - Hidden on mobile workspace and chat */}
-        {!shouldHideSidebar && (
-          <footer className="bg-[#111111] border-t border-gray-800 px-6 py-4">
+        <footer className={`bg-[#111111] border-t border-gray-800 px-6 py-4 ${isCompactRoute ? 'hidden md:block' : ''}`}>
           <div className="flex justify-between items-center text-sm text-gray-500">
             <div className="flex items-center gap-6">
               <span>© 2024 OurVidz</span>
@@ -279,8 +271,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
               </div>
             </div>
           </div>
-          </footer>
-        )}
+        </footer>
       </div>
     </div>
   );
