@@ -89,10 +89,11 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
     }
   ];
 
-  // Check if we're on workspace or chat route for mobile optimization
+  // Check if we're on workspace, chat, or roleplay dashboard route for mobile optimization
   const isWorkspaceRoute = location.pathname === '/workspace';
   const isChatRoute = location.pathname.startsWith('/roleplay/chat');
-  const shouldHideSidebar = isMobile && (isWorkspaceRoute || isChatRoute);
+  const isRoleplayDashboard = location.pathname === '/roleplay';
+  const shouldHideSidebar = isMobile && (isWorkspaceRoute || isChatRoute || isRoleplayDashboard);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">

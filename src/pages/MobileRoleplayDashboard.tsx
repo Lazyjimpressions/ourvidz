@@ -3,7 +3,6 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
-import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X, Pencil, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,8 @@ import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
 import { SceneGallery } from '@/components/roleplay/SceneGallery';
 import { SceneCreationModal } from '@/components/roleplay/SceneCreationModal';
 import { SceneSetupSheet, SceneSetupConfig } from '@/components/roleplay/SceneSetupSheet';
+import { MobileRoleplayBottomBar } from '@/components/roleplay/MobileRoleplayBottomBar';
+import { MobileRoleplayFilterSheet } from '@/components/roleplay/MobileRoleplayFilterSheet';
 import type { ScenarioSessionPayload, SceneStyle, SceneTemplate } from '@/types/roleplay';
 import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
 import { useUserConversations } from '@/hooks/useUserConversations';
@@ -43,6 +44,8 @@ const MobileRoleplayDashboard = () => {
   const [editingScene, setEditingScene] = useState<SceneTemplate | null>(null);
   const [sceneConfig, setSceneConfig] = useState<SceneSetupConfig | null>(null);
   const [sceneGalleryRefreshTrigger, setSceneGalleryRefreshTrigger] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [activeSection, setActiveSection] = useState<'characters' | 'scenes'>('characters');
   // Track scene images that failed to load to prevent infinite re-render loops
   const [erroredSceneImages, setErroredSceneImages] = useState<Set<string>>(new Set());
 
@@ -444,61 +447,120 @@ const MobileRoleplayDashboard = () => {
 
   return (
     <OurVidzDashboardLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header Section - Compact with Settings */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-xl font-bold text-white">Roleplay</h1>
-            <p className="text-sm text-muted-foreground">Chat with AI characters</p>
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 pb-20 overflow-x-hidden">
+        {/* Header Section - Minimal on mobile */}
+        {isMobile ? (
+          <div className="mb-3 pt-2">
+            <h1 className="text-lg font-bold text-white">Roleplay</h1>
+            <p className="text-xs text-muted-foreground">Chat with AI characters</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                loadPublicCharacters();
-                loadUserCharacters();
-              }}
-              className="h-8 w-8 p-0"
-              title="Refresh characters"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSettings(true)}
-              className="h-8 w-8 p-0"
-            >
-              <Settings className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleCreateCharacter}
-              className="h-8"
-            >
-              <Plus className="w-4 h-4 mr-1" /> Character
-            </Button>
+        ) : (
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-xl font-bold text-white">Roleplay</h1>
+              <p className="text-sm text-muted-foreground">Chat with AI characters</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  loadPublicCharacters();
+                  loadUserCharacters();
+                }}
+                className="h-8 w-8 p-0"
+                title="Refresh characters"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSettings(true)}
+                className="h-8 w-8 p-0"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleCreateCharacter}
+                className="h-8"
+              >
+                <Plus className="w-4 h-4 mr-1" /> Character
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
         
         {/* Continue Conversations Section - Shows conversations with messages (scene images preferred) */}
         {userConversations.filter(c => (c.message_count || (c as any).messages?.[0]?.count || 0) > 0).length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <PlayCircle className="w-4 h-4 text-purple-400" />
-              <h2 className="text-base font-medium text-white">Continue Where You Left Off</h2>
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-medium text-white">Continue</h2>
+                <span className="text-xs text-muted-foreground/70">({userConversations.filter(c => (c.message_count || (c as any).messages?.[0]?.count || 0) > 0).length})</span>
+              </div>
             </div>
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {/* Horizontal scroll on mobile, grid on desktop */}
+          {isMobile ? (
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-2 px-2">
               {userConversations
-                .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0) // ✅ FIX: Show conversations with messages, not just scene images
+                .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
                 .sort((a, b) => {
-                  // ✅ FIX: Prioritize conversations with scene images, then by updated_at
                   if (a.last_scene_image && !b.last_scene_image) return -1;
                   if (!a.last_scene_image && b.last_scene_image) return 1;
                   return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
                 })
                 .slice(0, 6)
+                .map((conversation) => {
+                  const sceneImageErrored = erroredSceneImages.has(conversation.id);
+                  const displayImage = (conversation.last_scene_image && !sceneImageErrored)
+                    ? conversation.last_scene_image
+                    : conversation.character?.image_url;
+
+                  return (
+                    <div
+                      key={conversation.id}
+                      className="flex-shrink-0 w-[140px] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
+                      onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
+                    >
+                      {displayImage ? (
+                        <img
+                          src={displayImage}
+                          alt={conversation.title}
+                          className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
+                          onError={() => {
+                            if (!sceneImageErrored) {
+                              setErroredSceneImages(prev => new Set(prev).add(conversation.id));
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-gray-900" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      {!sceneImageErrored && conversation.character?.image_url && (
+                        <div className="absolute top-2 left-2 w-6 h-6 rounded-full overflow-hidden border border-white/50">
+                          <img
+                            src={conversation.character.image_url}
+                            alt={conversation.character.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <div className="absolute bottom-2 left-2 right-2">
+                        <p className="text-white text-xs font-medium truncate">
+                          {conversation.character?.name || 'Unknown'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {userConversations
+                .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
                 .map((conversation) => {
                   // ✅ FIX: Determine image source - prefer scene image, fallback to character avatar
                   const sceneImageErrored = erroredSceneImages.has(conversation.id);
@@ -574,35 +636,38 @@ const MobileRoleplayDashboard = () => {
                   );
                 })}
             </div>
+          )}
           </div>
         )}
 
 
         {/* Scene Gallery Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ImageIcon className="w-4 h-4 text-pink-400" />
-              <h2 className="text-base font-medium text-white">Scene Gallery</h2>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-medium text-white">Scenes</h2>
+              <span className="text-xs text-muted-foreground/70">({sceneTemplates.length})</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  setEditingScene(null);
-                  setShowSceneCreation(true);
-                }}
-                className="h-7 text-xs"
-              >
-                <Plus className="w-3 h-3 mr-1" /> Create
-              </Button>
+            <div className="flex items-center gap-1">
+              {!isMobile && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    setEditingScene(null);
+                    setShowSceneCreation(true);
+                  }}
+                  className="h-6 text-xs px-2"
+                >
+                  <Plus className="w-3 h-3 mr-1" /> Create
+                </Button>
+              )}
               {sceneTemplates.length > 0 && (
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={() => setShowSceneGallery(true)}
-                  className="h-7 text-xs"
+                  className="h-6 text-xs"
                 >
                   View All
                 </Button>
@@ -674,54 +739,51 @@ const MobileRoleplayDashboard = () => {
           )}
         </div>
 
-        {/* Scenario Quick-Start Section */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <h2 className="text-base font-medium text-white">Custom Scenario</h2>
+        {/* Scenario Quick-Start Section - Desktop only */}
+        {!isMobile && (
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-medium text-white">Custom Scenario</h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowScenarioWizard(true)}
+                className="h-6 text-xs"
+              >
+                <Plus className="w-3 h-3 mr-1" /> New
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowScenarioWizard(true)}
-              className="h-7 text-xs"
-            >
-              <Plus className="w-3 h-3 mr-1" /> New
-            </Button>
+            <p className="text-xs text-muted-foreground">
+              Build your own roleplay scenario from scratch.
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Build your own roleplay scenario from scratch.
-          </p>
-        </div>
+        )}
 
-        {/* Search and Filters */}
-        <SearchAndFilters
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          selectedFilter={selectedFilter}
-          setSelectedFilter={setSelectedFilter}
-        />
+        {/* Search and Filters - Desktop only, mobile uses bottom sheet */}
+        {!isMobile && (
+          <div className="mb-4">
+            <input
+              type="text"
+              placeholder="Search characters..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-sm"
+            />
+          </div>
+        )}
 
         {/* My Personas Section */}
         {filteredMyPersonas.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <User className="w-4 h-4 text-purple-400" />
-              <h2 className="text-base font-medium text-white">My Personas</h2>
-              <span className="text-xs text-muted-foreground">({filteredMyPersonas.length})</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">Characters that represent you in roleplay</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-medium text-white">My Personas</h2>
+                <span className="text-xs text-muted-foreground/70">({filteredMyPersonas.length})</span>
+              </div>
             </div>
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid gap-1.5 grid-cols-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filteredMyPersonas.map((character) => (
                 <div key={character.id} className="relative">
                   <MobileCharacterCard
@@ -745,23 +807,14 @@ const MobileRoleplayDashboard = () => {
 
         {/* My Characters Section (AI Companions) */}
         {filteredMyCharacters.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-4 h-4 text-blue-400" />
-              <h2 className="text-base font-medium text-white">My Characters</h2>
-              <span className="text-xs text-muted-foreground">({filteredMyCharacters.length})</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs">AI companions to roleplay with</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-medium text-white">My Characters</h2>
+                <span className="text-xs text-muted-foreground/70">({filteredMyCharacters.length})</span>
+              </div>
             </div>
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid gap-1.5 grid-cols-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filteredMyCharacters.map((character) => (
                 <div key={character.id} className="relative">
                   <MobileCharacterCard
@@ -784,11 +837,12 @@ const MobileRoleplayDashboard = () => {
 
         {/* Explore Public Characters Section */}
         {filteredPublicCharacters.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <Globe className="w-4 h-4 text-green-400" />
-              <h2 className="text-base font-medium text-white">Explore Public</h2>
-              <span className="text-xs text-muted-foreground">({filteredPublicCharacters.length})</span>
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-medium text-white">Explore</h2>
+                <span className="text-xs text-muted-foreground/70">({filteredPublicCharacters.length})</span>
+              </div>
             </div>
             <CharacterGrid
               characters={filteredPublicCharacters}
@@ -899,7 +953,30 @@ const MobileRoleplayDashboard = () => {
             </div>
           </div>
         )}
+
+        {/* Mobile Filter Sheet */}
+        <MobileRoleplayFilterSheet
+          isOpen={showFilters}
+          onClose={() => setShowFilters(false)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          contentFilter={contentFilter}
+          onContentFilterChange={setContentFilter}
+          selectedFilter={selectedFilter}
+          onSelectedFilterChange={setSelectedFilter}
+        />
       </div>
+
+      {/* Mobile Bottom Bar */}
+      {isMobile && (
+        <MobileRoleplayBottomBar
+          onShowFilters={() => setShowFilters(true)}
+          onShowSettings={() => setShowSettings(true)}
+          onCreateCharacter={handleCreateCharacter}
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+        />
+      )}
     </OurVidzDashboardLayout>
   );
 };
