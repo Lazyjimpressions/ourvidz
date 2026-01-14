@@ -11,7 +11,6 @@ import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import { UpdatedOptimizedLibrary } from "@/components/library/UpdatedOptimizedLibrary";
-import SimplifiedWorkspace from "@/pages/SimplifiedWorkspace";
 import MobileSimplifiedWorkspace from "@/pages/MobileSimplifiedWorkspace";
 import { Admin } from "@/pages/Admin";
 import Storyboard from "@/pages/Storyboard";
@@ -23,8 +22,6 @@ import MobileRoleplayDashboard from "@/pages/MobileRoleplayDashboard";
 import MobileRoleplayChat from "@/pages/MobileRoleplayChat";
 
 import NotFound from "@/pages/NotFound";
-import { useMobileDetection } from "@/hooks/useMobileDetection";
-
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,13 +31,6 @@ const queryClient = new QueryClient({
     }
   }
 });
-
-// Mobile-aware workspace component
-const WorkspaceWithMobileDetection = () => {
-  const { isMobile } = useMobileDetection();
-  
-  return isMobile ? <MobileSimplifiedWorkspace /> : <SimplifiedWorkspace />;
-};
 
 function App() {
   console.log('🚀 APP.TSX: App component rendering...');
@@ -56,7 +46,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/workspace" element={<ProtectedRoute><WorkspaceWithMobileDetection /></ProtectedRoute>} />
+              <Route path="/workspace" element={<ProtectedRoute><MobileSimplifiedWorkspace /></ProtectedRoute>} />
               <Route path="/library" element={<ProtectedRoute><UpdatedOptimizedLibrary /></ProtectedRoute>} />
               <Route path="/storyboard" element={<ProtectedRoute><Storyboard /></ProtectedRoute>} />
               <Route path="/storyboard/:projectId" element={<ProtectedRoute><StoryboardEditor /></ProtectedRoute>} />
