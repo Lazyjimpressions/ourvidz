@@ -576,8 +576,27 @@ serve(async (req) => {
     const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')
 
     if (!redisUrl || !redisToken) {
-      console.error('Redis configuration missing')
-      return new Response('Queue service unavailable', { status: 503, headers: corsHeaders })
+      console.error('❌ Redis configuration missing - local workers not available')
+      
+      // Update job status to failed with clear message
+      await supabaseClient
+        .from('jobs')
+        .update({ 
+          status: 'failed',
+          error_message: 'Local workers not configured. Please use API models (fal/Replicate) or configure Upstash Redis for local SDXL/WAN workers.'
+        })
+        .eq('id', job.id)
+      
+      return new Response(
+        JSON.stringify({ 
+          error: 'Local workers not available',
+          message: 'Upstash Redis is not configured. Use API models (fal/Replicate) instead, or configure UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN secrets.',
+          jobId: job.id,
+          status: 'failed',
+          fallback_suggestion: 'fal-image or replicate-image'
+        }), 
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
     try {
