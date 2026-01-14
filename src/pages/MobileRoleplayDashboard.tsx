@@ -445,7 +445,7 @@ const MobileRoleplayDashboard = () => {
 
   return (
     <OurVidzDashboardLayout>
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 pb-20 overflow-x-hidden">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 pb-20">
         {/* Header Section - Responsive via CSS only */}
         <div className="flex items-center justify-between mb-3 sm:mb-4 pt-2 sm:pt-0">
           <div>
@@ -495,7 +495,7 @@ const MobileRoleplayDashboard = () => {
           {/* Horizontal scroll on mobile, grid on larger screens */}
           {/* Mobile carousel - contained scroll */}
           <div className="relative -mx-2 sm:hidden">
-            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide overscroll-x-contain">
+            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide overscroll-x-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
               {userConversations
                 .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
                 .sort((a, b) => {
@@ -511,11 +511,11 @@ const MobileRoleplayDashboard = () => {
                     : conversation.character?.image_url;
 
                   return (
-                    <div
-                      key={conversation.id}
-                      className="flex-shrink-0 w-[calc(33vw-12px)] max-w-[140px] min-w-[100px] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group snap-start"
-                      onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
-                    >
+                      <div
+                        key={conversation.id}
+                        className="flex-shrink-0 w-[clamp(120px,34vw,170px)] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group snap-start"
+                        onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
+                      >
                       {displayImage ? (
                         <img
                           src={displayImage}
