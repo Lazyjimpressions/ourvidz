@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from '@/components/ui/responsive-modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -116,11 +121,11 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
   if (!scene) return null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground max-w-sm max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-lg">Edit Scene</DialogTitle>
-        </DialogHeader>
+    <ResponsiveModal open={isOpen} onOpenChange={onClose}>
+      <ResponsiveModalContent className="bg-background border-border text-foreground max-w-sm">
+        <ResponsiveModalHeader>
+          <ResponsiveModalTitle className="text-lg">Edit Scene</ResponsiveModalTitle>
+        </ResponsiveModalHeader>
 
         <div className="space-y-4">
           <div>
@@ -245,8 +250,7 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </ResponsiveModalContent>
+    </ResponsiveModal>
   );
 };
-
