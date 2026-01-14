@@ -448,49 +448,42 @@ const MobileRoleplayDashboard = () => {
   return (
     <OurVidzDashboardLayout>
       <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 pb-20 overflow-x-hidden">
-        {/* Header Section - Minimal on mobile */}
-        {isMobile ? (
-          <div className="mb-3 pt-2">
-            <h1 className="text-lg font-bold text-white">Roleplay</h1>
-            <p className="text-xs text-muted-foreground">Chat with AI characters</p>
+        {/* Header Section - Responsive via CSS only */}
+        <div className="flex items-center justify-between mb-3 sm:mb-4 pt-2 sm:pt-0">
+          <div>
+            <h1 className="text-lg sm:text-xl font-bold text-white">Roleplay</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">Chat with AI characters</p>
           </div>
-        ) : (
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-xl font-bold text-white">Roleplay</h1>
-              <p className="text-sm text-muted-foreground">Chat with AI characters</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  loadPublicCharacters();
-                  loadUserCharacters();
-                }}
-                className="h-8 w-8 p-0"
-                title="Refresh characters"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSettings(true)}
-                className="h-8 w-8 p-0"
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleCreateCharacter}
-                className="h-8"
-              >
-                <Plus className="w-4 h-4 mr-1" /> Character
-              </Button>
-            </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                loadPublicCharacters();
+                loadUserCharacters();
+              }}
+              className="h-8 w-8 p-0"
+              title="Refresh characters"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSettings(true)}
+              className="h-8 w-8 p-0"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleCreateCharacter}
+              className="h-8"
+            >
+              <Plus className="w-4 h-4 mr-1" /> Character
+            </Button>
           </div>
-        )}
+        </div>
         
         {/* Continue Conversations Section - Shows conversations with messages (scene images preferred) */}
         {userConversations.filter(c => (c.message_count || (c as any).messages?.[0]?.count || 0) > 0).length > 0 && (
@@ -501,89 +494,36 @@ const MobileRoleplayDashboard = () => {
                 <span className="text-xs text-muted-foreground/70">({userConversations.filter(c => (c.message_count || (c as any).messages?.[0]?.count || 0) > 0).length})</span>
               </div>
             </div>
-          {/* Horizontal scroll carousel for conversations - isolated scroll container */}
-          {isMobile ? (
-            <div className="relative -mx-2">
-              <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide">
-                {userConversations
-                  .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
-                  .sort((a, b) => {
-                    if (a.last_scene_image && !b.last_scene_image) return -1;
-                    if (!a.last_scene_image && b.last_scene_image) return 1;
-                    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-                  })
-                  .slice(0, 6)
-                  .map((conversation) => {
-                    const sceneImageErrored = erroredSceneImages.has(conversation.id);
-                    const displayImage = (conversation.last_scene_image && !sceneImageErrored)
-                      ? conversation.last_scene_image
-                      : conversation.character?.image_url;
-
-                    return (
-                      <div
-                        key={conversation.id}
-                        className="flex-shrink-0 w-[calc(33vw-12px)] max-w-[140px] min-w-[100px] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group snap-start"
-                        onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
-                      >
-                        {displayImage ? (
-                          <img
-                            src={displayImage}
-                            alt={conversation.title}
-                            className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
-                            onError={() => {
-                              if (!sceneImageErrored) {
-                                setErroredSceneImages(prev => new Set(prev).add(conversation.id));
-                              }
-                            }}
-                          />
-                        ) : (
-                          <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-gray-900" />
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                        {!sceneImageErrored && conversation.character?.image_url && (
-                          <div className="absolute top-2 left-2 w-6 h-6 rounded-full overflow-hidden border border-white/50">
-                            <img
-                              src={conversation.character.image_url}
-                              alt={conversation.character.name}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
-                        <div className="absolute bottom-2 left-2 right-2">
-                          <p className="text-white text-xs font-medium truncate">
-                            {conversation.character?.name || 'Unknown'}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {/* Horizontal scroll on mobile, grid on larger screens */}
+          {/* Mobile carousel */}
+          <div className="relative -mx-2 sm:hidden">
+            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide">
               {userConversations
                 .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
+                .sort((a, b) => {
+                  if (a.last_scene_image && !b.last_scene_image) return -1;
+                  if (!a.last_scene_image && b.last_scene_image) return 1;
+                  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+                })
+                .slice(0, 6)
                 .map((conversation) => {
-                  // ✅ FIX: Determine image source - prefer scene image, fallback to character avatar
                   const sceneImageErrored = erroredSceneImages.has(conversation.id);
                   const displayImage = (conversation.last_scene_image && !sceneImageErrored)
                     ? conversation.last_scene_image
-                    : conversation.character?.image_url; // Fallback to character image if no scene image
+                    : conversation.character?.image_url;
 
                   return (
                     <div
                       key={conversation.id}
-                      className="relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
+                      className="flex-shrink-0 w-[calc(33vw-12px)] max-w-[140px] min-w-[100px] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group snap-start"
                       onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
                     >
-                      {/* Scene thumbnail as background */}
                       {displayImage ? (
                         <img
                           src={displayImage}
                           alt={conversation.title}
                           className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
                           onError={() => {
-                            // Mark this conversation's scene image as errored
                             if (!sceneImageErrored) {
                               setErroredSceneImages(prev => new Set(prev).add(conversation.id));
                             }
@@ -592,11 +532,9 @@ const MobileRoleplayDashboard = () => {
                       ) : (
                         <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-gray-900" />
                       )}
-                      {/* Gradient overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                      {/* Character avatar overlay - only show if using scene image (not errored) */}
                       {!sceneImageErrored && conversation.character?.image_url && (
-                        <div className="absolute top-2 left-2 w-8 h-8 rounded-full overflow-hidden border-2 border-white/50">
+                        <div className="absolute top-2 left-2 w-6 h-6 rounded-full overflow-hidden border border-white/50">
                           <img
                             src={conversation.character.image_url}
                             alt={conversation.character.name}
@@ -604,41 +542,88 @@ const MobileRoleplayDashboard = () => {
                           />
                         </div>
                       )}
-                      {/* Hover action icons - top right */}
-                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            dismissConversation(conversation.id);
-                          }}
-                          className="p-1 bg-black/60 hover:bg-black/80 rounded-full"
-                          title="Hide from list"
-                        >
-                          <X className="w-3.5 h-3.5 text-white/80" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteConversation(conversation.id);
-                          }}
-                          className="p-1 bg-black/60 hover:bg-red-600/80 rounded-full"
-                          title="Delete conversation"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-white/80" />
-                        </button>
-                      </div>
-                      {/* Character name */}
                       <div className="absolute bottom-2 left-2 right-2">
-                        <p className="text-white text-sm font-medium truncate">
+                        <p className="text-white text-xs font-medium truncate">
                           {conversation.character?.name || 'Unknown'}
                         </p>
-                        <p className="text-white/60 text-xs truncate">{conversation.title}</p>
                       </div>
                     </div>
                   );
                 })}
             </div>
-          )}
+          </div>
+          {/* Desktop grid */}
+          <div className="hidden sm:grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {userConversations
+              .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
+              .map((conversation) => {
+                const sceneImageErrored = erroredSceneImages.has(conversation.id);
+                const displayImage = (conversation.last_scene_image && !sceneImageErrored)
+                  ? conversation.last_scene_image
+                  : conversation.character?.image_url;
+
+                return (
+                  <div
+                    key={conversation.id}
+                    className="relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
+                    onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
+                  >
+                    {displayImage ? (
+                      <img
+                        src={displayImage}
+                        alt={conversation.title}
+                        className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
+                        onError={() => {
+                          if (!sceneImageErrored) {
+                            setErroredSceneImages(prev => new Set(prev).add(conversation.id));
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-gray-900" />
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    {!sceneImageErrored && conversation.character?.image_url && (
+                      <div className="absolute top-2 left-2 w-8 h-8 rounded-full overflow-hidden border-2 border-white/50">
+                        <img
+                          src={conversation.character.image_url}
+                          alt={conversation.character.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dismissConversation(conversation.id);
+                        }}
+                        className="p-1 bg-black/60 hover:bg-black/80 rounded-full"
+                        title="Hide from list"
+                      >
+                        <X className="w-3.5 h-3.5 text-white/80" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteConversation(conversation.id);
+                        }}
+                        className="p-1 bg-black/60 hover:bg-red-600/80 rounded-full"
+                        title="Delete conversation"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-white/80" />
+                      </button>
+                    </div>
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <p className="text-white text-sm font-medium truncate">
+                        {conversation.character?.name || 'Unknown'}
+                      </p>
+                      <p className="text-white/60 text-xs truncate">{conversation.title}</p>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
           </div>
         )}
 
@@ -651,19 +636,17 @@ const MobileRoleplayDashboard = () => {
               <span className="text-xs text-muted-foreground/70">({sceneTemplates.length})</span>
             </div>
             <div className="flex items-center gap-1">
-              {!isMobile && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => {
-                    setEditingScene(null);
-                    setShowSceneCreation(true);
-                  }}
-                  className="h-6 text-xs px-2"
-                >
-                  <Plus className="w-3 h-3 mr-1" /> Create
-                </Button>
-              )}
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setEditingScene(null);
+                  setShowSceneCreation(true);
+                }}
+                className="hidden sm:flex h-6 text-xs px-2"
+              >
+                <Plus className="w-3 h-3 mr-1" /> Create
+              </Button>
               {sceneTemplates.length > 0 && (
                 <Button
                   variant="ghost"
@@ -741,40 +724,36 @@ const MobileRoleplayDashboard = () => {
           )}
         </div>
 
-        {/* Scenario Quick-Start Section - Desktop only */}
-        {!isMobile && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-sm font-medium text-white">Custom Scenario</h2>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowScenarioWizard(true)}
-                className="h-6 text-xs"
-              >
-                <Plus className="w-3 h-3 mr-1" /> New
-              </Button>
+        {/* Scenario Quick-Start Section - Desktop only via CSS */}
+        <div className="hidden sm:block mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-medium text-white">Custom Scenario</h2>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Build your own roleplay scenario from scratch.
-            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowScenarioWizard(true)}
+              className="h-6 text-xs"
+            >
+              <Plus className="w-3 h-3 mr-1" /> New
+            </Button>
           </div>
-        )}
+          <p className="text-xs text-muted-foreground">
+            Build your own roleplay scenario from scratch.
+          </p>
+        </div>
 
-        {/* Search and Filters - Desktop only, mobile uses bottom sheet */}
-        {!isMobile && (
-          <div className="mb-4">
-            <input
-              type="text"
-              placeholder="Search characters..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-sm"
-            />
-          </div>
-        )}
+        {/* Search and Filters - Desktop only via CSS, mobile uses bottom sheet */}
+        <div className="hidden sm:block mb-4">
+          <input
+            type="text"
+            placeholder="Search characters..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-sm"
+          />
+        </div>
 
         {/* My Personas Section */}
         {filteredMyPersonas.length > 0 && (
@@ -969,8 +948,8 @@ const MobileRoleplayDashboard = () => {
         />
       </div>
 
-      {/* Mobile Bottom Bar */}
-      {isMobile && (
+      {/* Mobile Bottom Bar - CSS controlled visibility */}
+      <div className="sm:hidden">
         <MobileRoleplayBottomBar
           onShowFilters={() => setShowFilters(true)}
           onShowSettings={() => setShowSettings(true)}
@@ -978,7 +957,7 @@ const MobileRoleplayDashboard = () => {
           activeSection={activeSection}
           onSectionChange={setActiveSection}
         />
-      )}
+      </div>
     </OurVidzDashboardLayout>
   );
 };
