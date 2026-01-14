@@ -1,7 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
-import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X, Pencil, HelpCircle } from 'lucide-react';
@@ -28,7 +27,6 @@ import { supabase } from '@/integrations/supabase/client';
 
 const MobileRoleplayDashboard = () => {
   const { user, isAdmin } = useAuth();
-  const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
@@ -422,7 +420,7 @@ const MobileRoleplayDashboard = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
             <p className="text-gray-400 mt-1">Loading characters...</p>
           </div>
-          <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
             {[...Array(10)].map((_, i) => (
               <div key={i} className="aspect-[3/4] bg-card border border-border rounded-lg animate-pulse" />
             ))}
@@ -495,9 +493,9 @@ const MobileRoleplayDashboard = () => {
               </div>
             </div>
           {/* Horizontal scroll on mobile, grid on larger screens */}
-          {/* Mobile carousel */}
+          {/* Mobile carousel - contained scroll */}
           <div className="relative -mx-2 sm:hidden">
-            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide">
+            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide overscroll-x-contain touch-pan-x">
               {userConversations
                 .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
                 .sort((a, b) => {
@@ -552,8 +550,8 @@ const MobileRoleplayDashboard = () => {
                 })}
             </div>
           </div>
-          {/* Desktop grid */}
-          <div className="hidden sm:grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {/* Desktop grid - using auto-fit */}
+          <div className="hidden sm:grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
             {userConversations
               .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
               .map((conversation) => {
@@ -660,7 +658,7 @@ const MobileRoleplayDashboard = () => {
             </div>
           </div>
           {sceneTemplates.length > 0 ? (
-            <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
               {sceneTemplates.slice(0, 6).map((scene) => (
                 <div
                   key={scene.id}
@@ -764,7 +762,7 @@ const MobileRoleplayDashboard = () => {
                 <span className="text-xs text-muted-foreground/70">({filteredMyPersonas.length})</span>
               </div>
             </div>
-            <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
               {filteredMyPersonas.map((character) => (
                 <div key={character.id} className="relative">
                   <MobileCharacterCard
@@ -795,7 +793,7 @@ const MobileRoleplayDashboard = () => {
                 <span className="text-xs text-muted-foreground/70">({filteredMyCharacters.length})</span>
               </div>
             </div>
-            <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
               {filteredMyCharacters.map((character) => (
                 <div key={character.id} className="relative">
                   <MobileCharacterCard

@@ -154,9 +154,9 @@ export const SceneGallery: React.FC<SceneGalleryProps> = ({
         </div>
       )}
 
-      {/* Scene grid */}
+      {/* Scene grid - using auto-fit for truly responsive layout */}
       {!isLoading && !error && scenes.length > 0 && (
-        <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
           {scenes.map((scene) => (
             <SceneTemplateCard
               key={scene.id}
