@@ -255,9 +255,18 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   }, [asset.id, isMobile]);
 
   // Load fallback URL for images when visible, no thumbUrl
+  // Includes timeout to prevent infinite spinner
   useEffect(() => {
     if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible) {
       setIsLoadingFallback(true);
+      
+      // Timeout prevents infinite spinner (10 seconds max)
+      const timeout = setTimeout(() => {
+        if (!fallbackUrl) {
+          setIsLoadingFallback(false);
+          console.warn('⚠️ Fallback loading timed out for asset:', asset.id);
+        }
+      }, 10000);
       
       // Use concurrency-controlled loader with safe signing
       originalImageLoader.load(async () => {
@@ -268,8 +277,11 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           console.warn('❌ Failed to load fallback image for asset', asset.id, err);
         }
       }).finally(() => {
+        clearTimeout(timeout);
         setIsLoadingFallback(false);
       });
+      
+      return () => clearTimeout(timeout);
     }
   }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely]);
 

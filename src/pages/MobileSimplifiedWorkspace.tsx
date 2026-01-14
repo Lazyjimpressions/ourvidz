@@ -13,6 +13,7 @@ import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
 import { useImageModels } from '@/hooks/useApiModels';
+import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 
 
 const MobileSimplifiedWorkspace = () => {
@@ -66,10 +67,8 @@ const MobileSimplifiedWorkspace = () => {
     clearWorkspace,
     deleteAllWorkspace,
     setLightboxIndex: setWorkspaceLightboxIndex,
-    // URL Management
-    signedUrls,
-    isUrlLoading,
-    registerAssetRef
+    // URL Management (not used - we use useSignedAssets instead for immediate signing)
+    // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace();
 
   // NEW: Handle signed URL from immediate upload (preferred workflow)
@@ -325,33 +324,21 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, navigate, location.pathname, location.search]);
 
-  // Process workspace assets through proper mappers - use centralized signing
-  const sharedAssets = useMemo(() => {
-    const mapped = workspaceAssets.map(toSharedFromWorkspace);
-    // Build compatible asset array using centralized signedUrls Map
-    return mapped.map(asset => {
-      const signedOriginal = signedUrls.get(asset.id);
-      return {
-        ...asset,
-        url: signedOriginal || null,
-        thumbUrl: signedOriginal || null, // Use original for both thumb and full
-        signOriginal: async () => {
-          const existing = signedUrls.get(asset.id);
-          if (existing) return existing;
-          // CRITICAL FIX: Never return raw storage path - use centralized signing service
-          if (asset.originalPath) {
-            const { urlSigningService } = await import('@/lib/services/UrlSigningService');
-            try {
-              return await urlSigningService.getSignedUrl(asset.originalPath, 'workspace-temp');
-            } catch (e) {
-              console.error('❌ signOriginal fallback failed:', e);
-            }
-          }
-          return ''; // Return empty string instead of raw path
-        }
-      };
-    });
-  }, [workspaceAssets, signedUrls]);
+  // Step 1: Map workspace assets to SharedAsset format
+  const mappedAssets = useMemo(() => {
+    return workspaceAssets.map(toSharedFromWorkspace);
+  }, [workspaceAssets]);
+
+  // Step 2: Use immediate signing hook (same as desktop) - no lazy loading!
+  // This signs ALL thumbnails immediately on mount, avoiding the IntersectionObserver overhead
+  const { signedAssets: sharedAssets, isSigning } = useSignedAssets(
+    mappedAssets,
+    'workspace-temp',
+    {
+      thumbTtlSec: 1800,   // 30 min for mobile thumbnails
+      originalTtlSec: 3600 // 1 hour for full resolution
+    }
+  );
 
   // Preview handler for SharedGrid
   const handlePreview = useCallback((asset: any) => {
@@ -367,19 +354,16 @@ const MobileSimplifiedWorkspace = () => {
     try {
       console.log('🖼️ MOBILE: Use as Reference clicked for asset:', asset);
       
-      // Get signed URL for the asset
+      // Get signed URL for the asset - use signOriginal from useSignedAssets
       let referenceUrl: string | null = null;
       
       if (asset.url) {
         referenceUrl = asset.url;
       } else if (typeof asset.signOriginal === 'function') {
         referenceUrl = await asset.signOriginal();
-      } else if (asset.originalPath) {
-        // Fallback: sign the URL directly
-        const signed = signedUrls.get(asset.id);
-        if (signed) {
-          referenceUrl = signed;
-        }
+      } else if (asset.thumbUrl) {
+        // Fallback: use thumbUrl (which is already signed)
+        referenceUrl = asset.thumbUrl;
       }
       
       if (!referenceUrl) {
@@ -427,7 +411,7 @@ const MobileSimplifiedWorkspace = () => {
       console.error('❌ MOBILE: Failed to use workspace image as reference:', error);
       toast.error('Failed to use image as reference');
     }
-  }, [setReferenceImage, setReferenceImageUrl, setPrompt, signedUrls]);
+  }, [setReferenceImage, setReferenceImageUrl, setPrompt]);
 
   // Workspace actions
   const handleSaveToLibrary = useCallback(async (asset: any) => {
@@ -524,8 +508,7 @@ const MobileSimplifiedWorkspace = () => {
                 }
               }
             }}
-            isLoading={isGenerating || isUrlLoading}
-            registerAssetRef={(element, assetId) => registerAssetRef(assetId, element)}
+            isLoading={isGenerating || isSigning}
           />
         </div>
 
