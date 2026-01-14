@@ -10,48 +10,51 @@ export interface MobileDetection {
 }
 
 export const useMobileDetection = (): MobileDetection => {
-  const [mobileDetection, setMobileDetection] = useState<MobileDetection>({
-    isMobile: false,
-    isTablet: false,
-    isDesktop: true,
-    screenWidth: 0,
-    screenHeight: 0,
-    isTouchDevice: false
-  });
+  const compute = (): MobileDetection => {
+    // During SSR/test environments window may be undefined
+    const width = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const height = typeof window !== 'undefined' ? window.innerHeight : 768;
+
+    // Check if device supports touch
+    const isTouchDevice =
+      typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+    // Determine device type based on screen width
+    const isMobile = width < 768;
+    const isTablet = width >= 768 && width < 1024;
+    const isDesktop = width >= 1024;
+
+    return {
+      isMobile,
+      isTablet,
+      isDesktop,
+      screenWidth: width,
+      screenHeight: height,
+      isTouchDevice,
+    };
+  };
+
+  // Initialize from the *real* viewport to avoid a desktop→mobile (or mobile→desktop) flicker
+  const [mobileDetection, setMobileDetection] = useState<MobileDetection>(() => compute());
 
   useEffect(() => {
-    const updateMobileDetection = () => {
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      
-      // Check if device supports touch
-      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      
-      // Determine device type based on screen width
-      const isMobile = width < 768;
-      const isTablet = width >= 768 && width < 1024;
-      const isDesktop = width >= 1024;
+    let raf = 0;
 
-      setMobileDetection({
-        isMobile,
-        isTablet,
-        isDesktop,
-        screenWidth: width,
-        screenHeight: height,
-        isTouchDevice
-      });
+    const onResize = () => {
+      // Coalesce rapid resize events (mobile address bar, orientation changes, etc.)
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setMobileDetection(compute()));
     };
 
-    // Initial detection
-    updateMobileDetection();
+    // Ensure we’re synced on mount
+    onResize();
 
-    // Update on resize
-    window.addEventListener('resize', updateMobileDetection);
-
+    window.addEventListener('resize', onResize);
     return () => {
-      window.removeEventListener('resize', updateMobileDetection);
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', onResize);
     };
   }, []);
 
   return mobileDetection;
-}; 
+};
