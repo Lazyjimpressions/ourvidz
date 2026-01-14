@@ -495,7 +495,7 @@ const MobileRoleplayDashboard = () => {
           {/* Horizontal scroll on mobile, grid on larger screens */}
           {/* Mobile carousel - contained scroll */}
           <div className="relative -mx-2 sm:hidden">
-            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide overscroll-x-contain touch-pan-x">
+            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide overscroll-x-contain">
               {userConversations
                 .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
                 .sort((a, b) => {
