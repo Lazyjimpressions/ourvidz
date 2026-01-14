@@ -422,7 +422,7 @@ const MobileRoleplayDashboard = () => {
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
             <p className="text-gray-400 mt-1">Loading characters...</p>
           </div>
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {[...Array(10)].map((_, i) => (
               <div key={i} className="aspect-[3/4] bg-card border border-border rounded-lg animate-pulse" />
             ))}
@@ -501,61 +501,63 @@ const MobileRoleplayDashboard = () => {
                 <span className="text-xs text-muted-foreground/70">({userConversations.filter(c => (c.message_count || (c as any).messages?.[0]?.count || 0) > 0).length})</span>
               </div>
             </div>
-          {/* Horizontal scroll on mobile, grid on desktop */}
+          {/* Horizontal scroll carousel for conversations - isolated scroll container */}
           {isMobile ? (
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide -mx-2 px-2">
-              {userConversations
-                .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
-                .sort((a, b) => {
-                  if (a.last_scene_image && !b.last_scene_image) return -1;
-                  if (!a.last_scene_image && b.last_scene_image) return 1;
-                  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-                })
-                .slice(0, 6)
-                .map((conversation) => {
-                  const sceneImageErrored = erroredSceneImages.has(conversation.id);
-                  const displayImage = (conversation.last_scene_image && !sceneImageErrored)
-                    ? conversation.last_scene_image
-                    : conversation.character?.image_url;
+            <div className="relative -mx-2">
+              <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide">
+                {userConversations
+                  .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
+                  .sort((a, b) => {
+                    if (a.last_scene_image && !b.last_scene_image) return -1;
+                    if (!a.last_scene_image && b.last_scene_image) return 1;
+                    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+                  })
+                  .slice(0, 6)
+                  .map((conversation) => {
+                    const sceneImageErrored = erroredSceneImages.has(conversation.id);
+                    const displayImage = (conversation.last_scene_image && !sceneImageErrored)
+                      ? conversation.last_scene_image
+                      : conversation.character?.image_url;
 
-                  return (
-                    <div
-                      key={conversation.id}
-                      className="flex-shrink-0 w-[140px] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group"
-                      onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
-                    >
-                      {displayImage ? (
-                        <img
-                          src={displayImage}
-                          alt={conversation.title}
-                          className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
-                          onError={() => {
-                            if (!sceneImageErrored) {
-                              setErroredSceneImages(prev => new Set(prev).add(conversation.id));
-                            }
-                          }}
-                        />
-                      ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-gray-900" />
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                      {!sceneImageErrored && conversation.character?.image_url && (
-                        <div className="absolute top-2 left-2 w-6 h-6 rounded-full overflow-hidden border border-white/50">
+                    return (
+                      <div
+                        key={conversation.id}
+                        className="flex-shrink-0 w-[calc(33vw-12px)] max-w-[140px] min-w-[100px] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group snap-start"
+                        onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
+                      >
+                        {displayImage ? (
                           <img
-                            src={conversation.character.image_url}
-                            alt={conversation.character.name}
-                            className="w-full h-full object-cover"
+                            src={displayImage}
+                            alt={conversation.title}
+                            className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105"
+                            onError={() => {
+                              if (!sceneImageErrored) {
+                                setErroredSceneImages(prev => new Set(prev).add(conversation.id));
+                              }
+                            }}
                           />
+                        ) : (
+                          <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-gray-900" />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                        {!sceneImageErrored && conversation.character?.image_url && (
+                          <div className="absolute top-2 left-2 w-6 h-6 rounded-full overflow-hidden border border-white/50">
+                            <img
+                              src={conversation.character.image_url}
+                              alt={conversation.character.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <div className="absolute bottom-2 left-2 right-2">
+                          <p className="text-white text-xs font-medium truncate">
+                            {conversation.character?.name || 'Unknown'}
+                          </p>
                         </div>
-                      )}
-                      <div className="absolute bottom-2 left-2 right-2">
-                        <p className="text-white text-xs font-medium truncate">
-                          {conversation.character?.name || 'Unknown'}
-                        </p>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+              </div>
             </div>
           ) : (
             <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -675,7 +677,7 @@ const MobileRoleplayDashboard = () => {
             </div>
           </div>
           {sceneTemplates.length > 0 ? (
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+            <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {sceneTemplates.slice(0, 6).map((scene) => (
                 <div
                   key={scene.id}
@@ -783,7 +785,7 @@ const MobileRoleplayDashboard = () => {
                 <span className="text-xs text-muted-foreground/70">({filteredMyPersonas.length})</span>
               </div>
             </div>
-            <div className="grid gap-1.5 grid-cols-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {filteredMyPersonas.map((character) => (
                 <div key={character.id} className="relative">
                   <MobileCharacterCard
@@ -814,7 +816,7 @@ const MobileRoleplayDashboard = () => {
                 <span className="text-xs text-muted-foreground/70">({filteredMyCharacters.length})</span>
               </div>
             </div>
-            <div className="grid gap-1.5 grid-cols-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {filteredMyCharacters.map((character) => (
                 <div key={character.id} className="relative">
                   <MobileCharacterCard

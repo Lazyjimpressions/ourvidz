@@ -42,8 +42,10 @@ export const CharacterGrid: React.FC<CharacterGridProps> = ({
     return null;
   }
 
+  // Dynamic grid: 2 cols on small phones, 3 on larger phones/tablets, 4-5 on desktop
+  // Using min-width approach to prevent overflow
   return (
-    <div className="grid gap-1.5 grid-cols-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 mb-6">
+    <div className="grid gap-2 grid-cols-2 min-[400px]:grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {characters.map((character) => (
         <MobileCharacterCard
           key={character.id}
