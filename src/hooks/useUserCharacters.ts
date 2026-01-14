@@ -123,6 +123,7 @@ export const useUserCharacters = () => {
         mood,
         content_rating,
         reference_image_url,
+        role,
         ...rest
       } = characterData;
 
@@ -144,7 +145,7 @@ export const useUserCharacters = () => {
           reference_image_url: emptyToUndefined(reference_image_url),
           content_rating: content_rating || 'nsfw', // Default to NSFW per plan
           user_id: user.id,
-          role: 'user',
+          role: role || 'ai', // Default to 'ai' for AI companions (My Characters)
           is_public: false,
           likes_count: 0,
           interaction_count: 0,
