@@ -196,13 +196,13 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
         {/* Header - Compact on mobile workspace */}
         <header className={`bg-[#111111] border-b border-gray-800 ${isCompactRoute ? 'px-3 py-2 md:px-6 md:py-4' : 'px-6 py-4'}`}>
           <div className="flex justify-between items-center">
-            {/* Mobile Menu Button - Only show on mobile workspace */}
-            {shouldHideSidebar && (
+            {/* Mobile Back Button - Only show on compact routes (small screens) */}
+            {isCompactRoute && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate(-1)}
-                className="p-2"
+                className="p-2 md:hidden"
               >
                 <Menu className="h-5 w-5" />
               </Button>
