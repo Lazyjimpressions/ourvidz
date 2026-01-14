@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Home, FileText, Play, Image, Library, Settings, User, LogOut, Brain, Users, Menu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useMobileDetection } from "@/hooks/useMobileDetection";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 
 interface OurVidzDashboardLayoutProps {
@@ -14,7 +14,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   const { profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isMobile } = useMobileDetection();
+  const isMobile = useIsMobile();
 
   const handleSignOut = async () => {
     await signOut();
