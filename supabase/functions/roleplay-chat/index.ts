@@ -547,7 +547,23 @@ serve(async (req) => {
     } else {
       // API model - look up in database
       try {
-        const modelConfig = await getModelConfig(supabase, effectiveModelProvider);
+        const requestedModelKey = effectiveModelProvider;
+        let modelConfig = await getModelConfig(supabase, effectiveModelProvider);
+
+        // ✅ Graceful fallback when a previously-saved/legacy model key no longer exists
+        if (!modelConfig) {
+          const fallbackKey = await getDefaultOpenRouterModel(supabase);
+          if (fallbackKey && fallbackKey !== effectiveModelProvider) {
+            console.warn('⚠️ Requested model not found, falling back to default OpenRouter model:', {
+              requestedModelKey,
+              fallbackKey
+            });
+            usedFallback = true;
+            effectiveModelProvider = fallbackKey;
+            modelConfig = await getModelConfig(supabase, effectiveModelProvider);
+          }
+        }
+
         if (modelConfig) {
           console.log('✅ Model config found:', {
             model_key: effectiveModelProvider,
@@ -555,23 +571,46 @@ serve(async (req) => {
             display_name: modelConfig.display_name,
             usedFallback
           });
+
           // Use database-driven model configuration with user character
-          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character, scene_starters, user_id);
+          response = await callModelWithConfig(
+            character,
+            recentMessages || [],
+            userMessage,
+            effectiveModelProvider,
+            content_tier,
+            modelConfig,
+            supabase,
+            scene_context,
+            scene_system_prompt,
+            conversation.user_character,
+            scene_starters,
+            user_id
+          );
+
           modelUsed = `${modelConfig.provider_name}:${effectiveModelProvider}`;
         } else {
-          console.error('❌ Model config not found for:', effectiveModelProvider);
-          return new Response(JSON.stringify({
-            success: false,
-            error: `Model not found: ${effectiveModelProvider}. Please ensure it exists in api_models table.`,
-            usedFallback
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 400
+          console.error('❌ Model config not found (even after fallback):', {
+            requestedModelKey,
+            effectiveModelProvider
           });
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Model not found: ${requestedModelKey}. Please select a different model in Settings.`,
+              usedFallback
+            }),
+            {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400
+            }
+          );
         }
       } catch (modelError) {
         console.error('❌ Error in model configuration lookup:', modelError);
-        throw new Error(`Model configuration error: ${modelError instanceof Error ? modelError.message : String(modelError)}`);
+        throw new Error(
+          `Model configuration error: ${modelError instanceof Error ? modelError.message : String(modelError)}`
+        );
       }
     }
 
@@ -932,26 +971,38 @@ async function checkLocalChatWorkerHealth(supabase: any): Promise<boolean> {
   }
 }
 
-// Get default OpenRouter model from database or hardcoded fallback
+// Get default OpenRouter model from database (preferred) with safe fallback
 async function getDefaultOpenRouterModel(supabase: any): Promise<string> {
   try {
-    const { data } = await supabase
+    // Prefer an explicit default OpenRouter model
+    const { data: defaultRow } = await supabase
       .from('api_models')
-      .select('model_key')
+      .select('model_key, api_providers!inner(name)')
       .eq('modality', 'roleplay')
       .eq('is_active', true)
       .eq('is_default', true)
-      .single();
+      .eq('api_providers.name', 'openrouter')
+      .maybeSingle();
 
-    if (data?.model_key) {
-      return data.model_key;
-    }
+    if (defaultRow?.model_key) return defaultRow.model_key;
+
+    // Otherwise pick the highest-priority active OpenRouter roleplay model
+    const { data: fallbackRows } = await supabase
+      .from('api_models')
+      .select('model_key, api_providers!inner(name)')
+      .eq('modality', 'roleplay')
+      .eq('is_active', true)
+      .eq('api_providers.name', 'openrouter')
+      .order('priority', { ascending: true })
+      .limit(1);
+
+    if (fallbackRows?.[0]?.model_key) return fallbackRows[0].model_key;
   } catch (error) {
-    console.log('Using hardcoded default OpenRouter model');
+    console.log('⚠️ Could not load default OpenRouter model from database, using hardcoded fallback');
   }
 
-  // Hardcoded fallback
-  return 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free';
+  // Hardcoded fallback (must be a real, known-good OpenRouter model key)
+  return 'cognitivecomputations/dolphin3.0-r1-mistral-24b:free';
 }
 
 // Get model configuration from api_models table
@@ -2928,8 +2979,9 @@ const sceneContext = analyzeSceneContent(response);
       console.log('🎬 Generating scene narrative for character:', character.name);
 
       try {
-        // Use the same model configuration as the current roleplay conversation
-        const roleplayModel = 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free'; // Default to Venice Dolphin
+        // Use the same provider configuration as the current roleplay conversation
+        // (pick the DB default OpenRouter model so we never reference stale/hardcoded keys)
+        const roleplayModel = await getDefaultOpenRouterModel(supabase);
         const modelConfig = await getModelConfig(supabase, roleplayModel);
 
         if (modelConfig && modelConfig.provider_name === 'openrouter') {

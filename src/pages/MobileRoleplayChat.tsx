@@ -154,7 +154,7 @@ const MobileRoleplayChat: React.FC = () => {
         // If local model was saved but is now unavailable, fall back to API
         const effectiveChatModel = isValidChatModel
           ? savedChatModel
-          : (defaultChatModel?.value || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free');
+          : (defaultChatModel?.value || 'chat_worker');
 
         const effectiveImageModel = isValidImageModel
           ? savedImageModel
@@ -179,7 +179,7 @@ const MobileRoleplayChat: React.FC = () => {
 
     // Use defaults from hooks (always non-local API models for reliability)
     return {
-      modelProvider: defaultChatModel?.value || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+      modelProvider: defaultChatModel?.value || 'chat_worker',
       selectedImageModel: defaultImageModel?.value || '',
       consistencySettings: {
         method: 'hybrid',
@@ -193,7 +193,7 @@ const MobileRoleplayChat: React.FC = () => {
   };
   
   // Initialize settings after models are loaded
-  const [modelProvider, setModelProvider] = useState<string>('cognitivecomputations/dolphin-mistral-24b-venice-edition:free');
+  const [modelProvider, setModelProvider] = useState<string>('chat_worker');
   const [selectedImageModel, setSelectedImageModel] = useState<string>(''); // Will be set from database API models (not 'sdxl')
   const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
     method: 'hybrid',

@@ -25,7 +25,8 @@ const DEFAULT_CONSISTENCY_SETTINGS: ConsistencySettings = {
 
 const DEFAULT_SETTINGS: RoleplaySettings = {
   memoryTier: 'conversation',
-  modelProvider: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+  // Start safe while models load; edge function will fall back to OpenRouter if local worker is unhealthy
+  modelProvider: 'chat_worker',
   selectedImageModel: '',
   consistencySettings: DEFAULT_CONSISTENCY_SETTINGS,
   userCharacterId: null,
