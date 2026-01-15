@@ -345,7 +345,8 @@ export const CharacterEditModal = ({
   return (
     <ResponsiveModal open={isOpen} onOpenChange={onClose}>
       <ResponsiveModalContent className="bg-background border-border max-w-2xl">
-        <ResponsiveModalHeader>
+        {/* Fixed Header */}
+        <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-border">
           <ResponsiveModalTitle className="flex items-center gap-2">
             <Edit3 className="w-5 h-5" />
             Edit {character?.name || 'Character'}
@@ -353,9 +354,10 @@ export const CharacterEditModal = ({
               <Badge variant="outline" className="ml-2">Admin Edit</Badge>
             )}
           </ResponsiveModalTitle>
-        </ResponsiveModalHeader>
+        </div>
 
-        <div className="space-y-6">
+        {/* Scrollable Content */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="name">Name</Label>
@@ -558,15 +560,17 @@ export const CharacterEditModal = ({
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={onClose} className="flex-1">
-              Cancel
-            </Button>
-            <Button onClick={handleSave} className="flex-1" disabled={!canEdit}>
-              <Save className="w-4 h-4 mr-2" />
-              Save Changes
-            </Button>
-          </div>
+        </div>
+
+        {/* Fixed Footer */}
+        <div className="flex-shrink-0 px-4 py-4 border-t border-border flex gap-3">
+          <Button variant="outline" onClick={onClose} className="flex-1">
+            Cancel
+          </Button>
+          <Button onClick={handleSave} className="flex-1" disabled={!canEdit}>
+            <Save className="w-4 h-4 mr-2" />
+            Save Changes
+          </Button>
         </div>
       </ResponsiveModalContent>
     </ResponsiveModal>

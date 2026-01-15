@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMobileDetection } from "@/hooks/useMobileDetection";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,8 +18,6 @@ import {
   DrawerClose,
 } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface ResponsiveModalProps {
   open: boolean;
@@ -66,7 +64,12 @@ export const ResponsiveModal = ({
   onOpenChange,
   children,
 }: ResponsiveModalProps) => {
-  const { isMobile } = useMobileDetection();
+  // Compute once on mount - prevents component swapping mid-session
+  const [isMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 768px)").matches
+      : false
+  );
 
   if (isMobile) {
     return (
@@ -102,7 +105,10 @@ export const ResponsiveModalContent = ({
           className
         )}
       >
-        <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div 
+          className="flex-1 min-h-0 overflow-y-auto"
+          style={{ WebkitOverflowScrolling: "touch" }}
+        >
           {children}
         </div>
       </DrawerContent>
@@ -110,8 +116,13 @@ export const ResponsiveModalContent = ({
   }
 
   return (
-    <DialogContent className={className} hideClose={hideClose}>
-      {children}
+    <DialogContent 
+      className={cn("max-h-[85vh] flex flex-col", className)} 
+      hideClose={hideClose}
+    >
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {children}
+      </div>
     </DialogContent>
   );
 };

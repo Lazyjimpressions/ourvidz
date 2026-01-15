@@ -481,14 +481,17 @@ export const AddCharacterModal = ({
   return (
     <ResponsiveModal open={isOpen} onOpenChange={onClose}>
       <ResponsiveModalContent className="bg-background border-border max-w-3xl">
-        <ResponsiveModalHeader>
+        {/* Fixed Header */}
+        <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-border">
           <ResponsiveModalTitle className="flex items-center gap-2">
             <Plus className="w-5 h-5" />
             Add Character
           </ResponsiveModalTitle>
-        </ResponsiveModalHeader>
+        </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        {/* Scrollable Content */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="create" className="flex items-center gap-2">
               <Sparkles className="w-4 h-4" />
@@ -957,16 +960,6 @@ export const AddCharacterModal = ({
               </details>
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-3 pt-4">
-              <Button variant="outline" onClick={onClose} className="flex-1">
-                Cancel
-              </Button>
-              <Button onClick={handleCreate} className="flex-1">
-                <Save className="w-4 h-4 mr-2" />
-                Create Character
-              </Button>
-            </div>
           </TabsContent>
 
           <TabsContent value="browse" className="space-y-4 mt-4">
@@ -980,7 +973,7 @@ export const AddCharacterModal = ({
                 <p className="text-sm text-muted-foreground">Loading characters...</p>
               </div>
             ) : (
-              <div className="grid gap-3 max-h-96 overflow-y-auto">
+              <div className="grid gap-3">
                 {publicCharacters?.map((character) => (
                   <div key={character.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50">
                     {character.image_url && (
@@ -1019,6 +1012,18 @@ export const AddCharacterModal = ({
             )}
           </TabsContent>
         </Tabs>
+        </div>
+
+        {/* Fixed Footer */}
+        <div className="flex-shrink-0 px-4 py-4 border-t border-border flex gap-3">
+          <Button variant="outline" onClick={onClose} className="flex-1">
+            Cancel
+          </Button>
+          <Button onClick={handleCreate} className="flex-1">
+            <Save className="w-4 h-4 mr-2" />
+            Create Character
+          </Button>
+        </div>
       </ResponsiveModalContent>
     </ResponsiveModal>
   );
