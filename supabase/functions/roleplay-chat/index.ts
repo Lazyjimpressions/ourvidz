@@ -3661,8 +3661,14 @@ const sceneContext = analyzeSceneContent(response);
               user_selected_i2i: i2iModelOverride || 'auto'
             });
           } else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
-            // ✅ Fallback: Continuity enabled but no previous scene - use T2I with character reference
-            console.log('📝 Scene continuity enabled but no previous scene - using T2I mode with character reference');
+            // ✅ First scene in conversation with continuity enabled - use character reference
+            i2iReferenceImage = character.reference_image_url || undefined;
+            i2iStrength = refStrength ?? 0.7;
+            console.log('📝 Scene continuity enabled but no previous scene - using T2I with character reference:', {
+              has_character_reference: !!i2iReferenceImage,
+              reference_url_preview: i2iReferenceImage?.substring(0, 80),
+              strength: i2iStrength
+            });
           } else {
             // T2I mode: Use character reference image if available
             i2iReferenceImage = character.reference_image_url || undefined;
