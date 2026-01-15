@@ -123,11 +123,13 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
   return (
     <ResponsiveModal open={isOpen} onOpenChange={onClose}>
       <ResponsiveModalContent className="bg-background border-border text-foreground max-w-sm">
-        <ResponsiveModalHeader>
+        {/* Fixed Header */}
+        <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-border">
           <ResponsiveModalTitle className="text-lg">Edit Scene</ResponsiveModalTitle>
-        </ResponsiveModalHeader>
+        </div>
 
-        <div className="space-y-4">
+        {/* Scrollable Content */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 space-y-4">
           <div>
             <Label htmlFor="edit-scene-name" className="text-sm font-medium">
               Scene Name <span className="text-red-500">*</span>
@@ -231,24 +233,25 @@ export const SceneEditModal: React.FC<SceneEditModalProps> = ({
               Higher priority scenes appear first in lists
             </p>
           </div>
+        </div>
 
-          <div className="flex gap-2 pt-2">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="flex-1"
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isSaving || !sceneName.trim() || !scenePrompt.trim()}
-              className="flex-1"
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </div>
+        {/* Fixed Footer */}
+        <div className="flex-shrink-0 px-4 py-4 border-t border-border flex gap-2">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1"
+            disabled={isSaving}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving || !sceneName.trim() || !scenePrompt.trim()}
+            className="flex-1"
+          >
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </Button>
         </div>
       </ResponsiveModalContent>
     </ResponsiveModal>
