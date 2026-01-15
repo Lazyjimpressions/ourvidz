@@ -173,16 +173,28 @@ export const AddCharacterModal = ({
     if (isFalModel) {
       // Use fal-image edge function directly for fal.ai models
       setIsGeneratingPortrait(true);
+      
+      // Check if we have a reference image for I2I generation
+      const hasReferenceImage = !!formData.reference_image_url;
+      
       try {
         const { data, error } = await supabase.functions.invoke('fal-image', {
           body: {
             prompt,
             apiModelId: selectedImageModel || undefined, // Will use default fal.ai model if not specified
             quality: 'high',
+            // Use Seedream v4.5 Edit model for I2I when reference image is available
+            model_key_override: hasReferenceImage ? 'fal-ai/bytedance/seedream/v4.5/edit' : undefined,
+            input: hasReferenceImage ? {
+              image_url: formData.reference_image_url
+              // Seedream Edit doesn't use strength - it uses prompt-based control
+            } : undefined,
             metadata: {
               contentType: formData.content_rating,
               destination: 'character_portrait',
-              characterName: formData.name
+              characterName: formData.name,
+              is_i2i: hasReferenceImage,
+              reference_image_url: hasReferenceImage ? formData.reference_image_url : undefined
             }
           }
         });
@@ -225,16 +237,21 @@ export const AddCharacterModal = ({
       }
     } else {
       // Fall back to useGeneration hook for other models (SDXL, Replicate)
+      const hasReferenceImage = !!formData.reference_image_url;
+      
       try {
         await generateContent({
           format: 'sdxl_image_high',
           prompt,
           projectId: '00000000-0000-0000-0000-000000000000',
+          referenceImageUrl: hasReferenceImage ? formData.reference_image_url : undefined,
           metadata: {
             contentType: formData.content_rating,
             destination: 'character_portrait',
             characterName: formData.name,
-            apiModelId: selectedImageModel || undefined
+            apiModelId: selectedImageModel || undefined,
+            is_i2i: hasReferenceImage,
+            reference_strength: hasReferenceImage ? 0.65 : undefined
           }
         });
       } catch (error) {
