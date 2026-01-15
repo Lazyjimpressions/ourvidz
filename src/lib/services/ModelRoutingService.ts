@@ -37,16 +37,22 @@ export interface ModelRoute {
  */
 export const DEFAULT_CHAT_MODELS = [
   {
-    modelKey: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
-    displayName: 'Dolphin Mistral 24B Venice (Free)',
+    modelKey: 'cognitivecomputations/dolphin3.0-r1-mistral-24b:free',
+    displayName: 'Dolphin 3.0 R1 Mistral 24B (Free)',
     tier: 'free',
-    description: 'Most uncensored model with user control over alignment'
+    description: 'Advanced uncensored reasoning model with strong roleplay capabilities'
   },
   {
     modelKey: 'cognitivecomputations/dolphin3.0-mistral-24b:free',
     displayName: 'Dolphin 3.0 Mistral 24B (Free)',
     tier: 'free',
     description: 'General-purpose uncensored instruct model'
+  },
+  {
+    modelKey: 'gryphe/mythomax-l2-13b',
+    displayName: 'MythoMax 13B',
+    tier: 'free',
+    description: 'Creative roleplay model with excellent storytelling'
   },
   {
     modelKey: 'nothingiisreal/mn-celeste-12b',
