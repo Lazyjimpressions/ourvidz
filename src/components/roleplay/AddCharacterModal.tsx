@@ -163,19 +163,25 @@ export const AddCharacterModal = ({
     });
 
     console.log('🎨 Generating character portrait with prompt:', prompt);
+    console.log('🎨 Reference image URL:', formData.reference_image_url);
 
-    // Check if selected model is from fal.ai (default model is Seedream from fal.ai)
+    // Check if we have a reference image for I2I generation
+    const hasReferenceImage = !!formData.reference_image_url;
+
+    // ALWAYS use fal-image for character portraits - it's more reliable than local SDXL workers
+    // Local SDXL workers require Upstash Redis which may be unavailable
     const selectedModel = imageModels?.find(m => m.id === selectedImageModel);
-    const isFalModel = selectedModel?.model_key?.includes('fal-ai') ||
-                       selectedModel?.model_key?.includes('seedream') ||
-                       !selectedImageModel; // Default model is fal.ai Seedream
+    const isExplicitlySDXL = selectedModel?.model_key?.toLowerCase().includes('sdxl') || 
+                              selectedModel?.model_key?.toLowerCase().includes('stability');
+    
+    // Use fal-image unless explicitly selecting an SDXL/Stability model
+    const useFalImage = !isExplicitlySDXL;
 
-    if (isFalModel) {
+    if (useFalImage) {
       // Use fal-image edge function directly for fal.ai models
       setIsGeneratingPortrait(true);
       
-      // Check if we have a reference image for I2I generation
-      const hasReferenceImage = !!formData.reference_image_url;
+      console.log('🎨 Using fal-image for character portrait, hasReferenceImage:', hasReferenceImage);
       
       try {
         const { data, error } = await supabase.functions.invoke('fal-image', {
@@ -236,8 +242,8 @@ export const AddCharacterModal = ({
         setIsGeneratingPortrait(false);
       }
     } else {
-      // Fall back to useGeneration hook for other models (SDXL, Replicate)
-      const hasReferenceImage = !!formData.reference_image_url;
+      // Fall back to useGeneration hook for SDXL/Stability models (requires local workers)
+      console.log('🎨 Using SDXL for character portrait, hasReferenceImage:', hasReferenceImage);
       
       try {
         await generateContent({
