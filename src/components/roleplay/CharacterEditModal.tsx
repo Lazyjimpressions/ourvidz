@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Edit3, Save, X, Plus, Wand2, Upload } from 'lucide-react';
+import { Edit3, Save, X, Plus, Wand2, Upload, Library } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useGeneration } from '@/hooks/useGeneration';
@@ -23,7 +23,7 @@ import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
-
+import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
 interface CharacterEditModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -77,6 +77,7 @@ export const CharacterEditModal = ({
   });
   const [newTag, setNewTag] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
   const { updateUserCharacter } = useUserCharacters();
   const { generateContent, isGenerating } = useGeneration();
   const { createScene } = useCharacterScenes(character?.id);
@@ -219,6 +220,16 @@ export const CharacterEditModal = ({
     } finally {
       setIsUploading(false);
     }
+  };
+
+  // Handle library image selection
+  const handleSelectFromLibrary = (imageUrl: string, source: 'library' | 'workspace') => {
+    setFormData(prev => ({ ...prev, image_url: imageUrl, reference_image_url: imageUrl }));
+    setShowImagePicker(false);
+    toast({ 
+      title: 'Image selected', 
+      description: 'Library image set as portrait' 
+    });
   };
 
   useEffect(() => {
@@ -529,33 +540,45 @@ export const CharacterEditModal = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="space-y-2">
             <Button 
               type="button"
               variant="outline" 
               onClick={handleGeneratePortrait}
               disabled={isGenerating || !formData.name.trim()}
-              className="flex-1"
+              className="w-full"
             >
               <Wand2 className="w-4 h-4 mr-2" />
               {isGenerating ? 'Generating...' : 'Generate Portrait'}
             </Button>
             
-            <div className="relative">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
-                disabled={isUploading}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-              />
-              <Button 
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                />
+                <Button 
+                  type="button"
+                  variant="outline"
+                  disabled={isUploading}
+                  className="w-full"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {isUploading ? 'Uploading...' : 'Upload'}
+                </Button>
+              </div>
+              
+              <Button
                 type="button"
                 variant="outline"
-                disabled={isUploading}
+                onClick={() => setShowImagePicker(true)}
               >
-                <Upload className="w-4 h-4 mr-2" />
-                {isUploading ? 'Uploading...' : 'Upload Avatar'}
+                <Library className="w-4 h-4 mr-2" />
+                Library
               </Button>
             </div>
           </div>
@@ -573,6 +596,14 @@ export const CharacterEditModal = ({
           </Button>
         </div>
       </ResponsiveModalContent>
+
+      {/* Image Picker Dialog */}
+      <ImagePickerDialog
+        isOpen={showImagePicker}
+        onClose={() => setShowImagePicker(false)}
+        onSelect={handleSelectFromLibrary}
+        title="Select Character Portrait"
+      />
     </ResponsiveModal>
   );
 };
