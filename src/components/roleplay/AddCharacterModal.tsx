@@ -68,7 +68,7 @@ export const AddCharacterModal = ({
     // New fields for enhanced character creation
     content_rating: 'nsfw' as ContentRating,  // Default to NSFW
     gender: '',
-    role: '',
+    narrative_role: '', // Story role (companion, mentor, etc.) - NOT the system role
     voice_examples: [] as string[],
     forbidden_phrases: [] as string[],
     // Structured layers for scene_behavior_rules
@@ -393,13 +393,18 @@ export const AddCharacterModal = ({
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { character_layers, ...cleanFormData } = formData;
 
+      // Separate narrative_role from the data to be sent to the database
+      const { narrative_role, ...dataForDb } = cleanFormData;
+      
       const characterData = {
-        ...cleanFormData,
+        ...dataForDb,
+        role: 'ai', // System role - always 'ai' for AI companions
         content_rating: formData.content_rating,
-        // Store structured layers in scene_behavior_rules
-        scene_behavior_rules: Object.keys(character_layers).length > 0
-          ? { characterLayers: character_layers }
-          : undefined
+        // Store structured layers and narrative role in scene_behavior_rules
+        scene_behavior_rules: {
+          ...(Object.keys(character_layers).length > 0 ? { characterLayers: character_layers } : {}),
+          ...(narrative_role ? { narrativeRole: narrative_role } : {})
+        }
       };
 
       console.log('📝 Creating character with data:', {
@@ -446,7 +451,7 @@ export const AddCharacterModal = ({
       is_public: false,
       content_rating: 'nsfw' as ContentRating,
       gender: '',
-      role: '',
+      narrative_role: '',
       voice_examples: [],
       forbidden_phrases: [],
       character_layers: {}
@@ -784,8 +789,8 @@ export const AddCharacterModal = ({
                 </div>
 
                 <div>
-                  <Label htmlFor="role">Role Type</Label>
-                  <Select value={formData.role} onValueChange={(value) => setFormData(prev => ({ ...prev, role: value }))}>
+                  <Label htmlFor="narrative_role">Role Type</Label>
+                  <Select value={formData.narrative_role} onValueChange={(value) => setFormData(prev => ({ ...prev, narrative_role: value }))}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select role" />
                     </SelectTrigger>
