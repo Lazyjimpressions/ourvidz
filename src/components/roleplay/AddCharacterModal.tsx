@@ -20,10 +20,13 @@ import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
+import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
+import { uploadToAvatarsBucket } from '@/utils/avatarUtils';
 import { getSignedUrl } from '@/lib/storage';
-import { Plus, Save, Users, Sparkles, X, Wand2, Loader2, ImageIcon, RefreshCw, User } from 'lucide-react';
+import { Plus, Save, Users, Sparkles, X, Wand2, Loader2, ImageIcon, RefreshCw, User, Upload, Library } from 'lucide-react';
+import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
 import type { ContentRating, CharacterLayers, VoiceTone } from '@/types/roleplay';
 
 interface AddCharacterModalProps {
@@ -80,9 +83,12 @@ export const AddCharacterModal = ({
   const { createUserCharacter } = useUserCharacters();
   const { characters: publicCharacters, isLoading: loadingPublic } = usePublicCharacters();
   const { toast } = useToast();
+  const { user } = useAuth();
   const { generateContent, isGenerating, currentJob, generationProgress } = useGeneration();
   const { imageModels, defaultModel: defaultImageModel } = useImageModels();
   const { allModelOptions: roleplayModels, defaultModel: defaultRoleplayModel } = useRoleplayModels();
+  const [isUploading, setIsUploading] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
 
   // Set default image model when available
   useEffect(() => {
@@ -241,6 +247,52 @@ export const AddCharacterModal = ({
       }
     }
   }, [formData, selectedImageModel, imageModels, generateContent, toast]);
+
+  // Handle file upload for character portrait
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id) {
+      if (!user?.id) {
+        toast({
+          title: 'Not logged in',
+          description: 'Please log in to upload images.',
+          variant: 'destructive'
+        });
+      }
+      return;
+    }
+    
+    setIsUploading(true);
+    try {
+      const avatarUrl = await uploadToAvatarsBucket(file, user.id, 'character');
+      setFormData(prev => ({ ...prev, image_url: avatarUrl, reference_image_url: avatarUrl }));
+      setGeneratedImageUrl(avatarUrl);
+      toast({ 
+        title: 'Avatar uploaded', 
+        description: 'Image uploaded successfully!' 
+      });
+    } catch (error) {
+      console.error('Failed to upload avatar:', error);
+      toast({ 
+        title: 'Upload failed', 
+        description: 'Failed to upload image. Please try again.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Handle library image selection
+  const handleSelectFromLibrary = (imageUrl: string, source: 'library' | 'workspace') => {
+    setFormData(prev => ({ ...prev, image_url: imageUrl, reference_image_url: imageUrl }));
+    setGeneratedImageUrl(imageUrl);
+    setShowImagePicker(false);
+    toast({ 
+      title: 'Image selected', 
+      description: 'Library image set as portrait' 
+    });
+  };
 
   // AI Suggestion function
   const fetchSuggestions = useCallback(async (
@@ -870,7 +922,7 @@ export const AddCharacterModal = ({
                 {/* Generation Controls */}
                 <div className="flex-1 space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    Generate a portrait based on your character's description and appearance tags, or paste an image URL below.
+                    Generate a portrait, upload an image, or select from your library.
                   </p>
 
                   {/* Generate Button */}
@@ -884,7 +936,7 @@ export const AddCharacterModal = ({
                     {(isGenerating || isGeneratingPortrait) ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Generating Portrait...
+                        Generating...
                       </>
                     ) : (
                       <>
@@ -893,6 +945,41 @@ export const AddCharacterModal = ({
                       </>
                     )}
                   </Button>
+
+                  {/* Upload + Library Buttons */}
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Upload Button */}
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        disabled={isUploading}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isUploading}
+                        className="w-full"
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {isUploading ? 'Uploading...' : 'Upload'}
+                      </Button>
+                    </div>
+                    
+                    {/* Library Button */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowImagePicker(true)}
+                    >
+                      <Library className="w-4 h-4 mr-2" />
+                      Library
+                    </Button>
+                  </div>
 
                   {/* Generation Progress */}
                   {(isGenerating || isGeneratingPortrait) && (
@@ -918,7 +1005,7 @@ export const AddCharacterModal = ({
                   {generatedImageUrl && !isGenerating && !isGeneratingPortrait && (
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={generateCharacterImage}
                       className="w-full text-xs"
@@ -1025,6 +1112,14 @@ export const AddCharacterModal = ({
           </Button>
         </div>
       </ResponsiveModalContent>
+
+      {/* Image Picker Dialog */}
+      <ImagePickerDialog
+        isOpen={showImagePicker}
+        onClose={() => setShowImagePicker(false)}
+        onSelect={handleSelectFromLibrary}
+        title="Select Character Portrait"
+      />
     </ResponsiveModal>
   );
 };
