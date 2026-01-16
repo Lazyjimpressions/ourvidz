@@ -855,9 +855,7 @@ const MobileRoleplayChat: React.FC = () => {
             // ✅ FIX: Pass user role and character for scene immersion
             user_role: userRole || null,
             user_character_id: effectiveUserCharacterId || null,
-            // Add prompt template integration
-            prompt_template_id: loadedPromptTemplate?.id || null,
-            prompt_template_name: loadedPromptTemplate?.template_name || null,
+            // NOTE: Template selection is handled server-side based on model_provider
             // Add image model selection (with fallback)
             selected_image_model: getValidImageModel(),
             // Scene style for user representation in images
@@ -1317,9 +1315,7 @@ const MobileRoleplayChat: React.FC = () => {
           // ✅ ADD SCENE CONTEXT:
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.scene_prompt || null,
-          // ✅ ADD PROMPT TEMPLATE INTEGRATION:
-          prompt_template_id: promptTemplate?.id || null,
-          prompt_template_name: promptTemplate?.template_name || null,
+          // NOTE: Template selection is handled server-side based on model_provider
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
           selected_image_model: validImageModel,
           // ✅ Scene style for user representation in images
@@ -1489,8 +1485,7 @@ const MobileRoleplayChat: React.FC = () => {
           user_id: user.id,
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
-          prompt_template_id: promptTemplate?.id || null,
-          prompt_template_name: promptTemplate?.template_name || null,
+          // NOTE: Template selection is handled server-side based on model_provider
           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Pass consistency settings from UI
@@ -1956,9 +1951,7 @@ const MobileRoleplayChat: React.FC = () => {
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
-          // ✅ Pass template ID (edge function will use model-specific selection if not provided)
-          prompt_template_id: currentTemplate?.id || null,
-          prompt_template_name: currentTemplate?.template_name || null,
+          // NOTE: Template selection is handled server-side based on model_provider
           // 🔄 Scene continuity (fresh conversation - no previous scene)
           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: null,

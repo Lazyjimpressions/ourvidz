@@ -425,56 +425,13 @@ serve(async (req) => {
       });
     }
 
-    // Load prompt template if provided
-    let promptTemplate: { id: string; template_name: string; [key: string]: any } | null = null;
-    if (prompt_template_id) {
-      try {
-        const { data: templateData, error: templateError } = await supabase
-          .from('prompt_templates')
-          .select('*')
-          .eq('id', prompt_template_id)
-          .eq('is_active', true)
-          .single();
-        
-        if (!templateError && templateData) {
-          promptTemplate = templateData;
-          console.log('📝 Loaded prompt template:', templateData.template_name);
-        } else {
-          console.log('⚠️ Failed to load prompt template:', templateError);
-          // ✅ ADMIN: Still preserve template ID/name from request even if load fails
-          console.log('📝 Preserving template info from request:', {
-            id: prompt_template_id,
-            name: prompt_template_name
-          });
-        }
-      } catch (error) {
-        console.error('Error loading prompt template:', error);
-        // ✅ ADMIN: Still preserve template ID/name from request even if load fails
-        console.log('📝 Preserving template info from request after error:', {
-          id: prompt_template_id,
-          name: prompt_template_name
-        });
-      }
-    } else if (prompt_template_name) {
-      // ✅ ADMIN: If only name is provided, try to find template by name
-      console.log('📝 Template ID not provided, searching by name:', prompt_template_name);
-      try {
-        const { data: templateData, error: templateError } = await supabase
-          .from('prompt_templates')
-          .select('*')
-          .eq('template_name', prompt_template_name)
-          .eq('is_active', true)
-          .order('version', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (!templateError && templateData) {
-          promptTemplate = templateData;
-          console.log('📝 Found template by name:', templateData.template_name, 'ID:', templateData.id);
-        }
-      } catch (error) {
-        console.error('Error searching template by name:', error);
-      }
+    // NOTE: Frontend template ID is ignored for API models - they do their own model-specific lookup
+    // This section only logs for debugging; actual template selection happens in callModelWithConfig
+    if (prompt_template_id || prompt_template_name) {
+      console.log('📝 Frontend passed template (ignored for API models, used only for chat_worker):', {
+        id: prompt_template_id,
+        name: prompt_template_name
+      });
     }
 
     // Get recent messages for context
@@ -540,8 +497,10 @@ serve(async (req) => {
 
     // Route to appropriate model provider
     if (effectiveModelProvider === 'chat_worker') {
-      // Local Qwen model
-      const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate, scene_starters, user_role, scene_description);
+      // Local Qwen model - use universal template (appropriate for local models)
+      const qwenTemplate = await getUniversalTemplate(supabase, content_tier);
+      console.log('📝 chat_worker using template:', qwenTemplate?.template_name || 'fallback');
+      const systemPrompt = buildSystemPromptFromTemplate(qwenTemplate, character, recentMessages, content_tier, scene_context, scene_system_prompt, conversation.user_character, scene_starters);
       response = await callChatWorkerWithHistory(character, recentMessages || [], systemPrompt, userMessage, content_tier);
       modelUsed = 'chat_worker';
     } else {
