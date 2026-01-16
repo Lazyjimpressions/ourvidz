@@ -84,6 +84,16 @@
   .pb-safe {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
+  /* Bottom nav safe padding - accounts for nav height + safe area */
+  .pb-nav-safe {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+  /* Touch-optimized card states */
+  .card-touch {
+    @apply transition-all duration-200;
+    @apply hover:shadow-lg hover:scale-[1.01] hover:border-primary/50;
+    @apply active:scale-[0.98];
+  }
 }
 
 /* Simple slider styling */
