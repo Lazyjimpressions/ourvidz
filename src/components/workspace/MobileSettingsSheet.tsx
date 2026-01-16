@@ -295,6 +295,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   {/* Thumbnail + Info Row */}
                   <div className="flex items-center gap-3">
                     <MobileReferenceImagePreview
+                      key={referenceImageUrl || referenceImage?.name || 'ref-single'}
                       file={referenceImage}
                       imageUrl={referenceImageUrl}
                       onRemove={onReferenceImageRemove}
@@ -375,6 +376,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   {hasStartFrame ? (
                     <div className="flex items-center gap-3">
                       <MobileReferenceImagePreview
+                        key={beginningRefImageUrl || beginningRefImage?.name || 'ref-start'}
                         file={beginningRefImage}
                         imageUrl={beginningRefImageUrl}
                         onRemove={onStartFrameRemove}
@@ -416,6 +418,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                     {hasStartFrame ? (
                       <div className="flex items-center gap-2">
                         <MobileReferenceImagePreview
+                          key={`start-${beginningRefImageUrl || beginningRefImage?.name || 'start'}`}
                           file={beginningRefImage}
                           imageUrl={beginningRefImageUrl}
                           onRemove={onStartFrameRemove}
@@ -448,6 +451,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                     {hasEndFrame ? (
                       <div className="flex items-center gap-2">
                         <MobileReferenceImagePreview
+                          key={`end-${endingRefImageUrl || endingRefImage?.name || 'end'}`}
                           file={endingRefImage}
                           imageUrl={endingRefImageUrl}
                           onRemove={onEndFrameRemove}
