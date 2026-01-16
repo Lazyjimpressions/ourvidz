@@ -87,12 +87,13 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
     }
   ];
 
-  // Check if we're on workspace, chat, or roleplay dashboard route for mobile optimization
+  // Check if we're on workspace, chat, roleplay dashboard, or library route for mobile optimization
   // IMPORTANT: avoid JS-driven width detection to prevent "reverting" on resize/viewport quirks.
   const isWorkspaceRoute = location.pathname === '/workspace';
   const isChatRoute = location.pathname.startsWith('/roleplay/chat');
   const isRoleplayDashboard = location.pathname === '/roleplay';
-  const isCompactRoute = isWorkspaceRoute || isChatRoute || isRoleplayDashboard;
+  const isLibraryRoute = location.pathname === '/library';
+  const isCompactRoute = isWorkspaceRoute || isChatRoute || isRoleplayDashboard || isLibraryRoute;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">
