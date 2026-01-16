@@ -1,16 +1,266 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { GenerationService } from '@/lib/services/GenerationService';
 import { GenerationRequest, GenerationStatus, GenerationFormat, GENERATION_CONFIGS } from '@/types/generation';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
+
+const ACTIVE_JOBS_KEY = 'active-generation-jobs';
+const JOB_TIMEOUT_MS = 300000; // 5 minutes
+
+interface PersistedJob extends GenerationStatus {
+  startedAt: number;
+}
+
+// Helper to persist job to localStorage
+const persistJob = (job: GenerationStatus | null) => {
+  if (job) {
+    const persistedJob: PersistedJob = {
+      ...job,
+      startedAt: Date.now()
+    };
+    localStorage.setItem(ACTIVE_JOBS_KEY, JSON.stringify(persistedJob));
+  } else {
+    localStorage.removeItem(ACTIVE_JOBS_KEY);
+  }
+};
+
+// Helper to restore job from localStorage
+const restoreJob = (): PersistedJob | null => {
+  try {
+    const stored = localStorage.getItem(ACTIVE_JOBS_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    localStorage.removeItem(ACTIVE_JOBS_KEY);
+  }
+  return null;
+};
 
 export const useGeneration = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [currentJob, setCurrentJob] = useState<GenerationStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const hasRecovered = useRef(false);
+
+  // Handle job completion (shared between realtime and recovery)
+  const handleJobCompleted = useCallback(async (jobId: string, format: GenerationFormat, showToast = true) => {
+    console.log('✅ Generation completed:', { jobId, format });
+    
+    setIsGenerating(false);
+    setGenerationProgress(100);
+    persistJob(null);
+    
+    // Resolve asset ID and emit completion event
+    try {
+      const { data: jobData, error: jobError } = await supabase
+        .from('jobs')
+        .select('image_id, video_id, job_type')
+        .eq('id', jobId)
+        .single();
+      
+      if (!jobError && jobData) {
+        const assetId = jobData.image_id || jobData.video_id;
+        const assetType = jobData.image_id ? 'image' : 'video';
+        
+        if (assetId) {
+          console.log('🎯 Resolved asset ID:', { jobId, assetId, assetType });
+          
+          let imageUrl = null;
+          if (assetType === 'image') {
+            const { data: assetData } = await supabase
+              .from('workspace_assets')
+              .select('temp_storage_path')
+              .eq('job_id', jobId)
+              .eq('asset_type', 'image')
+              .maybeSingle();
+            
+            if (assetData?.temp_storage_path) {
+              imageUrl = assetData.temp_storage_path;
+            }
+          }
+          
+          window.dispatchEvent(new CustomEvent('generation-completed', {
+            detail: { assetId, imageUrl, bucket: 'workspace-temp', type: assetType, jobId }
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error resolving asset ID:', error);
+    }
+    
+    // Invalidate workspace assets to refresh the UI
+    queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+    
+    if (showToast) {
+      toast({
+        title: "Generation Complete",
+        description: `Your ${GENERATION_CONFIGS[format]?.displayName || 'content'} is ready!`,
+      });
+    }
+    
+    setCurrentJob(null);
+  }, [toast, queryClient]);
+
+  // Handle job failure
+  const handleJobFailed = useCallback((jobId: string, errorMessage: string, showToast = true) => {
+    console.error('❌ Generation failed:', { jobId, error: errorMessage });
+    
+    setIsGenerating(false);
+    setError(errorMessage);
+    persistJob(null);
+    setCurrentJob(null);
+    
+    if (showToast) {
+      toast({
+        title: "Generation Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  // Recover job on mount - check if there's a pending job from before
+  useEffect(() => {
+    if (hasRecovered.current) return;
+    hasRecovered.current = true;
+
+    const storedJob = restoreJob();
+    if (!storedJob) return;
+
+    console.log('🔄 Found stored job, checking status:', storedJob.id);
+
+    // Check if job has timed out based on original start time
+    const elapsed = Date.now() - storedJob.startedAt;
+    if (elapsed > JOB_TIMEOUT_MS) {
+      console.warn('⏰ Stored job has timed out, clearing');
+      persistJob(null);
+      return;
+    }
+
+    // Verify current job status in database
+    const verifyJob = async () => {
+      try {
+        const { data: job, error: dbError } = await supabase
+          .from('jobs')
+          .select('status, error_message')
+          .eq('id', storedJob.id)
+          .single();
+
+        if (dbError || !job) {
+          console.warn('⚠️ Stored job not found in database, clearing');
+          persistJob(null);
+          return;
+        }
+
+        if (job.status === 'completed') {
+          console.log('🎉 Job completed while away!');
+          await handleJobCompleted(storedJob.id, storedJob.format, true);
+        } else if (job.status === 'failed' || job.status === 'cancelled') {
+          handleJobFailed(storedJob.id, job.error_message || 'Generation failed', true);
+        } else {
+          // Job still in progress - restore tracking
+          console.log('📡 Resuming job tracking:', storedJob.id);
+          setCurrentJob(storedJob);
+          setIsGenerating(true);
+          setGenerationProgress(job.status === 'processing' ? 50 : 10);
+          
+          toast({
+            title: "Generation Resumed",
+            description: "Your generation is still in progress.",
+          });
+        }
+      } catch (error) {
+        console.error('❌ Failed to verify stored job:', error);
+        persistJob(null);
+      }
+    };
+
+    verifyJob();
+  }, [handleJobCompleted, handleJobFailed, toast]);
+
+  // Realtime subscription for job status updates
+  useEffect(() => {
+    if (!currentJob || currentJob.status === 'completed' || currentJob.status === 'failed') {
+      return;
+    }
+
+    console.log('📡 Setting up realtime subscription for job:', currentJob.id);
+
+    const channelName = `job-status-${currentJob.id}-${Date.now()}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'jobs',
+          filter: `id=eq.${currentJob.id}`
+        },
+        async (payload) => {
+          const newJob = payload.new as any;
+          console.log('📊 Realtime job update:', { jobId: currentJob.id, status: newJob.status });
+
+          if (newJob.status === 'processing') {
+            setGenerationProgress(50);
+            setCurrentJob(prev => prev ? { ...prev, status: 'processing', progress: 50 } : null);
+          } else if (newJob.status === 'completed') {
+            await handleJobCompleted(currentJob.id, currentJob.format);
+          } else if (newJob.status === 'failed' || newJob.status === 'cancelled') {
+            handleJobFailed(currentJob.id, newJob.error_message || 'Generation failed');
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Realtime subscription status:', status);
+      });
+
+    // Fallback polling in case realtime misses an update (every 10s instead of 2s)
+    const fallbackPoll = setInterval(async () => {
+      try {
+        const jobStatus = await GenerationService.getGenerationStatus(currentJob.id);
+        
+        if (jobStatus.status === 'completed') {
+          console.log('🔄 Fallback poll detected completion');
+          await handleJobCompleted(currentJob.id, currentJob.format);
+        } else if (jobStatus.status === 'failed') {
+          handleJobFailed(currentJob.id, jobStatus.error_message || 'Generation failed');
+        }
+      } catch (error) {
+        console.error('❌ Fallback poll error:', error);
+      }
+    }, 10000);
+
+    // Timeout based on stored start time
+    const storedJob = restoreJob();
+    const elapsed = storedJob ? Date.now() - storedJob.startedAt : 0;
+    const remainingTime = Math.max(JOB_TIMEOUT_MS - elapsed, 10000);
+
+    const timeout = setTimeout(() => {
+      console.warn('⏰ Generation timeout reached');
+      setIsGenerating(false);
+      setCurrentJob(null);
+      persistJob(null);
+      setError('Generation took too long - this may indicate a server issue');
+      toast({
+        title: "Generation Timeout",
+        description: "This is taking longer than expected. Please try again.",
+        variant: "destructive",
+      });
+    }, remainingTime);
+
+    return () => {
+      console.log('🧹 Cleaning up realtime subscription');
+      supabase.removeChannel(channel);
+      clearInterval(fallbackPoll);
+      clearTimeout(timeout);
+    };
+  }, [currentJob?.id, currentJob?.status, currentJob?.format, handleJobCompleted, handleJobFailed, toast]);
 
   const generateContent = useCallback(async (request: GenerationRequest) => {
     try {
@@ -18,30 +268,24 @@ export const useGeneration = () => {
       setIsGenerating(true);
       setGenerationProgress(0);
       
-      console.log('🎬 Starting generation with enhanced request:', request);
+      console.log('🎬 Starting generation:', request);
       
-      // Queue the generation job with enhanced error handling
       const jobId = await GenerationService.queueGeneration(request);
-      
       const config = GENERATION_CONFIGS[request.format];
       
-      // Set initial job status
-      setCurrentJob({
+      const newJob: GenerationStatus = {
         id: jobId,
         status: 'queued',
         format: request.format,
         progress: 0,
         estimatedTimeRemaining: parseInt(config.estimatedTime)
-      });
+      };
+      
+      setCurrentJob(newJob);
+      persistJob(newJob);
 
-      console.log('✅ Job queued successfully with enhanced logging:', {
-        jobId,
-        format: request.format,
-        isSDXL: config.isSDXL,
-        estimatedTime: config.estimatedTime
-      });
+      console.log('✅ Job queued:', { jobId, format: request.format });
 
-      // Show success toast for SDXL jobs
       if (config.isSDXL) {
         toast({
           title: "SDXL Generation Started",
@@ -50,18 +294,14 @@ export const useGeneration = () => {
       }
       
     } catch (error) {
-      console.error('❌ Generation failed with enhanced error details:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        request,
-        timestamp: new Date().toISOString()
-      });
+      console.error('❌ Generation failed:', error);
       
       const errorMessage = error instanceof Error ? error.message : 'Generation failed';
       setError(errorMessage);
       setIsGenerating(false);
       setCurrentJob(null);
+      persistJob(null);
 
-      // Enhanced error handling for SDXL unavailability
       if (errorMessage.includes('503') || errorMessage.includes('SDXL_DISABLED')) {
         toast({
           title: "SDXL Workers Unavailable",
@@ -91,12 +331,7 @@ export const useGeneration = () => {
       await GenerationService.cancelGeneration(currentJob.id);
       setIsGenerating(false);
       setCurrentJob(null);
-      
-      // Clear timeout
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        setTimeoutId(null);
-      }
+      persistJob(null);
       
       toast({
         title: "Generation Cancelled",
@@ -110,188 +345,7 @@ export const useGeneration = () => {
         variant: "destructive",
       });
     }
-  }, [currentJob?.id, timeoutId, toast]);
-
-  // Enhanced polling for job status updates with completion event emission and timeout handling
-  useEffect(() => {
-    if (!currentJob || currentJob.status === 'completed' || currentJob.status === 'failed') {
-      return;
-    }
-
-    // Set timeout for stuck jobs (5 minutes) 
-    const timeout = setTimeout(() => {
-      console.warn('⏰ Generation timeout reached, stopping processing');
-      setIsGenerating(false);
-      setCurrentJob(null);
-      setError('Generation took too long - this may indicate a server issue');
-      toast({
-        title: "Generation Timeout", 
-        description: "This is taking longer than expected. The system may be overloaded. Please try again.",
-        variant: "destructive",
-      });
-    }, 300000);
-    
-    setTimeoutId(timeout);
-
-    const pollInterval = setInterval(async () => {
-      try {
-        const jobStatus = await GenerationService.getGenerationStatus(currentJob.id);
-        
-        console.log('📊 Enhanced job status poll:', {
-          jobId: currentJob.id,
-          status: jobStatus.status,
-          format: currentJob.format,
-          timestamp: new Date().toISOString()
-        });
-
-        setCurrentJob(prev => prev ? {
-          ...prev,
-          status: jobStatus.status as 'queued' | 'processing' | 'completed' | 'failed',
-          progress: jobStatus.status === 'processing' ? 50 : 
-                   jobStatus.status === 'completed' ? 100 : prev.progress,
-          error: jobStatus.error_message || undefined
-        } : null);
-
-        if (jobStatus.status === 'completed') {
-          setIsGenerating(false);
-          setGenerationProgress(100);
-          
-          // Clear timeout
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            setTimeoutId(null);
-          }
-          
-          console.log('✅ Generation completed with enhanced status:', {
-            jobId: currentJob.id,
-            format: currentJob.format,
-            completedAt: new Date().toISOString()
-          });
-          
-          // Emit completion event with asset ID and image URL resolution
-          try {
-            console.log('🎉 Generation completed, resolving asset ID and image URL');
-            
-            const { data: jobData, error: jobError } = await supabase
-              .from('jobs')
-              .select('image_id, video_id, job_type')
-              .eq('id', currentJob.id)
-              .single();
-            
-            if (!jobError && jobData) {
-              const assetId = jobData.image_id || jobData.video_id;
-              const assetType = jobData.image_id ? 'image' : 'video';
-              
-              if (assetId) {
-                console.log('🎯 Resolved asset ID from completed job:', { 
-                  jobId: currentJob.id, 
-                  assetId, 
-                  assetType,
-                  jobType: jobData.job_type 
-                });
-                
-                // Get asset URL from workspace_assets for recent generations
-                let imageUrl = null;
-                let bucket = null;
-                if (assetType === 'image') {
-                  const { data: assetData, error: assetError } = await supabase
-                    .from('workspace_assets')
-                    .select('temp_storage_path, generation_settings')
-                    .eq('job_id', currentJob.id)
-                    .eq('asset_type', 'image')
-                    .maybeSingle();
-                  
-                  if (!assetError && assetData?.temp_storage_path) {
-                    imageUrl = assetData.temp_storage_path;
-                    
-                    // Extract bucket from generation settings or job type
-                    if (jobData.job_type?.includes('sdxl_image_high')) {
-                      bucket = 'workspace-temp';
-                    } else if (jobData.job_type?.includes('sdxl_image_fast')) {
-                      bucket = 'workspace-temp';
-                    } else if (assetData.generation_settings && typeof assetData.generation_settings === 'object') {
-                      bucket = 'workspace-temp'; // All new assets go to workspace-temp
-                    }
-                    
-                    console.log('🖼️ Resolved asset URL and bucket:', { imageUrl, bucket });
-                  }
-                }
-                
-                // Emit event with asset ID, image URL, and bucket
-                window.dispatchEvent(new CustomEvent('generation-completed', {
-                  detail: { 
-                    assetId, 
-                    imageUrl,
-                    bucket,
-                    type: assetType, 
-                    jobId: currentJob.id 
-                  }
-                }));
-              } else {
-                console.warn('⚠️ No asset ID found for completed job:', currentJob.id);
-              }
-            } else {
-              console.error('❌ Failed to resolve asset ID for job:', currentJob.id, jobError);
-            }
-          } catch (error) {
-            console.error('❌ Error resolving asset ID from job:', error);
-          }
-          
-          toast({
-            title: "Generation Complete",
-            description: `Your ${GENERATION_CONFIGS[currentJob.format].displayName} is ready!`,
-          });
-          
-        } else if (jobStatus.status === 'failed') {
-          setIsGenerating(false);
-          
-          // Clear timeout
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            setTimeoutId(null);
-          }
-          
-          const errorMsg = jobStatus.error_message || 'Generation failed';
-          setError(errorMsg);
-          console.error('❌ Generation failed with enhanced error tracking:', {
-            jobId: currentJob.id,
-            format: currentJob.format,
-            error: errorMsg,
-            failedAt: new Date().toISOString()
-          });
-          
-          toast({
-            title: "Generation Failed",
-            description: errorMsg,
-            variant: "destructive",
-          });
-        }
-        
-      } catch (error) {
-        console.error('❌ Failed to poll job status with enhanced error tracking:', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          jobId: currentJob.id,
-          timestamp: new Date().toISOString()
-        });
-      }
-    }, 2000);
-
-    return () => {
-      clearInterval(pollInterval);
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-    };
-  }, [currentJob, toast, timeoutId]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [timeoutId]);
+  }, [currentJob?.id, toast]);
 
   return {
     generateContent,
