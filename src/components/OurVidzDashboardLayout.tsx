@@ -56,6 +56,12 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
       active: isActiveRoute("/workspace", "image")
     },
     { 
+      icon: Users, 
+      label: "Create Character",
+      onClick: () => navigate("/create-character"),
+      active: isActiveRoute("/create-character")
+    },
+    { 
       icon: Brain, 
       label: "🧠 Playground",
       onClick: () => navigate("/playground"),

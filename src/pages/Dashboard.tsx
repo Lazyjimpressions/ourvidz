@@ -47,13 +47,13 @@ const Dashboard = () => {
       onClick: () => navigate("/storyboard")
     },
     {
-      id: 'create-actor',
-      title: "Create an Actor",
-      subtitle: "Create realistic and consistent models",
+      id: 'create-character',
+      title: "Create Character",
+      subtitle: "Design AI companions for roleplay",
       backgroundImage: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=600&fit=crop",
-      buttonText: "Create Actor",
+      buttonText: "Create Character",
       icon: Users,
-      onClick: () => navigate("/workspace?mode=character")
+      onClick: () => navigate("/create-character")
     },
     {
       id: 'video-library',

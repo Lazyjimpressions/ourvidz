@@ -785,32 +785,51 @@ const MobileRoleplayDashboard = () => {
         )}
 
         {/* My Characters Section (AI Companions) */}
-        {filteredMyCharacters.length > 0 && (
+        {filteredMyCharacters.length >= 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <h2 className="text-sm font-medium text-white">My Characters</h2>
                 <span className="text-xs text-muted-foreground/70">({filteredMyCharacters.length})</span>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/create-character')}
+                className="h-6 text-xs"
+              >
+                <Plus className="w-3 h-3 mr-1" /> Create
+              </Button>
             </div>
-            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
-              {filteredMyCharacters.map((character) => (
-                <div key={character.id} className="relative">
-                  <MobileCharacterCard
-                    character={character}
-                    onSelect={() => handleCharacterSelect(character.id)}
-                    onPreview={() => handleCharacterPreview(character.id)}
-                    onDelete={handleDeleteCharacter}
-                  />
-                  {/* Private/Public indicator */}
-                  {!character.is_public && (
-                    <div className="absolute top-2 right-8 z-10">
-                      <Shield className="w-3.5 h-3.5 text-yellow-400" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            {filteredMyCharacters.length > 0 ? (
+              <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
+                {filteredMyCharacters.map((character) => (
+                  <div key={character.id} className="relative">
+                    <MobileCharacterCard
+                      character={character}
+                      onSelect={() => handleCharacterSelect(character.id)}
+                      onPreview={() => handleCharacterPreview(character.id)}
+                      onDelete={handleDeleteCharacter}
+                    />
+                    {/* Private/Public indicator */}
+                    {!character.is_public && (
+                      <div className="absolute top-2 right-8 z-10">
+                        <Shield className="w-3.5 h-3.5 text-yellow-400" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div 
+                className="border border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/20 transition-colors"
+                onClick={() => navigate('/create-character')}
+              >
+                <User className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">No characters yet</p>
+                <p className="text-xs text-muted-foreground/70 mt-1">Tap to create your first character</p>
+              </div>
+            )}
           </div>
         )}
 
