@@ -493,9 +493,9 @@ const MobileRoleplayDashboard = () => {
               </div>
             </div>
           {/* Horizontal scroll on mobile, grid on larger screens */}
-          {/* Mobile carousel - contained scroll */}
-          <div className="relative -mx-2 sm:hidden">
-            <div className="flex gap-2 overflow-x-auto pb-2 px-2 snap-x snap-mandatory scrollbar-hide overscroll-x-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {/* Mobile carousel - contained scroll, forces 2 tiles visible */}
+          <div className="relative -mx-2 sm:hidden min-w-0">
+            <div className="flex flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pb-2 px-2 snap-x snap-mandatory scrollbar-hide overscroll-x-contain touch-pan-x" style={{ WebkitOverflowScrolling: 'touch' }}>
               {userConversations
                 .filter(conv => (conv.message_count || (conv as any).messages?.[0]?.count || 0) > 0)
                 .sort((a, b) => {
@@ -513,7 +513,7 @@ const MobileRoleplayDashboard = () => {
                   return (
                       <div
                         key={conversation.id}
-                        className="flex-shrink-0 w-[clamp(120px,34vw,170px)] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group snap-start"
+                        className="flex-shrink-0 w-[calc(50vw-16px)] max-w-[180px] relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer group snap-start"
                         onClick={() => navigate(`/roleplay/chat/${conversation.character_id}?conversation=${conversation.id}`)}
                       >
                       {displayImage ? (
