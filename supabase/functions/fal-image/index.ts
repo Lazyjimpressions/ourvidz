@@ -1310,6 +1310,47 @@ serve(async (req) => {
         storagePath = resultUrl;
       }
 
+      // VIDEO THUMBNAIL GENERATION: Use reference image as thumbnail for videos
+      // This ensures videos have proper thumbnails in workspace and library
+      let thumbnailPath: string | null = null;
+      
+      if (resultType === 'video' && storagePath && !storagePath.startsWith('http')) {
+        try {
+          // Use the reference image (start frame) as the video thumbnail
+          const referenceUrl = modelInput.image_url;
+          if (referenceUrl && (referenceUrl.startsWith('http://') || referenceUrl.startsWith('https://'))) {
+            console.log('🖼️ Generating video thumbnail from reference image...');
+            
+            const thumbResponse = await fetch(referenceUrl);
+            if (thumbResponse.ok) {
+              const thumbBuffer = await thumbResponse.arrayBuffer();
+              const thumbStoragePath = `${user.id}/${jobData.id}_${timestamp}.thumb.webp`;
+              
+              const { error: thumbUploadError } = await supabase.storage
+                .from('workspace-temp')
+                .upload(thumbStoragePath, thumbBuffer, {
+                  contentType: 'image/webp',
+                  upsert: true
+                });
+              
+              if (!thumbUploadError) {
+                thumbnailPath = thumbStoragePath;
+                console.log('✅ Video thumbnail created:', thumbStoragePath);
+              } else {
+                console.warn('⚠️ Thumbnail upload failed:', thumbUploadError);
+              }
+            } else {
+              console.warn('⚠️ Failed to download reference image for thumbnail:', thumbResponse.status);
+            }
+          } else {
+            console.log('ℹ️ No reference image available for video thumbnail');
+          }
+        } catch (thumbError) {
+          console.warn('⚠️ Thumbnail generation failed:', thumbError);
+          // Continue without thumbnail - UI will use fallback
+        }
+      }
+
       // Update job with result
       const { error: jobUpdateError } = await supabase
         .from('jobs')
@@ -1322,7 +1363,8 @@ serve(async (req) => {
             result_type: resultType,
             fal_response: falResult,
             input_used: modelInput,
-            original_fal_url: resultUrl // Keep original for reference
+            original_fal_url: resultUrl, // Keep original for reference
+            thumbnail_path: thumbnailPath // Store thumbnail path in job metadata
           }
         })
         .eq('id', jobData.id);
@@ -1345,6 +1387,7 @@ serve(async (req) => {
           job_id: jobData.id,
           asset_type: resultType,
           temp_storage_path: storagePath, // ✅ Frontend expects this column, not asset_url
+          thumbnail_path: thumbnailPath, // ✅ Store thumbnail path for videos
           file_size_bytes: fileSizeBytes,
           mime_type: resultType === 'video' ? 'video/mp4' : 'image/png',
           original_prompt: body.prompt, // Store original, but use sanitized for API call

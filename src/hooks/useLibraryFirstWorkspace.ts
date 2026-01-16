@@ -750,16 +750,45 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         });
       }
 
+      // DUAL-ROUTE ARCHITECTURE: Detect model provider for appropriate reference handling
+      // API models (fal, replicate, openrouter) have different capabilities than local models (SDXL, WAN workers)
+      const getModelProvider = (model: typeof selectedModel): 'fal' | 'replicate' | 'openrouter' | 'local' => {
+        if (model?.type === 'fal') return 'fal';
+        if (model?.type === 'replicate') return 'replicate';
+        // Check for openrouter models by model_key pattern if needed
+        return 'local'; // Default to local (SDXL/WAN workers)
+      };
+      
+      const modelProvider = getModelProvider(selectedModel);
+      const isApiRoute = ['fal', 'replicate', 'openrouter'].includes(modelProvider);
+      const isLocalRoute = modelProvider === 'local';
+      
+      console.log('🔀 ROUTE DETECTION:', {
+        modelProvider,
+        isApiRoute,
+        isLocalRoute,
+        selectedModelType: selectedModel?.type,
+        selectedModelId: selectedModel?.id
+      });
+      
       // Precompute signed reference URLs when needed
-      // For video mode, use beginningRefImage or referenceImage (for WAN 2.1 i2v single reference)
+      // For video mode, use beginningRefImage or referenceImage
+      // API models (fal.ai WAN 2.1 i2v): Only single reference supported
+      // Local WAN workers: Start + end references supported
       const startRefUrl = mode === 'video'
         ? (beginningRefImageUrl || 
            (beginningRefImage ? await uploadAndSignReference(beginningRefImage) : undefined) ||
            (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined)))
         : undefined;
-      const endRefUrl = mode === 'video'
+      
+      // Only calculate endRefUrl for local models - API models (fal.ai) don't support dual references
+      const endRefUrl = (mode === 'video' && isLocalRoute)
         ? (endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
         : undefined;
+      
+      if (mode === 'video' && isApiRoute && (endingRefImage || endingRefImageUrl)) {
+        console.log('ℹ️ NOTE: End reference ignored for API video model (only start reference supported)');
+      }
 
       // FIX: Compute effective reference URL BEFORE prompt enhancement (so we know if we have a reference image)
       console.log('🔍 MOBILE DEBUG - Reference image state before upload:', {
@@ -892,8 +921,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // STAGING-FIRST: All assets go to workspace_assets table
             duration: mode === 'video' ? videoDuration : undefined,
             motion_intensity: mode === 'video' ? motionIntensity : undefined,
+            // DUAL-ROUTE: Only include end_reference_url for local workers (API models don't support it)
             start_reference_url: startRefUrl,
-            end_reference_url: endRefUrl,
+            ...(isLocalRoute && mode === 'video' && { end_reference_url: endRefUrl }),
+            // Track model provider for downstream routing decisions
+            model_provider: modelProvider,
             // FIX: Add reference_image_url to metadata for server-side logging
             reference_image_url: effRefUrl,
             // Control parameters
