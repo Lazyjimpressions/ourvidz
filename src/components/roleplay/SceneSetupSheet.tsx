@@ -188,7 +188,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="h-[85vh] rounded-t-2xl px-0">
+      <SheetContent side="bottom" className="h-[85vh] max-h-[calc(100vh-env(safe-area-inset-top)-2rem)] rounded-t-2xl px-0">
         {/* Scene Header */}
         <div className={cn("relative h-32 bg-gradient-to-br", gradient)}>
           {scene.preview_image_url && (
@@ -421,7 +421,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
         </ScrollArea>
 
         {/* Footer */}
-        <SheetFooter className="absolute bottom-0 left-0 right-0 px-6 py-4 bg-background border-t">
+        <SheetFooter className="absolute bottom-0 left-0 right-0 px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-background border-t">
           <Button
             className="w-full gap-2"
             size="lg"
