@@ -314,7 +314,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
           {/* Main content area */}
           <div 
-            className="flex items-center justify-center"
+            className={`flex items-center justify-center ${isFullscreen ? 'w-full h-[100dvh]' : ''}`}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -326,7 +326,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
               </div>
             ) : currentOriginalUrl ? (
-              <div className="max-w-[90vw] max-h-[90vh] flex items-center justify-center">
+              <div className={isFullscreen ? "w-full h-full flex items-center justify-center" : "max-w-[90vw] max-h-[90vh] flex items-center justify-center"}>
                 {(() => {
                   // Defensive type detection - check if asset should be video despite being marked as image
                   const isVideoByMime = currentAsset.metadata?.mimeType?.startsWith('video/') || currentAsset.mimeType?.startsWith('video/');
@@ -352,7 +352,10 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                       <img
                         src={currentOriginalUrl}
                         alt=""
-                        className={`max-w-full max-h-full w-auto h-auto ${imageFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
+                        className={isFullscreen 
+                          ? `w-full h-full ${imageFitMode === 'contain' ? 'object-contain' : 'object-cover'}`
+                          : `max-w-full max-h-full w-auto h-auto ${imageFitMode === 'contain' ? 'object-contain' : 'object-cover'}`
+                        }
                       />
                     );
                   }
