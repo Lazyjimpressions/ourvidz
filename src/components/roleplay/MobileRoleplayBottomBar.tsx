@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, ImageIcon, Filter, Settings, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -18,11 +19,18 @@ export const MobileRoleplayBottomBar: React.FC<MobileRoleplayBottomBarProps> = (
   activeSection = 'characters',
   onSectionChange
 }) => {
+  const navigate = useNavigate();
+
+  const handleCreateClick = () => {
+    // Navigate directly to character creation page
+    navigate('/create-character');
+  };
+
   return (
     <>
       {/* Floating Action Button */}
       <Button
-        onClick={onCreateCharacter}
+        onClick={handleCreateClick}
         className="fixed bottom-20 right-4 w-14 h-14 rounded-full shadow-lg z-50 bg-primary hover:bg-primary/90"
         size="icon"
       >

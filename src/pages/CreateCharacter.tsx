@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserCharacters, type UserCharacter } from '@/hooks/useUserCharacters';
+import { useImageModels } from '@/hooks/useImageModels';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { ArrowLeft, ChevronDown, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PortraitPanel } from '@/components/roleplay/PortraitPanel';
 import { CharacterGreetingsEditor } from '@/components/roleplay/CharacterGreetingsEditor';
+import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
 import { type SelectedPresets, getPresetTags } from '@/data/characterPresets';
 
 const CreateCharacter: React.FC = () => {
@@ -47,12 +49,25 @@ const CreateCharacter: React.FC = () => {
   // UI state
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     basic: true,
     visual: false,
     greetings: false,
     advanced: false,
   });
+
+  // Model selection - I2I detection based on reference image
+  const { modelOptions, defaultModel, isLoading: modelsLoading } = useImageModels(!!referenceImageUrl);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+
+  // Set default model when available
+  useEffect(() => {
+    if (defaultModel && !selectedModelId) {
+      setSelectedModelId(defaultModel.value);
+    }
+  }, [defaultModel, selectedModelId]);
 
   // Load existing character for editing
   useEffect(() => {
@@ -68,8 +83,15 @@ const CreateCharacter: React.FC = () => {
         setAppearanceTags(existingCharacter.appearance_tags || []);
         setImageUrl(existingCharacter.image_url);
         setReferenceImageUrl(existingCharacter.reference_image_url);
-        // Load first_message and alternate_greetings when available
-        // These will come from the updated type after migration
+        setFirstMessage(existingCharacter.first_message || '');
+        setAlternateGreetings(
+          Array.isArray(existingCharacter.alternate_greetings) 
+            ? existingCharacter.alternate_greetings 
+            : []
+        );
+        if (existingCharacter.default_presets) {
+          setPresets(existingCharacter.default_presets as unknown as SelectedPresets);
+        }
       }
     }
   }, [isEditing, editId, characters]);
@@ -92,46 +114,125 @@ const CreateCharacter: React.FC = () => {
     setAppearanceTags(appearanceTags.filter(t => t !== tag));
   };
 
+  const handleUpload = async () => {
+    if (!user) return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      setIsUploading(true);
+      try {
+        let processedFile = file;
+
+        // Handle HEIC conversion for iPhone
+        if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
+          const heic2any = (await import('heic2any')).default;
+          const blob = await heic2any({ blob: file, toType: 'image/jpeg' });
+          processedFile = new File(
+            [blob as Blob],
+            file.name.replace(/\.heic$/i, '.jpg'),
+            { type: 'image/jpeg' }
+          );
+        }
+
+        // Upload to reference_images bucket
+        const path = `${user.id}/ref_${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('reference_images')
+          .upload(path, processedFile);
+
+        if (uploadError) throw uploadError;
+
+        // Get signed URL for display and I2I
+        const { data: signedData } = await supabase.storage
+          .from('reference_images')
+          .createSignedUrl(path, 3600);
+
+        if (signedData?.signedUrl) {
+          setReferenceImageUrl(signedData.signedUrl);
+          setImageUrl(signedData.signedUrl);
+          toast({ title: 'Image Uploaded', description: 'Reference image ready for generation.' });
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+        toast({
+          title: 'Upload Failed',
+          description: error instanceof Error ? error.message : 'Failed to upload image.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsUploading(false);
+      }
+    };
+    input.click();
+  };
+
+  const handleSelectFromLibrary = (selectedImageUrl: string) => {
+    setImageUrl(selectedImageUrl);
+    setReferenceImageUrl(selectedImageUrl);
+    setShowImagePicker(false);
+    toast({ title: 'Image Selected', description: 'Reference image ready for generation.' });
+  };
+
   const handleGenerate = async () => {
     if (!user) return;
-    
+
     setIsGenerating(true);
     try {
-      // Get preset tags
+      // Get preset tags for prompt
       const presetTags = getPresetTags(presets);
-      
-      // TODO: Call character-portrait edge function
-      // For now, log what would be sent
+
       console.log('🎨 Generate portrait:', {
         name,
         gender,
         appearanceTags: [...appearanceTags, ...presetTags],
         presets,
-        hasReferenceImage: !!referenceImageUrl
+        hasReferenceImage: !!referenceImageUrl,
+        modelId: selectedModelId
       });
-      
-      toast({
-        title: 'Coming Soon',
-        description: 'Portrait generation will be available shortly.',
+
+      // Call character-portrait edge function
+      const { data, error } = await supabase.functions.invoke('character-portrait', {
+        body: {
+          characterId: isEditing ? editId : null,
+          presets,
+          referenceImageUrl,
+          contentRating,
+          apiModelId: selectedModelId || undefined,
+          characterData: isEditing ? null : {
+            name,
+            gender,
+            appearance_tags: appearanceTags,
+            description
+          }
+        }
       });
+
+      if (error) throw error;
+
+      if (data?.imageUrl) {
+        setImageUrl(data.imageUrl);
+        toast({
+          title: 'Portrait Generated',
+          description: `Generated in ${Math.round((data.generationTimeMs || 0) / 1000)}s`,
+        });
+      } else {
+        throw new Error('No image returned from generation');
+      }
     } catch (error) {
       console.error('Generation error:', error);
       toast({
         title: 'Generation Failed',
-        description: 'Failed to generate portrait.',
+        description: error instanceof Error ? error.message : 'Failed to generate portrait.',
         variant: 'destructive',
       });
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  const handleUpload = () => {
-    // TODO: Implement file upload
-    toast({
-      title: 'Coming Soon',
-      description: 'Image upload will be available shortly.',
-    });
   };
 
   const handleSave = async () => {
@@ -232,11 +333,16 @@ const CreateCharacter: React.FC = () => {
                   <PortraitPanel
                     imageUrl={imageUrl}
                     isGenerating={isGenerating}
+                    isUploading={isUploading}
                     presets={presets}
                     onPresetsChange={setPresets}
                     onGenerate={handleGenerate}
                     onUpload={handleUpload}
+                    onSelectFromLibrary={() => setShowImagePicker(true)}
                     hasReferenceImage={!!referenceImageUrl}
+                    modelId={selectedModelId}
+                    onModelChange={setSelectedModelId}
+                    modelOptions={modelOptions}
                     className="pb-4"
                   />
                 </CollapsibleContent>
@@ -246,11 +352,16 @@ const CreateCharacter: React.FC = () => {
               <PortraitPanel
                 imageUrl={imageUrl}
                 isGenerating={isGenerating}
+                isUploading={isUploading}
                 presets={presets}
                 onPresetsChange={setPresets}
                 onGenerate={handleGenerate}
                 onUpload={handleUpload}
+                onSelectFromLibrary={() => setShowImagePicker(true)}
                 hasReferenceImage={!!referenceImageUrl}
+                modelId={selectedModelId}
+                onModelChange={setSelectedModelId}
+                modelOptions={modelOptions}
               />
             </div>
           </div>
@@ -406,6 +517,14 @@ const CreateCharacter: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Image Picker Dialog */}
+      <ImagePickerDialog
+        isOpen={showImagePicker}
+        onClose={() => setShowImagePicker(false)}
+        onSelect={handleSelectFromLibrary}
+        title="Select Character Portrait"
+      />
     </div>
   );
 };
