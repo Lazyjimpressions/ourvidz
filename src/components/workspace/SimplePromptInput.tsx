@@ -771,6 +771,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       className={`${(referenceImage || referenceImageUrl) ? 'cursor-pointer' : ''}`}
                     >
                       <ReferenceImageUpload 
+                        key={referenceImageUrl || referenceImage?.name || 'ref-image'}
                         file={referenceImage} 
                         onFileChange={handleReferenceFileChange} 
                         imageUrl={referenceImageUrl} 
@@ -810,6 +811,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   // Video mode: Show single reference for WAN 2.1 i2v, dual for other models
                   videoModelSettings?.settings?.referenceMode === 'single' ? (
                     <ReferenceImageUpload 
+                      key={beginningRefImageUrl || beginningRefImage?.name || 'ref-video'}
                       file={beginningRefImage || null} 
                       onFileChange={onBeginningRefImageChange || (() => {})} 
                       imageUrl={beginningRefImageUrl} 
@@ -820,6 +822,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   ) : (
                     <>
                       <ReferenceImageUpload 
+                        key={`start-${beginningRefImageUrl || beginningRefImage?.name || 'start'}`}
                         file={beginningRefImage || null} 
                         onFileChange={onBeginningRefImageChange || (() => {})} 
                         imageUrl={beginningRefImageUrl} 
@@ -828,6 +831,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         sizeClass="h-14 w-12"
                       />
                       <ReferenceImageUpload 
+                        key={`end-${endingRefImageUrl || endingRefImage?.name || 'end'}`}
                         file={endingRefImage || null} 
                         onFileChange={onEndingRefImageChange || (() => {})} 
                         imageUrl={endingRefImageUrl} 
