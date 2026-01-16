@@ -1,3 +1,5 @@
+import { getPresetTags, type SelectedPresets } from '@/data/characterPresets';
+
 interface Character {
   name: string;
   description?: string;
@@ -7,8 +9,17 @@ interface Character {
   gender?: string;
 }
 
-export const buildCharacterPortraitPrompt = (character: Character): string => {
+export interface CharacterPortraitOptions {
+  presets?: SelectedPresets;
+  isI2I?: boolean;
+}
+
+export const buildCharacterPortraitPrompt = (
+  character: Character, 
+  options?: CharacterPortraitOptions
+): string => {
   const maxTokens = 77; // SDXL limit
+  const { presets, isI2I } = options || {};
   
   // Build quality tokens - photorealistic focus
   const qualityTokens = ['score_9', 'score_8_up', 'masterpiece', 'best quality', 'photorealistic'];
@@ -24,6 +35,12 @@ export const buildCharacterPortraitPrompt = (character: Character): string => {
     characterTokens.push('1girl', 'beautiful woman', 'portrait', 'headshot'); 
   } else {
     characterTokens.push('1person', 'beautiful person', 'portrait', 'headshot');
+  }
+  
+  // Add preset tags if provided (pose, expression, outfit, camera)
+  if (presets) {
+    const presetTags = getPresetTags(presets);
+    characterTokens.push(...presetTags);
   }
   
   // Add appearance tags if available
@@ -68,11 +85,15 @@ export const buildCharacterPortraitPrompt = (character: Character): string => {
     'photographic'
   ];
   
+  // For I2I, add identity preservation phrase
+  const i2iTokens = isI2I ? ['maintain same character identity', 'consistent facial features'] : [];
+  
   // Smart token assembly with deduplication
   const allTokenGroups = [
     { tokens: qualityTokens, priority: 1, maxCount: 4 },
-    { tokens: characterTokens, priority: 2, maxCount: 12 },
-    { tokens: technicalTokens, priority: 3, maxCount: 5 }
+    { tokens: characterTokens, priority: 2, maxCount: 14 },
+    { tokens: i2iTokens, priority: 3, maxCount: 2 },
+    { tokens: technicalTokens, priority: 4, maxCount: 5 }
   ];
 
   const finalTokens: string[] = [];
@@ -108,7 +129,9 @@ export const buildCharacterPortraitPrompt = (character: Character): string => {
     character: character.name,
     prompt,
     tokenCount: finalTokens.length,
-    maxTokens
+    maxTokens,
+    hasPresets: !!presets,
+    isI2I
   });
 
   return prompt;

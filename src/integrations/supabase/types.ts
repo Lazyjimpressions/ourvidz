@@ -533,13 +533,16 @@ export type Database = {
       }
       characters: {
         Row: {
+          alternate_greetings: Json | null
           appearance_tags: string[] | null
           base_prompt: string | null
           consistency_method: string | null
           content_rating: string
           created_at: string | null
           creator_id: string | null
+          default_presets: Json | null
           description: string
+          first_message: string | null
           forbidden_phrases: string[] | null
           gender: string | null
           id: string
@@ -564,13 +567,16 @@ export type Database = {
           voice_tone: string | null
         }
         Insert: {
+          alternate_greetings?: Json | null
           appearance_tags?: string[] | null
           base_prompt?: string | null
           consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
           creator_id?: string | null
+          default_presets?: Json | null
           description: string
+          first_message?: string | null
           forbidden_phrases?: string[] | null
           gender?: string | null
           id?: string
@@ -595,13 +601,16 @@ export type Database = {
           voice_tone?: string | null
         }
         Update: {
+          alternate_greetings?: Json | null
           appearance_tags?: string[] | null
           base_prompt?: string | null
           consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
           creator_id?: string | null
+          default_presets?: Json | null
           description?: string
+          first_message?: string | null
           forbidden_phrases?: string[] | null
           gender?: string | null
           id?: string

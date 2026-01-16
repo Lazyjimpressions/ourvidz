@@ -20,6 +20,7 @@ import Pricing from "@/pages/Pricing";
 import Playground from "@/pages/Playground";
 import MobileRoleplayDashboard from "@/pages/MobileRoleplayDashboard";
 import MobileRoleplayChat from "@/pages/MobileRoleplayChat";
+import CreateCharacter from "@/pages/CreateCharacter";
 
 import NotFound from "@/pages/NotFound";
 
@@ -58,6 +59,8 @@ function App() {
               <Route path="/roleplay" element={<ProtectedRoute><MobileRoleplayDashboard /></ProtectedRoute>} />
               <Route path="/roleplay/chat/:characterId" element={<ProtectedRoute><MobileRoleplayChat /></ProtectedRoute>} />
               <Route path="/roleplay/chat/:characterId/scene/:sceneId" element={<ProtectedRoute><MobileRoleplayChat /></ProtectedRoute>} />
+              <Route path="/create-character" element={<ProtectedRoute><CreateCharacter /></ProtectedRoute>} />
+              <Route path="/edit-character/:id" element={<ProtectedRoute><CreateCharacter /></ProtectedRoute>} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>
