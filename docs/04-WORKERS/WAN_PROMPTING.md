@@ -1,12 +1,47 @@
 # WAN Video Generation Prompting Guide - OurVidz
 
-**Last Updated:** August 8, 2025  
+**Last Updated:** January 2026  
 **Model:** WAN 2.1 (Video Generation)  
 **Purpose:** Comprehensive guide for video prompt engineering with WAN model
 
 ## Overview
 
 WAN is a powerful text-to-video model that excels at generating high-quality, temporally consistent video content. This guide covers best practices for both SFW and NSFW video generation.
+
+## API vs Local Model Differences
+
+The system supports two distinct video generation routes with different capabilities:
+
+### fal.ai WAN 2.1 i2v (API Route)
+- **Reference**: Single image only (start frame via `image_url`)
+- **Character Limit**: 2,000 characters (not tokens)
+- **Key Parameters**: `image_url`, `guide_scale` (1-10), `resolution`, `aspect_ratio`, `num_frames`
+- **Prompting Style**: Concise prompts focusing on subject and intended motion
+- **Thumbnail**: Generated automatically from reference image
+- **Dual Reference**: NOT supported (end frame ignored)
+
+### Local WAN Worker (Local Route)
+- **Reference**: Start and end frames supported (`first_frame`, `last_frame`)
+- **Token Limit**: 100-300 tokens optimal
+- **Key Parameters**: Standard WAN params with full control
+- **Prompting Style**: Detailed prompts with camera work, temporal consistency, motion modifiers
+- **Dual Reference**: Supported for interpolation between start and end frames
+
+### Choosing Between Routes
+
+| Use Case | Recommended Route | Reason |
+|----------|-------------------|--------|
+| Quick i2v generation | fal.ai API | Faster, simpler |
+| Start-to-end interpolation | Local Worker | Dual reference support |
+| Explicit content | Local Worker | No content filtering |
+| High-volume production | fal.ai API | Scalable, no local GPU needed |
+
+## Thumbnail Generation
+
+Video thumbnails are generated from the input reference image:
+1. The start reference image is used as the thumbnail
+2. Stored alongside the video in `workspace-temp` and `user-library`
+3. Ensures consistent visual representation in workspace grid and library
 
 ## Core Video Prompt Structure
 

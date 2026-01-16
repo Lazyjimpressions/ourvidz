@@ -143,23 +143,67 @@ serve(async (req) => {
 
       // Try to download thumbnail (best-effort)
       let libraryThumbPath: string | null = null;
+      let thumbData = null;
+      
       if (thumbSrc) {
-        const { data: thumbData } = await supabaseClient.storage
+        const thumbResult = await supabaseClient.storage
           .from('workspace-temp')
           .download(thumbSrc);
-        
-        if (thumbData) {
-          const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
-          const { error: upThumbErr } = await supabaseClient.storage
-            .from('user-library')
-            .upload(thumbDest, thumbData, {
-              contentType: 'image/webp',
-              upsert: true
-            });
-          if (!upThumbErr) {
-            libraryThumbPath = thumbDest;
-            console.log('📁 Copied thumbnail:', { thumbSrc, thumbDest });
+        thumbData = thumbResult.data;
+      }
+      
+      // VIDEO THUMBNAIL FALLBACK: If no thumbnail exists for videos, use job's reference image
+      if (!thumbData && asset.asset_type === 'video' && asset.job_id) {
+        console.log('📸 Attempting to use job reference image as video thumbnail fallback...');
+        try {
+          const { data: jobData } = await supabaseClient
+            .from('jobs')
+            .select('metadata')
+            .eq('id', asset.job_id)
+            .single();
+          
+          const refUrl = jobData?.metadata?.reference_image_url || 
+                         jobData?.metadata?.start_reference_url ||
+                         jobData?.metadata?.input_used?.image_url;
+          
+          if (refUrl) {
+            // If it's a storage path, download directly
+            if (refUrl && !refUrl.startsWith('http')) {
+              const bucketName = refUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
+              const storagePath = refUrl.replace(`${bucketName}/`, '');
+              const { data: refThumbData } = await supabaseClient.storage
+                .from(bucketName)
+                .download(storagePath);
+              if (refThumbData) {
+                thumbData = refThumbData;
+                console.log('✅ Using job reference image from storage as video thumbnail');
+              }
+            } else if (refUrl.startsWith('http')) {
+              // Download from external URL
+              const refResponse = await fetch(refUrl);
+              if (refResponse.ok) {
+                const refBuffer = await refResponse.arrayBuffer();
+                thumbData = new Blob([refBuffer], { type: 'image/webp' });
+                console.log('✅ Using job reference image from URL as video thumbnail');
+              }
+            }
           }
+        } catch (refError) {
+          console.warn('⚠️ Failed to fetch job reference for thumbnail fallback:', refError);
+        }
+      }
+        
+      if (thumbData) {
+        const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
+        const { error: upThumbErr } = await supabaseClient.storage
+          .from('user-library')
+          .upload(thumbDest, thumbData, {
+            contentType: 'image/webp',
+            upsert: true
+          });
+        if (!upThumbErr) {
+          libraryThumbPath = thumbDest;
+          console.log('📁 Copied thumbnail:', { thumbSrc, thumbDest });
         }
       }
 
@@ -283,23 +327,64 @@ serve(async (req) => {
         }
 
         // Try to download and copy thumbnail (best-effort)
+        let thumbData = null;
         if (thumbSrc) {
-          const { data: thumbData } = await supabaseClient.storage
+          const thumbResult = await supabaseClient.storage
             .from('workspace-temp')
             .download(thumbSrc);
-          
-          if (thumbData) {
-            const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
-            const { error: upThumbErr } = await supabaseClient.storage
-              .from('user-library')
-              .upload(thumbDest, thumbData, {
-                contentType: 'image/webp',
-                upsert: true
-              });
-            if (!upThumbErr) {
-              libraryThumbPath = thumbDest;
-              console.log('📁 Copied thumbnail for clear:', { thumbSrc, thumbDest });
+          thumbData = thumbResult.data;
+        }
+        
+        // VIDEO THUMBNAIL FALLBACK: If no thumbnail exists for videos, use job's reference image
+        if (!thumbData && asset.asset_type === 'video' && asset.job_id) {
+          console.log('📸 [clear_asset] Attempting to use job reference image as video thumbnail fallback...');
+          try {
+            const { data: jobData } = await supabaseClient
+              .from('jobs')
+              .select('metadata')
+              .eq('id', asset.job_id)
+              .single();
+            
+            const refUrl = jobData?.metadata?.reference_image_url || 
+                           jobData?.metadata?.start_reference_url ||
+                           jobData?.metadata?.input_used?.image_url;
+            
+            if (refUrl) {
+              if (refUrl && !refUrl.startsWith('http')) {
+                const bucketName = refUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
+                const storagePath = refUrl.replace(`${bucketName}/`, '');
+                const { data: refThumbData } = await supabaseClient.storage
+                  .from(bucketName)
+                  .download(storagePath);
+                if (refThumbData) {
+                  thumbData = refThumbData;
+                  console.log('✅ [clear_asset] Using job reference image from storage as video thumbnail');
+                }
+              } else if (refUrl.startsWith('http')) {
+                const refResponse = await fetch(refUrl);
+                if (refResponse.ok) {
+                  const refBuffer = await refResponse.arrayBuffer();
+                  thumbData = new Blob([refBuffer], { type: 'image/webp' });
+                  console.log('✅ [clear_asset] Using job reference image from URL as video thumbnail');
+                }
+              }
             }
+          } catch (refError) {
+            console.warn('⚠️ [clear_asset] Failed to fetch job reference for thumbnail fallback:', refError);
+          }
+        }
+          
+        if (thumbData) {
+          const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
+          const { error: upThumbErr } = await supabaseClient.storage
+            .from('user-library')
+            .upload(thumbDest, thumbData, {
+              contentType: 'image/webp',
+              upsert: true
+            });
+          if (!upThumbErr) {
+            libraryThumbPath = thumbDest;
+            console.log('📁 Copied thumbnail for clear:', { thumbSrc, thumbDest });
           }
         }
 
