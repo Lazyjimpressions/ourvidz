@@ -81,34 +81,34 @@ const MobileSimplifiedWorkspace = () => {
     });
     
     // CRITICAL FIX: Clear old image state FIRST to prevent visual conflicts
-    // This ensures the UI clears the old image before showing the new one
+    // Use requestAnimationFrame to ensure DOM clears before setting new URL
+    // This prevents race conditions that cause the old image to persist visually
     switch (type) {
       case 'single':
-        // Clear old state first
+        // Clear old state synchronously first
         setReferenceImage(null);
         setReferenceImageUrl(null);
-        // Use setTimeout to ensure state clears before setting new URL
-        // This prevents the preview from showing both old and new images
-        setTimeout(() => {
+        // Use requestAnimationFrame to ensure DOM updates before setting new URL
+        requestAnimationFrame(() => {
           setReferenceImageUrl(url);
           console.log('✅ MOBILE: Reference image URL set in hook state (after clear)');
-        }, 0);
+        });
         break;
       case 'start':
         setBeginningRefImage(null);
         setBeginningRefImageUrl(null);
-        setTimeout(() => {
+        requestAnimationFrame(() => {
           setBeginningRefImageUrl(url);
           console.log('✅ MOBILE: Beginning reference image URL set in hook state (after clear)');
-        }, 0);
+        });
         break;
       case 'end':
         setEndingRefImage(null);
         setEndingRefImageUrl(null);
-        setTimeout(() => {
+        requestAnimationFrame(() => {
           setEndingRefImageUrl(url);
           console.log('✅ MOBILE: Ending reference image URL set in hook state (after clear)');
-        }, 0);
+        });
         break;
     }
   }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage]);

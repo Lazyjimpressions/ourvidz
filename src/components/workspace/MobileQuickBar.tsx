@@ -52,9 +52,13 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
       
       {/* Reference Image Indicator (when set) */}
       {hasReferenceImage && (
-        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted border text-xs">
+        <div 
+          key={referenceImageUrl || 'ref-indicator'}
+          className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted border text-xs"
+        >
           {referenceImageUrl ? (
             <img 
+              key={`img-${referenceImageUrl}`}
               src={referenceImageUrl} 
               alt="Ref" 
               className="h-5 w-5 rounded object-cover"
