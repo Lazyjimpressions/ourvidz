@@ -52,6 +52,13 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
   const currentAsset = useMemo(() => assets[currentIndex] || null, [assets, currentIndex]);
 
+  // Auto-enable fullscreen for videos
+  useEffect(() => {
+    if (currentAsset?.type === 'video') {
+      setIsFullscreen(true);
+    }
+  }, [currentAsset?.id, currentAsset?.type]);
+
   // Navigation
   const goToPrevious = useCallback(() => {
     setCurrentIndex(prev => Math.max(0, prev - 1));
@@ -320,7 +327,12 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                       <video
                         src={currentOriginalUrl}
                         controls
-                        className="max-w-full max-h-full w-auto h-auto object-contain"
+                        autoPlay
+                        playsInline
+                        className={isFullscreen 
+                          ? "w-full h-full object-contain" 
+                          : "max-w-full max-h-full w-auto h-auto object-contain"
+                        }
                         poster={(currentAsset as any).thumbUrl || undefined}
                       />
                     );

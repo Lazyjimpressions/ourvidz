@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
 import { useImageModels } from '@/hooks/useApiModels';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
+import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 
 
 const MobileSimplifiedWorkspace = () => {
@@ -414,17 +415,17 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [setReferenceImage, setReferenceImageUrl, setPrompt]);
 
-  // Workspace actions
+  // Workspace actions - Save to library WITHOUT removing from workspace
   const handleSaveToLibrary = useCallback(async (asset: any) => {
     try {
-      // Use the clearItem function which saves to library
-      await clearItem(asset.id, asset.type);
+      // Use WorkspaceAssetService.saveToLibrary which only saves, doesn't remove
+      await WorkspaceAssetService.saveToLibrary(asset.id);
       toast.success('Saved to library');
     } catch (e) {
       console.error(e);
       toast.error('Failed to save to library');
     }
-  }, [clearItem]);
+  }, []);
 
   const handleDiscard = useCallback(async (asset: any) => {
     try {
