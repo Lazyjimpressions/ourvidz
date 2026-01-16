@@ -744,10 +744,9 @@ serve(async (req) => {
       // Include fallback info so frontend can update UI
       usedFallback,
       fallbackModel: usedFallback ? effectiveModelProvider : undefined,
-      // ✅ ADMIN: Include prompt template info for debugging
-      // Always include template info from request if available, even if template wasn't loaded
-      prompt_template_id: promptTemplate?.id || prompt_template_id || undefined,
-      prompt_template_name: promptTemplate?.template_name || prompt_template_name || undefined,
+      // ✅ ADMIN: Include prompt template info for debugging (handled server-side now)
+      prompt_template_id: undefined,
+      prompt_template_name: undefined,
       // ✅ FIX: Include scene generation metadata
       scene_id: sceneResult?.scene_id || undefined,
       scene_template_id: sceneTemplateId || undefined,
