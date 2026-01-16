@@ -297,9 +297,9 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   return (
     <>
       <OurVidzDashboardLayout>
-        <div className="max-w-7xl mx-auto px-6 space-y-6">
+        <div className="max-w-7xl mx-auto px-3 md:px-6 space-y-4 md:space-y-6">
           {/* Header */}
-          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur border-b border-border">
+          <div className="sticky top-0 z-40 -mx-3 px-3 md:-mx-6 md:px-6 pt-3 md:pt-4 pb-2 md:pb-3 bg-background/80 backdrop-blur border-b border-border">
             <CompactLibraryHeader
               searchTerm={searchState.query}
               onSearchChange={updateQuery}
@@ -314,7 +314,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
             {/* Tabs */}
             <div className="mt-3">
               <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'all' | 'characters' | 'scenes')}>
-                <TabsList className="grid w-full max-w-md grid-cols-3">
+                <TabsList className="grid w-full max-w-md grid-cols-3 text-xs md:text-sm">
                   <TabsTrigger value="all">All Assets</TabsTrigger>
                   <TabsTrigger value="characters">Characters</TabsTrigger>
                   <TabsTrigger value="scenes">Scenes</TabsTrigger>

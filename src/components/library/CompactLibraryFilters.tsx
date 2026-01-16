@@ -24,7 +24,7 @@ export const CompactLibraryFilters = ({
   counts
 }: CompactLibraryFiltersProps) => {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
       {/* Type Filters */}
       <div className="flex items-center gap-1">
         <PillFilter

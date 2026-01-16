@@ -29,7 +29,7 @@ export const CompactLibraryHeader = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">Library</h1>
+          <h1 className="text-lg md:text-xl font-semibold">Library</h1>
           <Badge variant="secondary" className="text-xs">
             {filteredCount} of {totalAssets}
           </Badge>
