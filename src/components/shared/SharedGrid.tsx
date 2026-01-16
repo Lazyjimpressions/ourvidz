@@ -292,6 +292,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely]);
 
   // Generate video thumbnail when visible, no thumbUrl, and video type
+  // Includes timeout to prevent infinite loading state
   useEffect(() => {
     if (
       asset.type === 'video' && 
@@ -302,6 +303,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       asset.originalPath
     ) {
       setIsGeneratingThumbnail(true);
+      
+      // Timeout prevents infinite spinner (15 seconds max for video thumbnail)
+      const timeout = setTimeout(() => {
+        if (!generatedVideoThumbnail) {
+          setIsGeneratingThumbnail(false);
+          console.warn('⚠️ Video thumbnail generation timed out for asset:', asset.id);
+        }
+      }, 15000);
       
       // Sign the video URL first, then generate thumbnail
       originalImageLoader.load(async () => {
@@ -315,8 +324,11 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           console.warn('❌ Failed to generate video thumbnail for asset', asset.id, err);
         }
       }).finally(() => {
+        clearTimeout(timeout);
         setIsGeneratingThumbnail(false);
       });
+      
+      return () => clearTimeout(timeout);
     }
   }, [asset.type, asset.thumbUrl, asset.id, asset.originalPath, generatedVideoThumbnail, isGeneratingThumbnail, isVisible, signOriginalSafely, generateVideoThumbnail]);
 
@@ -446,7 +458,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       </div>
 
       {/* Action buttons - smaller and positioned at bottom-right */}
-      <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      {/* Hidden by default, visible on hover. pointer-events-none prevents accidental taps on mobile */}
+      <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
         {/* Workspace actions */}
         {isWorkspace && actions?.onSaveToLibrary && (
           <Button
