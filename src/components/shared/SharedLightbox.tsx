@@ -43,7 +43,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
   const [imageFitMode, setImageFitMode] = useState<'contain' | 'cover'>('contain');
   const [uiVisible, setUiVisible] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(true); // Default to fullscreen for 1-tap experience
 
   // Reset currentIndex when startIndex changes
   useEffect(() => {
@@ -52,12 +52,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
   const currentAsset = useMemo(() => assets[currentIndex] || null, [assets, currentIndex]);
 
-  // Auto-enable fullscreen for videos
-  useEffect(() => {
-    if (currentAsset?.type === 'video') {
-      setIsFullscreen(true);
-    }
-  }, [currentAsset?.id, currentAsset?.type]);
+  // Fullscreen is now default for all assets - no need for video-specific logic
 
   // Navigation
   const goToPrevious = useCallback(() => {
@@ -168,31 +163,47 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
   const isWorkspace = currentAsset.metadata?.source === 'workspace';
 
-  // Touch handlers for swipe navigation
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  // Touch handlers for swipe navigation (horizontal) and close (vertical)
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [touchEndY, setTouchEndY] = useState<number | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+    setTouchEndX(null);
+    setTouchEndY(null);
+    setTouchStartX(e.targetTouches[0].clientX);
+    setTouchStartY(e.targetTouches[0].clientY);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+    setTouchEndX(e.targetTouches[0].clientX);
+    setTouchEndY(e.targetTouches[0].clientY);
   };
 
   const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
+    if (!touchStartX || !touchEndX || !touchStartY || !touchEndY) return;
     
-    const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > 50;
-    const isRightSwipe = distance < -50;
+    const distanceX = touchStartX - touchEndX;
+    const distanceY = touchStartY - touchEndY;
+    
+    // Determine if swipe is more horizontal or vertical
+    if (Math.abs(distanceX) > Math.abs(distanceY)) {
+      // Horizontal swipe - navigation
+      const isLeftSwipe = distanceX > 50;
+      const isRightSwipe = distanceX < -50;
 
-    if (isLeftSwipe && canGoNext) {
-      goToNext();
-    }
-    if (isRightSwipe && canGoPrevious) {
-      goToPrevious();
+      if (isLeftSwipe && canGoNext) {
+        goToNext();
+      }
+      if (isRightSwipe && canGoPrevious) {
+        goToPrevious();
+      }
+    } else {
+      // Vertical swipe - close on swipe down
+      if (distanceY < -80) {
+        onClose();
+      }
     }
   };
 
