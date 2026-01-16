@@ -27,6 +27,9 @@ export interface UserCharacter {
   voice_examples?: string[];
   forbidden_phrases?: string[];
   scene_behavior_rules?: Json;
+  first_message?: string;
+  alternate_greetings?: string[];
+  default_presets?: Json;
   created_at: string;
   updated_at: string;
 }
@@ -94,7 +97,8 @@ export const useUserCharacters = () => {
 
       if (error) throw error;
 
-      setCharacters(data || []);
+      // Cast data to handle Json types from Supabase
+      setCharacters((data || []) as unknown as UserCharacter[]);
 
       // Also load which are personas
       await loadUserPersonaIds();
@@ -175,7 +179,7 @@ export const useUserCharacters = () => {
       }
 
       if (data) {
-        setCharacters(prev => [data, ...prev]);
+        setCharacters(prev => [data as unknown as UserCharacter, ...prev]);
         
         // If character was created with an image_url, try to auto-save any pending jobs to library
         // This handles the case where image was generated before character creation
@@ -231,8 +235,9 @@ export const useUserCharacters = () => {
       if (error) throw error;
       
       if (data) {
+        const typedData = data as unknown as UserCharacter;
         setCharacters(prev => prev.map(char => 
-          char.id === id ? { ...char, ...data } : char
+          char.id === id ? { ...char, ...typedData } : char
         ));
       }
       
