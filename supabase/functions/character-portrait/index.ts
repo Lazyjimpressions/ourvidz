@@ -364,20 +364,60 @@ serve(async (req) => {
       })
       .eq('id', jobData.id);
 
-    // Update character image_url if characterId exists
+    // Insert into character_portraits table
+    let portraitId: string | null = null;
     if (characterId) {
-      const { error: updateError } = await supabase
-        .from('characters')
-        .update({
-          image_url: imageUrl,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', characterId);
+      // Check if this is the first portrait for this character
+      const { count } = await supabase
+        .from('character_portraits')
+        .select('*', { count: 'exact', head: true })
+        .eq('character_id', characterId);
 
-      if (updateError) {
-        console.error('⚠️ Failed to update character image:', updateError);
+      const isFirstPortrait = (count || 0) === 0;
+
+      const { data: portraitData, error: portraitError } = await supabase
+        .from('character_portraits')
+        .insert({
+          character_id: characterId,
+          image_url: imageUrl,
+          prompt: prompt,
+          enhanced_prompt: prompt,
+          is_primary: isFirstPortrait, // First portrait becomes primary
+          sort_order: count || 0,
+          generation_metadata: {
+            model: apiModel.display_name,
+            model_key: apiModel.model_key,
+            generation_mode: isI2I ? 'i2i' : 'txt2img',
+            generation_time_ms: generationTime,
+            presets,
+            job_id: jobData.id
+          }
+        })
+        .select()
+        .single();
+
+      if (portraitError) {
+        console.error('⚠️ Failed to insert portrait:', portraitError);
       } else {
-        console.log('✅ Character image updated');
+        portraitId = portraitData.id;
+        console.log('✅ Portrait inserted:', portraitId, 'isPrimary:', isFirstPortrait);
+      }
+
+      // Update character image_url if this is the first portrait
+      if (isFirstPortrait) {
+        const { error: updateError } = await supabase
+          .from('characters')
+          .update({
+            image_url: imageUrl,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', characterId);
+
+        if (updateError) {
+          console.error('⚠️ Failed to update character image:', updateError);
+        } else {
+          console.log('✅ Character image updated');
+        }
       }
     }
 

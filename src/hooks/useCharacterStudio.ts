@@ -330,24 +330,35 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
         }
       });
       
-      if (error) throw error;
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Edge function failed');
+      }
       
-      // The character-portrait function returns imageUrl directly (sync) or jobId (async)
-      if (data?.imageUrl) {
-        // Sync response - refresh portraits
+      console.log('🎨 Portrait generation response:', data);
+      
+      // The character-portrait function returns imageUrl directly (sync polling)
+      if (data?.success && data?.imageUrl) {
+        // The edge function inserts into character_portraits table
+        // Realtime subscription should pick it up, but let's also refresh
         await fetchPortraits();
+        
         toast({
           title: "Portrait Generated",
           description: `Generated in ${Math.round((data.generationTimeMs || 0) / 1000)}s`
         });
         setIsGenerating(false);
         return data.imageUrl;
-      } else if (data?.jobId) {
-        // Async response - track job
-        setActiveJobId(data.jobId);
-        return data.jobId;
+      } else if (data?.error) {
+        throw new Error(data.error);
       }
       
+      // Fallback - generation may still be processing
+      toast({
+        title: "Generation Started",
+        description: "Your portrait is being generated..."
+      });
+      setIsGenerating(false);
       return null;
     } catch (err) {
       console.error('Error generating portrait:', err);
