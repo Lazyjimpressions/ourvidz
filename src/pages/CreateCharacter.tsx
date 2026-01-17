@@ -304,7 +304,7 @@ const CreateCharacter: React.FC = () => {
           </div>
           <Button
             onClick={handleSave}
-            disabled={isSaving || !name.trim() || !description.trim()}
+            disabled={isSaving || isGenerating || !name.trim() || !description.trim()}
             size="sm"
             className="h-8 gap-1.5"
           >
