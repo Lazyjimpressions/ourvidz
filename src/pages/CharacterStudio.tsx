@@ -15,6 +15,8 @@ import { PortraitGallery } from '@/components/character-studio/PortraitGallery';
 import { ScenesGallery } from '@/components/character-studio/ScenesGallery';
 import { CharacterStudioPromptBar } from '@/components/character-studio/CharacterStudioPromptBar';
 import { SceneGenerationModal } from '@/components/roleplay/SceneGenerationModal';
+import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
+import { useImageModels } from '@/hooks/useImageModels';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CharacterScene } from '@/hooks/useCharacterStudio';
 
@@ -45,13 +47,37 @@ export default function CharacterStudio() {
     selectedItemType
   } = useCharacterStudio({ characterId });
 
+  // Image model state - track reference image for I2I filtering
+  const hasReferenceImage = !!character.reference_image_url;
+  const { modelOptions: imageModelOptions, defaultModel } = useImageModels(hasReferenceImage);
+  const [selectedImageModel, setSelectedImageModel] = useState<string>('');
+  
+  // Image picker state
+  const [showImagePicker, setShowImagePicker] = useState(false);
+
+  // Set default model when loaded
+  React.useEffect(() => {
+    if (defaultModel && !selectedImageModel) {
+      setSelectedImageModel(defaultModel.value);
+    }
+  }, [defaultModel, selectedImageModel]);
+
   // Modal states
   const [showSceneModal, setShowSceneModal] = useState(false);
   const [sceneToEdit, setSceneToEdit] = useState<CharacterScene | null>(null);
 
   // Handle portrait generation from prompt bar
-  const handleGenerateFromPrompt = async (prompt: string, referenceImageUrl?: string) => {
-    await generatePortrait(prompt, { referenceImageUrl });
+  const handleGenerateFromPrompt = async (prompt: string, referenceImageUrl?: string, modelId?: string) => {
+    await generatePortrait(prompt, { 
+      referenceImageUrl: referenceImageUrl || character.reference_image_url || undefined,
+      model: modelId || selectedImageModel 
+    });
+  };
+
+  // Handle image picker selection
+  const handleImagePickerSelect = (imageUrl: string) => {
+    updateCharacter({ reference_image_url: imageUrl });
+    setShowImagePicker(false);
   };
 
   // Handle portrait actions
@@ -108,26 +134,39 @@ export default function CharacterStudio() {
   // Mobile layout - use tabs
   if (isMobile) {
     return (
-      <MobileCharacterStudio
-        character={character}
-        updateCharacter={updateCharacter}
-        isNewCharacter={isNewCharacter}
-        isDirty={isDirty}
-        isSaving={isSaving}
-        savedCharacterId={savedCharacterId}
-        saveCharacter={saveCharacter}
-        portraits={portraits}
-        primaryPortrait={primaryPortrait}
-        setPrimaryPortrait={setPrimaryPortrait}
-        deletePortrait={deletePortrait}
-        scenes={scenes}
-        isGenerating={isGenerating}
-        generatePortrait={generatePortrait}
-        selectItem={selectItem}
-        selectedItemId={selectedItemId}
-        selectedItemType={selectedItemType}
-        onStartChat={handleStartChat}
-      />
+      <>
+        <MobileCharacterStudio
+          character={character}
+          updateCharacter={updateCharacter}
+          isNewCharacter={isNewCharacter}
+          isDirty={isDirty}
+          isSaving={isSaving}
+          savedCharacterId={savedCharacterId}
+          saveCharacter={saveCharacter}
+          portraits={portraits}
+          primaryPortrait={primaryPortrait}
+          setPrimaryPortrait={setPrimaryPortrait}
+          deletePortrait={deletePortrait}
+          scenes={scenes}
+          isGenerating={isGenerating}
+          generatePortrait={generatePortrait}
+          selectItem={selectItem}
+          selectedItemId={selectedItemId}
+          selectedItemType={selectedItemType}
+          onStartChat={handleStartChat}
+          selectedImageModel={selectedImageModel}
+          onImageModelChange={setSelectedImageModel}
+          imageModelOptions={imageModelOptions}
+          onOpenImagePicker={() => setShowImagePicker(true)}
+        />
+        
+        {/* Image Picker Dialog */}
+        <ImagePickerDialog
+          isOpen={showImagePicker}
+          onClose={() => setShowImagePicker(false)}
+          onSelect={handleImagePickerSelect}
+        />
+      </>
     );
   }
 
@@ -193,6 +232,10 @@ export default function CharacterStudio() {
             isDirty={isDirty}
             isNewCharacter={isNewCharacter}
             primaryPortraitUrl={primaryPortrait?.image_url}
+            selectedImageModel={selectedImageModel}
+            onImageModelChange={setSelectedImageModel}
+            imageModelOptions={imageModelOptions}
+            onOpenImagePicker={() => setShowImagePicker(true)}
           />
         </div>
 
@@ -234,6 +277,10 @@ export default function CharacterStudio() {
             isGenerating={isGenerating}
             isDisabled={isNewCharacter}
             placeholder={`Describe a portrait for ${character.name || 'your character'}...`}
+            selectedImageModel={selectedImageModel}
+            onImageModelChange={setSelectedImageModel}
+            imageModelOptions={imageModelOptions}
+            onOpenImagePicker={() => setShowImagePicker(true)}
           />
         </div>
       </div>
@@ -251,6 +298,13 @@ export default function CharacterStudio() {
           onSceneCreated={handleSceneGenerated}
         />
       )}
+
+      {/* Image Picker Dialog */}
+      <ImagePickerDialog
+        isOpen={showImagePicker}
+        onClose={() => setShowImagePicker(false)}
+        onSelect={handleImagePickerSelect}
+      />
     </div>
   );
 }
@@ -275,6 +329,10 @@ interface MobileCharacterStudioProps {
   selectedItemId: string | null;
   selectedItemType: 'portrait' | 'scene' | null;
   onStartChat: () => void;
+  selectedImageModel: string;
+  onImageModelChange: (modelId: string) => void;
+  imageModelOptions: ReturnType<typeof useImageModels>['modelOptions'];
+  onOpenImagePicker: () => void;
 }
 
 function MobileCharacterStudio({
@@ -295,7 +353,11 @@ function MobileCharacterStudio({
   selectItem,
   selectedItemId,
   selectedItemType,
-  onStartChat
+  onStartChat,
+  selectedImageModel,
+  onImageModelChange,
+  imageModelOptions,
+  onOpenImagePicker
 }: MobileCharacterStudioProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'details' | 'portraits' | 'scenes'>('details');
@@ -361,6 +423,10 @@ function MobileCharacterStudio({
             isDirty={isDirty}
             isNewCharacter={isNewCharacter}
             primaryPortraitUrl={primaryPortrait?.image_url}
+            selectedImageModel={selectedImageModel}
+            onImageModelChange={onImageModelChange}
+            imageModelOptions={imageModelOptions}
+            onOpenImagePicker={onOpenImagePicker}
           />
         )}
 

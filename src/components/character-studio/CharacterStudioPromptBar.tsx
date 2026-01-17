@@ -6,31 +6,51 @@ import {
   Loader2,
   Image as ImageIcon,
   Upload,
-  X
+  X,
+  Library,
+  ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ModelSelector } from './ModelSelector';
+import { ImageModelOption } from '@/hooks/useImageModels';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface CharacterStudioPromptBarProps {
-  onGenerate: (prompt: string, referenceImageUrl?: string) => void;
+  onGenerate: (prompt: string, referenceImageUrl?: string, modelId?: string) => void;
   isGenerating: boolean;
   isDisabled: boolean;
   placeholder?: string;
+  selectedImageModel: string;
+  onImageModelChange: (modelId: string) => void;
+  imageModelOptions: ImageModelOption[];
+  onOpenImagePicker: () => void;
 }
 
 export function CharacterStudioPromptBar({
   onGenerate,
   isGenerating,
   isDisabled,
-  placeholder = "Describe the portrait you want to generate..."
+  placeholder = "Describe the portrait you want to generate...",
+  selectedImageModel,
+  onImageModelChange,
+  imageModelOptions,
+  onOpenImagePicker
 }: CharacterStudioPromptBarProps) {
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
+
+  const selectedModelData = imageModelOptions.find(m => m.value === selectedImageModel);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || isGenerating || isDisabled) return;
     
-    onGenerate(prompt.trim(), referenceImage || undefined);
+    onGenerate(prompt.trim(), referenceImage || undefined, selectedImageModel);
     setPrompt('');
   };
 
@@ -51,6 +71,10 @@ export function CharacterStudioPromptBar({
       setReferenceImage(reader.result as string);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleLibrarySelect = () => {
+    onOpenImagePicker();
   };
 
   return (
@@ -83,29 +107,55 @@ export function CharacterStudioPromptBar({
         )}
 
         <div className="flex items-end gap-3">
-          {/* Reference Image Upload */}
-          <div className="flex-shrink-0">
-            <label className={cn(
-              'w-10 h-10 rounded-lg border border-border',
-              'flex items-center justify-center cursor-pointer',
-              'text-muted-foreground hover:text-foreground hover:border-primary/50',
-              'transition-colors duration-200',
-              isDisabled && 'opacity-50 cursor-not-allowed'
-            )}>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
-                className="hidden"
+          {/* Reference Image Options */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button 
+                type="button"
                 disabled={isDisabled}
-              />
-              {referenceImage ? (
-                <ImageIcon className="w-4 h-4 text-primary" />
-              ) : (
-                <Upload className="w-4 h-4" />
+                className={cn(
+                  'w-10 h-10 rounded-lg border border-border',
+                  'flex items-center justify-center cursor-pointer',
+                  'text-muted-foreground hover:text-foreground hover:border-primary/50',
+                  'transition-colors duration-200',
+                  isDisabled && 'opacity-50 cursor-not-allowed',
+                  referenceImage && 'border-primary text-primary'
+                )}
+              >
+                {referenceImage ? (
+                  <ImageIcon className="w-4 h-4" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="z-[100] bg-popover border border-border">
+              <DropdownMenuItem onSelect={() => document.getElementById('file-upload-input')?.click()}>
+                <Upload className="w-4 h-4 mr-2" />
+                Upload Image
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={handleLibrarySelect}>
+                <Library className="w-4 h-4 mr-2" />
+                Select from Library
+              </DropdownMenuItem>
+              {referenceImage && (
+                <DropdownMenuItem onSelect={() => setReferenceImage(null)} className="text-destructive">
+                  <X className="w-4 h-4 mr-2" />
+                  Remove Reference
+                </DropdownMenuItem>
               )}
-            </label>
-          </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
+          {/* Hidden file input */}
+          <input
+            id="file-upload-input"
+            type="file"
+            accept="image/*"
+            onChange={handleFileUpload}
+            className="hidden"
+            disabled={isDisabled}
+          />
 
           {/* Prompt Input */}
           <div className="flex-1">
@@ -122,6 +172,50 @@ export function CharacterStudioPromptBar({
               rows={1}
             />
           </div>
+
+          {/* Model Selector Button */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-10 gap-1 px-2 min-w-[100px] max-w-[140px]"
+                disabled={isDisabled}
+              >
+                <span className="truncate text-xs">
+                  {selectedModelData?.label.split(' ')[0] || 'Model'}
+                </span>
+                <ChevronDown className="w-3 h-3 flex-shrink-0" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[280px] z-[100] bg-popover border border-border">
+              {imageModelOptions.map((model) => (
+                <DropdownMenuItem 
+                  key={model.value}
+                  onSelect={() => onImageModelChange(model.value)}
+                  disabled={!model.isAvailable}
+                  className={cn(
+                    'flex items-center gap-2',
+                    selectedImageModel === model.value && 'bg-accent'
+                  )}
+                >
+                  {model.type === 'local' && (
+                    <span className={cn(
+                      'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                      model.isAvailable ? 'bg-green-500' : 'bg-red-500'
+                    )} />
+                  )}
+                  <span className="flex-1 truncate">{model.label}</span>
+                  {model.capabilities?.supports_i2i && (
+                    <span className="text-[10px] px-1 py-0.5 bg-muted rounded text-muted-foreground">
+                      I2I
+                    </span>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Generate Button */}
           <Button

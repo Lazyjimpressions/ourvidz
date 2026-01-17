@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,11 +26,19 @@ import {
   Settings,
   Wand2,
   Loader2,
-  Save
+  Save,
+  Sparkles,
+  Library
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
 import { PresetChipCarousel } from '@/components/roleplay/PresetChipCarousel';
+import { SuggestButton, SuggestionType } from './SuggestButton';
+import { ModelSelector } from './ModelSelector';
+import { useImageModels, ImageModelOption } from '@/hooks/useImageModels';
+import { useRoleplayModels } from '@/hooks/useRoleplayModels';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 // Appearance presets for quick character styling
 const APPEARANCE_PRESETS = {
@@ -48,12 +56,16 @@ interface CharacterStudioSidebarProps {
   character: CharacterData;
   onUpdateCharacter: (updates: Partial<CharacterData>) => void;
   onSave: () => Promise<string | null>;
-  onGenerate: (prompt: string) => Promise<string | null>;
+  onGenerate: (prompt: string, options?: { referenceImageUrl?: string; modelId?: string }) => Promise<string | null>;
   isSaving: boolean;
   isGenerating: boolean;
   isDirty: boolean;
   isNewCharacter: boolean;
   primaryPortraitUrl?: string | null;
+  selectedImageModel: string;
+  onImageModelChange: (modelId: string) => void;
+  imageModelOptions: ImageModelOption[];
+  onOpenImagePicker: () => void;
 }
 
 export function CharacterStudioSidebar({
@@ -65,8 +77,13 @@ export function CharacterStudioSidebar({
   isGenerating,
   isDirty,
   isNewCharacter,
-  primaryPortraitUrl
+  primaryPortraitUrl,
+  selectedImageModel,
+  onImageModelChange,
+  imageModelOptions,
+  onOpenImagePicker
 }: CharacterStudioSidebarProps) {
+  const { toast } = useToast();
   const [openSections, setOpenSections] = React.useState({
     basic: true,
     appearance: true,
@@ -75,6 +92,11 @@ export function CharacterStudioSidebar({
   });
   
   const [selectedPresetKey, setSelectedPresetKey] = useState<string | undefined>(undefined);
+  const [isLoadingSuggestion, setIsLoadingSuggestion] = useState<SuggestionType | null>(null);
+  
+  // Get roleplay models for AI suggestions
+  const { allModelOptions: roleplayModels, defaultModel: defaultRoleplayModel } = useRoleplayModels();
+  const [selectedRoleplayModel, setSelectedRoleplayModel] = useState<string>('');
 
   const toggleSection = (section: keyof typeof openSections) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -96,7 +118,10 @@ export function CharacterStudioSidebar({
 
   const handleGeneratePortrait = () => {
     const prompt = buildAppearancePrompt();
-    onGenerate(prompt);
+    onGenerate(prompt, { 
+      referenceImageUrl: character.reference_image_url || undefined,
+      modelId: selectedImageModel 
+    });
   };
 
   const handlePresetSelect = (key: string | undefined) => {
@@ -107,6 +132,81 @@ export function CharacterStudioSidebar({
       onUpdateCharacter({ appearance_tags: updatedTags });
     }
   };
+
+  // AI Suggestion handler
+  const fetchSuggestions = useCallback(async (type: SuggestionType) => {
+    setIsLoadingSuggestion(type);
+    try {
+      const { data, error } = await supabase.functions.invoke('character-suggestions', {
+        body: {
+          type: type === 'persona' ? 'backstory' : type, // Map persona to backstory for API
+          characterName: character.name || undefined,
+          existingDescription: character.description || undefined,
+          existingTraits: character.traits ? character.traits.split(',').map(t => t.trim()) : undefined,
+          existingAppearance: character.appearance_tags.length > 0 ? character.appearance_tags : undefined,
+          contentRating: character.content_rating,
+          modelKey: selectedRoleplayModel || defaultRoleplayModel?.value || undefined
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success && data.suggestions) {
+        const suggestions = data.suggestions;
+
+        if (type === 'traits' && suggestions.suggestedTraits) {
+          const currentTraits = character.traits ? character.traits.split(',').map(t => t.trim()) : [];
+          const newTraits = [...new Set([...currentTraits, ...suggestions.suggestedTraits])];
+          onUpdateCharacter({ traits: newTraits.join(', ') });
+          toast({ title: 'Traits Suggested', description: `Added ${suggestions.suggestedTraits.length} trait suggestions` });
+        }
+
+        if (type === 'voice' && suggestions.suggestedVoiceTone) {
+          onUpdateCharacter({
+            voice_tone: suggestions.suggestedVoiceTone,
+            persona: suggestions.suggestedPersona || character.persona
+          });
+          toast({ title: 'Voice Suggested', description: `Suggested tone: ${suggestions.suggestedVoiceTone}` });
+        }
+
+        if (type === 'appearance' && suggestions.suggestedAppearance) {
+          const newTags = [...new Set([...character.appearance_tags, ...suggestions.suggestedAppearance])];
+          onUpdateCharacter({ appearance_tags: newTags });
+          toast({ title: 'Appearance Suggested', description: `Added ${suggestions.suggestedAppearance.length} appearance tags` });
+        }
+
+        if (type === 'description' && suggestions.suggestedDescription) {
+          onUpdateCharacter({ description: suggestions.suggestedDescription });
+          toast({ title: 'Description Generated', description: 'AI-generated character description applied' });
+        }
+
+        if (type === 'persona' && suggestions.suggestedPersona) {
+          onUpdateCharacter({ persona: suggestions.suggestedPersona });
+          toast({ title: 'Persona Generated', description: 'AI-generated persona applied' });
+        }
+
+        if (type === 'all') {
+          onUpdateCharacter({
+            description: suggestions.suggestedDescription || character.description,
+            traits: suggestions.suggestedTraits?.join(', ') || character.traits,
+            voice_tone: suggestions.suggestedVoiceTone || character.voice_tone,
+            persona: suggestions.suggestedPersona || character.persona,
+            appearance_tags: suggestions.suggestedAppearance || character.appearance_tags,
+          });
+          toast({ title: 'Character Enhanced', description: 'Applied AI suggestions to all fields' });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch suggestions:', error);
+      toast({
+        title: 'Suggestion Failed',
+        description: 'Could not generate AI suggestions. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoadingSuggestion(null);
+    }
+  }, [character, toast, selectedRoleplayModel, defaultRoleplayModel, onUpdateCharacter]);
 
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
@@ -129,7 +229,7 @@ export function CharacterStudioSidebar({
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 pb-20">
           {/* Character Avatar Preview */}
           <div className="flex flex-col items-center gap-3 pb-4 border-b border-border">
             <div className="w-24 h-24 rounded-full overflow-hidden bg-muted border-2 border-border">
@@ -148,6 +248,17 @@ export function CharacterStudioSidebar({
             <span className="text-sm font-medium text-foreground">
               {character.name || 'New Character'}
             </span>
+            
+            {/* Enhance All Button */}
+            <SuggestButton
+              type="all"
+              onClick={() => fetchSuggestions('all')}
+              isLoading={isLoadingSuggestion !== null}
+              loadingType={isLoadingSuggestion}
+              disabled={!character.name}
+              variant="full"
+              className="w-full"
+            />
           </div>
 
           {/* Basic Info Section */}
@@ -181,7 +292,7 @@ export function CharacterStudioSidebar({
                     <SelectTrigger className="h-9">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100] bg-popover">
                       <SelectItem value="female">Female</SelectItem>
                       <SelectItem value="male">Male</SelectItem>
                       <SelectItem value="non-binary">Non-binary</SelectItem>
@@ -199,7 +310,7 @@ export function CharacterStudioSidebar({
                     <SelectTrigger className="h-9">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100] bg-popover">
                       <SelectItem value="sfw">SFW</SelectItem>
                       <SelectItem value="nsfw">NSFW</SelectItem>
                     </SelectContent>
@@ -208,7 +319,17 @@ export function CharacterStudioSidebar({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="description" className="text-xs text-muted-foreground">Description</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="description" className="text-xs text-muted-foreground">Description</Label>
+                  <SuggestButton
+                    type="description"
+                    onClick={() => fetchSuggestions('description')}
+                    isLoading={isLoadingSuggestion !== null}
+                    loadingType={isLoadingSuggestion}
+                    disabled={!character.name}
+                    variant="text"
+                  />
+                </div>
                 <Textarea
                   id="description"
                   value={character.description}
@@ -240,7 +361,17 @@ export function CharacterStudioSidebar({
 
               {/* Appearance Tags */}
               <div className="space-y-1.5">
-                <Label htmlFor="traits" className="text-xs text-muted-foreground">Appearance Details</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="traits" className="text-xs text-muted-foreground">Appearance Details</Label>
+                  <SuggestButton
+                    type="appearance"
+                    onClick={() => fetchSuggestions('appearance')}
+                    isLoading={isLoadingSuggestion !== null}
+                    loadingType={isLoadingSuggestion}
+                    disabled={!character.name}
+                    variant="text"
+                  />
+                </div>
                 <Textarea
                   id="traits"
                   value={character.traits}
@@ -268,6 +399,52 @@ export function CharacterStudioSidebar({
                   ))}
                 </div>
               )}
+
+              {/* Reference Image */}
+              {character.reference_image_url && (
+                <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
+                  <img 
+                    src={character.reference_image_url} 
+                    alt="Reference" 
+                    className="w-10 h-10 rounded object-cover"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">Reference Image</p>
+                    <p className="text-xs text-muted-foreground">I2I mode enabled</p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onUpdateCharacter({ reference_image_url: null })}
+                    className="h-6 px-2 text-xs"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+
+              {/* Library Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenImagePicker}
+                className="w-full gap-2"
+              >
+                <Library className="w-4 h-4" />
+                Select Reference from Library
+              </Button>
+
+              {/* Image Model Selector */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Image Model</Label>
+                <ModelSelector
+                  models={imageModelOptions}
+                  selectedModel={selectedImageModel}
+                  onSelect={onImageModelChange}
+                  hasReferenceImage={!!character.reference_image_url}
+                  size="sm"
+                />
+              </div>
 
               {/* Generate Button */}
               <Button
@@ -297,7 +474,17 @@ export function CharacterStudioSidebar({
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-2">
               <div className="space-y-1.5">
-                <Label htmlFor="persona" className="text-xs text-muted-foreground">Persona</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="persona" className="text-xs text-muted-foreground">Persona</Label>
+                  <SuggestButton
+                    type="persona"
+                    onClick={() => fetchSuggestions('persona')}
+                    isLoading={isLoadingSuggestion !== null}
+                    loadingType={isLoadingSuggestion}
+                    disabled={!character.name}
+                    variant="text"
+                  />
+                </div>
                 <Textarea
                   id="persona"
                   value={character.persona}
@@ -317,7 +504,7 @@ export function CharacterStudioSidebar({
                     <SelectTrigger className="h-9">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100] bg-popover">
                       <SelectItem value="warm">Warm</SelectItem>
                       <SelectItem value="playful">Playful</SelectItem>
                       <SelectItem value="confident">Confident</SelectItem>
@@ -336,7 +523,7 @@ export function CharacterStudioSidebar({
                     <SelectTrigger className="h-9">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[100] bg-popover">
                       <SelectItem value="friendly">Friendly</SelectItem>
                       <SelectItem value="flirty">Flirty</SelectItem>
                       <SelectItem value="mysterious">Mysterious</SelectItem>
@@ -345,6 +532,27 @@ export function CharacterStudioSidebar({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="traits_personality" className="text-xs text-muted-foreground">Personality Traits</Label>
+                  <SuggestButton
+                    type="traits"
+                    onClick={() => fetchSuggestions('traits')}
+                    isLoading={isLoadingSuggestion !== null}
+                    loadingType={isLoadingSuggestion}
+                    disabled={!character.name}
+                    variant="text"
+                  />
+                </div>
+                <Input
+                  id="traits_personality"
+                  value={character.traits}
+                  onChange={(e) => onUpdateCharacter({ traits: e.target.value })}
+                  placeholder="kind, adventurous, witty..."
+                  className="h-9"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -370,6 +578,26 @@ export function CharacterStudioSidebar({
               <ChevronDown className={cn('w-4 h-4 transition-transform', openSections.advanced && 'rotate-180')} />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-2">
+              {/* AI Model for Suggestions */}
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">AI Model (for suggestions)</Label>
+                <Select 
+                  value={selectedRoleplayModel || defaultRoleplayModel?.value || ''} 
+                  onValueChange={setSelectedRoleplayModel}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select model..." />
+                  </SelectTrigger>
+                  <SelectContent className="z-[100] bg-popover">
+                    {roleplayModels.map((model) => (
+                      <SelectItem key={model.value} value={model.value} disabled={!model.isAvailable}>
+                        {model.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex items-center justify-between py-2">
                 <div>
                   <Label className="text-sm">Make Public</Label>
