@@ -295,10 +295,11 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
     }
   }, [saveCharacter, updateCharacter, toast]);
 
-  // Generate portrait
+  // Generate portrait using character-portrait edge function
+  // Model is dynamically selected from api_models table
   const generatePortrait = useCallback(async (prompt: string, options?: {
     referenceImageUrl?: string;
-    model?: string;
+    model?: string; // This is the api_models.id from database
   }) => {
     // First, ensure character is saved
     let charId = savedCharacterId;
@@ -310,35 +311,55 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
     setIsGenerating(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('generate-content', {
+      console.log('🎨 Generating portrait:', {
+        characterId: charId,
+        hasReferenceImage: !!options?.referenceImageUrl,
+        modelId: options?.model,
+        contentRating: character.content_rating
+      });
+
+      // Use character-portrait edge function which handles model routing dynamically
+      const { data, error } = await supabase.functions.invoke('character-portrait', {
         body: {
-          prompt,
-          job_type: 'image_generation',
-          content_mode: character.content_rating,
-          reference_image_url: options?.referenceImageUrl,
-          metadata: {
-            character_id: charId,
-            is_character_portrait: true,
-            appearance_tags: character.appearance_tags
-          }
+          characterId: charId,
+          referenceImageUrl: options?.referenceImageUrl,
+          contentRating: character.content_rating,
+          apiModelId: options?.model || undefined, // Pass model ID from database
+          presets: {}, // Can be extended to pass appearance presets
+          characterData: null // Character already saved, use ID
         }
       });
       
       if (error) throw error;
       
-      setActiveJobId(data.jobId);
-      return data.jobId;
+      // The character-portrait function returns imageUrl directly (sync) or jobId (async)
+      if (data?.imageUrl) {
+        // Sync response - refresh portraits
+        await fetchPortraits();
+        toast({
+          title: "Portrait Generated",
+          description: `Generated in ${Math.round((data.generationTimeMs || 0) / 1000)}s`
+        });
+        setIsGenerating(false);
+        return data.imageUrl;
+      } else if (data?.jobId) {
+        // Async response - track job
+        setActiveJobId(data.jobId);
+        return data.jobId;
+      }
+      
+      return null;
     } catch (err) {
       console.error('Error generating portrait:', err);
       toast({
         title: "Error",
-        description: "Failed to start portrait generation",
+        description: err instanceof Error ? err.message : "Failed to start portrait generation",
         variant: "destructive"
       });
       setIsGenerating(false);
       return null;
     }
-  }, [savedCharacterId, saveCharacter, character, toast]);
+  }, [savedCharacterId, saveCharacter, character, toast, fetchPortraits]);
 
   // Select item in gallery
   const selectItem = useCallback((id: string | null, type: 'portrait' | 'scene' | null) => {
