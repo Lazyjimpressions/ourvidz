@@ -29,8 +29,10 @@ import {
   Save,
   Sparkles,
   Library,
-  Plus
+  Plus,
+  Upload
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
 import { PresetChipCarousel } from '@/components/roleplay/PresetChipCarousel';
@@ -84,6 +86,7 @@ export function CharacterStudioSidebar({
   imageModelOptions,
   onOpenImagePicker
 }: CharacterStudioSidebarProps) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [openSections, setOpenSections] = React.useState({
     basic: true,
@@ -95,6 +98,7 @@ export function CharacterStudioSidebar({
   const [selectedPresetKey, setSelectedPresetKey] = useState<string | undefined>(undefined);
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState<SuggestionType | null>(null);
   const [newAppearanceTag, setNewAppearanceTag] = useState('');
+  const [isUploadingRef, setIsUploadingRef] = useState(false);
   
   // Get roleplay models for AI suggestions
   const { allModelOptions: roleplayModels, defaultModel: defaultRoleplayModel } = useRoleplayModels();
@@ -151,6 +155,65 @@ export function CharacterStudioSidebar({
       e.preventDefault();
       handleAddAppearanceTag();
     }
+  };
+
+  // Upload reference image from device (phone/files)
+  const handleUploadReferenceImage = async () => {
+    if (!user) return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      setIsUploadingRef(true);
+      try {
+        let processedFile: File = file;
+
+        // Handle HEIC conversion for iPhone
+        if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
+          const heic2any = (await import('heic2any')).default;
+          const blob = await heic2any({ blob: file, toType: 'image/jpeg' });
+          processedFile = new File(
+            [blob as Blob],
+            file.name.replace(/\.heic$/i, '.jpg'),
+            { type: 'image/jpeg' }
+          );
+        }
+
+        // Upload to reference_images bucket
+        const path = `${user.id}/ref_${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('reference_images')
+          .upload(path, processedFile, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        // Get signed URL for display and I2I
+        const { data: signedData, error: signError } = await supabase.storage
+          .from('reference_images')
+          .createSignedUrl(path, 3600);
+
+        if (signError) throw signError;
+
+        if (signedData?.signedUrl) {
+          onUpdateCharacter({ reference_image_url: signedData.signedUrl });
+          toast({ title: 'Reference uploaded', description: 'I2I mode enabled.' });
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+        toast({
+          title: 'Upload Failed',
+          description: error instanceof Error ? error.message : 'Failed to upload image.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsUploadingRef(false);
+      }
+    };
+    input.click();
   };
   const fetchSuggestions = useCallback(async (type: SuggestionType) => {
     setIsLoadingSuggestion(type);
@@ -461,16 +524,32 @@ export function CharacterStudioSidebar({
                 </div>
               )}
 
-              {/* Library Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onOpenImagePicker}
-                className="w-full gap-2"
-              >
-                <Library className="w-4 h-4" />
-                Select Reference from Library
-              </Button>
+              {/* Reference Image Buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleUploadReferenceImage}
+                  disabled={isUploadingRef}
+                  className="flex-1 gap-2"
+                >
+                  {isUploadingRef ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {isUploadingRef ? 'Uploading...' : 'Upload'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenImagePicker}
+                  className="flex-1 gap-2"
+                >
+                  <Library className="w-4 h-4" />
+                  Library
+                </Button>
+              </div>
 
               {/* Image Model Selector */}
               <div className="space-y-1.5">
