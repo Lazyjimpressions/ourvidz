@@ -795,7 +795,7 @@ const MobileRoleplayDashboard = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate('/create-character')}
+                onClick={() => navigate('/character-studio')}
                 className="h-6 text-xs"
               >
                 <Plus className="w-3 h-3 mr-1" /> Create
@@ -823,7 +823,7 @@ const MobileRoleplayDashboard = () => {
             ) : (
               <div 
                 className="border border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/20 transition-colors"
-                onClick={() => navigate('/create-character')}
+                onClick={() => navigate('/character-studio')}
               >
                 <User className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">No characters yet</p>
