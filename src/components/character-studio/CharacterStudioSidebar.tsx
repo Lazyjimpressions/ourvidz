@@ -28,7 +28,8 @@ import {
   Loader2,
   Save,
   Sparkles,
-  Library
+  Library,
+  Plus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
@@ -93,6 +94,7 @@ export function CharacterStudioSidebar({
   
   const [selectedPresetKey, setSelectedPresetKey] = useState<string | undefined>(undefined);
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState<SuggestionType | null>(null);
+  const [newAppearanceTag, setNewAppearanceTag] = useState('');
   
   // Get roleplay models for AI suggestions
   const { allModelOptions: roleplayModels, defaultModel: defaultRoleplayModel } = useRoleplayModels();
@@ -133,7 +135,23 @@ export function CharacterStudioSidebar({
     }
   };
 
-  // AI Suggestion handler
+  // Add appearance tag handler
+  const handleAddAppearanceTag = () => {
+    const tag = newAppearanceTag.trim();
+    if (tag && !character.appearance_tags.includes(tag)) {
+      onUpdateCharacter({ 
+        appearance_tags: [...character.appearance_tags, tag] 
+      });
+      setNewAppearanceTag('');
+    }
+  };
+
+  const handleAppearanceTagKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddAppearanceTag();
+    }
+  };
   const fetchSuggestions = useCallback(async (type: SuggestionType) => {
     setIsLoadingSuggestion(type);
     try {
@@ -379,6 +397,26 @@ export function CharacterStudioSidebar({
                   placeholder="blonde hair, blue eyes, athletic build..."
                   className="min-h-[60px] resize-none text-sm"
                 />
+              </div>
+
+              {/* Add Appearance Tag Input */}
+              <div className="flex gap-2">
+                <Input
+                  value={newAppearanceTag}
+                  onChange={(e) => setNewAppearanceTag(e.target.value)}
+                  onKeyPress={handleAppearanceTagKeyPress}
+                  placeholder="Add appearance tag..."
+                  className="flex-1 h-8 text-sm"
+                />
+                <Button 
+                  onClick={handleAddAppearanceTag} 
+                  size="sm" 
+                  variant="outline" 
+                  className="h-8 px-2"
+                  disabled={!newAppearanceTag.trim()}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
               </div>
 
               {/* Current Tags */}

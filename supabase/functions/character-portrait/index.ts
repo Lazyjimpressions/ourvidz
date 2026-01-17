@@ -45,6 +45,8 @@ serve(async (req) => {
       });
     }
 
+    console.log('👤 User authenticated:', user.id);
+
     // Load character if ID provided, otherwise use characterData
     let character: any = null;
     if (characterId) {
@@ -187,9 +189,11 @@ serve(async (req) => {
         api_model_id: apiModel.id,
         model_type: 'sdxl',
         format: 'image',
+        destination: 'character_portrait',
         metadata: {
           type: 'character_portrait',
           character_id: characterId,
+          character_name: character.name,
           generation_mode: isI2I ? 'i2i' : 'txt2img',
           content_rating: effectiveContentRating,
           presets
@@ -259,6 +263,8 @@ serve(async (req) => {
     const modelKey = apiModel.model_key;
     const startTime = Date.now();
 
+    console.log('📤 Calling fal.ai:', modelKey);
+
     const falResponse = await fetch(`https://queue.fal.run/${modelKey}`, {
       method: 'POST',
       headers: {
@@ -291,14 +297,25 @@ serve(async (req) => {
     const requestId = queueResult.request_id;
     console.log('📋 fal.ai request queued:', requestId);
 
-    // Poll for result (with timeout)
+    // Update job as processing
+    await supabase
+      .from('jobs')
+      .update({ status: 'processing', started_at: new Date().toISOString() })
+      .eq('id', jobData.id);
+
+    // Poll for result (with extended timeout for slower models)
     let imageUrl: string | null = null;
     let attempts = 0;
-    const maxAttempts = 60; // 60 seconds max
+    const maxAttempts = 90; // 90 seconds max (extended from 60)
 
     while (attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       attempts++;
+
+      // Log progress every 10 attempts
+      if (attempts % 10 === 0) {
+        console.log(`⏳ Polling attempt ${attempts}/${maxAttempts}...`);
+      }
 
       const statusResponse = await fetch(
         `https://queue.fal.run/${modelKey}/requests/${requestId}/status`,
@@ -307,11 +324,21 @@ serve(async (req) => {
         }
       );
 
-      if (!statusResponse.ok) continue;
+      if (!statusResponse.ok) {
+        console.log(`⚠️ Status check failed: ${statusResponse.status}`);
+        continue;
+      }
 
       const status = await statusResponse.json();
+      
+      // Log status changes
+      if (attempts % 10 === 0) {
+        console.log(`📊 Status: ${status.status}`);
+      }
 
       if (status.status === 'COMPLETED') {
+        console.log('✅ fal.ai generation completed, fetching result...');
+        
         // Get result
         const resultResponse = await fetch(
           `https://queue.fal.run/${modelKey}/requests/${requestId}`,
@@ -322,9 +349,19 @@ serve(async (req) => {
 
         if (resultResponse.ok) {
           const result = await resultResponse.json();
-          imageUrl = result.images?.[0]?.url || result.image?.url;
-          console.log('✅ Generation completed:', imageUrl?.substring(0, 60));
+          console.log('📥 Result received:', JSON.stringify(result).substring(0, 300));
+          
+          // Extract image URL (handle both array and object formats)
+          imageUrl = result.images?.[0]?.url || result.image?.url || result.output?.url;
+          
+          if (imageUrl) {
+            console.log('🖼️ Image URL extracted:', imageUrl.substring(0, 80) + '...');
+          } else {
+            console.error('❌ No image URL found in result:', Object.keys(result));
+          }
           break;
+        } else {
+          console.error('❌ Failed to fetch result:', resultResponse.status);
         }
       } else if (status.status === 'FAILED') {
         console.error('❌ Generation failed:', status.error);
@@ -333,8 +370,11 @@ serve(async (req) => {
     }
 
     const generationTime = Date.now() - startTime;
+    console.log(`⏱️ Total generation time: ${generationTime}ms`);
 
     if (!imageUrl) {
+      console.error('❌ No image URL after polling - timeout or failure');
+      
       await supabase
         .from('jobs')
         .update({
@@ -350,6 +390,94 @@ serve(async (req) => {
       );
     }
 
+    // ========== PHASE 1: UPLOAD TO USER-LIBRARY BUCKET ==========
+    console.log('📦 Downloading image from fal.ai for storage...');
+    
+    let storagePath: string | null = null;
+    let libraryImageUrl: string | null = null;
+    
+    try {
+      // Download image from fal.ai
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to download image: ${imageResponse.status}`);
+      }
+      
+      const imageBlob = await imageResponse.blob();
+      const imageBuffer = await imageBlob.arrayBuffer();
+      const imageBytes = new Uint8Array(imageBuffer);
+      
+      console.log(`📥 Downloaded image: ${imageBytes.length} bytes`);
+      
+      // Generate storage path
+      const timestamp = Date.now();
+      const charIdPart = characterId || 'new';
+      storagePath = `${user.id}/portraits/${charIdPart}_${timestamp}.png`;
+      
+      // Upload to user-library bucket
+      const { error: uploadError } = await supabase.storage
+        .from('user-library')
+        .upload(storagePath, imageBytes, {
+          contentType: 'image/png',
+          upsert: false
+        });
+      
+      if (uploadError) {
+        console.error('⚠️ Storage upload failed:', uploadError);
+        // Continue with fal.ai URL if upload fails
+      } else {
+        console.log('✅ Uploaded to user-library:', storagePath);
+        
+        // Generate signed URL for the stored image
+        const { data: signedData } = await supabase.storage
+          .from('user-library')
+          .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
+        
+        if (signedData?.signedUrl) {
+          libraryImageUrl = signedData.signedUrl;
+          console.log('🔗 Signed URL generated');
+        }
+      }
+    } catch (downloadError) {
+      console.error('⚠️ Image download/upload failed:', downloadError);
+      // Continue with fal.ai URL
+    }
+    
+    // Use library URL if available, otherwise fall back to fal.ai URL
+    const finalImageUrl = libraryImageUrl || imageUrl;
+
+    // ========== PHASE 2: INSERT INTO USER_LIBRARY TABLE ==========
+    if (storagePath) {
+      console.log('💾 Inserting into user_library table...');
+      
+      const { error: libraryError } = await supabase
+        .from('user_library')
+        .insert({
+          user_id: user.id,
+          asset_type: 'image',
+          storage_path: storagePath,
+          original_prompt: prompt,
+          model_used: apiModel.display_name,
+          file_size_bytes: 0, // Will be updated if we know the size
+          mime_type: 'image/png',
+          tags: ['character', 'portrait', character.name].filter(Boolean),
+          content_category: 'character',
+          roleplay_metadata: {
+            character_id: characterId,
+            character_name: character.name,
+            type: 'character_portrait',
+            generation_mode: isI2I ? 'i2i' : 'txt2img',
+            job_id: jobData.id
+          }
+        });
+      
+      if (libraryError) {
+        console.error('⚠️ user_library insert failed:', libraryError);
+      } else {
+        console.log('✅ Inserted into user_library');
+      }
+    }
+
     // Update job as completed
     await supabase
       .from('jobs')
@@ -359,14 +487,19 @@ serve(async (req) => {
         metadata: {
           ...jobData.metadata,
           generation_time_ms: generationTime,
-          result_url: imageUrl
+          result_url: finalImageUrl,
+          storage_path: storagePath
         }
       })
       .eq('id', jobData.id);
 
+    console.log('✅ Job updated to completed');
+
     // Insert into character_portraits table
     let portraitId: string | null = null;
     if (characterId) {
+      console.log('💾 Inserting into character_portraits...');
+      
       // Check if this is the first portrait for this character
       const { count } = await supabase
         .from('character_portraits')
@@ -379,7 +512,7 @@ serve(async (req) => {
         .from('character_portraits')
         .insert({
           character_id: characterId,
-          image_url: imageUrl,
+          image_url: finalImageUrl,
           prompt: prompt,
           enhanced_prompt: prompt,
           is_primary: isFirstPortrait, // First portrait becomes primary
@@ -390,14 +523,15 @@ serve(async (req) => {
             generation_mode: isI2I ? 'i2i' : 'txt2img',
             generation_time_ms: generationTime,
             presets,
-            job_id: jobData.id
+            job_id: jobData.id,
+            storage_path: storagePath
           }
         })
         .select()
         .single();
 
       if (portraitError) {
-        console.error('⚠️ Failed to insert portrait:', portraitError);
+        console.error('❌ Failed to insert portrait:', JSON.stringify(portraitError));
       } else {
         portraitId = portraitData.id;
         console.log('✅ Portrait inserted:', portraitId, 'isPrimary:', isFirstPortrait);
@@ -408,7 +542,7 @@ serve(async (req) => {
         const { error: updateError } = await supabase
           .from('characters')
           .update({
-            image_url: imageUrl,
+            image_url: finalImageUrl,
             updated_at: new Date().toISOString()
           })
           .eq('id', characterId);
@@ -421,11 +555,15 @@ serve(async (req) => {
       }
     }
 
+    console.log('🎉 Character portrait generation complete!');
+
     return new Response(JSON.stringify({
       success: true,
-      imageUrl,
+      imageUrl: finalImageUrl,
       jobId: jobData.id,
-      generationTimeMs: generationTime
+      portraitId,
+      generationTimeMs: generationTime,
+      storagePath
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
