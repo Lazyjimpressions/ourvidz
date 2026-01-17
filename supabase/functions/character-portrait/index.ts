@@ -303,26 +303,40 @@ serve(async (req) => {
       .update({ status: 'processing', started_at: new Date().toISOString() })
       .eq('id', jobData.id);
 
-    // Poll for result (with extended timeout for slower models)
+    // Poll for result (fix: some fal models have a subpath that must be removed for status/result endpoints)
     let imageUrl: string | null = null;
     let attempts = 0;
-    const maxAttempts = 90; // 90 seconds max (extended from 60)
+    const maxAttempts = 90; // 90 seconds max
+
+    // IMPORTANT:
+    // - Submitting to the queue may use a subpath (e.g. ".../text-to-image")
+    // - But status/results MUST use the base model_id without the subpath
+    //   https://docs.fal.ai/model-apis/model-endpoints/queue
+    let pollModelId = modelKey;
 
     while (attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       attempts++;
 
-      // Log progress every 10 attempts
       if (attempts % 10 === 0) {
         console.log(`⏳ Polling attempt ${attempts}/${maxAttempts}...`);
       }
 
-      const statusResponse = await fetch(
-        `https://queue.fal.run/${modelKey}/requests/${requestId}/status`,
-        {
-          headers: { 'Authorization': `Key ${falApiKey}` }
+      const statusUrl = `https://queue.fal.run/${pollModelId}/requests/${requestId}/status`;
+      const statusResponse = await fetch(statusUrl, {
+        headers: { Authorization: `Key ${falApiKey}` },
+      });
+
+      // If we accidentally used a subpath for polling, fal responds with 405 (method not allowed).
+      // In that case, retry using the base model_id.
+      if (statusResponse.status === 405 && pollModelId === modelKey) {
+        const parts = modelKey.split('/');
+        if (parts.length > 2) {
+          pollModelId = parts.slice(0, -1).join('/');
+          console.log(`🔁 Detected model subpath. Polling via base model_id: ${pollModelId}`);
+          continue;
         }
-      );
+      }
 
       if (!statusResponse.ok) {
         console.log(`⚠️ Status check failed: ${statusResponse.status}`);
@@ -330,30 +344,26 @@ serve(async (req) => {
       }
 
       const status = await statusResponse.json();
-      
-      // Log status changes
+
       if (attempts % 10 === 0) {
         console.log(`📊 Status: ${status.status}`);
       }
 
       if (status.status === 'COMPLETED') {
         console.log('✅ fal.ai generation completed, fetching result...');
-        
-        // Get result
-        const resultResponse = await fetch(
-          `https://queue.fal.run/${modelKey}/requests/${requestId}`,
-          {
-            headers: { 'Authorization': `Key ${falApiKey}` }
-          }
-        );
+
+        const resultUrl = `https://queue.fal.run/${pollModelId}/requests/${requestId}`;
+        const resultResponse = await fetch(resultUrl, {
+          headers: { Authorization: `Key ${falApiKey}` },
+        });
 
         if (resultResponse.ok) {
           const result = await resultResponse.json();
           console.log('📥 Result received:', JSON.stringify(result).substring(0, 300));
-          
+
           // Extract image URL (handle both array and object formats)
           imageUrl = result.images?.[0]?.url || result.image?.url || result.output?.url;
-          
+
           if (imageUrl) {
             console.log('🖼️ Image URL extracted:', imageUrl.substring(0, 80) + '...');
           } else {
