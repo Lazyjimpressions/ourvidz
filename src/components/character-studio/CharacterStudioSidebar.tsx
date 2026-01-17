@@ -56,7 +56,7 @@ interface CharacterStudioSidebarProps {
   character: CharacterData;
   onUpdateCharacter: (updates: Partial<CharacterData>) => void;
   onSave: () => Promise<string | null>;
-  onGenerate: (prompt: string, options?: { referenceImageUrl?: string; modelId?: string }) => Promise<string | null>;
+  onGenerate: (prompt: string, options?: { referenceImageUrl?: string; model?: string }) => Promise<string | null>;
   isSaving: boolean;
   isGenerating: boolean;
   isDirty: boolean;
@@ -120,7 +120,7 @@ export function CharacterStudioSidebar({
     const prompt = buildAppearancePrompt();
     onGenerate(prompt, { 
       referenceImageUrl: character.reference_image_url || undefined,
-      modelId: selectedImageModel 
+      model: selectedImageModel // Pass model ID from api_models table
     });
   };
 
