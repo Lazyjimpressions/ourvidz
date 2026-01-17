@@ -360,6 +360,9 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
         // Refresh portraits to show the new one
         await fetchPortraits();
         
+        // Update local character state to show the new image immediately in profile holder
+        updateCharacter({ image_url: data.imageUrl });
+        
         toast({
           title: "Portrait generated",
           description: `Completed in ${Math.round((data.generationTimeMs || 0) / 1000)}s`

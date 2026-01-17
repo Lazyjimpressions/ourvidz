@@ -313,7 +313,13 @@ export function CharacterStudioSidebar({
         <div className="p-4 space-y-4 pb-20">
           {/* Character Avatar Preview */}
           <div className="flex flex-col items-center gap-3 pb-4 border-b border-border">
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-muted border-2 border-border">
+            <div className="w-24 h-24 rounded-full overflow-hidden bg-muted border-2 border-border relative">
+              {/* Loading spinner overlay during generation */}
+              {isGenerating && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              )}
               {primaryPortraitUrl || character.image_url ? (
                 <img 
                   src={primaryPortraitUrl || character.image_url || ''} 

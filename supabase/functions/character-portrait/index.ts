@@ -497,21 +497,20 @@ serve(async (req) => {
         console.log('✅ Portrait inserted:', portraitId, 'isPrimary:', isFirstPortrait);
       }
 
-      // Update character image_url if this is the first portrait
-      if (isFirstPortrait) {
-        const { error: updateError } = await supabase
-          .from('characters')
-          .update({
-            image_url: finalImageUrl,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', characterId);
+      // Always update character image_url to show latest generated portrait
+      // This ensures the profile image holder reflects the newest generation for validation
+      const { error: updateError } = await supabase
+        .from('characters')
+        .update({
+          image_url: finalImageUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', characterId);
 
-        if (updateError) {
-          console.error('⚠️ Failed to update character image:', updateError);
-        } else {
-          console.log('✅ Character image updated');
-        }
+      if (updateError) {
+        console.error('⚠️ Failed to update character image:', updateError);
+      } else {
+        console.log('✅ Character image updated to latest portrait');
       }
     }
 
