@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -32,6 +32,18 @@ import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
 import { PresetChipCarousel } from '@/components/roleplay/PresetChipCarousel';
 
+// Appearance presets for quick character styling
+const APPEARANCE_PRESETS = {
+  elegant: { icon: '👗', label: 'Elegant', tags: ['elegant', 'refined', 'sophisticated'] },
+  casual: { icon: '👕', label: 'Casual', tags: ['casual', 'relaxed', 'everyday'] },
+  athletic: { icon: '💪', label: 'Athletic', tags: ['athletic', 'fit', 'toned'] },
+  glamorous: { icon: '✨', label: 'Glamorous', tags: ['glamorous', 'stunning', 'gorgeous'] },
+  mysterious: { icon: '🌙', label: 'Mysterious', tags: ['mysterious', 'enigmatic', 'alluring'] },
+  innocent: { icon: '🌸', label: 'Innocent', tags: ['innocent', 'sweet', 'gentle'] },
+  bold: { icon: '🔥', label: 'Bold', tags: ['bold', 'confident', 'striking'] },
+  natural: { icon: '🌿', label: 'Natural', tags: ['natural', 'organic', 'earthy'] },
+};
+
 interface CharacterStudioSidebarProps {
   character: CharacterData;
   onUpdateCharacter: (updates: Partial<CharacterData>) => void;
@@ -61,6 +73,8 @@ export function CharacterStudioSidebar({
     personality: false,
     advanced: false
   });
+  
+  const [selectedPresetKey, setSelectedPresetKey] = useState<string | undefined>(undefined);
 
   const toggleSection = (section: keyof typeof openSections) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -85,11 +99,13 @@ export function CharacterStudioSidebar({
     onGenerate(prompt);
   };
 
-  const handlePresetSelect = (presetPrompt: string) => {
-    // Extract tags from preset and add to appearance_tags
-    const newTags = presetPrompt.split(',').map(t => t.trim()).filter(Boolean);
-    const updatedTags = [...new Set([...character.appearance_tags, ...newTags])];
-    onUpdateCharacter({ appearance_tags: updatedTags });
+  const handlePresetSelect = (key: string | undefined) => {
+    setSelectedPresetKey(key);
+    if (key && APPEARANCE_PRESETS[key as keyof typeof APPEARANCE_PRESETS]) {
+      const preset = APPEARANCE_PRESETS[key as keyof typeof APPEARANCE_PRESETS];
+      const updatedTags = [...new Set([...character.appearance_tags, ...preset.tags])];
+      onUpdateCharacter({ appearance_tags: updatedTags });
+    }
   };
 
   return (
@@ -215,10 +231,12 @@ export function CharacterStudioSidebar({
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-3 pt-2">
               {/* Appearance Presets */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Quick Presets</Label>
-                <PresetChipCarousel onPresetSelect={handlePresetSelect} />
-              </div>
+              <PresetChipCarousel 
+                label="Quick Presets"
+                presets={APPEARANCE_PRESETS}
+                selectedKey={selectedPresetKey}
+                onSelect={handlePresetSelect}
+              />
 
               {/* Appearance Tags */}
               <div className="space-y-1.5">

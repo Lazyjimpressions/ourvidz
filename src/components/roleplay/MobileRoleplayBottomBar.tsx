@@ -22,8 +22,8 @@ export const MobileRoleplayBottomBar: React.FC<MobileRoleplayBottomBarProps> = (
   const navigate = useNavigate();
 
   const handleCreateClick = () => {
-    // Navigate directly to character creation page
-    navigate('/create-character');
+    // Navigate directly to character studio
+    navigate('/character-studio');
   };
 
   return (

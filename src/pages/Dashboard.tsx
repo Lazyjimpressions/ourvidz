@@ -47,13 +47,13 @@ const Dashboard = () => {
       onClick: () => navigate("/storyboard")
     },
     {
-      id: 'create-character',
-      title: "Create Character",
-      subtitle: "Design AI companions for roleplay",
+      id: 'character-studio',
+      title: "Character Studio",
+      subtitle: "Design AI companions with multiple portraits",
       backgroundImage: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=800&h=600&fit=crop",
-      buttonText: "Create Character",
+      buttonText: "Open Studio",
       icon: Users,
-      onClick: () => navigate("/create-character")
+      onClick: () => navigate("/character-studio")
     },
     {
       id: 'video-library',

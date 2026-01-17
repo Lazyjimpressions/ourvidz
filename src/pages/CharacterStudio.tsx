@@ -247,8 +247,8 @@ export default function CharacterStudio() {
             setSceneToEdit(null);
           }}
           characterId={savedCharacterId}
-          characterName={character.name}
-          onSceneGenerated={handleSceneGenerated}
+          character={{ name: character.name, id: savedCharacterId }}
+          onSceneCreated={handleSceneGenerated}
         />
       )}
     </div>
