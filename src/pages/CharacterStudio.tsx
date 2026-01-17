@@ -302,6 +302,8 @@ export default function CharacterStudio() {
             onImageModelChange={setSelectedImageModel}
             imageModelOptions={imageModelOptions}
             onOpenImagePicker={() => setShowImagePicker(true)}
+            referenceImageUrl={character.reference_image_url}
+            onReferenceImageChange={(url) => updateCharacter({ reference_image_url: url })}
           />
         </div>
       </div>
