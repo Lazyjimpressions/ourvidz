@@ -6,7 +6,8 @@ import {
   ArrowLeft, 
   MessageSquare,
   ExternalLink,
-  Loader2
+  Loader2,
+  Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCharacterStudio } from '@/hooks/useCharacterStudio';
@@ -16,6 +17,7 @@ import { ScenesGallery } from '@/components/character-studio/ScenesGallery';
 import { CharacterStudioPromptBar } from '@/components/character-studio/CharacterStudioPromptBar';
 import { SceneGenerationModal } from '@/components/roleplay/SceneGenerationModal';
 import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
+import { CharacterSelector } from '@/components/character-studio/CharacterSelector';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CharacterScene } from '@/hooks/useCharacterStudio';
@@ -170,6 +172,15 @@ export default function CharacterStudio() {
     );
   }
 
+  // Handle character selection from selector
+  const handleSelectCharacter = (selectedCharacterId: string) => {
+    navigate(`/character-studio/${selectedCharacterId}`);
+  };
+
+  const handleCreateNewCharacter = () => {
+    navigate('/character-studio');
+  };
+
   // Desktop layout - sidebar + main workspace
   return (
     <div className="h-screen flex flex-col bg-background">
@@ -186,9 +197,19 @@ export default function CharacterStudio() {
             Back
           </Button>
           <div className="h-4 w-px bg-border" />
-          <h1 className="font-semibold text-foreground">
-            {isNewCharacter ? 'New Character' : `Edit: ${character.name || 'Character'}`}
-          </h1>
+          
+          {/* Character Selector */}
+          <CharacterSelector
+            onSelect={handleSelectCharacter}
+            onCreateNew={handleCreateNewCharacter}
+            trigger={
+              <Button variant="ghost" size="sm" className="gap-2">
+                <Users className="w-4 h-4" />
+                {isNewCharacter ? 'New Character' : character.name || 'Character'}
+              </Button>
+            }
+          />
+          
           {isDirty && (
             <span className="text-xs text-muted-foreground">(unsaved changes)</span>
           )}
