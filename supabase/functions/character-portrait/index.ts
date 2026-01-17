@@ -189,9 +189,9 @@ serve(async (req) => {
         api_model_id: apiModel.id,
         model_type: 'sdxl',
         format: 'image',
-        destination: 'character_portrait',
         metadata: {
           type: 'character_portrait',
+          destination: 'character_portrait',
           character_id: characterId,
           character_name: character.name,
           generation_mode: isI2I ? 'i2i' : 'txt2img',
