@@ -175,7 +175,8 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
   }, []);
 
   // Save character
-  const saveCharacter = useCallback(async (): Promise<string | null> => {
+  // Options: { silent?: boolean } - when true, suppresses success toast (useful for auto-save during generation)
+  const saveCharacter = useCallback(async (options?: { silent?: boolean }): Promise<string | null> => {
     if (!user?.id) {
       toast({
         title: "Error",
@@ -246,10 +247,14 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
       }
 
       setIsDirty(false);
-      toast({
-        title: savedCharacterId ? "Character updated" : "Character created",
-        description: `${character.name} has been saved successfully.`
-      });
+      
+      // Only show toast if not silent (e.g., during manual save, not auto-save for generation)
+      if (!options?.silent) {
+        toast({
+          title: savedCharacterId ? "Character updated" : "Character created",
+          description: `${character.name} has been saved successfully.`
+        });
+      }
       
       return result.id;
     } catch (err) {
@@ -301,14 +306,20 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
     referenceImageUrl?: string;
     model?: string; // This is the api_models.id from database
   }) => {
-    // First, ensure character is saved
+    // First, ensure character is saved (silently - no "saved" toast during generation)
     let charId = savedCharacterId;
     if (!charId) {
-      charId = await saveCharacter();
+      charId = await saveCharacter({ silent: true });
       if (!charId) return null;
     }
     
     setIsGenerating(true);
+    
+    // Show generation started toast
+    toast({
+      title: "Generating portrait...",
+      description: "This may take a moment."
+    });
     
     try {
       console.log('🎨 Generating portrait:', {
@@ -337,15 +348,15 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
       
       console.log('🎨 Portrait generation response:', data);
       
-      // The character-portrait function returns imageUrl directly (sync polling)
+      // The character-portrait function returns imageUrl directly (sync mode)
       if (data?.success && data?.imageUrl) {
         // The edge function inserts into character_portraits table
-        // Realtime subscription should pick it up, but let's also refresh
+        // Refresh portraits to show the new one
         await fetchPortraits();
         
         toast({
-          title: "Portrait Generated",
-          description: `Generated in ${Math.round((data.generationTimeMs || 0) / 1000)}s`
+          title: "Portrait generated",
+          description: `Completed in ${Math.round((data.generationTimeMs || 0) / 1000)}s`
         });
         setIsGenerating(false);
         return data.imageUrl;
@@ -353,18 +364,13 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
         throw new Error(data.error);
       }
       
-      // Fallback - generation may still be processing
-      toast({
-        title: "Generation Started",
-        description: "Your portrait is being generated..."
-      });
-      setIsGenerating(false);
-      return null;
+      // Unexpected response structure
+      throw new Error('Unexpected response from generation service');
     } catch (err) {
       console.error('Error generating portrait:', err);
       toast({
-        title: "Error",
-        description: err instanceof Error ? err.message : "Failed to start portrait generation",
+        title: "Generation failed",
+        description: err instanceof Error ? err.message : "Failed to generate portrait",
         variant: "destructive"
       });
       setIsGenerating(false);

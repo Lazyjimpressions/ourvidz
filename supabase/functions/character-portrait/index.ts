@@ -259,13 +259,20 @@ serve(async (req) => {
       }
     }
 
-    // Call fal.ai
+    // Call fal.ai using synchronous endpoint (no polling needed)
     const modelKey = apiModel.model_key;
     const startTime = Date.now();
+    const falEndpoint = `https://fal.run/${modelKey}`;
 
-    console.log('📤 Calling fal.ai:', modelKey);
+    console.log('📤 Calling fal.ai (sync):', falEndpoint);
 
-    const falResponse = await fetch(`https://queue.fal.run/${modelKey}`, {
+    // Update job as processing
+    await supabase
+      .from('jobs')
+      .update({ status: 'processing', started_at: new Date().toISOString() })
+      .eq('id', jobData.id);
+
+    const falResponse = await fetch(falEndpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Key ${falApiKey}`,
@@ -274,15 +281,18 @@ serve(async (req) => {
       body: JSON.stringify(modelInput)
     });
 
+    const generationTime = Date.now() - startTime;
+    console.log(`⏱️ Generation completed in ${generationTime}ms`);
+
     if (!falResponse.ok) {
       const errorText = await falResponse.text();
-      console.error('❌ fal.ai queue error:', falResponse.status, errorText);
+      console.error('❌ fal.ai error:', falResponse.status, errorText);
 
       await supabase
         .from('jobs')
         .update({
           status: 'failed',
-          error_message: `fal.ai error: ${falResponse.status}`,
+          error_message: `fal.ai error: ${falResponse.status} - ${errorText.substring(0, 200)}`,
           completed_at: new Date().toISOString()
         })
         .eq('id', jobData.id);
@@ -293,112 +303,32 @@ serve(async (req) => {
       );
     }
 
-    const queueResult = await falResponse.json();
-    const requestId = queueResult.request_id;
-    console.log('📋 fal.ai request queued:', requestId);
+    const result = await falResponse.json();
+    console.log('📥 Result received:', JSON.stringify(result).substring(0, 300));
 
-    // Update job as processing
-    await supabase
-      .from('jobs')
-      .update({ status: 'processing', started_at: new Date().toISOString() })
-      .eq('id', jobData.id);
-
-    // Poll for result (fix: some fal models have a subpath that must be removed for status/result endpoints)
-    let imageUrl: string | null = null;
-    let attempts = 0;
-    const maxAttempts = 90; // 90 seconds max
-
-    // IMPORTANT:
-    // - Submitting to the queue may use a subpath (e.g. ".../text-to-image")
-    // - But status/results MUST use the base model_id without the subpath
-    //   https://docs.fal.ai/model-apis/model-endpoints/queue
-    let pollModelId = modelKey;
-
-    while (attempts < maxAttempts) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      attempts++;
-
-      if (attempts % 10 === 0) {
-        console.log(`⏳ Polling attempt ${attempts}/${maxAttempts}...`);
-      }
-
-      const statusUrl = `https://queue.fal.run/${pollModelId}/requests/${requestId}/status`;
-      const statusResponse = await fetch(statusUrl, {
-        headers: { Authorization: `Key ${falApiKey}` },
-      });
-
-      // If we accidentally used a subpath for polling, fal responds with 405 (method not allowed).
-      // In that case, retry using the base model_id.
-      if (statusResponse.status === 405 && pollModelId === modelKey) {
-        const parts = modelKey.split('/');
-        if (parts.length > 2) {
-          pollModelId = parts.slice(0, -1).join('/');
-          console.log(`🔁 Detected model subpath. Polling via base model_id: ${pollModelId}`);
-          continue;
-        }
-      }
-
-      if (!statusResponse.ok) {
-        console.log(`⚠️ Status check failed: ${statusResponse.status}`);
-        continue;
-      }
-
-      const status = await statusResponse.json();
-
-      if (attempts % 10 === 0) {
-        console.log(`📊 Status: ${status.status}`);
-      }
-
-      if (status.status === 'COMPLETED') {
-        console.log('✅ fal.ai generation completed, fetching result...');
-
-        const resultUrl = `https://queue.fal.run/${pollModelId}/requests/${requestId}`;
-        const resultResponse = await fetch(resultUrl, {
-          headers: { Authorization: `Key ${falApiKey}` },
-        });
-
-        if (resultResponse.ok) {
-          const result = await resultResponse.json();
-          console.log('📥 Result received:', JSON.stringify(result).substring(0, 300));
-
-          // Extract image URL (handle both array and object formats)
-          imageUrl = result.images?.[0]?.url || result.image?.url || result.output?.url;
-
-          if (imageUrl) {
-            console.log('🖼️ Image URL extracted:', imageUrl.substring(0, 80) + '...');
-          } else {
-            console.error('❌ No image URL found in result:', Object.keys(result));
-          }
-          break;
-        } else {
-          console.error('❌ Failed to fetch result:', resultResponse.status);
-        }
-      } else if (status.status === 'FAILED') {
-        console.error('❌ Generation failed:', status.error);
-        break;
-      }
-    }
-
-    const generationTime = Date.now() - startTime;
-    console.log(`⏱️ Total generation time: ${generationTime}ms`);
+    // Extract image URL (handle both array and object formats)
+    // fal.ai returns: { images: [{ url, content_type, ... }], seed }
+    const imageUrl = result.images?.[0]?.url || result.image?.url || result.output?.url;
 
     if (!imageUrl) {
-      console.error('❌ No image URL after polling - timeout or failure');
-      
+      console.error('❌ No image URL in response. Keys:', Object.keys(result));
+
       await supabase
         .from('jobs')
         .update({
           status: 'failed',
-          error_message: 'Generation timed out or failed',
+          error_message: `No image URL in response: ${JSON.stringify(result).substring(0, 200)}`,
           completed_at: new Date().toISOString()
         })
         .eq('id', jobData.id);
 
       return new Response(
-        JSON.stringify({ error: 'Image generation timed out' }),
+        JSON.stringify({ error: 'No image returned from generation', resultKeys: Object.keys(result) }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    console.log('🖼️ Image URL extracted:', imageUrl.substring(0, 80) + '...');
 
     // ========== PHASE 1: UPLOAD TO USER-LIBRARY BUCKET ==========
     console.log('📦 Downloading image from fal.ai for storage...');
