@@ -23,8 +23,18 @@ serve(async (req) => {
       referenceImageUrl, 
       contentRating,
       apiModelId,
-      characterData // For new characters not yet saved
+      characterData, // For new characters not yet saved
+      promptOverride // User-typed prompt from Character Studio prompt bar
     } = body;
+    
+    console.log('📥 character-portrait request:', {
+      characterId,
+      hasPresets: !!presets,
+      hasReferenceImage: !!referenceImageUrl,
+      apiModelId,
+      hasCharacterData: !!characterData,
+      promptOverrideLength: promptOverride?.length || 0
+    });
 
     // Get authenticated user
     const authHeader = req.headers.get('authorization');
@@ -160,6 +170,15 @@ serve(async (req) => {
       promptParts.push(...character.appearance_tags.slice(0, 8));
     }
 
+    // ===== PROMPT OVERRIDE: User-typed prompt from Character Studio =====
+    // This allows users to influence generation with their own descriptions
+    if (promptOverride && typeof promptOverride === 'string' && promptOverride.trim()) {
+      // Cap at 200 chars to avoid overwhelming the base prompt
+      const cleanedOverride = promptOverride.trim().slice(0, 200);
+      promptParts.push(cleanedOverride);
+      console.log('📝 Added promptOverride:', cleanedOverride.substring(0, 50) + '...');
+    }
+
     // I2I identity preservation
     if (isI2I) {
       promptParts.push('maintain same character identity', 'consistent features');
@@ -196,7 +215,8 @@ serve(async (req) => {
           character_name: character.name,
           generation_mode: isI2I ? 'i2i' : 'txt2img',
           content_rating: effectiveContentRating,
-          presets
+          presets,
+          prompt_override: promptOverride || null
         }
       })
       .select()

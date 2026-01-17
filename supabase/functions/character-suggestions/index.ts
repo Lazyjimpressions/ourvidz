@@ -293,7 +293,7 @@ async function callOpenRouter(
 }
 
 /**
- * Parse the AI response as JSON
+ * Parse the AI response as JSON with robust key-based extraction fallback
  */
 function parseAISuggestions(content: string): Record<string, unknown> {
   // Try to extract JSON from the response
@@ -317,37 +317,86 @@ function parseAISuggestions(content: string): Record<string, unknown> {
   }
 
   try {
-    return JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonStr);
+    // Validate we got meaningful content
+    if (Object.keys(parsed).length > 0) {
+      console.log('✅ JSON parsed successfully:', Object.keys(parsed));
+      return parsed;
+    }
   } catch (error) {
-    console.warn('⚠️ Failed to parse AI response as JSON, attempting extraction:', error);
-
-    // Fallback: try to extract common patterns
-    const suggestions: Record<string, unknown> = {};
-
-    // Extract traits
-    const traitsMatch = content.match(/traits?[:\s]*\[([^\]]+)\]/i);
-    if (traitsMatch) {
-      suggestions.suggestedTraits = traitsMatch[1].split(',').map(t => t.trim().replace(/"/g, ''));
-    }
-
-    // Extract appearance
-    const appearanceMatch = content.match(/appearance[:\s]*\[([^\]]+)\]/i);
-    if (appearanceMatch) {
-      suggestions.suggestedAppearance = appearanceMatch[1].split(',').map(t => t.trim().replace(/"/g, ''));
-    }
-
-    // Extract voice tone
-    const voiceMatch = content.match(/voice\s*tone[:\s]*["']?([^"'\n,]+)/i);
-    if (voiceMatch) {
-      suggestions.suggestedVoiceTone = voiceMatch[1].trim();
-    }
-
-    if (Object.keys(suggestions).length === 0) {
-      throw new Error('Could not parse AI suggestions');
-    }
-
-    return suggestions;
+    console.warn('⚠️ Failed to parse AI response as JSON, attempting key-based extraction:', error);
   }
+
+  // ===== ROBUST KEY-BASED EXTRACTION =====
+  // This handles malformed JSON from LLMs that may have unterminated strings
+  const suggestions: Record<string, unknown> = {};
+
+  // Extract suggestedDescription (handles multiline by being greedy but stopping at next key)
+  const descMatch = content.match(/"suggestedDescription"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|"\s*$)/);
+  if (descMatch && descMatch[1] && descMatch[1].length > 10) {
+    // Clean up escaped characters and normalize
+    suggestions.suggestedDescription = descMatch[1]
+      .replace(/\\n/g, ' ')
+      .replace(/\\"/g, '"')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Extract suggestedTraits array
+  const traitsMatch = content.match(/"suggestedTraits"\s*:\s*\[([\s\S]*?)\]/);
+  if (traitsMatch && traitsMatch[1]) {
+    const traitItems = traitsMatch[1].match(/"([^"]+)"/g);
+    if (traitItems && traitItems.length > 0) {
+      suggestions.suggestedTraits = traitItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
+    }
+  }
+
+  // Extract suggestedVoiceTone (simple string)
+  const voiceToneMatch = content.match(/"suggestedVoiceTone"\s*:\s*"([^"]+)"/);
+  if (voiceToneMatch && voiceToneMatch[1] && voiceToneMatch[1].length > 2) {
+    suggestions.suggestedVoiceTone = voiceToneMatch[1].trim();
+  }
+
+  // Extract suggestedAppearance array
+  const appearanceMatch = content.match(/"suggestedAppearance"\s*:\s*\[([\s\S]*?)\]/);
+  if (appearanceMatch && appearanceMatch[1]) {
+    const appearanceItems = appearanceMatch[1].match(/"([^"]+)"/g);
+    if (appearanceItems && appearanceItems.length > 0) {
+      suggestions.suggestedAppearance = appearanceItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
+    }
+  }
+
+  // Extract suggestedPersona
+  const personaMatch = content.match(/"suggestedPersona"\s*:\s*"([^"]+)"/);
+  if (personaMatch && personaMatch[1] && personaMatch[1].length > 5) {
+    suggestions.suggestedPersona = personaMatch[1].trim();
+  }
+
+  // Extract suggestedBackstory array
+  const backstoryMatch = content.match(/"suggestedBackstory"\s*:\s*\[([\s\S]*?)\]/);
+  if (backstoryMatch && backstoryMatch[1]) {
+    const backstoryItems = backstoryMatch[1].match(/"([^"]+)"/g);
+    if (backstoryItems && backstoryItems.length > 0) {
+      suggestions.suggestedBackstory = backstoryItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
+    }
+  }
+
+  // Extract suggestedVoiceExamples array
+  const voiceExMatch = content.match(/"suggestedVoiceExamples"\s*:\s*\[([\s\S]*?)\]/);
+  if (voiceExMatch && voiceExMatch[1]) {
+    const exampleItems = voiceExMatch[1].match(/"([^"]+)"/g);
+    if (exampleItems && exampleItems.length > 0) {
+      suggestions.suggestedVoiceExamples = exampleItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
+    }
+  }
+
+  console.log('📋 Key-based extraction result:', Object.keys(suggestions));
+
+  if (Object.keys(suggestions).length === 0) {
+    throw new Error('Could not parse AI suggestions - no valid fields extracted');
+  }
+
+  return suggestions;
 }
 
 serve(async (req) => {
