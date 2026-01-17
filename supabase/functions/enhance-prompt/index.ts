@@ -24,16 +24,30 @@ serve(async (req) => {
     }
     
     const requestBody = await req.json()
-    prompt = requestBody.prompt // Assign to function-scoped variable
-    const jobType = requestBody.jobType
+    
+    // ===== BACKWARDS COMPATIBILITY: Accept both old and new field names =====
+    // Old: original_prompt, job_type, enhancement_model
+    // New: prompt, jobType, selectedModel
+    prompt = requestBody.prompt || requestBody.original_prompt || '' // Support both
+    const jobType = requestBody.jobType || requestBody.job_type
     const format = requestBody.format
     const quality = requestBody.quality
-    const selectedModel = requestBody.selectedModel || 'qwen_instruct'
+    const selectedModel = requestBody.selectedModel || requestBody.enhancement_model || 'qwen_instruct'
     const user_id = requestBody.user_id
     const regeneration = requestBody.regeneration
     const selectedPresets = requestBody.selectedPresets || []
     const contentType = requestBody.contentType // Extract contentType from request
     const exactCopyMode = requestBody.metadata?.exact_copy_mode || false
+
+    console.log('📥 enhance-prompt received:', {
+      hasPrompt: !!prompt,
+      promptLength: prompt?.length || 0,
+      jobType,
+      selectedModel,
+      contentType,
+      // Log which field names were used for debugging
+      usedLegacyFields: !!(requestBody.original_prompt || requestBody.job_type || requestBody.enhancement_model)
+    });
 
     if (!prompt || typeof prompt !== 'string') {
       return new Response(JSON.stringify({

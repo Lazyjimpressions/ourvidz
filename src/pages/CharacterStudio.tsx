@@ -274,7 +274,7 @@ export default function CharacterStudio() {
                 onSelect={handleSelectPortrait}
                 onSetPrimary={setPrimaryPortrait}
                 onDelete={deletePortrait}
-                onAddNew={() => generatePortrait(character.traits || character.name || 'portrait')}
+                onAddNew={() => handleGenerateFromPrompt(character.traits || character.name || 'portrait')}
                 onUseAsReference={handleUseAsReference}
               />
 
@@ -465,7 +465,10 @@ function MobileCharacterStudio({
                 onSelect={(id) => selectItem(id, 'portrait')}
                 onSetPrimary={setPrimaryPortrait}
                 onDelete={deletePortrait}
-                onAddNew={() => generatePortrait(character.traits || character.name || 'portrait')}
+                onAddNew={() => generatePortrait(character.traits || character.name || 'portrait', { 
+                  referenceImageUrl: character.reference_image_url || undefined,
+                  model: selectedImageModel 
+                })}
                 onUseAsReference={(p) => updateCharacter({ reference_image_url: p.image_url })}
               />
             </div>

@@ -302,6 +302,7 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
 
   // Generate portrait using character-portrait edge function
   // Model is dynamically selected from api_models table
+  // prompt: User-typed prompt from Character Studio prompt bar (promptOverride)
   const generatePortrait = useCallback(async (prompt: string, options?: {
     referenceImageUrl?: string;
     model?: string; // This is the api_models.id from database
@@ -322,9 +323,13 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
     });
     
     try {
+      // Use reference image from options, fall back to character's reference image
+      const effectiveReferenceUrl = options?.referenceImageUrl || character.reference_image_url || undefined;
+      
       console.log('🎨 Generating portrait:', {
         characterId: charId,
-        hasReferenceImage: !!options?.referenceImageUrl,
+        promptOverride: prompt?.substring(0, 50),
+        hasReferenceImage: !!effectiveReferenceUrl,
         modelId: options?.model,
         contentRating: character.content_rating
       });
@@ -333,11 +338,12 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
       const { data, error } = await supabase.functions.invoke('character-portrait', {
         body: {
           characterId: charId,
-          referenceImageUrl: options?.referenceImageUrl,
+          referenceImageUrl: effectiveReferenceUrl,
           contentRating: character.content_rating,
           apiModelId: options?.model || undefined, // Pass model ID from database
           presets: {}, // Can be extended to pass appearance presets
-          characterData: null // Character already saved, use ID
+          characterData: null, // Character already saved, use ID
+          promptOverride: prompt || undefined // Pass user's typed prompt
         }
       });
       
