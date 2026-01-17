@@ -401,6 +401,56 @@ export type Database = {
           },
         ]
       }
+      character_portraits: {
+        Row: {
+          character_id: string
+          created_at: string | null
+          enhanced_prompt: string | null
+          generation_metadata: Json | null
+          id: string
+          image_url: string
+          is_primary: boolean | null
+          prompt: string | null
+          sort_order: number | null
+          thumbnail_url: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          character_id: string
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          generation_metadata?: Json | null
+          id?: string
+          image_url: string
+          is_primary?: boolean | null
+          prompt?: string | null
+          sort_order?: number | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          character_id?: string
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          generation_metadata?: Json | null
+          id?: string
+          image_url?: string
+          is_primary?: boolean | null
+          prompt?: string | null
+          sort_order?: number | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_portraits_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       character_role_audit: {
         Row: {
           character_id: string
@@ -553,11 +603,13 @@ export type Database = {
           mood: string | null
           name: string
           persona: string | null
+          portrait_count: number | null
           preview_image_url: string | null
           quick_start: boolean | null
           reference_image_url: string | null
           role: string | null
           scene_behavior_rules: Json | null
+          scene_count: number | null
           seed_locked: number | null
           system_prompt: string | null
           traits: string | null
@@ -587,11 +639,13 @@ export type Database = {
           mood?: string | null
           name: string
           persona?: string | null
+          portrait_count?: number | null
           preview_image_url?: string | null
           quick_start?: boolean | null
           reference_image_url?: string | null
           role?: string | null
           scene_behavior_rules?: Json | null
+          scene_count?: number | null
           seed_locked?: number | null
           system_prompt?: string | null
           traits?: string | null
@@ -621,11 +675,13 @@ export type Database = {
           mood?: string | null
           name?: string
           persona?: string | null
+          portrait_count?: number | null
           preview_image_url?: string | null
           quick_start?: boolean | null
           reference_image_url?: string | null
           role?: string | null
           scene_behavior_rules?: Json | null
+          scene_count?: number | null
           seed_locked?: number | null
           system_prompt?: string | null
           traits?: string | null
