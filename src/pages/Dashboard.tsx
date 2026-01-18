@@ -56,6 +56,15 @@ const Dashboard = () => {
       onClick: () => navigate("/character-studio")
     },
     {
+      id: 'roleplay',
+      title: "Roleplay",
+      subtitle: "Chat with AI characters in immersive scenarios",
+      backgroundImage: "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&h=600&fit=crop",
+      buttonText: "Start Roleplay",
+      icon: Users,
+      onClick: () => navigate("/roleplay")
+    },
+    {
       id: 'video-library',
       title: "Video Library",
       subtitle: "Browse and manage your video projects",

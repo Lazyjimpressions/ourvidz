@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from "@/contexts/AuthContext";
 import { Home, FileText, Play, Image, Library, Settings, LogOut, Brain, Users, Menu } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { MobileNavDrawer } from "@/components/shared/MobileNavDrawer";
 
 
 interface OurVidzDashboardLayoutProps {
@@ -13,6 +14,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   const { profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -209,12 +211,18 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate(-1)}
+                onClick={() => setMobileNavOpen(true)}
                 className="p-2 md:hidden"
               >
                 <Menu className="h-5 w-5" />
               </Button>
             )}
+            
+            {/* Mobile Navigation Drawer */}
+            <MobileNavDrawer 
+              isOpen={mobileNavOpen} 
+              onClose={() => setMobileNavOpen(false)} 
+            />
             <div className="flex justify-end items-center flex-1">
               <div className={`flex items-center ${isCompactRoute ? 'gap-2 md:gap-4' : 'gap-4'}`}>
                 <Button
