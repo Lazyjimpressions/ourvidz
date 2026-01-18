@@ -72,27 +72,25 @@ export function PortraitGallery({
 
   return (
     <div className="space-y-3">
-      {/* Section Header */}
+      {/* Section Header - simplified with icon */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-foreground">Portrait Versions</h3>
-          <Badge variant="secondary" className="text-xs">
-            {portraits.length}
-          </Badge>
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <ImageIcon className="w-4 h-4" />
+          <span>{portraits.length}</span>
         </div>
         <Button 
           variant="outline" 
           size="sm" 
           onClick={onAddNew}
           disabled={isGenerating || isNewCharacter}
-          className="gap-1.5"
+          className="h-8 w-8 p-0 sm:w-auto sm:px-3 sm:gap-1.5"
         >
           {isGenerating ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
           )}
-          Generate
+          <span className="hidden sm:inline">Generate</span>
         </Button>
       </div>
 
@@ -120,11 +118,11 @@ export function PortraitGallery({
                   setLightboxOpen(true);
                 }}
               >
-                {/* Image */}
+                {/* Image - use object-contain to avoid cropping */}
                 <img
                   src={portrait.thumbnail_url || portrait.image_url}
                   alt="Portrait version"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain bg-muted/50"
                 />
 
                 {/* Primary Badge */}
@@ -196,26 +194,23 @@ export function PortraitGallery({
             );
           })}
 
-          {/* Add New Tile */}
+          {/* Add New Tile - icon only */}
           <button
             onClick={onAddNew}
             disabled={isGenerating || isNewCharacter}
             className={cn(
               'aspect-[3/4] rounded-lg border-2 border-dashed border-border',
-              'flex flex-col items-center justify-center gap-2',
+              'flex items-center justify-center',
               'text-muted-foreground hover:text-foreground hover:border-primary/50',
               'transition-colors duration-200',
               (isGenerating || isNewCharacter) && 'opacity-50 cursor-not-allowed'
             )}
           >
             {isGenerating ? (
-              <Loader2 className="w-6 h-6 animate-spin" />
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              <Plus className="w-6 h-6" />
+              <Plus className="w-5 h-5" />
             )}
-            <span className="text-xs">
-              {isGenerating ? 'Generating...' : 'Add Version'}
-            </span>
           </button>
         </div>
       ) : (
