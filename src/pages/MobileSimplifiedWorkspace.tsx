@@ -476,15 +476,23 @@ const MobileSimplifiedWorkspace = () => {
           ${keyboardVisible ? '' : isControlsExpanded ? 'pb-80' : 'pb-32'}
           pt-[env(safe-area-inset-top)]
         `}>
-          {/* Progress Indicator */}
-          {isGenerating && (
-            <div className="mb-4">
-              <GenerationProgressIndicator 
-                status="processing"
-                progress={0}
-              />
-            </div>
-          )}
+          {/* Progress Indicator - dynamically derives status from workspace assets */}
+          {isGenerating && (() => {
+            // Derive actual job status from workspace assets
+            const processingAssets = workspaceAssets.filter(a => a.status === 'processing' || a.status === 'queued');
+            const hasProcessing = processingAssets.some(a => a.status === 'processing');
+            const hasQueued = processingAssets.some(a => a.status === 'queued');
+            const dynamicStatus = hasProcessing ? 'processing' : hasQueued ? 'queued' : 'processing';
+            
+            return (
+              <div className="mb-4">
+                <GenerationProgressIndicator 
+                  status={dynamicStatus}
+                  progress={hasProcessing ? 50 : 10}
+                />
+              </div>
+            );
+          })()}
 
           {/* Content Grid */}
           <SharedGrid
