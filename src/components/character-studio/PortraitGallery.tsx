@@ -125,70 +125,58 @@ export function PortraitGallery({
                   className="w-full h-full object-cover bg-muted"
                 />
 
-                {/* Primary Badge */}
-                {isPrimary && (
-                  <div className="absolute top-2 left-2">
-                    <Badge className="bg-yellow-500/90 text-yellow-950 gap-1 text-xs">
-                      <Star className="w-3 h-3 fill-current" />
-                      Primary
+                {/* Top Row: Primary Badge (left) + Options Menu (right) - always visible */}
+                <div className="absolute top-1.5 left-1.5 right-1.5 flex items-start justify-between pointer-events-none">
+                  {/* Primary Badge */}
+                  {isPrimary ? (
+                    <Badge className="bg-yellow-500/90 text-yellow-950 gap-0.5 text-[10px] px-1.5 py-0.5 pointer-events-auto">
+                      <Star className="w-2.5 h-2.5 fill-current" />
+                      <span className="hidden sm:inline">Primary</span>
                     </Badge>
-                  </div>
-                )}
-
-                {/* Hover Overlay */}
-                <div className={cn(
-                  'absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent',
-                  'opacity-0 group-hover:opacity-100 transition-opacity duration-200',
-                  'flex flex-col justify-end p-2'
-                )}>
-                  {/* Quick Actions */}
-                  <div className="flex items-center justify-between">
-                    {!isPrimary && (
+                  ) : (
+                    <div /> // Spacer to keep menu aligned right
+                  )}
+                  
+                  {/* Options Menu - always visible for accessibility */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <Button
                         variant="secondary"
                         size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSetPrimary(portrait.id);
-                        }}
+                        className="h-6 w-6 p-0 pointer-events-auto bg-black/60 hover:bg-black/80 border-0"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Star className="w-3 h-3" />
-                        Set Primary
+                        <MoreVertical className="w-3.5 h-3.5 text-white" />
                       </Button>
-                    )}
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 ml-auto"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem onClick={() => onUseAsReference(portrait)}>
-                          <Copy className="w-4 h-4 mr-2" />
-                          Use as Reference
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDownload(portrait)}>
-                          <Download className="w-4 h-4 mr-2" />
-                          Download
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          className="text-destructive"
-                          onClick={() => onDelete(portrait.id)}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44 bg-popover z-50">
+                      {!isPrimary && (
+                        <>
+                          <DropdownMenuItem onClick={() => onSetPrimary(portrait.id)}>
+                            <Star className="w-4 h-4 mr-2" />
+                            Set as Primary
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                        </>
+                      )}
+                      <DropdownMenuItem onClick={() => onUseAsReference(portrait)}>
+                        <Copy className="w-4 h-4 mr-2" />
+                        Use as Reference
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDownload(portrait)}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => onDelete(portrait.id)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             );
