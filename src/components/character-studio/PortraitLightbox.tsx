@@ -108,8 +108,8 @@ export function PortraitLightbox({
         handleNext();
       }
     }
-    // Vertical swipe down (close)
-    else if (deltaY > 100 && Math.abs(deltaY) > Math.abs(deltaX)) {
+    // Vertical swipe down (close) - reduced threshold for responsiveness
+    else if (deltaY > 60 && Math.abs(deltaY) > Math.abs(deltaX)) {
       onClose();
     }
     
@@ -184,6 +184,25 @@ export function PortraitLightbox({
           className="max-w-full max-h-full object-contain rounded-lg"
           onClick={() => setShowPanel(!showPanel)}
         />
+        
+        {/* Mobile Navigation Dots */}
+        {portraits.length > 1 && (
+          <div className="flex justify-center gap-1.5 mt-3 md:hidden">
+            {portraits.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => onIndexChange(idx)}
+                className={cn(
+                  "w-2 h-2 rounded-full transition-all duration-200",
+                  idx === currentIndex 
+                    ? "bg-white w-4" 
+                    : "bg-white/40 hover:bg-white/60"
+                )}
+                aria-label={`Go to portrait ${idx + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Navigation Arrows (Desktop) */}
@@ -275,67 +294,76 @@ export function PortraitLightbox({
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button 
-              onClick={handleRegenerate} 
-              disabled={!editablePrompt.trim()}
-              className="gap-2 bg-primary hover:bg-primary/90"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Regenerate
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                onUseAsReference(currentPortrait);
-                onClose();
-              }}
-              className="gap-2 border-white/30 text-white hover:bg-white/10"
-            >
-              <Copy className="w-4 h-4" />
-              Use as Reference
-            </Button>
-            
-            <div className="flex-1" />
-            
-            {!isPrimary && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onSetPrimary(currentPortrait.id)}
-                className="gap-1.5 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
+          {/* Action Buttons - Mobile optimized 2-row layout */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            {/* Primary actions row */}
+            <div className="flex items-center gap-2">
+              <Button 
+                onClick={handleRegenerate} 
+                disabled={!editablePrompt.trim()}
+                className="gap-2 flex-1 sm:flex-none bg-primary hover:bg-primary/90"
               >
-                <Star className="w-4 h-4" />
-                Set Primary
+                <RefreshCw className="w-4 h-4" />
+                <span className="hidden sm:inline">Regenerate</span>
+                <span className="sm:hidden">Regen</span>
               </Button>
-            )}
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={handleDownload}
-              className="text-white/70 hover:text-white hover:bg-white/10"
-            >
-              <Download className="w-5 h-5" />
-            </Button>
-            
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => {
-                onDelete(currentPortrait.id);
-                if (portraits.length <= 1) {
+              
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  onUseAsReference(currentPortrait);
                   onClose();
-                } else if (currentIndex >= portraits.length - 1) {
-                  onIndexChange(currentIndex - 1);
-                }
-              }}
-              className="text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="w-5 h-5" />
-            </Button>
+                }}
+                className="gap-2 flex-1 sm:flex-none border-white/30 text-white hover:bg-white/10"
+              >
+                <Copy className="w-4 h-4" />
+                <span className="hidden sm:inline">Use as Reference</span>
+                <span className="sm:hidden">Reference</span>
+              </Button>
+            </div>
+            
+            {/* Secondary actions row */}
+            <div className="flex items-center gap-2 justify-between sm:justify-end sm:flex-1">
+              {!isPrimary && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onSetPrimary(currentPortrait.id)}
+                  className="gap-1.5 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
+                >
+                  <Star className="w-4 h-4" />
+                  <span className="hidden sm:inline">Set Primary</span>
+                  <span className="sm:hidden">Primary</span>
+                </Button>
+              )}
+              
+              <div className="flex items-center gap-1 ml-auto">
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={handleDownload}
+                  className="text-white/70 hover:text-white hover:bg-white/10"
+                >
+                  <Download className="w-5 h-5" />
+                </Button>
+                
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  onClick={() => {
+                    onDelete(currentPortrait.id);
+                    if (portraits.length <= 1) {
+                      onClose();
+                    } else if (currentIndex >= portraits.length - 1) {
+                      onIndexChange(currentIndex - 1);
+                    }
+                  }}
+                  className="text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
