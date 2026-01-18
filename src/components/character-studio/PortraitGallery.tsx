@@ -118,11 +118,11 @@ export function PortraitGallery({
                   setLightboxOpen(true);
                 }}
               >
-                {/* Image - use object-contain to avoid cropping */}
+                {/* Image */}
                 <img
                   src={portrait.thumbnail_url || portrait.image_url}
                   alt="Portrait version"
-                  className="w-full h-full object-contain bg-muted/50"
+                  className="w-full h-full object-cover bg-muted"
                 />
 
                 {/* Primary Badge */}
