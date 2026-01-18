@@ -7,7 +7,8 @@ import {
   MessageSquare,
   ExternalLink,
   Loader2,
-  Users
+  Users,
+  ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCharacterStudio } from '@/hooks/useCharacterStudio';
@@ -402,9 +403,21 @@ function MobileCharacterStudio({
         >
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="font-medium text-sm text-foreground truncate max-w-[40%]">
-          {isNewCharacter ? 'New Character' : character.name || 'Character'}
-        </h1>
+        
+        {/* Character Selector */}
+        <CharacterSelector
+          onSelect={(id) => navigate(`/character-studio/${id}`)}
+          onCreateNew={() => navigate('/character-studio')}
+          trigger={
+            <button className="flex items-center gap-1 text-sm font-medium text-foreground">
+              <span className="truncate max-w-[120px]">
+                {isNewCharacter ? 'New Character' : character.name || 'Character'}
+              </span>
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            </button>
+          }
+        />
+        
         <Button
           size="sm"
           onClick={saveCharacter}
@@ -459,33 +472,54 @@ function MobileCharacterStudio({
         )}
 
         {activeTab === 'portraits' && (
-          <ScrollArea className="h-full">
-            <div className="p-4 pb-24">
-              <PortraitGallery
-                portraits={portraits}
-                primaryPortraitId={primaryPortrait?.id}
-                selectedPortraitId={selectedItemType === 'portrait' ? selectedItemId : null}
-                isGenerating={isGenerating}
-                isNewCharacter={isNewCharacter}
-                onSelect={(id) => selectItem(id, 'portrait')}
-                onSetPrimary={setPrimaryPortrait}
-                onDelete={deletePortrait}
-                onAddNew={() => generatePortrait(character.traits || character.name || 'portrait', { 
-                  referenceImageUrl: character.reference_image_url || undefined,
-                  model: selectedImageModel 
-                })}
-                onUseAsReference={(p) => updateCharacter({ reference_image_url: p.image_url })}
-                onRegenerate={(prompt, referenceUrl) => {
-                  updateCharacter({ reference_image_url: referenceUrl });
-                  generatePortrait(prompt, { 
-                    referenceImageUrl: referenceUrl,
+          <div className="flex flex-col h-full">
+            <ScrollArea className="flex-1">
+              <div className="p-4 pb-4">
+                <PortraitGallery
+                  portraits={portraits}
+                  primaryPortraitId={primaryPortrait?.id}
+                  selectedPortraitId={selectedItemType === 'portrait' ? selectedItemId : null}
+                  isGenerating={isGenerating}
+                  isNewCharacter={isNewCharacter}
+                  onSelect={(id) => selectItem(id, 'portrait')}
+                  onSetPrimary={setPrimaryPortrait}
+                  onDelete={deletePortrait}
+                  onAddNew={() => generatePortrait(character.traits || character.name || 'portrait', { 
+                    referenceImageUrl: character.reference_image_url || undefined,
                     model: selectedImageModel 
-                  });
-                }}
-                characterAppearanceTags={character.appearance_tags || []}
-              />
-            </div>
-          </ScrollArea>
+                  })}
+                  onUseAsReference={(p) => updateCharacter({ reference_image_url: p.image_url })}
+                  onRegenerate={(prompt, referenceUrl) => {
+                    updateCharacter({ reference_image_url: referenceUrl });
+                    generatePortrait(prompt, { 
+                      referenceImageUrl: referenceUrl,
+                      model: selectedImageModel 
+                    });
+                  }}
+                  characterAppearanceTags={character.appearance_tags || []}
+                />
+              </div>
+            </ScrollArea>
+            
+            {/* Prompt Bar for mobile portraits tab */}
+            <CharacterStudioPromptBar
+              onGenerate={(prompt, refUrl, modelId) => 
+                generatePortrait(prompt, { 
+                  referenceImageUrl: refUrl || character.reference_image_url || undefined,
+                  model: modelId || selectedImageModel 
+                })
+              }
+              isGenerating={isGenerating}
+              isDisabled={isNewCharacter}
+              placeholder={`Describe a portrait for ${character.name || 'your character'}...`}
+              selectedImageModel={selectedImageModel}
+              onImageModelChange={onImageModelChange}
+              imageModelOptions={imageModelOptions}
+              onOpenImagePicker={onOpenImagePicker}
+              referenceImageUrl={character.reference_image_url}
+              onReferenceImageChange={(url) => updateCharacter({ reference_image_url: url })}
+            />
+          </div>
         )}
 
         {activeTab === 'scenes' && (
@@ -506,19 +540,21 @@ function MobileCharacterStudio({
         )}
       </div>
 
-      {/* Mobile Bottom Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-3 bg-card/95 backdrop-blur border-t border-border pb-safe">
-        <div className="flex gap-2">
-          <Button
-            className="flex-1"
-            onClick={onStartChat}
-            disabled={isNewCharacter || !savedCharacterId}
-          >
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Start Chat
-          </Button>
+      {/* Mobile Bottom Bar - only show on Details and Scenes tabs */}
+      {activeTab !== 'portraits' && (
+        <div className="fixed bottom-0 left-0 right-0 p-3 bg-card/95 backdrop-blur border-t border-border pb-safe">
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              onClick={onStartChat}
+              disabled={isNewCharacter || !savedCharacterId}
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Start Chat
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
