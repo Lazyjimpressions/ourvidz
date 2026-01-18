@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
+import { PortraitLightbox } from './PortraitLightbox';
 
 interface PortraitGalleryProps {
   portraits: CharacterPortrait[];
@@ -32,6 +33,8 @@ interface PortraitGalleryProps {
   onDelete: (id: string) => void;
   onAddNew: () => void;
   onUseAsReference: (portrait: CharacterPortrait) => void;
+  onRegenerate?: (prompt: string, referenceUrl: string) => void;
+  characterAppearanceTags?: string[];
 }
 
 export function PortraitGallery({
@@ -44,8 +47,12 @@ export function PortraitGallery({
   onSetPrimary,
   onDelete,
   onAddNew,
-  onUseAsReference
+  onUseAsReference,
+  onRegenerate,
+  characterAppearanceTags = []
 }: PortraitGalleryProps) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const handleDownload = async (portrait: CharacterPortrait) => {
     try {
       const response = await fetch(portrait.image_url);
@@ -107,7 +114,11 @@ export function PortraitGallery({
                     : 'border-border hover:border-primary/50',
                   isPrimary && 'ring-2 ring-yellow-500/30'
                 )}
-                onClick={() => onSelect(portrait.id)}
+                onClick={() => {
+                  const index = portraits.findIndex(p => p.id === portrait.id);
+                  setLightboxIndex(index >= 0 ? index : 0);
+                  setLightboxOpen(true);
+                }}
               >
                 {/* Image */}
                 <img
@@ -239,6 +250,37 @@ export function PortraitGallery({
             Generate Portrait
           </Button>
         </div>
+      )}
+
+      {/* Portrait Lightbox */}
+      {lightboxOpen && portraits.length > 0 && (
+        <PortraitLightbox
+          portraits={portraits}
+          currentIndex={lightboxIndex}
+          primaryPortraitId={primaryPortraitId}
+          characterAppearanceTags={characterAppearanceTags}
+          onClose={() => setLightboxOpen(false)}
+          onIndexChange={setLightboxIndex}
+          onRegenerate={(prompt, refUrl) => {
+            onRegenerate?.(prompt, refUrl);
+            setLightboxOpen(false);
+          }}
+          onUseAsReference={(portrait) => {
+            onUseAsReference(portrait);
+            setLightboxOpen(false);
+          }}
+          onDownload={handleDownload}
+          onSetPrimary={onSetPrimary}
+          onDelete={(id) => {
+            onDelete(id);
+            // Adjust index if needed
+            if (portraits.length <= 1) {
+              setLightboxOpen(false);
+            } else if (lightboxIndex >= portraits.length - 1) {
+              setLightboxIndex(lightboxIndex - 1);
+            }
+          }}
+        />
       )}
     </div>
   );

@@ -1,0 +1,344 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  X, 
+  ChevronLeft, 
+  ChevronRight, 
+  Download, 
+  Copy, 
+  Star,
+  Trash2,
+  RefreshCw,
+  ChevronUp,
+  ChevronDown
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
+import { CharacterPortrait } from '@/hooks/usePortraitVersions';
+
+interface PortraitLightboxProps {
+  portraits: CharacterPortrait[];
+  currentIndex: number;
+  primaryPortraitId?: string;
+  characterAppearanceTags?: string[];
+  onClose: () => void;
+  onIndexChange: (index: number) => void;
+  onRegenerate: (prompt: string, referenceUrl: string) => void;
+  onUseAsReference: (portrait: CharacterPortrait) => void;
+  onDownload: (portrait: CharacterPortrait) => void;
+  onSetPrimary: (portraitId: string) => void;
+  onDelete: (portraitId: string) => void;
+}
+
+export function PortraitLightbox({
+  portraits,
+  currentIndex,
+  primaryPortraitId,
+  characterAppearanceTags = [],
+  onClose,
+  onIndexChange,
+  onRegenerate,
+  onUseAsReference,
+  onDownload,
+  onSetPrimary,
+  onDelete
+}: PortraitLightboxProps) {
+  const [editablePrompt, setEditablePrompt] = useState('');
+  const [showPanel, setShowPanel] = useState(true);
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  
+  const currentPortrait = portraits[currentIndex];
+  const isPrimary = currentPortrait?.id === primaryPortraitId || currentPortrait?.is_primary;
+
+  // Initialize prompt from current portrait
+  useEffect(() => {
+    if (currentPortrait) {
+      setEditablePrompt(currentPortrait.prompt || currentPortrait.enhanced_prompt || '');
+    }
+  }, [currentPortrait]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') handlePrevious();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex]);
+
+  // Prevent body scroll when lightbox is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  const handlePrevious = useCallback(() => {
+    const newIndex = currentIndex > 0 ? currentIndex - 1 : portraits.length - 1;
+    onIndexChange(newIndex);
+  }, [currentIndex, portraits.length, onIndexChange]);
+
+  const handleNext = useCallback(() => {
+    const newIndex = currentIndex < portraits.length - 1 ? currentIndex + 1 : 0;
+    onIndexChange(newIndex);
+  }, [currentIndex, portraits.length, onIndexChange]);
+
+  // Touch handlers for swipe navigation
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+    
+    const deltaX = e.changedTouches[0].clientX - touchStart.x;
+    const deltaY = e.changedTouches[0].clientY - touchStart.y;
+    
+    // Horizontal swipe (navigation)
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX > 0) {
+        handlePrevious();
+      } else {
+        handleNext();
+      }
+    }
+    // Vertical swipe down (close)
+    else if (deltaY > 100 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      onClose();
+    }
+    
+    setTouchStart(null);
+  };
+
+  const handleRegenerate = () => {
+    if (!currentPortrait || !editablePrompt.trim()) return;
+    onRegenerate(editablePrompt.trim(), currentPortrait.image_url);
+    onClose();
+  };
+
+  const handleDownload = async () => {
+    if (!currentPortrait) return;
+    onDownload(currentPortrait);
+  };
+
+  if (!currentPortrait) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 bg-black/95 flex flex-col"
+      onClick={(e) => {
+        // Close when clicking backdrop (not on controls)
+        if (e.target === e.currentTarget) {
+          setShowPanel(!showPanel);
+        }
+      }}
+    >
+      {/* Header */}
+      <div className={cn(
+        "absolute top-0 left-0 right-0 z-10 p-4 flex items-center justify-between",
+        "bg-gradient-to-b from-black/80 to-transparent",
+        "transition-opacity duration-200",
+        !showPanel && "opacity-0 pointer-events-none"
+      )}>
+        {/* Counter */}
+        {portraits.length > 1 && (
+          <div className="bg-black/50 text-white px-3 py-1.5 rounded-full text-sm font-medium">
+            {currentIndex + 1} / {portraits.length}
+          </div>
+        )}
+        
+        {/* Primary Badge */}
+        {isPrimary && (
+          <Badge className="bg-yellow-500/90 text-yellow-950 gap-1">
+            <Star className="w-3 h-3 fill-current" />
+            Primary
+          </Badge>
+        )}
+        
+        {/* Close Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="text-white hover:bg-white/20 ml-auto"
+        >
+          <X className="w-6 h-6" />
+        </Button>
+      </div>
+
+      {/* Main Image Container */}
+      <div 
+        className="flex-1 flex items-center justify-center px-4 py-16"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        <img
+          src={currentPortrait.image_url}
+          alt="Portrait"
+          className="max-w-full max-h-full object-contain rounded-lg"
+          onClick={() => setShowPanel(!showPanel)}
+        />
+      </div>
+
+      {/* Navigation Arrows (Desktop) */}
+      {portraits.length > 1 && (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handlePrevious}
+            className={cn(
+              "absolute left-4 top-1/2 -translate-y-1/2",
+              "hidden md:flex",
+              "w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white",
+              "transition-opacity duration-200",
+              !showPanel && "opacity-0 pointer-events-none"
+            )}
+          >
+            <ChevronLeft className="w-8 h-8" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleNext}
+            className={cn(
+              "absolute right-4 top-1/2 -translate-y-1/2",
+              "hidden md:flex",
+              "w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white",
+              "transition-opacity duration-200",
+              !showPanel && "opacity-0 pointer-events-none"
+            )}
+          >
+            <ChevronRight className="w-8 h-8" />
+          </Button>
+        </>
+      )}
+
+      {/* Bottom Panel */}
+      <div className={cn(
+        "absolute bottom-0 left-0 right-0 z-10",
+        "bg-gradient-to-t from-black via-black/95 to-transparent",
+        "transition-transform duration-300 ease-out",
+        !showPanel && "translate-y-full"
+      )}>
+        {/* Toggle Panel Button */}
+        <button
+          onClick={() => setShowPanel(!showPanel)}
+          className="absolute -top-8 left-1/2 -translate-x-1/2 p-2 text-white/70 hover:text-white"
+        >
+          {showPanel ? <ChevronDown className="w-5 h-5" /> : <ChevronUp className="w-5 h-5" />}
+        </button>
+
+        <div className="p-4 pb-safe space-y-4 max-w-2xl mx-auto">
+          {/* Prompt Editor */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-white/70 text-xs">Edit Prompt</Label>
+              {currentPortrait.prompt && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditablePrompt(currentPortrait.prompt || '')}
+                  className="h-6 px-2 text-xs text-white/50 hover:text-white hover:bg-white/10"
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
+            <Textarea
+              value={editablePrompt}
+              onChange={(e) => setEditablePrompt(e.target.value)}
+              placeholder="Describe changes for a new version..."
+              className="bg-white/10 border-white/20 text-white placeholder:text-white/40 text-sm resize-none"
+              rows={2}
+            />
+          </div>
+
+          {/* Appearance Tags */}
+          {characterAppearanceTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {characterAppearanceTags.map((tag) => (
+                <Badge 
+                  key={tag} 
+                  variant="outline" 
+                  className="text-xs border-white/30 text-white/70 bg-white/5"
+                >
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button 
+              onClick={handleRegenerate} 
+              disabled={!editablePrompt.trim()}
+              className="gap-2 bg-primary hover:bg-primary/90"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Regenerate
+            </Button>
+            
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                onUseAsReference(currentPortrait);
+                onClose();
+              }}
+              className="gap-2 border-white/30 text-white hover:bg-white/10"
+            >
+              <Copy className="w-4 h-4" />
+              Use as Reference
+            </Button>
+            
+            <div className="flex-1" />
+            
+            {!isPrimary && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onSetPrimary(currentPortrait.id)}
+                className="gap-1.5 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10"
+              >
+                <Star className="w-4 h-4" />
+                Set Primary
+              </Button>
+            )}
+            
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={handleDownload}
+              className="text-white/70 hover:text-white hover:bg-white/10"
+            >
+              <Download className="w-5 h-5" />
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => {
+                onDelete(currentPortrait.id);
+                if (portraits.length <= 1) {
+                  onClose();
+                } else if (currentIndex >= portraits.length - 1) {
+                  onIndexChange(currentIndex - 1);
+                }
+              }}
+              className="text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

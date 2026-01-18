@@ -276,6 +276,11 @@ export default function CharacterStudio() {
                 onDelete={deletePortrait}
                 onAddNew={() => handleGenerateFromPrompt(character.traits || character.name || 'portrait')}
                 onUseAsReference={handleUseAsReference}
+                onRegenerate={(prompt, referenceUrl) => {
+                  updateCharacter({ reference_image_url: referenceUrl });
+                  handleGenerateFromPrompt(prompt, referenceUrl, selectedImageModel);
+                }}
+                characterAppearanceTags={character.appearance_tags || []}
               />
 
               {/* Scenes Gallery */}
@@ -470,6 +475,14 @@ function MobileCharacterStudio({
                   model: selectedImageModel 
                 })}
                 onUseAsReference={(p) => updateCharacter({ reference_image_url: p.image_url })}
+                onRegenerate={(prompt, referenceUrl) => {
+                  updateCharacter({ reference_image_url: referenceUrl });
+                  generatePortrait(prompt, { 
+                    referenceImageUrl: referenceUrl,
+                    model: selectedImageModel 
+                  });
+                }}
+                characterAppearanceTags={character.appearance_tags || []}
               />
             </div>
           </ScrollArea>
