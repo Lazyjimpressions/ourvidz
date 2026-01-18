@@ -118,11 +118,11 @@ export function PortraitGallery({
                   setLightboxOpen(true);
                 }}
               >
-                {/* Image */}
+                {/* Image - object-top prioritizes faces */}
                 <img
                   src={portrait.thumbnail_url || portrait.image_url}
                   alt="Portrait version"
-                  className="w-full h-full object-cover bg-muted"
+                  className="w-full h-full object-cover object-top bg-muted"
                 />
 
                 {/* Primary Badge */}
