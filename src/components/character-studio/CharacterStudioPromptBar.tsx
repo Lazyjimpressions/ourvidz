@@ -126,12 +126,12 @@ export function CharacterStudioPromptBar({
   };
 
   return (
-    <div className={cn('border-t border-border bg-card/95 backdrop-blur', 'p-4')}>
-      <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
-        {/* Reference Image Preview */}
+    <div className={cn('border-t border-border bg-card/95 backdrop-blur', 'p-3 pb-4')}>
+      <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-2">
+        {/* Reference Image Preview - compact thumbnail only */}
         {!!referenceImageUrl && (
-          <div className="mb-3 flex items-center gap-2">
-            <div className="relative w-16 h-16 rounded-lg overflow-hidden border border-border">
+          <div className="flex items-center gap-2">
+            <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-primary flex-shrink-0">
               <img
                 src={referenceImageUrl}
                 alt="Reference"
@@ -141,33 +141,48 @@ export function CharacterStudioPromptBar({
               <button
                 type="button"
                 onClick={() => onReferenceImageChange?.(null)}
-                className="absolute -top-1 -right-1 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
+                className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
               >
-                <X className="w-3 h-3" />
+                <X className="w-2.5 h-2.5" />
               </button>
             </div>
-            <span className="text-xs text-muted-foreground">Reference image attached (I2I mode)</span>
           </div>
         )}
 
-        <div className="flex items-end gap-3">
-          {/* Reference Image Options */}
+        {/* Row 1: Full-width textarea */}
+        <Textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={isDisabled || isGenerating}
+          className={cn('min-h-[44px] max-h-[100px] resize-none text-sm w-full')}
+          rows={1}
+        />
+
+        {/* Row 2: Compact button row */}
+        <div className="flex items-center gap-2">
+          {/* Reference Image Options - icon only */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="icon"
                 disabled={isDisabled}
                 className={cn(
-                  'w-10 h-10 rounded-lg border border-border',
-                  'flex items-center justify-center cursor-pointer',
-                  'text-muted-foreground hover:text-foreground hover:border-primary/50',
-                  'transition-colors duration-200',
-                  isDisabled && 'opacity-50 cursor-not-allowed',
+                  'h-9 w-9 flex-shrink-0',
                   referenceImageUrl && 'border-primary text-primary'
                 )}
               >
-                {referenceImageUrl ? <ImageIcon className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-              </button>
+                {isUploading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : referenceImageUrl ? (
+                  <ImageIcon className="w-4 h-4" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="z-[100] bg-popover border border-border">
               <DropdownMenuItem
@@ -175,16 +190,16 @@ export function CharacterStudioPromptBar({
                 disabled={isUploading || !user}
               >
                 <Upload className="w-4 h-4 mr-2" />
-                {isUploading ? 'Uploading...' : 'Upload Image'}
+                {isUploading ? 'Uploading...' : 'Upload'}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={handleLibrarySelect}>
                 <Library className="w-4 h-4 mr-2" />
-                Select from Library
+                Library
               </DropdownMenuItem>
               {!!referenceImageUrl && (
                 <DropdownMenuItem onSelect={() => onReferenceImageChange?.(null)} className="text-destructive">
                   <X className="w-4 h-4 mr-2" />
-                  Remove Reference
+                  Remove
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -200,34 +215,21 @@ export function CharacterStudioPromptBar({
             disabled={isDisabled || isUploading}
           />
 
-          {/* Prompt Input */}
-          <div className="flex-1">
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              disabled={isDisabled || isGenerating}
-              className={cn('min-h-[44px] max-h-[120px] resize-none', 'text-sm')}
-              rows={1}
-            />
-          </div>
-
-          {/* Model Selector Button */}
+          {/* Model Selector - compact */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-10 gap-1 px-2 min-w-[100px] max-w-[140px]"
+                className="h-9 gap-1 px-2 max-w-[100px]"
                 disabled={isDisabled}
               >
                 <span className="truncate text-xs">{selectedModelData?.label.split(' ')[0] || 'Model'}</span>
                 <ChevronDown className="w-3 h-3 flex-shrink-0" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[280px] z-[100] bg-popover border border-border">
+            <DropdownMenuContent align="start" className="w-[260px] z-[100] bg-popover border border-border">
               {imageModelOptions.map((model) => (
                 <DropdownMenuItem
                   key={model.value}
@@ -243,7 +245,7 @@ export function CharacterStudioPromptBar({
                       )}
                     />
                   )}
-                  <span className="flex-1 truncate">{model.label}</span>
+                  <span className="flex-1 truncate text-sm">{model.label}</span>
                   {model.capabilities?.supports_i2i && (
                     <span className="text-[10px] px-1 py-0.5 bg-muted rounded text-muted-foreground">I2I</span>
                   )}
@@ -252,24 +254,26 @@ export function CharacterStudioPromptBar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Generate Button */}
-          <Button type="submit" disabled={!prompt.trim() || isGenerating || isDisabled} className="gap-2 h-10">
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Generate Button - icon on mobile, text on desktop */}
+          <Button 
+            type="submit" 
+            disabled={!prompt.trim() || isGenerating || isDisabled} 
+            className="h-9 gap-1.5 px-3"
+          >
             {isGenerating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating
-              </>
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <>
-                <Wand2 className="w-4 h-4" />
-                Generate
-              </>
+              <Wand2 className="w-4 h-4" />
             )}
+            <span className="hidden sm:inline">Generate</span>
           </Button>
         </div>
 
         {isDisabled && (
-          <p className="text-xs text-muted-foreground mt-2 text-center">Save your character first to generate portraits</p>
+          <p className="text-xs text-muted-foreground text-center">Save character first</p>
         )}
       </form>
     </div>

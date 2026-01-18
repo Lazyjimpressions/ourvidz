@@ -392,7 +392,7 @@ function MobileCharacterStudio({
   const [activeTab, setActiveTab] = useState<'details' | 'portraits' | 'scenes'>('details');
 
   return (
-    <div className="h-screen flex flex-col bg-background">
+    <div className="h-screen w-full flex flex-col bg-background overflow-x-hidden">
       {/* Mobile Header */}
       <header className="h-12 border-b border-border flex items-center justify-between px-3 bg-card">
         <Button 
@@ -474,7 +474,7 @@ function MobileCharacterStudio({
         {activeTab === 'portraits' && (
           <div className="flex flex-col h-full">
             <ScrollArea className="flex-1">
-              <div className="p-4 pb-4">
+              <div className="p-3 pb-2">
                 <PortraitGallery
                   portraits={portraits}
                   primaryPortraitId={primaryPortrait?.id}
