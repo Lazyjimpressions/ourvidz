@@ -122,7 +122,7 @@ export function PortraitGallery({
                 <img
                   src={portrait.thumbnail_url || portrait.image_url}
                   alt="Portrait version"
-                  className="w-full h-full object-cover object-top bg-muted"
+                  className="w-full h-full object-cover bg-muted"
                 />
 
                 {/* Primary Badge */}
