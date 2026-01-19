@@ -332,8 +332,8 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
     >
       <ResponsiveModalContent 
         className={`
-          max-w-lg w-[95vw] flex flex-col
-          bg-card border-border p-0
+          max-w-lg w-full flex flex-col
+          bg-card border-border p-0 overflow-x-hidden
         `}
         hideClose={true}
       >
@@ -355,7 +355,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
         </ResponsiveModalHeader>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 w-full max-w-full">
           {/* Character Image Section */}
           <div className="mb-4">
             <div className={`
@@ -654,16 +654,16 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 
             {/* Appearance Tags */}
             {character.appearance_tags && character.appearance_tags.length > 0 && (
-              <div>
+              <div className="w-full overflow-hidden">
                 <h4 className="text-xs font-medium text-gray-400 mb-2">Appearance</h4>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1 w-full">
                   {character.appearance_tags.slice(0, 6).map(tag => (
-                    <Badge key={tag} variant="secondary" className="text-xs px-2 py-1">
+                    <Badge key={tag} variant="secondary" className="text-xs px-2 py-1 flex-shrink-0">
                       {tag}
                     </Badge>
                   ))}
                   {character.appearance_tags.length > 6 && (
-                    <Badge variant="secondary" className="text-xs px-2 py-1">
+                    <Badge variant="secondary" className="text-xs px-2 py-1 flex-shrink-0">
                       +{character.appearance_tags.length - 6} more
                     </Badge>
                   )}

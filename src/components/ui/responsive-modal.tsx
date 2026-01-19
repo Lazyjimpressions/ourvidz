@@ -101,12 +101,12 @@ export const ResponsiveModalContent = ({
     return (
       <DrawerContent
         className={cn(
-          "max-h-[90vh] flex flex-col",
+          "max-h-[90vh] flex flex-col w-full",
           className
         )}
       >
         <div 
-          className="flex-1 min-h-0 overflow-y-auto"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden w-full"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           {children}
