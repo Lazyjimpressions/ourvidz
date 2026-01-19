@@ -250,6 +250,12 @@ export const useUserCharacters = () => {
 
   const deleteUserCharacter = async (id: string) => {
     try {
+      // Clean up any jobs referencing this character in metadata to prevent orphaned records
+      await supabase
+        .from('jobs')
+        .delete()
+        .contains('metadata', { character_id: id });
+
       // Build query - admin can delete any character, regular users can only delete their own
       let query = supabase
         .from('characters')

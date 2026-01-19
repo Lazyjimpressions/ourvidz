@@ -772,9 +772,9 @@ const MobileRoleplayDashboard = () => {
                     onDelete={handleDeleteCharacter}
                     onEdit={() => handleEditCharacter(character)}
                   />
-                  {/* Private/Public indicator */}
+                  {/* Private/Public indicator - positioned left to avoid action button overlap */}
                   {!character.is_public && (
-                    <div className="absolute top-2 right-8 z-10">
+                    <div className="absolute top-2 left-12 z-10">
                       <Shield className="w-3.5 h-3.5 text-yellow-400" />
                     </div>
                   )}
@@ -811,9 +811,9 @@ const MobileRoleplayDashboard = () => {
                       onPreview={() => handleCharacterPreview(character.id)}
                       onDelete={handleDeleteCharacter}
                     />
-                    {/* Private/Public indicator */}
+                    {/* Private/Public indicator - positioned left to avoid action button overlap */}
                     {!character.is_public && (
-                      <div className="absolute top-2 right-8 z-10">
+                      <div className="absolute top-2 left-12 z-10">
                         <Shield className="w-3.5 h-3.5 text-yellow-400" />
                       </div>
                     )}
