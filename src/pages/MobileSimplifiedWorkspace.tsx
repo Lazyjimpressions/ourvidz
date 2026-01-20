@@ -163,14 +163,24 @@ const MobileSimplifiedWorkspace = () => {
     
     switch (type) {
       case 'single':
+        // Clear all reference states to prevent sync loop
         setReferenceImage(null);
         setReferenceImageUrl(null);
         setReferenceMetadata(null);
         setExactCopyMode(false);
-        break;
-      case 'start':
+        // ALSO clear the synced video frame states to prevent re-sync
         setBeginningRefImage(null);
         setBeginningRefImageUrl(null);
+        break;
+      case 'start':
+        // Clear video frame states
+        setBeginningRefImage(null);
+        setBeginningRefImageUrl(null);
+        // ALSO clear image mode reference to prevent re-sync when switching modes
+        setReferenceImage(null);
+        setReferenceImageUrl(null);
+        setReferenceMetadata(null);
+        setExactCopyMode(false);
         break;
       case 'end':
         setEndingRefImage(null);
