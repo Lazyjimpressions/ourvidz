@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -21,7 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
 import { PortraitLightbox } from './PortraitLightbox';
-import { urlSigningService } from '@/lib/services/UrlSigningService';
+import { PortraitTile } from '@/components/shared/PortraitTile';
 
 interface PortraitGalleryProps {
   portraits: CharacterPortrait[];
@@ -54,39 +54,6 @@ export function PortraitGallery({
 }: PortraitGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
-
-  // Sign URLs for all portraits
-  useEffect(() => {
-    const signUrls = async () => {
-      const urlsToSign: Record<string, string> = {};
-      
-      for (const portrait of portraits) {
-        const imageUrl = portrait.thumbnail_url || portrait.image_url;
-        if (!imageUrl) continue;
-        
-        // Check if URL needs signing (storage paths)
-        if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/')) {
-          try {
-            const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
-            const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
-            urlsToSign[portrait.id] = signed;
-          } catch (error) {
-            console.error('Failed to sign portrait URL:', error);
-            urlsToSign[portrait.id] = imageUrl;
-          }
-        } else {
-          urlsToSign[portrait.id] = imageUrl;
-        }
-      }
-      
-      setSignedUrls(urlsToSign);
-    };
-    
-    if (portraits.length > 0) {
-      signUrls();
-    }
-  }, [portraits]);
 
   const handleDownload = async (portrait: CharacterPortrait) => {
     try {
@@ -137,18 +104,13 @@ export function PortraitGallery({
             const isSelected = portrait.id === selectedPortraitId;
 
             return (
-              <div
+              <PortraitTile
                 key={portrait.id}
+                imageUrl={portrait.thumbnail_url || portrait.image_url}
+                alt="Portrait version"
                 className={cn(
-                  "relative group cursor-pointer",
-                  "aspect-[3/4]",
-                  "rounded-lg overflow-hidden",
-                  "bg-card border border-border",
-                  "transition-all duration-200",
-                  "hover:shadow-lg hover:scale-[1.01] hover:border-primary/50",
-                  "shadow-sm",
                   isSelected && 'border-primary ring-2 ring-primary/20',
-                  isPrimary && 'ring-2 ring-yellow-500/30'
+                  isPrimary && 'ring-2 ring-amber-500/30'
                 )}
                 onClick={() => {
                   const index = portraits.findIndex(p => p.id === portrait.id);
@@ -156,26 +118,16 @@ export function PortraitGallery({
                   setLightboxOpen(true);
                 }}
               >
-                {/* Image container matching MobileCharacterCard */}
-                <div className="relative w-full h-full">
-                  <img
-                    src={signedUrls[portrait.id] || portrait.thumbnail_url || portrait.image_url}
-                    alt="Portrait version"
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                </div>
-
                 {/* Top Row: Primary Badge (left) + Options Menu (right) - always visible */}
                 <div className="absolute top-1.5 left-1.5 right-1.5 flex items-start justify-between pointer-events-none">
                   {/* Primary Badge */}
                   {isPrimary ? (
-                    <Badge className="bg-yellow-500/90 text-yellow-950 gap-0.5 text-[10px] px-1.5 py-0.5 pointer-events-auto">
+                    <Badge className="bg-amber-500/90 text-amber-950 gap-0.5 text-[10px] px-1.5 py-0.5 pointer-events-auto">
                       <Star className="w-2.5 h-2.5 fill-current" />
                       <span className="hidden sm:inline">Primary</span>
                     </Badge>
                   ) : (
-                    <div /> // Spacer to keep menu aligned right
+                    <div /> /* Spacer */
                   )}
                   
                   {/* Options Menu - always visible for accessibility */}
@@ -219,7 +171,7 @@ export function PortraitGallery({
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
-              </div>
+              </PortraitTile>
             );
           })}
 
