@@ -131,7 +131,7 @@ export function PortraitGallery({
 
       {/* Gallery Grid */}
       {portraits.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
           {portraits.map((portrait) => {
             const isPrimary = portrait.id === primaryPortraitId || portrait.is_primary;
             const isSelected = portrait.id === selectedPortraitId;
@@ -140,11 +140,14 @@ export function PortraitGallery({
               <div
                 key={portrait.id}
                 className={cn(
-                  'group relative aspect-[3/4] rounded-lg overflow-hidden cursor-pointer',
-                  'border-2 transition-all duration-200',
-                  isSelected 
-                    ? 'border-primary ring-2 ring-primary/20' 
-                    : 'border-border hover:border-primary/50',
+                  "relative group cursor-pointer",
+                  "aspect-[3/4]",
+                  "rounded-lg overflow-hidden",
+                  "bg-card border border-border",
+                  "transition-all duration-200",
+                  "hover:shadow-lg hover:scale-[1.01] hover:border-primary/50",
+                  "shadow-sm",
+                  isSelected && 'border-primary ring-2 ring-primary/20',
                   isPrimary && 'ring-2 ring-yellow-500/30'
                 )}
                 onClick={() => {
@@ -153,12 +156,15 @@ export function PortraitGallery({
                   setLightboxOpen(true);
                 }}
               >
-                {/* Image - object-top prioritizes faces */}
-                <img
-                  src={signedUrls[portrait.id] || portrait.thumbnail_url || portrait.image_url}
-                  alt="Portrait version"
-                  className="w-full h-full object-cover bg-muted"
-                />
+                {/* Image container matching MobileCharacterCard */}
+                <div className="relative w-full h-full">
+                  <img
+                    src={signedUrls[portrait.id] || portrait.thumbnail_url || portrait.image_url}
+                    alt="Portrait version"
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
 
                 {/* Top Row: Primary Badge (left) + Options Menu (right) - always visible */}
                 <div className="absolute top-1.5 left-1.5 right-1.5 flex items-start justify-between pointer-events-none">
