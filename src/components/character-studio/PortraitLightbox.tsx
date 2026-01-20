@@ -49,6 +49,7 @@ export function PortraitLightbox({
   const [editablePrompt, setEditablePrompt] = useState('');
   const [showPanel, setShowPanel] = useState(true);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
   const [signedImageUrl, setSignedImageUrl] = useState<string>('');
   
   const currentPortrait = portraits[currentIndex];
@@ -120,14 +121,19 @@ export function PortraitLightbox({
 
   // Touch handlers for swipe navigation
   const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
     setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStart) return;
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
     
-    const deltaX = e.changedTouches[0].clientX - touchStart.x;
-    const deltaY = e.changedTouches[0].clientY - touchStart.y;
+    const deltaX = touchEnd.x - touchStart.x;
+    const deltaY = touchEnd.y - touchStart.y;
     
     // Horizontal swipe (navigation)
     if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
@@ -137,12 +143,13 @@ export function PortraitLightbox({
         handleNext();
       }
     }
-    // Vertical swipe down (close) - reduced threshold for responsiveness
+    // Vertical swipe down (close)
     else if (deltaY > 60 && Math.abs(deltaY) > Math.abs(deltaX)) {
       onClose();
     }
     
     setTouchStart(null);
+    setTouchEnd(null);
   };
 
   const handleRegenerate = () => {
@@ -203,20 +210,24 @@ export function PortraitLightbox({
 
       {/* Main Image Container */}
       <div 
-        className="flex-1 flex items-center justify-center px-4 py-16"
+        className="flex-1 flex flex-col items-center justify-center p-4"
         onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
+        onClick={() => setShowPanel(!showPanel)}
       >
-        <img
-          src={signedImageUrl || currentPortrait.image_url}
-          alt="Portrait"
-          className="max-w-full max-h-full object-contain rounded-lg"
-          onClick={() => setShowPanel(!showPanel)}
-        />
+        {/* Constrained image wrapper */}
+        <div className="relative w-full h-full max-w-4xl max-h-[calc(100vh-200px)] flex items-center justify-center">
+          <img
+            src={signedImageUrl || currentPortrait.image_url}
+            alt="Portrait"
+            className="max-w-full max-h-full object-contain rounded-lg"
+          />
+        </div>
         
-        {/* Mobile Navigation Dots */}
+        {/* Mobile Navigation Dots - outside image wrapper */}
         {portraits.length > 1 && (
-          <div className="flex justify-center gap-1.5 mt-3 md:hidden">
+          <div className="flex justify-center gap-1.5 mt-4 md:hidden" onClick={(e) => e.stopPropagation()}>
             {portraits.map((_, idx) => (
               <button
                 key={idx}
