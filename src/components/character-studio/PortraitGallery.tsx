@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -21,6 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
 import { PortraitLightbox } from './PortraitLightbox';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 
 interface PortraitGalleryProps {
   portraits: CharacterPortrait[];
@@ -53,6 +54,40 @@ export function PortraitGallery({
 }: PortraitGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+  // Sign URLs for all portraits
+  useEffect(() => {
+    const signUrls = async () => {
+      const urlsToSign: Record<string, string> = {};
+      
+      for (const portrait of portraits) {
+        const imageUrl = portrait.thumbnail_url || portrait.image_url;
+        if (!imageUrl) continue;
+        
+        // Check if URL needs signing (storage paths)
+        if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/')) {
+          try {
+            const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
+            const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
+            urlsToSign[portrait.id] = signed;
+          } catch (error) {
+            console.error('Failed to sign portrait URL:', error);
+            urlsToSign[portrait.id] = imageUrl;
+          }
+        } else {
+          urlsToSign[portrait.id] = imageUrl;
+        }
+      }
+      
+      setSignedUrls(urlsToSign);
+    };
+    
+    if (portraits.length > 0) {
+      signUrls();
+    }
+  }, [portraits]);
+
   const handleDownload = async (portrait: CharacterPortrait) => {
     try {
       const response = await fetch(portrait.image_url);
@@ -120,7 +155,7 @@ export function PortraitGallery({
               >
                 {/* Image - object-top prioritizes faces */}
                 <img
-                  src={portrait.thumbnail_url || portrait.image_url}
+                  src={signedUrls[portrait.id] || portrait.thumbnail_url || portrait.image_url}
                   alt="Portrait version"
                   className="w-full h-full object-cover bg-muted"
                 />
