@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 
 interface PortraitLightboxProps {
   portraits: CharacterPortrait[];
@@ -48,9 +49,37 @@ export function PortraitLightbox({
   const [editablePrompt, setEditablePrompt] = useState('');
   const [showPanel, setShowPanel] = useState(true);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [signedImageUrl, setSignedImageUrl] = useState<string>('');
   
   const currentPortrait = portraits[currentIndex];
   const isPrimary = currentPortrait?.id === primaryPortraitId || currentPortrait?.is_primary;
+
+  // Sign the current portrait URL
+  useEffect(() => {
+    const signUrl = async () => {
+      if (!currentPortrait?.image_url) {
+        setSignedImageUrl('');
+        return;
+      }
+      
+      const imageUrl = currentPortrait.image_url;
+      
+      if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/')) {
+        try {
+          const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
+          const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
+          setSignedImageUrl(signed);
+        } catch (error) {
+          console.error('Failed to sign lightbox image URL:', error);
+          setSignedImageUrl(imageUrl);
+        }
+      } else {
+        setSignedImageUrl(imageUrl);
+      }
+    };
+    
+    signUrl();
+  }, [currentPortrait?.image_url]);
 
   // Initialize prompt from current portrait
   useEffect(() => {
@@ -179,7 +208,7 @@ export function PortraitLightbox({
         onTouchEnd={handleTouchEnd}
       >
         <img
-          src={currentPortrait.image_url}
+          src={signedImageUrl || currentPortrait.image_url}
           alt="Portrait"
           className="max-w-full max-h-full object-contain rounded-lg"
           onClick={() => setShowPanel(!showPanel)}
