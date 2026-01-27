@@ -673,6 +673,7 @@ serve(async (req) => {
         content_tier, // ✅ FIX: Pass content_tier to respect NSFW setting
         scene_name, // ✅ FIX: Pass scene_name from request body
         scene_description, // ✅ FIX: Pass scene_description from request body
+        conversation.current_location || undefined, // ✅ FIX #3: Pass current location for scene grounding
         // ✅ CRITICAL FIX: Pass scene_context (template's scene_prompt) for image generation
         scene_context || undefined, // Template's scene_prompt from scenes table
         // Scene continuity (I2I iteration) parameters
@@ -2410,6 +2411,7 @@ async function generateScene(
   contentTier: 'sfw' | 'nsfw' = 'nsfw', // ✅ FIX: Add content_tier parameter, default NSFW
   sceneName?: string, // ✅ FIX: Add scene_name parameter
   sceneDescription?: string, // ✅ FIX: Add scene_description parameter
+  currentLocation?: string, // ✅ FIX #3: Current location from conversation for scene grounding
   // ✅ CRITICAL FIX: Template's scene_prompt from scenes table (for first scene generation)
   sceneTemplatePrompt?: string, // scene_prompt from scenes table template
   // Scene continuity (I2I iteration) parameters
@@ -2637,7 +2639,8 @@ async function generateSceneNarrativeWithOpenRouter(
   supabase: any,
   useI2IIteration: boolean = false,  // ✅ FIX 3.1: ADD I2I FLAG PARAMETER
   previousSceneId?: string,  // ✅ FIX: Add previous scene ID to fetch previous scene context
-  characterResponse?: string  // ✅ FIX: Add character response for direct scene description extraction
+  characterResponse?: string,  // ✅ FIX: Add character response for direct scene description extraction
+  currentLocation?: string  // ✅ FIX #3: Current location from database for scene grounding
 ): Promise<{ scenePrompt: string; templateId: string; templateName: string; templateUseCase: string; templateContentMode: string }> {
   const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
@@ -2719,13 +2722,25 @@ async function generateSceneNarrativeWithOpenRouter(
 
   // ✅ ENHANCED: Extract storyline elements from full conversation
   const storylineContext = extractStorylineContext(conversationHistory);
-  
-  // ✅ FIX: For I2I, prioritize previous scene's location over conversation history
-  const storylineLocation = useI2IIteration && previousSceneSetting
-    ? previousSceneSetting  // Use previous scene's location for continuity
-    : (storylineContext.locations.length > 0
-        ? storylineContext.locations[storylineContext.locations.length - 1] // Most recent location from conversation
-        : sceneContext.setting);
+
+  // ✅ FIX #3: Prioritize locations for scene grounding
+  // Priority: 1. currentLocation (from DB), 2. previousSceneSetting (I2I), 3. conversation history
+  const storylineLocation = currentLocation  // Highest priority: DB location
+    ? currentLocation
+    : (useI2IIteration && previousSceneSetting
+        ? previousSceneSetting  // Use previous scene's location for continuity
+        : (storylineContext.locations.length > 0
+            ? storylineContext.locations[storylineContext.locations.length - 1] // Most recent location from conversation
+            : sceneContext.setting));
+
+  // ✅ FIX #3: Log location priority for scene grounding
+  console.log('📍 Scene location grounding:', {
+    source: currentLocation ? 'database' : (useI2IIteration && previousSceneSetting ? 'previous_scene' : (storylineContext.locations.length > 0 ? 'conversation' : 'scene_context')),
+    location: storylineLocation,
+    currentLocation,
+    previousSceneSetting,
+    conversationLocations: storylineContext.locations
+  });
 
   // ✅ PHASE 1: Enhanced template with stronger constraints
   const basePrompt = template.system_prompt
@@ -2998,7 +3013,8 @@ const sceneContext = analyzeSceneContent(response);
             supabase,
             useI2IIteration,  // ✅ FIX 3.3: PASS I2I FLAG
             previousSceneId,  // ✅ FIX: Pass previous scene ID for location continuity
-            response  // ✅ CRITICAL FIX: Pass character response for direct scene description extraction
+            response,  // ✅ CRITICAL FIX: Pass character response for direct scene description extraction
+            currentLocation  // ✅ FIX #3: Pass current location for scene grounding
           );
           scenePrompt = narrativeResult.scenePrompt;
           // ✅ ADMIN: Store template info for metadata (will be used in scene generation metadata)
