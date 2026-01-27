@@ -42,7 +42,7 @@ export function useCharacterTemplates() {
 
         if (fetchError) throw fetchError;
 
-        setTemplates(data || []);
+        setTemplates((data || []) as CharacterTemplate[]);
       } catch (err) {
         console.error('Error loading character templates:', err);
         setError(err instanceof Error ? err.message : 'Failed to load templates');

@@ -254,6 +254,7 @@ export default function CharacterStudio() {
           deletePortrait={deletePortrait}
           scenes={scenes}
           isGenerating={isGenerating}
+          generationProgress={generationProgress}
           generatePortrait={generatePortrait}
           selectItem={selectItem}
           selectedItemId={selectedItemId}
@@ -499,6 +500,7 @@ interface MobileCharacterStudioProps {
   deletePortrait: ReturnType<typeof useCharacterStudio>['deletePortrait'];
   scenes: ReturnType<typeof useCharacterStudio>['scenes'];
   isGenerating: boolean;
+  generationProgress: ReturnType<typeof useCharacterStudio>['generationProgress'];
   generatePortrait: ReturnType<typeof useCharacterStudio>['generatePortrait'];
   selectItem: ReturnType<typeof useCharacterStudio>['selectItem'];
   selectedItemId: string | null;
@@ -524,6 +526,7 @@ function MobileCharacterStudio({
   deletePortrait,
   scenes,
   isGenerating,
+  generationProgress,
   generatePortrait,
   selectItem,
   selectedItemId,

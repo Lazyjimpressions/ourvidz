@@ -67,7 +67,9 @@ export type Database = {
       }
       api_models: {
         Row: {
+          avg_generation_time: number | null
           capabilities: Json
+          cost_per_use: number | null
           created_at: string
           created_by: string | null
           display_name: string
@@ -88,7 +90,9 @@ export type Database = {
           version: string | null
         }
         Insert: {
+          avg_generation_time?: number | null
           capabilities?: Json
+          cost_per_use?: number | null
           created_at?: string
           created_by?: string | null
           display_name: string
@@ -109,7 +113,9 @@ export type Database = {
           version?: string | null
         }
         Update: {
+          avg_generation_time?: number | null
           capabilities?: Json
+          cost_per_use?: number | null
           created_at?: string
           created_by?: string | null
           display_name?: string
@@ -580,6 +586,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      character_templates: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          default_data: Json
+          description: string | null
+          icon_emoji: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          priority: number | null
+          template_key: string
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          default_data: Json
+          description?: string | null
+          icon_emoji?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          priority?: number | null
+          template_key: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          default_data?: Json
+          description?: string | null
+          icon_emoji?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          priority?: number | null
+          template_key?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       characters: {
         Row: {
