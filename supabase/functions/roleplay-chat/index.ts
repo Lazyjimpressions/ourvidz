@@ -3059,13 +3059,20 @@ const sceneContext = analyzeSceneContent(response);
     if (!effectiveImageModel || effectiveImageModel.trim() === '') {
       console.log('📸 No image model specified, fetching default image model from database...');
 
+      // ✅ FIX: Determine required task type based on whether this is first scene
+      // First scene: Use T2I model (task='generation', e.g., Seedream v4)
+      // I2I iterations: Use I2I model (task='style_transfer', e.g., Seedream v4.5 Edit)
+      const requiredTask = isFirstScene ? 'generation' : 'style_transfer';
+      console.log(`🎯 Looking for default ${isFirstScene ? 'T2I' : 'I2I'} model with task='${requiredTask}'`);
+
       // First, look for the default model (is_default = true)
       const { data: defaultModels } = await supabase
         .from('api_models')
-        .select('id, model_key, display_name, api_providers!inner(name)')
+        .select('id, model_key, display_name, task, api_providers!inner(name)')
         .eq('is_active', true)
         .eq('is_default', true)
         .eq('modality', 'image')
+        .eq('task', requiredTask)  // ✅ FIX: Filter by task type
         .limit(1);
 
       if (defaultModels && defaultModels.length > 0) {
@@ -3077,9 +3084,10 @@ const sceneContext = analyzeSceneContent(response);
       if (!effectiveImageModel) {
         const { data: fallbackModels } = await supabase
           .from('api_models')
-          .select('id, model_key, display_name, api_providers!inner(name)')
+          .select('id, model_key, display_name, task, api_providers!inner(name)')
           .eq('is_active', true)
           .eq('modality', 'image')
+          .eq('task', requiredTask)  // ✅ FIX: Filter by task type
           .order('priority', { ascending: false })
           .limit(1);
 
