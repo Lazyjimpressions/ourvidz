@@ -74,7 +74,7 @@ export function PortraitTile({
           <img
             src={displayUrl}
             alt={alt}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain md:object-cover"
             loading="lazy"
           />
         ) : (

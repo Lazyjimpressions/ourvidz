@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   MessageSquare,
   ExternalLink,
   Loader2,
   Users,
-  ChevronDown
+  ChevronDown,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCharacterStudio } from '@/hooks/useCharacterStudio';
@@ -19,14 +22,17 @@ import { CharacterStudioPromptBar } from '@/components/character-studio/Characte
 import { SceneGenerationModal } from '@/components/roleplay/SceneGenerationModal';
 import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
 import { CharacterSelector } from '@/components/character-studio/CharacterSelector';
+import { CharacterTemplateSelector } from '@/components/character-studio/CharacterTemplateSelector';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useToast } from '@/hooks/use-toast';
 import { CharacterScene } from '@/hooks/useCharacterStudio';
 
 export default function CharacterStudio() {
-  const { id: characterId } = useParams<{ id: string }>();
+  const { id: characterId } = useParams<{ id: string}>();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const { toast } = useToast();
   
   const {
     character,
@@ -44,13 +50,14 @@ export default function CharacterStudio() {
     deletePortrait,
     scenes,
     isGenerating,
+    generationProgress,
     generatePortrait,
     selectItem,
     selectedItemId,
     selectedItemType
   } = useCharacterStudio({ characterId });
 
-  // Image model state - track reference image for I2I filtering
+  // Image model state - track reference image for Image Match Mode filtering
   const hasReferenceImage = !!character.reference_image_url;
   const { modelOptions: imageModelOptions, defaultModel } = useImageModels(hasReferenceImage);
   const [selectedImageModel, setSelectedImageModel] = useState<string>('');
@@ -58,12 +65,90 @@ export default function CharacterStudio() {
   // Image picker state
   const [showImagePicker, setShowImagePicker] = useState(false);
 
+  // Template selector state
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+
   // Set default model when loaded
   React.useEffect(() => {
     if (defaultModel && !selectedImageModel) {
       setSelectedImageModel(defaultModel.value);
     }
   }, [defaultModel, selectedImageModel]);
+
+  // Debounced auto-save on field changes (2s delay)
+  useEffect(() => {
+    if (!isDirty || isNewCharacter) return;
+
+    const timeout = setTimeout(() => {
+      saveCharacter({ silent: true });
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [isDirty, isNewCharacter, character, saveCharacter]);
+
+  // Track previous reference image state for Image Match Mode notifications
+  const prevHasReferenceImage = React.useRef(hasReferenceImage);
+
+  // Notify user when Image Match Mode changes (reference image added/removed)
+  useEffect(() => {
+    // Skip on initial mount
+    if (prevHasReferenceImage.current === hasReferenceImage) {
+      prevHasReferenceImage.current = hasReferenceImage;
+      return;
+    }
+
+    if (hasReferenceImage && !prevHasReferenceImage.current) {
+      // Reference image was added - Image Match Mode enabled
+      const currentModel = imageModelOptions.find(m => m.value === selectedImageModel);
+      const modelName = currentModel?.label.split(' ')[0] || 'compatible model';
+      const i2iModelCount = imageModelOptions.filter(m => m.capabilities?.supports_i2i && m.isAvailable).length;
+
+      toast({
+        title: 'Reference Image Set',
+        description: `New portraits will match this style. ${i2iModelCount} compatible ${i2iModelCount === 1 ? 'model' : 'models'} available.`,
+        duration: 5000
+      });
+    } else if (!hasReferenceImage && prevHasReferenceImage.current) {
+      // Reference image was removed - Image Match Mode disabled
+      toast({
+        title: 'Reference Image Removed',
+        description: 'All models now available',
+        duration: 3000
+      });
+    }
+
+    prevHasReferenceImage.current = hasReferenceImage;
+  }, [hasReferenceImage, selectedImageModel, imageModelOptions, toast]);
+
+  // Auto-switch to I2I-compatible model when reference image is added
+  useEffect(() => {
+    if (hasReferenceImage) {
+      const currentModel = imageModelOptions.find(m => m.value === selectedImageModel);
+
+      // If current model doesn't support I2I, auto-switch to one that does
+      if (currentModel && !currentModel.capabilities?.supports_i2i) {
+        const i2iDefault = imageModelOptions.find(
+          m => m.capabilities?.supports_i2i && m.isAvailable
+        );
+
+        if (i2iDefault) {
+          setSelectedImageModel(i2iDefault.value);
+          toast({
+            title: 'Model Switched',
+            description: `Switched to ${i2iDefault.label} (supports reference images)`,
+            duration: 4000
+          });
+        } else {
+          // No I2I models available
+          toast({
+            title: 'No Compatible Models',
+            description: 'No models support reference images. Remove reference to see all models.',
+            variant: 'destructive'
+          });
+        }
+      }
+    }
+  }, [hasReferenceImage, selectedImageModel, imageModelOptions, toast, setSelectedImageModel]);
 
   // Modal states
   const [showSceneModal, setShowSceneModal] = useState(false);
@@ -81,6 +166,23 @@ export default function CharacterStudio() {
   const handleImagePickerSelect = (imageUrl: string) => {
     updateCharacter({ reference_image_url: imageUrl });
     setShowImagePicker(false);
+  };
+
+  // Handle template selection
+  const handleTemplateSelect = (templateData: any) => {
+    updateCharacter({
+      appearance_tags: templateData.appearance_tags || [],
+      traits: templateData.traits || '',
+      persona: templateData.persona || '',
+      first_message: templateData.first_message || '',
+      voice_tone: templateData.voice_tone || 'warm',
+      mood: templateData.mood || 'friendly'
+    });
+    toast({
+      title: 'Template Applied',
+      description: 'Character fields have been pre-filled. Customize as needed.',
+      duration: 3000
+    });
   };
 
   // Handle portrait actions
@@ -210,9 +312,45 @@ export default function CharacterStudio() {
               </Button>
             }
           />
-          
-          {isDirty && (
-            <span className="text-xs text-muted-foreground">(unsaved changes)</span>
+
+          {/* Template Button - For New Characters */}
+          {isNewCharacter && !character.name && (
+            <>
+              <div className="h-4 w-px bg-border" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTemplateSelector(true)}
+                className="h-8 px-3 text-xs gap-1.5"
+              >
+                <span>📋</span>
+                Start from Template
+              </Button>
+            </>
+          )}
+
+          {/* Save Status Badge - Compact */}
+          {!isNewCharacter && (
+            <div className="flex items-center gap-1.5">
+              {isSaving && (
+                <Badge variant="outline" className="h-5 gap-1 text-[10px]">
+                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  Saving
+                </Badge>
+              )}
+              {!isSaving && !isDirty && (
+                <Badge variant="default" className="h-5 gap-1 text-[10px]">
+                  <Check className="w-2.5 h-2.5" />
+                  Saved
+                </Badge>
+              )}
+              {!isSaving && isDirty && (
+                <Badge variant="secondary" className="h-5 gap-1 text-[10px]">
+                  <AlertCircle className="w-2.5 h-2.5" />
+                  Unsaved
+                </Badge>
+              )}
+            </div>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -302,7 +440,8 @@ export default function CharacterStudio() {
           <CharacterStudioPromptBar
             onGenerate={handleGenerateFromPrompt}
             isGenerating={isGenerating}
-            isDisabled={isNewCharacter}
+            generationProgress={generationProgress}
+            isDisabled={false}
             placeholder={`Describe a portrait for ${character.name || 'your character'}...`}
             selectedImageModel={selectedImageModel}
             onImageModelChange={setSelectedImageModel}
@@ -333,6 +472,13 @@ export default function CharacterStudio() {
         isOpen={showImagePicker}
         onClose={() => setShowImagePicker(false)}
         onSelect={handleImagePickerSelect}
+      />
+
+      {/* Character Template Selector */}
+      <CharacterTemplateSelector
+        open={showTemplateSelector}
+        onOpenChange={setShowTemplateSelector}
+        onSelectTemplate={handleTemplateSelect}
       />
     </div>
   );
@@ -503,14 +649,15 @@ function MobileCharacterStudio({
             
             {/* Prompt Bar for mobile portraits tab */}
             <CharacterStudioPromptBar
-              onGenerate={(prompt, refUrl, modelId) => 
-                generatePortrait(prompt, { 
+              onGenerate={(prompt, refUrl, modelId) =>
+                generatePortrait(prompt, {
                   referenceImageUrl: refUrl || character.reference_image_url || undefined,
-                  model: modelId || selectedImageModel 
+                  model: modelId || selectedImageModel
                 })
               }
               isGenerating={isGenerating}
-              isDisabled={isNewCharacter}
+              generationProgress={generationProgress}
+              isDisabled={false}
               placeholder={`Describe a portrait for ${character.name || 'your character'}...`}
               selectedImageModel={selectedImageModel}
               onImageModelChange={onImageModelChange}

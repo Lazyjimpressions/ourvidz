@@ -94,7 +94,12 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
   // Generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  
+  const [generationProgress, setGenerationProgress] = useState<{
+    percent: number;
+    estimatedTimeRemaining: number;
+    stage: 'queued' | 'processing' | 'finalizing';
+  } | null>(null);
+
   // Selection state for gallery
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItemType, setSelectedItemType] = useState<'portrait' | 'scene' | null>(null);
@@ -307,15 +312,63 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
     referenceImageUrl?: string;
     model?: string; // This is the api_models.id from database
   }) => {
-    // First, ensure character is saved (silently - no "saved" toast during generation)
+    // Auto-save if new character or dirty state
     let charId = savedCharacterId;
-    if (!charId) {
+    if (!charId || isDirty) {
+      // Validate required fields before saving
+      if (!character.name?.trim() || !character.description?.trim()) {
+        const isNewCharacter = !savedCharacterId;
+
+        toast({
+          title: 'Missing Required Fields',
+          description: isNewCharacter
+            ? 'New characters need a name and description before generating portraits'
+            : 'Please add a character name and description to continue',
+          variant: 'destructive'
+        });
+        return null;
+      }
+
+      // Silent auto-save
       charId = await saveCharacter({ silent: true });
       if (!charId) return null;
+
+      // Notify user of auto-save on first generation
+      if (!savedCharacterId) {
+        toast({
+          title: 'Character Auto-Saved',
+          description: 'Generating your first portrait...',
+          duration: 2000
+        });
+      }
     }
-    
+
     setIsGenerating(true);
-    
+
+    // Estimate generation time (default to 20s for API models, 6s for local)
+    const estimatedDuration = 20; // seconds (will be improved with model metadata)
+    const startTime = Date.now();
+
+    // Initialize progress
+    setGenerationProgress({
+      percent: 0,
+      estimatedTimeRemaining: estimatedDuration,
+      stage: 'queued'
+    });
+
+    // Simulate progress updates
+    const progressInterval = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000; // seconds
+      const progress = Math.min(95, (elapsed / estimatedDuration) * 100); // Cap at 95% until complete
+      const remaining = Math.max(0, estimatedDuration - elapsed);
+
+      setGenerationProgress({
+        percent: Math.round(progress),
+        estimatedTimeRemaining: Math.round(remaining),
+        stage: progress < 30 ? 'queued' : progress < 80 ? 'processing' : 'finalizing'
+      });
+    }, 500); // Update every 500ms
+
     // Show generation started toast
     toast({
       title: "Generating portrait...",
@@ -356,27 +409,38 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
       
       // The character-portrait function returns imageUrl directly (sync mode)
       if (data?.success && data?.imageUrl) {
+        // Clear progress interval
+        clearInterval(progressInterval);
+        setGenerationProgress({ percent: 100, estimatedTimeRemaining: 0, stage: 'finalizing' });
+
         // The edge function inserts into character_portraits table
         // Refresh portraits to show the new one
         await fetchPortraits();
-        
+
         // Update local character state to show the new image immediately in profile holder
         updateCharacter({ image_url: data.imageUrl });
-        
+
         toast({
           title: "Portrait generated",
           description: `Completed in ${Math.round((data.generationTimeMs || 0) / 1000)}s`
         });
         setIsGenerating(false);
+        setGenerationProgress(null);
         return data.imageUrl;
       } else if (data?.error) {
+        clearInterval(progressInterval);
+        setGenerationProgress(null);
         throw new Error(data.error);
       }
-      
+
       // Unexpected response structure
+      clearInterval(progressInterval);
+      setGenerationProgress(null);
       throw new Error('Unexpected response from generation service');
     } catch (err) {
       console.error('Error generating portrait:', err);
+      clearInterval(progressInterval);
+      setGenerationProgress(null);
       toast({
         title: "Generation failed",
         description: err instanceof Error ? err.message : "Failed to generate portrait",
@@ -385,7 +449,7 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
       setIsGenerating(false);
       return null;
     }
-  }, [savedCharacterId, saveCharacter, character, toast, fetchPortraits]);
+  }, [savedCharacterId, saveCharacter, character, toast, fetchPortraits, updateCharacter]);
 
   // Select item in gallery
   const selectItem = useCallback((id: string | null, type: 'portrait' | 'scene' | null) => {
@@ -451,6 +515,7 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
     // Generation
     isGenerating,
     activeJobId,
+    generationProgress,
     generatePortrait,
     setIsGenerating,
     setActiveJobId,

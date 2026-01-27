@@ -53,7 +53,7 @@ export function ModelSelector({
       <SelectContent className="z-[100] bg-popover border border-border shadow-lg">
         {models.length === 0 && (
           <div className="py-2 px-3 text-xs text-muted-foreground">
-            {hasReferenceImage ? 'No I2I-capable models available' : 'No models available'}
+            {hasReferenceImage ? 'No models support reference images' : 'No models available'}
           </div>
         )}
         {models.map((model) => (
@@ -63,24 +63,36 @@ export function ModelSelector({
             disabled={!model.isAvailable}
             className="flex items-center gap-2"
           >
-            <div className="flex items-center gap-2 w-full">
-              {model.type === 'local' && (
-                <span className={cn(
-                  'w-1.5 h-1.5 rounded-full flex-shrink-0',
-                  model.isAvailable ? 'bg-green-500' : 'bg-red-500'
-                )} />
-              )}
-              <span className="flex-1 truncate">{model.label}</span>
-              {model.capabilities?.supports_i2i && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">
-                  I2I
-                </Badge>
-              )}
-              {model.capabilities?.cost === 'free' && (
-                <Badge variant="outline" className="text-[10px] px-1 py-0 text-green-600">
-                  Free
-                </Badge>
-              )}
+            <div className="flex items-center justify-between w-full gap-2">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {model.type === 'local' && (
+                  <span className={cn(
+                    'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                    model.isAvailable ? 'bg-green-500' : 'bg-red-500'
+                  )} />
+                )}
+                <span className="truncate text-xs">{model.label}</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {model.avg_generation_time && (
+                  <Badge variant="outline" className="h-4 text-[10px] px-1">
+                    ~{model.avg_generation_time}s
+                  </Badge>
+                )}
+                {model.cost_per_use !== undefined && (
+                  <Badge
+                    variant={model.cost_per_use === 0 ? 'default' : 'secondary'}
+                    className="h-4 text-[10px] px-1"
+                  >
+                    {model.cost_per_use === 0 ? 'Free' : `$${model.cost_per_use}`}
+                  </Badge>
+                )}
+                {model.capabilities?.supports_i2i && (
+                  <Badge variant="outline" className="h-4 text-[10px] px-1">
+                    Ref
+                  </Badge>
+                )}
+              </div>
             </div>
           </SelectItem>
         ))}

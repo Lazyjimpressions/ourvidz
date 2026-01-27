@@ -18,10 +18,10 @@ import {
 } from '@/components/ui/collapsible';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  ChevronDown, 
-  User, 
-  Palette, 
+import {
+  ChevronDown,
+  User,
+  Palette,
   MessageSquare,
   Settings,
   Wand2,
@@ -30,7 +30,8 @@ import {
   Sparkles,
   Library,
   Plus,
-  Upload
+  Upload,
+  X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
@@ -191,7 +192,7 @@ export function CharacterStudioSidebar({
 
         if (uploadError) throw uploadError;
 
-        // Get signed URL for display and I2I
+        // Get signed URL for display and Image Match Mode
         const { data: signedData, error: signError } = await supabase.storage
           .from('reference_images')
           .createSignedUrl(path, 3600);
@@ -200,7 +201,7 @@ export function CharacterStudioSidebar({
 
         if (signedData?.signedUrl) {
           onUpdateCharacter({ reference_image_url: signedData.signedUrl });
-          toast({ title: 'Reference uploaded', description: 'I2I mode enabled.' });
+          toast({ title: 'Reference uploaded', description: 'Image Match Mode enabled.' });
         }
       } catch (error) {
         console.error('Upload error:', error);
@@ -507,28 +508,41 @@ export function CharacterStudioSidebar({
                 </div>
               )}
 
-              {/* Reference Image */}
-              {character.reference_image_url && (
-                <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
-                  <img 
-                    src={character.reference_image_url} 
-                    alt="Reference" 
-                    className="w-10 h-10 rounded object-cover"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground">Reference Image</p>
-                    <p className="text-xs text-muted-foreground">I2I mode enabled</p>
+              {/* Reference Image - Image Match Mode indicator */}
+              {character.reference_image_url && (() => {
+                const i2iModelCount = imageModelOptions.filter(m => m.capabilities?.supports_i2i && m.isAvailable).length;
+                return (
+                  <div className="flex items-center gap-2 p-2 bg-secondary/30 rounded-md border border-secondary">
+                    <img
+                      src={character.reference_image_url}
+                      alt="Reference"
+                      className="w-12 h-12 rounded object-cover"
+                    />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary" className="text-xs">Image Match Mode</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        New portraits will match this reference's style
+                      </p>
+                      {i2iModelCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                          {i2iModelCount} compatible {i2iModelCount === 1 ? 'model' : 'models'}
+                        </Badge>
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => onUpdateCharacter({ reference_image_url: null })}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onUpdateCharacter({ reference_image_url: null })}
-                    className="h-6 px-2 text-xs"
-                  >
-                    Remove
-                  </Button>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Reference Image Buttons */}
               <div className="flex gap-2">

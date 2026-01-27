@@ -14,6 +14,8 @@ export interface ImageModel {
   priority: number;
   provider_name: string;
   provider_display_name: string;
+  avg_generation_time?: number;  // Average generation time in seconds
+  cost_per_use?: number;         // Cost per use in USD
   capabilities?: {
     nsfw?: boolean;
     speed?: string;
@@ -31,6 +33,8 @@ export interface ImageModelOption {
   label: string;
   type: 'local' | 'api';
   isAvailable: boolean;
+  avg_generation_time?: number;
+  cost_per_use?: number;
   capabilities?: ImageModel['capabilities'];
 }
 
@@ -58,6 +62,8 @@ export const useImageModels = (hasReferenceImage?: boolean) => {
             is_active,
             is_default,
             priority,
+            avg_generation_time,
+            cost_per_use,
             capabilities,
             api_providers!inner(name, display_name)
           `)
@@ -110,6 +116,8 @@ export const useImageModels = (hasReferenceImage?: boolean) => {
       label: sdxlWorker.isAvailable ? 'SDXL (Local)' : 'SDXL (Local - Offline)',
       type: 'local',
       isAvailable: sdxlWorker.isAvailable,
+      avg_generation_time: 6,  // ~6 seconds
+      cost_per_use: 0,         // Free
       capabilities: {
         nsfw: true,
         speed: 'fast',
@@ -127,6 +135,8 @@ export const useImageModels = (hasReferenceImage?: boolean) => {
     label: `${model.display_name} (${model.provider_display_name})`,
     type: 'api',
     isAvailable: true, // API models are always available
+    avg_generation_time: model.avg_generation_time,
+    cost_per_use: model.cost_per_use,
     capabilities: (model.capabilities || {}) as ImageModel['capabilities']
   }));
 

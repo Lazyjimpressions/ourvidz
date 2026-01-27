@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  X, 
-  ChevronLeft, 
-  ChevronRight, 
-  Download, 
-  Copy, 
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Copy,
   Star,
   Trash2,
   RefreshCw,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
+import { useToast } from '@/hooks/use-toast';
 
 interface PortraitLightboxProps {
   portraits: CharacterPortrait[];
@@ -50,10 +52,19 @@ export function PortraitLightbox({
   const [showPanel, setShowPanel] = useState(true);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
+  const { toast } = useToast();
   const [signedImageUrl, setSignedImageUrl] = useState<string>('');
-  
+  const [showHints, setShowHints] = useState(() => {
+    return !localStorage.getItem('lightbox-hints-dismissed');
+  });
+
   const currentPortrait = portraits[currentIndex];
   const isPrimary = currentPortrait?.id === primaryPortraitId || currentPortrait?.is_primary;
+
+  const dismissHints = () => {
+    setShowHints(false);
+    localStorage.setItem('lightbox-hints-dismissed', 'true');
+  };
 
   // Sign the current portrait URL
   useEffect(() => {
@@ -348,17 +359,22 @@ export function PortraitLightbox({
                 <span className="sm:hidden">Regen</span>
               </Button>
               
-              <Button 
-                variant="outline" 
+              <Button
+                variant="default"
                 onClick={() => {
                   onUseAsReference(currentPortrait);
+                  toast({
+                    title: 'Reference Image Set',
+                    description: 'New portraits will match this style',
+                    duration: 3000
+                  });
                   onClose();
                 }}
-                className="gap-2 flex-1 sm:flex-none border-white/30 text-white hover:bg-white/10"
+                className="gap-2 flex-1 sm:flex-none"
               >
-                <Copy className="w-4 h-4" />
-                <span className="hidden sm:inline">Use as Reference</span>
-                <span className="sm:hidden">Reference</span>
+                <ImageIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">Set as Reference Image</span>
+                <span className="sm:hidden">Set Ref</span>
               </Button>
             </div>
             
@@ -407,6 +423,40 @@ export function PortraitLightbox({
           </div>
         </div>
       </div>
+
+      {/* Navigation Hints Overlay - First Time Only */}
+      {showHints && (
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10">
+          <div className="bg-background p-4 rounded-lg max-w-xs space-y-2 mx-4">
+            <h3 className="text-sm font-semibold">Navigation Tips</h3>
+            <ul className="text-xs space-y-1 text-muted-foreground">
+              <li className="flex items-center gap-2">
+                <span className="shrink-0">←  →</span>
+                <span>Arrow keys to navigate</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="shrink-0">👆</span>
+                <span>Click image to hide controls</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="shrink-0">👉</span>
+                <span>Swipe left/right on mobile</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="shrink-0">ESC</span>
+                <span>Close lightbox</span>
+              </li>
+            </ul>
+            <Button
+              size="sm"
+              className="w-full h-7 text-xs mt-3"
+              onClick={dismissHints}
+            >
+              Got it
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import {
   Wand2,
   Loader2,
@@ -16,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
@@ -35,6 +37,13 @@ interface CharacterStudioPromptBarProps {
   /** Controlled reference image URL (recommended so sidebar + prompt bar stay in sync) */
   referenceImageUrl?: string | null;
   onReferenceImageChange?: (url: string | null) => void;
+
+  /** Generation progress state */
+  generationProgress?: {
+    percent: number;
+    estimatedTimeRemaining: number;
+    stage: 'queued' | 'processing' | 'finalizing';
+  } | null;
 }
 
 export function CharacterStudioPromptBar({
@@ -48,6 +57,7 @@ export function CharacterStudioPromptBar({
   onOpenImagePicker,
   referenceImageUrl,
   onReferenceImageChange,
+  generationProgress,
 }: CharacterStudioPromptBarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -105,7 +115,7 @@ export function CharacterStudioPromptBar({
 
       if (signedData?.signedUrl) {
         onReferenceImageChange?.(signedData.signedUrl);
-        toast({ title: 'Reference uploaded', description: 'I2I mode enabled.' });
+        toast({ title: 'Reference uploaded', description: 'Image Match Mode enabled.' });
       }
     } catch (error) {
       console.error('Reference upload error:', error);
@@ -128,27 +138,6 @@ export function CharacterStudioPromptBar({
   return (
     <div className={cn('border-t border-border bg-card/95 backdrop-blur', 'p-3 pb-4')}>
       <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-2">
-        {/* Reference Image Preview - compact thumbnail only */}
-        {!!referenceImageUrl && (
-          <div className="flex items-center gap-2">
-            <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-primary flex-shrink-0">
-              <img
-                src={referenceImageUrl}
-                alt="Reference"
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-              <button
-                type="button"
-                onClick={() => onReferenceImageChange?.(null)}
-                className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center"
-              >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Row 1: Full-width textarea */}
         <Textarea
           value={prompt}
@@ -162,46 +151,44 @@ export function CharacterStudioPromptBar({
 
         {/* Row 2: Compact button row */}
         <div className="flex items-center gap-2">
-          {/* Reference Image Options - icon only */}
+          {/* Reference Image Options - enhanced for iteration workflow */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
-                variant="outline"
+                variant={referenceImageUrl ? "secondary" : "outline"}
                 size="icon"
                 disabled={isDisabled}
-                className={cn(
-                  'h-9 w-9 flex-shrink-0',
-                  referenceImageUrl && 'border-primary text-primary'
-                )}
+                className="h-9 w-9 flex-shrink-0"
               >
                 {isUploading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
-                ) : referenceImageUrl ? (
-                  <ImageIcon className="w-4 h-4" />
                 ) : (
-                  <Upload className="w-4 h-4" />
+                  <ImageIcon className="w-4 h-4" />
                 )}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="z-[100] bg-popover border border-border">
+              {!!referenceImageUrl && (
+                <>
+                  <DropdownMenuItem onSelect={() => onReferenceImageChange?.(null)} className="text-destructive">
+                    <X className="w-4 h-4 mr-2" />
+                    Remove Reference
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem
                 onSelect={() => document.getElementById('file-upload-input')?.click()}
                 disabled={isUploading || !user}
               >
                 <Upload className="w-4 h-4 mr-2" />
-                {isUploading ? 'Uploading...' : 'Upload'}
+                {isUploading ? 'Uploading...' : 'Upload New'}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={handleLibrarySelect}>
                 <Library className="w-4 h-4 mr-2" />
-                Library
+                From Library
               </DropdownMenuItem>
-              {!!referenceImageUrl && (
-                <DropdownMenuItem onSelect={() => onReferenceImageChange?.(null)} className="text-destructive">
-                  <X className="w-4 h-4 mr-2" />
-                  Remove
-                </DropdownMenuItem>
-              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -247,7 +234,7 @@ export function CharacterStudioPromptBar({
                   )}
                   <span className="flex-1 truncate text-sm">{model.label}</span>
                   {model.capabilities?.supports_i2i && (
-                    <span className="text-[10px] px-1 py-0.5 bg-muted rounded text-muted-foreground">I2I</span>
+                    <span className="text-[10px] px-1 py-0.5 bg-muted rounded text-muted-foreground">Ref</span>
                   )}
                 </DropdownMenuItem>
               ))}
@@ -257,24 +244,28 @@ export function CharacterStudioPromptBar({
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Generate Button - icon on mobile, text on desktop */}
-          <Button 
-            type="submit" 
-            disabled={!prompt.trim() || isGenerating || isDisabled} 
+          {/* Generate Button - compact with inline progress */}
+          <Button
+            type="submit"
+            disabled={!prompt.trim() || isGenerating || isDisabled}
+            size="sm"
             className="h-9 gap-1.5 px-3"
           >
             {isGenerating ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                {generationProgress && (
+                  <span className="text-xs ml-1">{generationProgress.percent}%</span>
+                )}
+              </>
             ) : (
-              <Wand2 className="w-4 h-4" />
+              <>
+                <Wand2 className="w-3 h-3" />
+                <span className="hidden sm:inline ml-1">Generate</span>
+              </>
             )}
-            <span className="hidden sm:inline">Generate</span>
           </Button>
         </div>
-
-        {isDisabled && (
-          <p className="text-xs text-muted-foreground text-center">Save character first</p>
-        )}
       </form>
     </div>
   );
