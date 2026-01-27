@@ -69,8 +69,8 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
   onStart
 }) => {
   const { characters: publicCharacters, isLoading: isLoadingPublicCharacters } = usePublicCharacters();
-  // ✅ FIX: Use userPersonas instead of all characters to show only role='user' personas
-  const { userPersonas: userCharacters, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
+  // Get all user-created characters for AI companion selection AND user personas for profile selection
+  const { characters: userCreatedCharacters, userPersonas, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
 
   // Selection state
   const [primaryCharacterId, setPrimaryCharacterId] = useState<string | null>(null);
@@ -81,15 +81,15 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
   const [showSecondCharacter, setShowSecondCharacter] = useState(false);
   const [expandedSection, setExpandedSection] = useState<'primary' | 'secondary' | null>('primary');
 
-  // Combine public and user characters, removing duplicates
+  // Combine public and user-created characters for AI companion selection, removing duplicates
   const allCharacters = useMemo(() => {
-    const combined = [...publicCharacters, ...userCharacters];
+    const combined = [...publicCharacters, ...userCreatedCharacters];
     // Remove duplicates by id
-    const unique = combined.filter((char, index, self) => 
+    const unique = combined.filter((char, index, self) =>
       index === self.findIndex(c => c.id === char.id)
     );
     return unique;
-  }, [publicCharacters, userCharacters]);
+  }, [publicCharacters, userCreatedCharacters]);
 
   // Reset state when scene changes
   React.useEffect(() => {
@@ -130,7 +130,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
 
   const primaryCharacter = allCharacters.find(c => c.id === primaryCharacterId);
   const secondaryCharacter = allCharacters.find(c => c.id === secondaryCharacterId);
-  const selectedUserCharacter = userCharacters.find(c => c.id === selectedUserCharacterId);
+  const selectedUserCharacter = userPersonas.find(c => c.id === selectedUserCharacterId);
 
   const canStart = primaryCharacterId !== null && selectedUserCharacterId !== null;
   const gradient = scene ? (SCENE_GRADIENTS[scene.setting || 'default'] || SCENE_GRADIENTS.default) : SCENE_GRADIENTS.default;
@@ -351,10 +351,10 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
                 <SelectContent>
                   {isLoadingUserCharacters ? (
                     <SelectItem value="" disabled>Loading characters...</SelectItem>
-                  ) : userCharacters.length === 0 ? (
-                    <SelectItem value="" disabled>No characters created yet</SelectItem>
+                  ) : userPersonas.length === 0 ? (
+                    <SelectItem value="" disabled>No user profiles created yet</SelectItem>
                   ) : (
-                    userCharacters.map((char) => (
+                    userPersonas.map((char) => (
                       <SelectItem key={char.id} value={char.id}>
                         <div className="flex items-center gap-2">
                           {char.image_url ? (
@@ -384,9 +384,9 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
                   <span>Profile selected: {selectedUserCharacter?.name || 'Unknown'}</span>
                 </div>
               )}
-              {userCharacters.length === 0 && !isLoadingUserCharacters && (
+              {userPersonas.length === 0 && !isLoadingUserCharacters && (
                 <p className="text-xs text-blue-400 mt-1">
-                  Create a character in your profile settings to personalize your roleplay experience.
+                  Create a user profile in your settings to personalize your roleplay experience.
                 </p>
               )}
             </div>
