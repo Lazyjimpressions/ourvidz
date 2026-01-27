@@ -148,7 +148,8 @@ export default function CharacterStudio() {
         }
       }
     }
-  }, [hasReferenceImage, selectedImageModel, imageModelOptions, toast, setSelectedImageModel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasReferenceImage, imageModelOptions]);
 
   // Modal states
   const [showSceneModal, setShowSceneModal] = useState(false);

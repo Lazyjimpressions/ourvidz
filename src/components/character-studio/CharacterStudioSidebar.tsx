@@ -95,6 +95,11 @@ export function CharacterStudioSidebar({
     personality: false,
     advanced: false
   });
+
+  // Memoize I2I model count to avoid recalculating on every render
+  const i2iModelCount = React.useMemo(() => {
+    return imageModelOptions.filter(m => m.capabilities?.supports_i2i && m.isAvailable).length;
+  }, [imageModelOptions]);
   
   const [selectedPresetKey, setSelectedPresetKey] = useState<string | undefined>(undefined);
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState<SuggestionType | null>(null);
@@ -509,40 +514,37 @@ export function CharacterStudioSidebar({
               )}
 
               {/* Reference Image - Image Match Mode indicator */}
-              {character.reference_image_url && (() => {
-                const i2iModelCount = imageModelOptions.filter(m => m.capabilities?.supports_i2i && m.isAvailable).length;
-                return (
-                  <div className="flex items-center gap-2 p-2 bg-secondary/30 rounded-md border border-secondary">
-                    <img
-                      src={character.reference_image_url}
-                      alt="Reference"
-                      className="w-12 h-12 rounded object-cover"
-                    />
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-xs">Image Match Mode</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        New portraits will match this reference's style
-                      </p>
-                      {i2iModelCount > 0 && (
-                        <Badge variant="outline" className="text-[10px] h-4 px-1.5">
-                          {i2iModelCount} compatible {i2iModelCount === 1 ? 'model' : 'models'}
-                        </Badge>
-                      )}
+              {character.reference_image_url && (
+                <div className="flex items-center gap-2 p-2 bg-secondary/30 rounded-md border border-secondary">
+                  <img
+                    src={character.reference_image_url}
+                    alt="Reference"
+                    className="w-12 h-12 rounded object-cover"
+                  />
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-xs">Image Match Mode</Badge>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => onUpdateCharacter({ reference_image_url: null })}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      New portraits will match this reference's style
+                    </p>
+                    {i2iModelCount > 0 && (
+                      <Badge variant="outline" className="text-[10px] h-4 px-1.5">
+                        {i2iModelCount} compatible {i2iModelCount === 1 ? 'model' : 'models'}
+                      </Badge>
+                    )}
                   </div>
-                );
-              })()}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => onUpdateCharacter({ reference_image_url: null })}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
 
               {/* Reference Image Buttons */}
               <div className="flex gap-2">
