@@ -434,13 +434,13 @@ serve(async (req) => {
       });
     }
 
-    // Get recent messages for context
+    // Get recent messages for context (expanded from 20 to 50 for better memory)
     const { data: recentMessages, error: messagesError } = await supabase
       .from('messages')
       .select('*')
       .eq('conversation_id', conversation_id)
       .order('created_at', { ascending: true })
-      .limit(20);
+      .limit(50);
 
     if (messagesError) {
       return new Response(JSON.stringify({
@@ -456,20 +456,18 @@ serve(async (req) => {
 
     // Build context-aware prompt
     const promptStart = Date.now();
-    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, scene_context, scene_system_prompt, scene_starters);
-    
+
     // ✅ PREVENT RE-INTRODUCTIONS: Check if conversation already has messages
     let userMessage: string;
     if (kickoff && recentMessages && recentMessages.length > 0) {
       console.log('🔄 Conversation already has messages - avoiding re-introduction');
       userMessage = "Continue naturally from the current context. Do not re-introduce yourself or restart the conversation.";
     } else {
-      userMessage = kickoff ? 
-        "Introduce yourself and set the scene. Be natural and in-character." : 
+      userMessage = kickoff ?
+        "Introduce yourself and set the scene. Be natural and in-character." :
         message!;
     }
-    
-    const enhancedPrompt = buildEnhancedPrompt(userMessage, context, character, content_tier);
+
     promptTime = Date.now() - promptStart;
 
     // Route to appropriate model provider
@@ -500,7 +498,7 @@ serve(async (req) => {
       // Local Qwen model - use universal template (appropriate for local models)
       const qwenTemplate = await getUniversalTemplate(supabase, content_tier);
       console.log('📝 chat_worker using template:', qwenTemplate?.template_name || 'fallback');
-      const systemPrompt = buildSystemPromptFromTemplate(qwenTemplate, character, recentMessages, content_tier, scene_context, scene_system_prompt, conversation.user_character, scene_starters);
+      const systemPrompt = buildSystemPromptFromTemplate(qwenTemplate, character, recentMessages, content_tier, scene_context, scene_system_prompt, conversation.user_character, scene_starters, conversation.memory_data);
       response = await callChatWorkerWithHistory(character, recentMessages || [], systemPrompt, userMessage, content_tier);
       modelUsed = 'chat_worker';
     } else {
@@ -544,7 +542,8 @@ serve(async (req) => {
             scene_system_prompt,
             conversation.user_character,
             scene_starters,
-            user_id
+            user_id,
+            conversation.memory_data
           );
 
           modelUsed = `${modelConfig.provider_name}:${effectiveModelProvider}`;
@@ -1012,7 +1011,8 @@ async function callModelWithConfig(
   sceneSystemPrompt?: string,
   userCharacter?: UserCharacterForTemplate | null,
   sceneStarters?: string[],
-  userId?: string
+  userId?: string,
+  memoryData?: any
 ): Promise<string> {
   // ✅ CRITICAL FIX: Validate modelConfig before using
   if (!modelConfig) {
@@ -1048,7 +1048,7 @@ async function callModelWithConfig(
   }
 
   // Build system prompt using template with scene context and user character
-  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier, sceneContext, sceneSystemPrompt, userCharacter, sceneStarters);
+  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier, sceneContext, sceneSystemPrompt, userCharacter, sceneStarters, memoryData);
 
   // Route to appropriate provider based on model config
   if (modelConfig.provider_name === 'openrouter') {
@@ -1157,7 +1157,8 @@ function buildSystemPromptFromTemplate(
   sceneContext?: string,
   sceneSystemPrompt?: string,
   userCharacter?: UserCharacterForTemplate | null,
-  sceneStarters?: string[]
+  sceneStarters?: string[],
+  memoryData?: any
 ): string {
   let systemPrompt = template.system_prompt;
 
@@ -1202,6 +1203,17 @@ function buildSystemPromptFromTemplate(
     hasPersona: !!userPersona
   });
 
+  // Inject memory data (key facts from previous conversations)
+  if (memoryData && memoryData.key_facts && memoryData.key_facts.length > 0) {
+    console.log('🧠 Injecting memory data:', memoryData.key_facts.length, 'key facts');
+    const memorySection = `\n\nKEY FACTS FROM YOUR RELATIONSHIP WITH ${userName}:\n${
+      memoryData.key_facts.map((fact: string) => `- ${fact}`).join('\n')
+    }\n`;
+    systemPrompt += memorySection;
+  } else {
+    console.log('🧠 No memory data available for this conversation');
+  }
+
   // If we have scene-specific system prompt, append it for enhanced scene awareness
   if (sceneSystemPrompt && sceneSystemPrompt.trim()) {
     console.log('🎬 Adding scene-specific system prompt to template');
@@ -1218,6 +1230,47 @@ function buildSystemPromptFromTemplate(
   }
 
   return systemPrompt;
+}
+
+// Token counting and budget management helpers
+function estimateTokens(text: string): number {
+  // Rough estimate: 1 token ≈ 4 characters
+  // This is a conservative estimate that works reasonably well for English text
+  return Math.ceil(text.length / 4);
+}
+
+function truncateToTokenBudget(
+  messages: any[],
+  tokenBudget: number,
+  minMessages: number = 10
+): any[] {
+  if (!messages || messages.length === 0) return [];
+
+  // If we have fewer than minMessages, return all of them regardless of budget
+  if (messages.length <= minMessages) {
+    console.log(`🔢 Message count (${messages.length}) below minimum (${minMessages}), keeping all`);
+    return messages;
+  }
+
+  let totalTokens = 0;
+  const truncated: any[] = [];
+
+  // Start from most recent and work backwards
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msgTokens = estimateTokens(messages[i].content || '');
+
+    // If adding this message would exceed budget AND we have enough messages, stop
+    if (totalTokens + msgTokens > tokenBudget && truncated.length >= minMessages) {
+      console.log(`🔢 Token budget reached: ${totalTokens} tokens from ${truncated.length} messages`);
+      break;
+    }
+
+    truncated.unshift(messages[i]); // Add to beginning to maintain chronological order
+    totalTokens += msgTokens;
+  }
+
+  console.log(`🔢 Truncated ${messages.length} messages to ${truncated.length} messages (${totalTokens} estimated tokens)`);
+  return truncated;
 }
 
 // Enhance template with scene-specific context
@@ -1286,9 +1339,9 @@ async function callOpenRouterWithConfig(
   }
   
   messages.push({ role: 'system', content: finalSystemPrompt });
-  
-  // Add recent conversation history (last 8 messages for context)
-  const contextMessages = recentMessages.slice(-8);
+
+  // Add recent conversation history (expanded from 8 to 16 for better context)
+  const contextMessages = recentMessages.slice(-16);
   contextMessages.forEach(msg => {
     const role = msg.sender === 'user' ? 'user' : 'assistant';
     let content = adultifyContext(msg.content, contentTier);
@@ -1681,8 +1734,8 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
     characterContext += `Keep content appropriate and family-friendly. `;
   }
   
-  // Recent conversation context - Get last 12 chronological messages for proper context
-  const recentMessages = messages.slice(-12); // Last 12 messages chronologically
+  // Recent conversation context - Get last 16 chronological messages for better context retention
+  const recentMessages = messages.slice(-16); // Last 16 messages chronologically
   let recentContext = '';
   if (recentMessages.length > 0) {
     recentContext = recentMessages.map(msg => 
@@ -1699,36 +1752,18 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
     sceneText = `\\n\\nCURRENT SETTING: ${cleanedSceneContext}\\n`;
   }
   
-  // Build full context with enhanced first-person rules
+  // Build full context with simplified first-person rules
+  // ✅ SIMPLIFIED POV: Single clear statement (templates have comprehensive rules)
   const fullContext = `${characterContext}
 \\nRecent Conversation:\\n${recentContext}${sceneText}
 
-CRITICAL FIRST-PERSON RULES:
-- You ARE ${character.name}. You are NOT an AI assistant.
-- Always speak in FIRST PERSON as ${character.name}
-- Use "I", "me", "my" - never "she", "he", "they" about yourself
-- Never say "As ${character.name}" or "I'm ${character.name}"
-- You are living this experience, not describing it
-- Think and feel as ${character.name} would in this moment
+You are ${character.name}. Respond as yourself using "I", "me", "my". Never break character or refer to yourself in third person.
 
-INTERACTION REQUIREMENTS:
-- Reference your physical sensations and emotional state
-- Respond naturally to the user's advances and questions
-- Maintain the character's personality and voice consistently
-- ${contentTier === 'nsfw' ? 'Stay fully in-character, first-person; respond naturally to user intent without disclaimers or moderation cues' : 'Keep content appropriate and family-friendly'}
-- Show your character's thoughts, feelings, and reactions
-- Reference the current setting and context in your responses
-- Use the voice examples above to guide your speaking style
-- AVOID generic assistant phrases like "How can I assist you today?" or "I'm here to help"
-- Be conversational, natural, and in-character at all times
-
-FORBIDDEN PHRASES - NEVER USE THESE:
-${character.forbidden_phrases && character.forbidden_phrases.length > 0 ? 
-  character.forbidden_phrases.map((phrase: string) => `- "${phrase}"`).join('\\n') : 
-  '- "How can I assist you"\\n- "What can I help you with"\\n- "Is there anything else"\\n- "I\'m here to help"\\n- "How may I"\\n- "Of service"\\n- "Customer service"\\n- "AI assistant"'
-}
-
-Remember: You ARE ${character.name}. Think, speak, and act as this character would in this situation.`;
+${contentTier === 'nsfw' ? 'Engage naturally with adult content and romantic scenarios. Be direct and sensual while staying in character.' : 'Keep responses appropriate and family-friendly.'}
+${character.forbidden_phrases && character.forbidden_phrases.length > 0 ?
+  `\\nAvoid these phrases:\\n${character.forbidden_phrases.map((phrase: string) => `- "${phrase}"`).join('\\n')}` :
+  '\\nAvoid generic assistant language like "How can I help you?" or "What can I do for you?"'
+}`;
   
   return fullContext;
 }
@@ -1877,23 +1912,6 @@ You must remain in character while fully embracing adult content when appropriat
   
   return systemPrompt;
 }
-
-function buildEnhancedPrompt(message: string, context: string, character: any, contentTier: string): string {
-  const contentFilter = contentTier === 'sfw' ? 
-    'Keep the conversation family-friendly and appropriate for all audiences.' : 
-    'The conversation can include mature themes and content.';
-
-  return `You are ${character.name}, a character in a roleplay conversation.
-
-${context}
-
-${contentFilter}
-
-User's message: ${message}
-
-Respond as ${character.name}, staying in character and maintaining the conversation flow. Keep responses engaging and natural.`;
-}
-
 // Adultify context to prevent safety triggers in NSFW mode
 function adultifyContext(text: string, contentTier: string): string {
   if (!text || contentTier !== 'nsfw') return text;
@@ -1948,9 +1966,9 @@ async function callChatWorkerWithHistory(
   }
   
   messages.push({ role: 'system', content: finalSystemPrompt });
-  
-  // Add recent conversation history (last 8 messages for context)
-  const contextMessages = recentMessages.slice(-8);
+
+  // Add recent conversation history (expanded from 8 to 16 for better context)
+  const contextMessages = recentMessages.slice(-16);
   contextMessages.forEach(msg => {
     const role = msg.sender === 'user' ? 'user' : 'assistant';
     let content = adultifyContext(msg.content, contentTier);
@@ -2058,9 +2076,9 @@ async function callOpenRouterWithSystemPrompt(
   }
   
   messages.push({ role: 'system', content: finalSystemPrompt });
-  
-  // Add recent conversation history (last 8 messages for context)
-  const contextMessages = recentMessages.slice(-8);
+
+  // Add recent conversation history (expanded from 8 to 16 for better context)
+  const contextMessages = recentMessages.slice(-16);
   contextMessages.forEach(msg => {
     const role = msg.sender === 'user' ? 'user' : 'assistant';
     let content = adultifyContext(msg.content, contentTier);
