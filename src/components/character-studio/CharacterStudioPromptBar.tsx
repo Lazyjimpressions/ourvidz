@@ -254,7 +254,7 @@ export function CharacterStudioPromptBar({
             {isGenerating ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
-                {generationProgress && (
+{generationProgress != null && (
                   <span className="text-xs ml-1">{generationProgress.percent}%</span>
                 )}
               </>
