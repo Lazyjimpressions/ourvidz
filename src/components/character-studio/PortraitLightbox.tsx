@@ -107,10 +107,10 @@ export function PortraitLightbox({
       if (e.key === 'ArrowLeft') handlePrevious();
       if (e.key === 'ArrowRight') handleNext();
     };
-    
+
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex]);
+  }, [handlePrevious, handleNext, onClose]);
 
   // Prevent body scroll when lightbox is open
   useEffect(() => {
@@ -262,12 +262,15 @@ export function PortraitLightbox({
           <Button
             variant="ghost"
             size="icon"
-            onClick={handlePrevious}
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrevious();
+            }}
             className={cn(
-              "absolute left-4 top-1/2 -translate-y-1/2",
+              "absolute left-4 top-1/2 -translate-y-1/2 z-50",
               "hidden md:flex",
               "w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white",
-              "transition-opacity duration-200",
+              "transition-opacity duration-200 pointer-events-auto",
               !showPanel && "opacity-0 pointer-events-none"
             )}
           >
@@ -276,12 +279,15 @@ export function PortraitLightbox({
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleNext}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
             className={cn(
-              "absolute right-4 top-1/2 -translate-y-1/2",
+              "absolute right-4 top-1/2 -translate-y-1/2 z-50",
               "hidden md:flex",
               "w-12 h-12 rounded-full bg-black/50 hover:bg-black/70 text-white",
-              "transition-opacity duration-200",
+              "transition-opacity duration-200 pointer-events-auto",
               !showPanel && "opacity-0 pointer-events-none"
             )}
           >
