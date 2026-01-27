@@ -69,7 +69,8 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
   onStart
 }) => {
   const { characters: publicCharacters, isLoading: isLoadingPublicCharacters } = usePublicCharacters();
-  const { characters: userCharacters, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
+  // ✅ FIX: Use userPersonas instead of all characters to show only role='user' personas
+  const { userPersonas: userCharacters, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
 
   // Selection state
   const [primaryCharacterId, setPrimaryCharacterId] = useState<string | null>(null);

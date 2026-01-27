@@ -1138,6 +1138,18 @@ function getUserPronoun(gender: string | null | undefined, type: 'subject' | 'ob
   return genderPronouns[type] || pronouns.other[type];
 }
 
+// Helper to get pronouns for AI character
+function getCharacterPronoun(gender: string | null | undefined, type: 'subject' | 'object' | 'possessive'): string {
+  const pronouns: Record<string, Record<string, string>> = {
+    male: { subject: 'he', object: 'him', possessive: 'his' },
+    female: { subject: 'she', object: 'her', possessive: 'her' },
+    other: { subject: 'they', object: 'them', possessive: 'their' }
+  };
+  const normalizedGender = (gender?.toLowerCase() || 'other');
+  const genderPronouns = pronouns[normalizedGender] || pronouns.other;
+  return genderPronouns[type] || pronouns.other[type];
+}
+
 // User character interface for template substitution
 interface UserCharacterForTemplate {
   id: string;
@@ -1163,6 +1175,8 @@ function buildSystemPromptFromTemplate(
   let systemPrompt = template.system_prompt;
 
   // Replace template placeholders with character data
+  const characterGender = character.gender || 'other';
+
   systemPrompt = systemPrompt
     .replace(/\{\{character_name\}\}/g, character.name)
     .replace(/\{\{character_description\}\}/g, character.description || '')
@@ -1179,7 +1193,10 @@ function buildSystemPromptFromTemplate(
     .replace(/\{\{voice_examples\}\}/g, character.voice_examples && character.voice_examples.length > 0
       ? character.voice_examples.map((example: string, index: number) =>
           `Example ${index + 1}: "${example}"`).join('\n')
-      : 'No specific voice examples available - speak naturally as this character would.');
+      : 'No specific voice examples available - speak naturally as this character would.')
+    .replace(/\{\{character_pronoun_they\}\}/g, getCharacterPronoun(characterGender, 'subject'))
+    .replace(/\{\{character_pronoun_them\}\}/g, getCharacterPronoun(characterGender, 'object'))
+    .replace(/\{\{character_pronoun_their\}\}/g, getCharacterPronoun(characterGender, 'possessive'));
 
   // Replace user character placeholders
   const userName = userCharacter?.name || 'User';
@@ -1212,6 +1229,13 @@ function buildSystemPromptFromTemplate(
     systemPrompt += memorySection;
   } else {
     console.log('🧠 No memory data available for this conversation');
+  }
+
+  // Add explicit gender instruction to prevent misgendering
+  if (characterGender && characterGender !== 'other') {
+    const genderInstruction = `\n\nIMPORTANT: You are a ${characterGender} character. Always use ${getCharacterPronoun(characterGender, 'subject')}/${getCharacterPronoun(characterGender, 'object')}/${getCharacterPronoun(characterGender, 'possessive')} pronouns when referring to yourself in first person.`;
+    systemPrompt += genderInstruction;
+    console.log(`🎭 Added gender instruction: ${characterGender} character with ${getCharacterPronoun(characterGender, 'subject')} pronouns`);
   }
 
   // If we have scene-specific system prompt, append it for enhanced scene awareness
@@ -3230,19 +3254,27 @@ const sceneContext = analyzeSceneContent(response);
       // ✅ SEEDREAM-SPECIFIC: Use PRESERVE/CHANGE structure for Seedream edit models
       // Since Seedream has no strength parameter, the prompt controls everything
       if (isSeedreamEdit) {
-        // Seedream Edit: Front-load PRESERVE phrases, then describe CHANGE
-        const preservePhrase = 'Maintain exact character identity, facial features, hair color and style, same lighting conditions, same environment';
-        
+        // ✅ FIX #4: Enhanced character-specific preservation with appearance_tags
+        // Build detailed preservation phrase with character-specific details
+        const characterAppearance = (character.appearance_tags || []).slice(0, 5).join(', ');
+        const preservePhrase = characterAppearance
+          ? `Maintain exact character identity: ${character.name} with ${characterAppearance}, exact facial features, same hair color and style, same lighting conditions, same environment, same clothing state unless explicitly changed`
+          : 'Maintain exact character identity, facial features, hair color and style, same lighting conditions, same environment, same clothing state unless explicitly changed';
+
         if (sceneStyle === 'both_characters' && userCharacter) {
           const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
-          enhancedScenePrompt = `[PRESERVE] ${preservePhrase}, same character positions relative to each other. [CHANGE] ${scenePrompt}. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+          const userAppearance = (userCharacter.appearance_tags || []).slice(0, 3).join(', ');
+          const enhancedPreserve = userAppearance
+            ? `${preservePhrase}; maintain ${userCharacter.name} appearance: ${userAppearance}`
+            : preservePhrase;
+          enhancedScenePrompt = `[PRESERVE] ${enhancedPreserve}, same character positions relative to each other. [CHANGE] ${scenePrompt}. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
         } else if (sceneStyle === 'pov') {
           enhancedScenePrompt = `[PRESERVE] ${preservePhrase}, POV camera angle. [CHANGE] ${scenePrompt}${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer.`;
         } else {
           enhancedScenePrompt = `[PRESERVE] ${preservePhrase}. [CHANGE] ${scenePrompt}. [CHARACTER] ${briefCharacterIdentity}.`;
         }
-        
-        console.log('🎬 Seedream Edit I2I: Using PRESERVE/CHANGE prompt structure (no strength parameter)');
+
+        console.log('🎬 Seedream Edit I2I: Using enhanced PRESERVE/CHANGE with character-specific details (no strength parameter)');
       } else {
         // Non-Seedream models: Use standard I2I prompt structure
         if (sceneStyle === 'both_characters' && userCharacter) {

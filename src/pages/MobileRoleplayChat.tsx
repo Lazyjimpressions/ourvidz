@@ -211,8 +211,34 @@ const MobileRoleplayChat: React.FC = () => {
       setModelProvider(settings.modelProvider);
       setSelectedImageModel(settings.selectedImageModel);
       setConsistencySettings(settings.consistencySettings);
-      // Use saved user character, or fall back to profile default
-      const effectiveUserCharacterId = settings.userCharacterId || defaultCharacterId || null;
+
+      // ✅ FIX: Priority order for user character selection: navigationState → localStorage → profileDefault
+      const locationState = location.state as {
+        userCharacterId?: string | null;
+      } | null;
+
+      const userCharacterIdFromNavigation = locationState?.userCharacterId;
+      let effectiveUserCharacterId: string | null = null;
+      let userCharacterSource = '';
+
+      if (userCharacterIdFromNavigation !== undefined) {
+        // Highest priority: Navigation state from scene setup modal
+        effectiveUserCharacterId = userCharacterIdFromNavigation;
+        userCharacterSource = 'navigation state';
+      } else if (settings.userCharacterId) {
+        // Medium priority: Saved localStorage preference
+        effectiveUserCharacterId = settings.userCharacterId;
+        userCharacterSource = 'localStorage';
+      } else if (defaultCharacterId) {
+        // Lowest priority: Profile default character
+        effectiveUserCharacterId = defaultCharacterId;
+        userCharacterSource = 'profile default';
+      } else {
+        // No character selected
+        effectiveUserCharacterId = null;
+        userCharacterSource = 'none (anonymous)';
+      }
+
       setSelectedUserCharacterId(effectiveUserCharacterId);
       setSceneStyle(settings.sceneStyle);
       hasInitializedModelDefaults.current = true;
@@ -220,6 +246,7 @@ const MobileRoleplayChat: React.FC = () => {
         chatModel: settings.modelProvider,
         imageModel: settings.selectedImageModel,
         userCharacterId: effectiveUserCharacterId,
+        userCharacterSource,  // ✅ FIX: Log which source was used
         sceneStyle: settings.sceneStyle,
         chatModelType: roleplayModelOptions.find(m => m.value === settings.modelProvider)?.isLocal ? 'local' : 'api',
         imageModelType: imageModelOptions.find(m => m.value === settings.selectedImageModel)?.type || 'unknown'
@@ -473,14 +500,10 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Check if this is a fresh scene start
       const forceNewConversation = locationState?.forceNewConversation || shouldStartFresh;
-      
-      const userCharacterIdFromState = locationState?.userCharacterId;
-      
-      // If userCharacterId is provided from state, use it (overrides saved settings)
-      if (userCharacterIdFromState !== undefined) {
-        setSelectedUserCharacterId(userCharacterIdFromState);
-        console.log('✅ Using userCharacterId from navigation state:', userCharacterIdFromState);
-      }
+
+      // ✅ FIX: userCharacterId from navigation state is now handled in settings initialization
+      // with proper priority: navigationState → localStorage → profileDefault (lines 208-244)
+      // This prevents race condition where localStorage overwrites navigation state
 
       try {
         setIsInitializing(true);
