@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -31,7 +31,7 @@ interface ScenesGalleryProps {
   onStartChat: (scene: CharacterScene) => void;
 }
 
-export function ScenesGallery({
+export const ScenesGallery = forwardRef<HTMLDivElement, ScenesGalleryProps>(function ScenesGallery({
   scenes,
   selectedSceneId,
   isNewCharacter,
@@ -200,4 +200,4 @@ export function ScenesGallery({
       )}
     </div>
   );
-}
+});
