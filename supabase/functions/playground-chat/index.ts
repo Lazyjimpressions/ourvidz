@@ -608,12 +608,13 @@ You say: ...`;
         .select('config')
         .single();
 
-      if (configError || !systemConfig?.config?.chatWorkerUrl) {
+      const configData = systemConfig?.config as { chatWorkerUrl?: string } | undefined;
+      if (configError || !configData?.chatWorkerUrl) {
         console.error('Failed to get chat worker URL:', configError);
         throw new Error('Chat worker not configured');
       }
 
-      chatWorkerUrl = systemConfig.config.chatWorkerUrl;
+      chatWorkerUrl = configData.chatWorkerUrl;
       cachedChatWorkerUrl = chatWorkerUrl;
       cachedConfigFetchedAt = Date.now();
     }
@@ -639,11 +640,11 @@ You say: ...`;
     const cache = await getCachedData();
     
     console.log('✅ Cache loaded:', {
-      templateCount: cache?.metadata?.templateCount || 0,
-      negativePromptCount: cache?.metadata?.negativePromptCount || 0,
+      templateCount: cache?.metadata?.template_count || 0,
+      negativePromptCount: cache?.metadata?.negative_prompt_count || 0,
       nsfwTermCount: cache?.nsfwTerms?.length || 0,
-      ageHours: cache?.metadata?.lastUpdated ? 
-        ((Date.now() - new Date(cache.metadata.lastUpdated).getTime()) / (1000 * 60 * 60)).toFixed(1) : 'unknown'
+      ageHours: cache?.metadata?.refreshed_at ? 
+        ((Date.now() - new Date(cache.metadata.refreshed_at).getTime()) / (1000 * 60 * 60)).toFixed(1) : 'unknown'
     });
     
     // Determine admin/owner NSFW override
@@ -657,6 +658,9 @@ You say: ...`;
     // NSFW-first content tier logic with explicit override support
     let finalTier: 'sfw' | 'nsfw';
     let tierReason: string;
+    
+    // Parse body for content_tier - body is already parsed above as 'message', 'conversation_id', etc.
+    // The explicitTier is passed directly in the destructured body
     
     // Check for explicit frontend override (user deliberately chose SFW)
     const explicitTier = req.body?.content_tier as 'sfw' | 'nsfw' | undefined;

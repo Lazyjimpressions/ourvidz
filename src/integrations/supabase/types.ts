@@ -799,6 +799,7 @@ export type Database = {
           character_id: string | null
           conversation_type: string
           created_at: string
+          current_location: string | null
           id: string
           last_scene_image: string | null
           memory_data: Json | null
@@ -814,6 +815,7 @@ export type Database = {
           character_id?: string | null
           conversation_type?: string
           created_at?: string
+          current_location?: string | null
           id?: string
           last_scene_image?: string | null
           memory_data?: Json | null
@@ -829,6 +831,7 @@ export type Database = {
           character_id?: string | null
           conversation_type?: string
           created_at?: string
+          current_location?: string | null
           id?: string
           last_scene_image?: string | null
           memory_data?: Json | null

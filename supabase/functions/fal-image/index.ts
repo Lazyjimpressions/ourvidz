@@ -1324,7 +1324,7 @@ serve(async (req) => {
             const thumbResponse = await fetch(referenceUrl);
             if (thumbResponse.ok) {
               const thumbBuffer = await thumbResponse.arrayBuffer();
-              const thumbStoragePath = `${user.id}/${jobData.id}_${timestamp}.thumb.webp`;
+              const thumbStoragePath = `${user.id}/${jobData.id}_${Date.now()}.thumb.webp`;
               
               const { error: thumbUploadError } = await supabase.storage
                 .from('workspace-temp')

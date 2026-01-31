@@ -100,6 +100,17 @@ export function PortraitLightbox({
     }
   }, [currentPortrait]);
 
+  // Navigation handlers (must be defined before useEffect that references them)
+  const handlePrevious = useCallback(() => {
+    const newIndex = currentIndex > 0 ? currentIndex - 1 : portraits.length - 1;
+    onIndexChange(newIndex);
+  }, [currentIndex, portraits.length, onIndexChange]);
+
+  const handleNext = useCallback(() => {
+    const newIndex = currentIndex < portraits.length - 1 ? currentIndex + 1 : 0;
+    onIndexChange(newIndex);
+  }, [currentIndex, portraits.length, onIndexChange]);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -119,16 +130,6 @@ export function PortraitLightbox({
       document.body.style.overflow = '';
     };
   }, []);
-
-  const handlePrevious = useCallback(() => {
-    const newIndex = currentIndex > 0 ? currentIndex - 1 : portraits.length - 1;
-    onIndexChange(newIndex);
-  }, [currentIndex, portraits.length, onIndexChange]);
-
-  const handleNext = useCallback(() => {
-    const newIndex = currentIndex < portraits.length - 1 ? currentIndex + 1 : 0;
-    onIndexChange(newIndex);
-  }, [currentIndex, portraits.length, onIndexChange]);
 
   // Touch handlers for swipe navigation
   const handleTouchStart = (e: React.TouchEvent) => {
