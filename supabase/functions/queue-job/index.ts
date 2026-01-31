@@ -35,6 +35,9 @@ interface JobRequest {
   negative_prompt?: string;
   compel_enabled?: boolean;
   compel_weights?: string;
+  // Enhancement control
+  bypass_enhancement?: boolean;
+  hard_override?: boolean;
 }
 
 serve(async (req) => {
@@ -650,7 +653,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         error: 'Internal server error',
-        details: error.message 
+        details: error instanceof Error ? error.message : String(error) 
       }),
       {
         status: 500,

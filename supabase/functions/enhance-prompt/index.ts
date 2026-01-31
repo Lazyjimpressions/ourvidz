@@ -591,7 +591,15 @@ class DynamicEnhancementOrchestrator {
       console.log('🤖 Model type selected:', modelType, modelKey ? '(from model_key)' : '(from job_type fallback)')
 
       // Try cache first, then database fallback using 5-tuple
-      let enhancementResult
+      let enhancementResult: {
+        enhanced_prompt: string;
+        strategy: string;
+        template_name?: string;
+        model_used: string;
+        token_count: number;
+        compressed: boolean;
+        fallback_level?: number;
+      }
       try {
         const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
         const enhancerModel = request.selectedModel || 'qwen_instruct'
