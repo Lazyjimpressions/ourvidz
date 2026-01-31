@@ -59,8 +59,19 @@ export function PortraitTile({
       }
     };
 
+    setIsLoading(true);
     setHasError(false);
+
+    // Safety: if iOS/Safari never fires onLoad/onError, don't leave the tile blank forever
+    const timeoutId = window.setTimeout(() => {
+      setIsLoading(false);
+    }, 2500);
+
     signImageUrl();
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [imageUrl]);
 
   const displayUrl = signedUrl || imageUrl;
@@ -90,10 +101,7 @@ export function PortraitTile({
           <img
             src={displayUrl}
             alt={alt}
-            className={cn(
-              "w-full h-full object-contain md:object-cover",
-              isLoading && "opacity-0"
-            )}
+            className={cn("w-full h-full object-contain md:object-cover")}
             loading="lazy"
             onLoad={() => setIsLoading(false)}
             onError={() => {
