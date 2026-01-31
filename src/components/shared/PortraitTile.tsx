@@ -34,7 +34,13 @@ export function PortraitTile({
         return;
       }
 
-      // Check if URL needs signing (user-library or workspace-temp paths)
+      // Skip signing if URL already has a token (already signed)
+      if (imageUrl.includes('?token=') || imageUrl.includes('&token=')) {
+        setSignedUrl(imageUrl);
+        return;
+      }
+
+      // Check if URL needs signing (user-library or workspace-temp paths without tokens)
       if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/')) {
         try {
           const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
