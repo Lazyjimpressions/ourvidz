@@ -155,8 +155,8 @@ export function PortraitLightbox({
         handleNext();
       }
     }
-    // Vertical swipe down (close)
-    else if (deltaY > 60 && Math.abs(deltaY) > Math.abs(deltaX)) {
+    // Vertical swipe down (close) - lowered threshold for easier mobile exit
+    else if (deltaY > 40 && Math.abs(deltaY) > Math.abs(deltaX)) {
       onClose();
     }
     
@@ -187,12 +187,17 @@ export function PortraitLightbox({
         }
       }}
     >
-      {/* Header */}
+      {/* Mobile swipe indicator - always visible on mobile */}
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 md:hidden">
+        <div className="w-10 h-1 bg-white/40 rounded-full" />
+      </div>
+
+      {/* Header - always visible on mobile for close button */}
       <div className={cn(
         "absolute top-0 left-0 right-0 z-10 p-4 flex items-center justify-between",
         "bg-gradient-to-b from-black/80 to-transparent",
         "transition-opacity duration-200",
-        !showPanel && "opacity-0 pointer-events-none"
+        !showPanel && "md:opacity-0 md:pointer-events-none" // Keep visible on mobile
       )}>
         {/* Counter */}
         {portraits.length > 1 && (
