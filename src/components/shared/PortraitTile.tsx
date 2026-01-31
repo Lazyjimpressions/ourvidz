@@ -41,6 +41,7 @@ export function PortraitTile({
       // Skip signing if URL already has a token (already signed)
       if (imageUrl.includes('?token=') || imageUrl.includes('&token=')) {
         setSignedUrl(imageUrl);
+        setIsLoading(false);
         return;
       }
 
@@ -50,12 +51,15 @@ export function PortraitTile({
           const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
           const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
           setSignedUrl(signed);
+          setIsLoading(false);
         } catch (error) {
           console.error('Failed to sign image URL:', error);
           setSignedUrl(imageUrl); // Fallback to original
+          setIsLoading(false);
         }
       } else {
         setSignedUrl(imageUrl); // Use as-is for public URLs
+        setIsLoading(false);
       }
     };
 
@@ -102,7 +106,6 @@ export function PortraitTile({
             src={displayUrl}
             alt={alt}
             className={cn("w-full h-full object-contain md:object-cover")}
-            loading="lazy"
             onLoad={() => setIsLoading(false)}
             onError={() => {
               setHasError(true);
