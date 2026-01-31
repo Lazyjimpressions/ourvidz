@@ -80,12 +80,15 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
         is_primary: p.id === portraitId
       })));
       
-      // Also update the character's main image_url
+      // Also update the character's main image_url AND reference_image_url for scene generation
       const portrait = portraits.find(p => p.id === portraitId);
       if (portrait) {
         await supabase
           .from('characters')
-          .update({ image_url: portrait.image_url })
+          .update({
+            image_url: portrait.image_url,
+            reference_image_url: portrait.image_url  // Also set reference for scene generation
+          })
           .eq('id', characterId);
       }
       

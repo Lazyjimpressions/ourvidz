@@ -8,4 +8,14 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #1282 | 6:13 PM | 🔵 | I2I Scene Generation Uses Previous Scene Images, Not Character References | ~480 |
+
+### Jan 30, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #1440 | 6:03 PM | ⚖️ | Plan to Fix First Scene Character Reference Using I2I Instead of T2I | ~703 |
+| #1437 | 5:44 PM | 🔵 | Scene Style Passed from Request Body to Generation Pipeline | ~364 |
+| #1434 | 5:43 PM | 🔵 | Scene Style Parameter Controls Character Composition | ~395 |
+| #1431 | 5:42 PM | 🔵 | User Character Visual Description Integration in Scene Prompts | ~529 |
+| #1429 | " | 🔵 | User Character Support in Scene Generation | ~559 |
 </claude-mem-context>
