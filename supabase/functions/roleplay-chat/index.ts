@@ -153,6 +153,7 @@ interface RoleplayChatRequest {
   // User context for scene immersion
   user_role?: string; // User's role in the scene (e.g., "taking the shower")
   user_character_id?: string; // User character ID for persona integration
+  user_character_reference_url?: string; // ✅ Multi-reference: User character reference image for both_characters scenes
   // Scene continuity (I2I iteration) fields
   previous_scene_id?: string; // ID of previous scene for linking
   previous_scene_image_url?: string; // URL of previous scene for I2I iteration
@@ -171,6 +172,7 @@ interface UserCharacterForScene {
   appearance_tags: string[];
   persona?: string;
   image_url?: string;
+  reference_image_url?: string; // ✅ Multi-reference: User character reference for both_characters scenes
 }
 
 // Scene style tokens for image generation
@@ -409,7 +411,8 @@ serve(async (req) => {
           gender,
           appearance_tags,
           persona,
-          image_url
+          image_url,
+          reference_image_url
         )
       `)
       .eq('id', conversation_id)
@@ -3265,8 +3268,24 @@ const sceneContext = analyzeSceneContent(response);
     // ✅ SEEDREAM DETECTION: Check if we're using Seedream edit models (which don't use strength parameter)
     // For Seedream edit, the prompt itself controls preservation vs change
     // ✅ CRITICAL FIX: Use imageModelConfig (fetched earlier) instead of undefined modelConfig
-    const isSeedreamEdit = imageModelConfig?.model_key?.includes('seedream') && 
+    const isSeedreamEdit = imageModelConfig?.model_key?.includes('seedream') &&
                            imageModelConfig?.model_key?.includes('edit');
+
+    // ✅ MULTI-REFERENCE DETECTION: Check if we can use Figure notation for both_characters
+    // Multi-reference requires: both_characters style + character reference + user character reference
+    const canUseMultiReference = sceneStyle === 'both_characters' &&
+                                  !!character.reference_image_url &&
+                                  !!userCharacter?.reference_image_url;
+
+    if (canUseMultiReference) {
+      console.log('🎭 Multi-reference eligible:', {
+        scene_style: sceneStyle,
+        has_character_ref: !!character.reference_image_url,
+        has_user_ref: !!userCharacter?.reference_image_url,
+        character_name: character.name,
+        user_name: userCharacter?.name
+      });
+    }
 
     // ✅ FIX: For I2I iterations, prioritize scene action/changes first
     if (useI2IIteration || generationMode === 'modification') {
@@ -3288,10 +3307,32 @@ const sceneContext = analyzeSceneContent(response);
         if (sceneStyle === 'both_characters' && userCharacter) {
           const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
           const userAppearance = (userCharacter.appearance_tags || []).slice(0, 3).join(', ');
-          const enhancedPreserve = userAppearance
-            ? `${preservePhrase}; maintain ${userCharacter.name} appearance: ${userAppearance}`
-            : preservePhrase;
-          enhancedScenePrompt = `[PRESERVE] ${enhancedPreserve}, same character positions relative to each other. [CHANGE] ${scenePrompt}. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+
+          // ✅ MULTI-REFERENCE: Use Figure notation when both references are available
+          if (canUseMultiReference) {
+            enhancedScenePrompt = `In the setting from Figure 1, show two people together.
+
+SCENE SETTING (from Figure 1): ${scenePrompt}
+
+CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${characterAppearance || characterVisualDescription}
+
+CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearance || briefUserIdentity}
+
+ACTION/POSE: ${scenePrompt}
+
+COMPOSITION RULES:
+- Maintain the exact environment, lighting, and atmosphere from Figure 1
+- Preserve Character 1's facial features, hair, and body type from Figure 2
+- Preserve Character 2's facial features, hair, and body type from Figure 3
+- Characters should be interacting naturally within the scene
+- Photorealistic, cinematic lighting, shallow depth of field`;
+            console.log('🎭 Multi-reference I2I: Using Figure notation for both_characters');
+          } else {
+            const enhancedPreserve = userAppearance
+              ? `${preservePhrase}; maintain ${userCharacter.name} appearance: ${userAppearance}`
+              : preservePhrase;
+            enhancedScenePrompt = `[PRESERVE] ${enhancedPreserve}, same character positions relative to each other. [CHANGE] ${scenePrompt}. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+          }
         } else if (sceneStyle === 'pov') {
           enhancedScenePrompt = `[PRESERVE] ${preservePhrase}, POV camera angle. [CHANGE] ${scenePrompt}${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer.`;
         } else {
@@ -3303,7 +3344,30 @@ const sceneContext = analyzeSceneContent(response);
         // Non-Seedream models: Use standard I2I prompt structure
         if (sceneStyle === 'both_characters' && userCharacter) {
           const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
-          enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting, natural progression. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+          const userAppearance = (userCharacter.appearance_tags || []).slice(0, 3).join(', ');
+
+          // ✅ MULTI-REFERENCE: Use Figure notation when both references are available
+          if (canUseMultiReference) {
+            enhancedScenePrompt = `In the setting from Figure 1, show two people together.
+
+SCENE SETTING (from Figure 1): ${scenePrompt}
+
+CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${(character.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription}
+
+CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearance || briefUserIdentity}
+
+ACTION/POSE: ${scenePrompt}
+
+COMPOSITION RULES:
+- Maintain the exact environment, lighting, and atmosphere from Figure 1
+- Preserve Character 1's facial features, hair, and body type from Figure 2
+- Preserve Character 2's facial features, hair, and body type from Figure 3
+- Characters should be interacting naturally within the scene
+- Photorealistic, cinematic lighting, shallow depth of field`;
+            console.log('🎭 Multi-reference I2I (non-Seedream): Using Figure notation for both_characters');
+          } else {
+            enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting, natural progression. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
+          }
         } else if (sceneStyle === 'pov') {
           enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer, POV perspective.`;
         } else {
@@ -3318,9 +3382,33 @@ const sceneContext = analyzeSceneContent(response);
         userCharacter.gender,
         userCharacter.appearance_tags || []
       );
-      enhancedScenePrompt = `Generate a scene showing ${character.name} (${characterVisualDescription}) and ${userCharacter.name} (${userVisualDescription}) together${styleTokensStr}, in the following scenario: ${scenePrompt}. Both characters should maintain their distinctive appearances. Composition: two people interacting.`;
 
-      console.log('🎬 Scene style: both_characters - including user:', userCharacter.name);
+      // ✅ MULTI-REFERENCE: Use Figure notation when both references are available
+      if (canUseMultiReference) {
+        const characterAppearance = (character.appearance_tags || []).slice(0, 5).join(', ');
+        const userAppearance = (userCharacter.appearance_tags || []).slice(0, 5).join(', ');
+
+        enhancedScenePrompt = `In the setting from Figure 1, show two people together.
+
+SCENE SETTING (from Figure 1): ${scenePrompt}
+
+CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${characterAppearance || characterVisualDescription}
+
+CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearance || userVisualDescription}
+
+ACTION/POSE: ${scenePrompt}
+
+COMPOSITION RULES:
+- Maintain the exact environment, lighting, and atmosphere from Figure 1
+- Preserve Character 1's facial features, hair, and body type from Figure 2
+- Preserve Character 2's facial features, hair, and body type from Figure 3
+- Characters should be interacting naturally within the scene
+- Photorealistic, cinematic lighting, shallow depth of field`;
+        console.log('🎭 Multi-reference T2I: Using Figure notation for both_characters');
+      } else {
+        enhancedScenePrompt = `Generate a scene showing ${character.name} (${characterVisualDescription}) and ${userCharacter.name} (${userVisualDescription}) together${styleTokensStr}, in the following scenario: ${scenePrompt}. Both characters should maintain their distinctive appearances. Composition: two people interacting.`;
+        console.log('🎬 Scene style: both_characters - including user:', userCharacter.name);
+      }
     } else if (sceneStyle === 'pov' && userCharacter) {
       // POV scene - first person view from user's perspective looking at character
       enhancedScenePrompt = `Generate a first-person POV scene${styleTokensStr} showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should be looking at the viewer. Camera angle: first person perspective.`;
@@ -3718,11 +3806,58 @@ const sceneContext = analyzeSceneContent(response);
             preview: sanitizedPrompt.substring(0, 150) + '...'
           });
 
+          // ✅ MULTI-REFERENCE: Build image_urls array for v4.5/edit multi-source composition
+          // Uses canUseMultiReference determined earlier for prompt building
+          let multiReferenceImageUrls: string[] | undefined = undefined;
+          let useMultiReference = false;
+
+          if (canUseMultiReference && userCharacter?.reference_image_url && character.reference_image_url) {
+            const imageUrlsArray: string[] = [];
+
+            // Figure 1: Scene environment (previous scene for continuity, or use character reference as fallback)
+            // Priority: previous scene image > character reference (since we may not have scene template image here)
+            if (verifiedPreviousSceneImageUrl) {
+              imageUrlsArray.push(verifiedPreviousSceneImageUrl);
+              console.log('📸 Multi-ref Figure 1 (Scene): Using previous scene image');
+            } else if (character.reference_image_url) {
+              // For first scene without previous, use character reference as environment base
+              imageUrlsArray.push(character.reference_image_url);
+              console.log('📸 Multi-ref Figure 1 (Scene): Using character reference as base');
+            }
+
+            // Figure 2: AI Character reference
+            imageUrlsArray.push(character.reference_image_url);
+            console.log('📸 Multi-ref Figure 2 (Character):', character.name);
+
+            // Figure 3: User Character reference
+            imageUrlsArray.push(userCharacter.reference_image_url);
+            console.log('📸 Multi-ref Figure 3 (User):', userCharacter.name);
+
+            if (imageUrlsArray.length >= 2) {
+              multiReferenceImageUrls = imageUrlsArray;
+              useMultiReference = true;
+
+              // Force I2I model for multi-reference (v4.5/edit)
+              if (!effectiveI2IModelOverride) {
+                effectiveI2IModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
+              }
+
+              console.log('🎭 MULTI-REFERENCE MODE ENABLED:', {
+                scene_style: sceneStyle,
+                image_count: imageUrlsArray.length,
+                figure_1: imageUrlsArray[0]?.substring(0, 50) + '...',
+                figure_2: imageUrlsArray[1]?.substring(0, 50) + '...',
+                figure_3: imageUrlsArray[2]?.substring(0, 50) + '...',
+                model_override: effectiveI2IModelOverride
+              });
+            }
+          }
+
           // Build fal.ai-specific request body
           const falRequestBody = {
             prompt: sanitizedPrompt, // ✅ Use sanitized prompt for fal.ai compliance
             apiModelId: modelConfig.id,
-            // Override model_key for I2I iteration
+            // Override model_key for I2I iteration or multi-reference
             model_key_override: effectiveI2IModelOverride || undefined,
             job_type: 'fal_image',
             quality: 'high',
@@ -3731,12 +3866,17 @@ const sceneContext = analyzeSceneContent(response);
               num_inference_steps: 30,
               guidance_scale: 7.5,
               seed: seedLocked ?? undefined,
-              // ✅ FIX: Only add I2I parameters if reference image is actually provided
-              // This prevents 422 errors when image_url is undefined
-              ...(i2iReferenceImage && i2iReferenceImage.trim() !== '' ? {
+              // ✅ MULTI-REFERENCE: Use image_urls array for v4.5/edit multi-source composition
+              // Otherwise fall back to single image_url for standard I2I
+              ...(useMultiReference && multiReferenceImageUrls && multiReferenceImageUrls.length >= 2 ? {
+                // v4.5/edit uses image_urls ARRAY (not image_url string)
+                // Note: v4.5/edit does NOT use strength parameter
+                image_urls: multiReferenceImageUrls
+              } : (i2iReferenceImage && i2iReferenceImage.trim() !== '' ? {
+                // Standard single-reference I2I
                 image_url: i2iReferenceImage,
                 strength: i2iStrength
-              } : {})
+              } : {}))
             },
             metadata: {
               destination: 'roleplay_scene',
@@ -3761,6 +3901,9 @@ const sceneContext = analyzeSceneContent(response);
               use_i2i_iteration: useI2IIteration,
               previous_scene_id: previousSceneId || null,
               has_previous_scene_image: !!previousSceneImageUrl,
+              // ✅ Multi-reference tracking
+              use_multi_reference: useMultiReference,
+              multi_reference_image_count: multiReferenceImageUrls?.length || 0,
               // ✅ ADMIN: Include scene prompt template info
               scene_template_id: sceneTemplateId,
               scene_template_name: sceneTemplateName

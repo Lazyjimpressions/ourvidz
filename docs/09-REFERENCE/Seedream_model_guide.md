@@ -10,13 +10,14 @@ Think of **Seedream as a unified image foundation model**, exposed through **dif
 
 They are **not separate models you chain together internally** — *you choose the endpoint based on what you want to do*.
 
-### The three relevant Seedream endpoints
+### The four relevant Seedream endpoints
 
-| Endpoint           | Purpose                                     | Do you need a source image? |
-| ------------------ | ------------------------------------------- | --------------------------- |
-| `v4/text-to-image` | Generate a new image from text              | ❌ No                        |
-| `v4/edit`          | Modify an existing image using text         | ✅ Yes                       |
-| `v4.5/edit`        | Higher-quality / more capable image editing | ✅ Yes                       |
+| Endpoint           | Purpose                                     | Do you need a source image? | Max Images |
+| ------------------ | ------------------------------------------- | --------------------------- | ---------- |
+| `v4/text-to-image` | Generate a new image from text              | ❌ No                        | 0          |
+| `v4.5/text-to-image` | Higher-quality text-to-image generation   | ❌ No                        | 0          |
+| `v4/edit`          | Modify an existing image using text         | ✅ Yes                       | 1-10       |
+| `v4.5/edit`        | Higher-quality editing with **multi-reference** | ✅ Yes                   | **1-10**   |
 
 👉 **They stand on their own.**
 You don’t “call v4 first then v4/edit”.
@@ -230,9 +231,77 @@ consider:
 
 ---
 
+## 9️⃣ Multi-Reference Composition (v4.5/edit)
+
+**NEW CAPABILITY:** Seedream v4.5/edit supports **up to 10 input images** for multi-source composition.
+
+### How It Works
+
+The model uses **Figure notation** to reference images:
+
+```typescript
+image_urls: [
+  "https://...scene.jpg",      // Figure 1: Environment
+  "https://...character.jpg",  // Figure 2: AI Character
+  "https://...user.jpg"        // Figure 3: User Character
+]
+
+prompt: `
+In the setting from Figure 1, show the woman from Figure 2
+and the man from Figure 3 in an intimate embrace.
+
+RULES:
+- Maintain environment and lighting from Figure 1
+- Preserve Character 1's appearance from Figure 2
+- Preserve Character 2's appearance from Figure 3
+`
+```
+
+### Use Cases for Multi-Reference
+
+| Scene Style | References | Figure Mapping |
+|-------------|------------|----------------|
+| character_only | 2 | Fig 1: Scene, Fig 2: Character |
+| pov | 2 | Fig 1: Scene, Fig 2: Character |
+| both_characters | 3 | Fig 1: Scene, Fig 2: AI Char, Fig 3: User |
+
+### API Input Format
+
+```typescript
+// v4.5/edit uses image_urls ARRAY (not image_url string)
+{
+  prompt: "In the setting from Figure 1...",
+  image_urls: ["url1", "url2", "url3"],  // ARRAY format
+  enable_safety_checker: false
+}
+
+// NOTE: v4.5/edit does NOT use strength parameter
+```
+
+### Character Limits
+
+| Model | char_limit | Notes |
+|-------|------------|-------|
+| v4/t2i | 10,000 | Standard prompts |
+| v4.5/t2i | 10,000 | Standard prompts |
+| v4/edit | 10,000 | No strength param |
+| v4.5/edit | 10,000 | Multi-ref, no strength |
+
+---
+
 ## Integration Status
 
-- ✅ Seedream v4.5/edit model exists in database
+- ✅ Seedream v4/t2i model exists in database
+- ✅ Seedream v4.5/edit model exists in database (max_images: 10)
+- ⏳ Seedream v4.5/t2i needs to be added to database
 - ✅ Dynamic model filtering active
 - ✅ Recommended for workspace I2I edits
 - ✅ Automatically appears when reference image is set
+- ✅ Multi-reference supported for both_characters scenes
+
+---
+
+## Related Documentation
+
+- [FAL_AI_SEEDREAM_DEFINITIVE.md](./FAL_AI_SEEDREAM_DEFINITIVE.md) - Complete API reference
+- [ROLEPLAY_SCENE_GENERATION.md](./ROLEPLAY_SCENE_GENERATION.md) - Scene generation workflow

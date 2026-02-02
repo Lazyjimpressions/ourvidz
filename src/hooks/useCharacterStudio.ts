@@ -43,6 +43,8 @@ export interface CharacterScene {
 
 interface UseCharacterStudioOptions {
   characterId?: string;
+  /** Default role for new characters: 'user' for persona, 'ai' for companion */
+  defaultRole?: 'user' | 'ai';
 }
 
 const defaultCharacterData: CharacterData = {
@@ -66,7 +68,7 @@ const defaultCharacterData: CharacterData = {
   default_presets: {} as Json
 };
 
-export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = {}) {
+export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseCharacterStudioOptions = {}) {
   const [character, setCharacter] = useState<CharacterData>(defaultCharacterData);
   const [scenes, setScenes] = useState<CharacterScene[]>([]);
   const [isDirty, setIsDirty] = useState(false);
@@ -222,7 +224,7 @@ export function useCharacterStudio({ characterId }: UseCharacterStudioOptions = 
         voice_examples: character.voice_examples,
         default_presets: character.default_presets,
         user_id: user.id,
-        role: 'ai'
+        role: defaultRole
       };
 
       let result;

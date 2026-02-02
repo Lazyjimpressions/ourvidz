@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -30,10 +30,16 @@ import { CharacterScene } from '@/hooks/useCharacterStudio';
 
 export default function CharacterStudio() {
   const { id: characterId } = useParams<{ id: string}>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { toast } = useToast();
-  
+
+  // Get role from URL params: ?role=user for personas, default to 'ai' for companions
+  const roleParam = searchParams.get('role');
+  const defaultRole: 'user' | 'ai' = roleParam === 'user' ? 'user' : 'ai';
+  const isPersonaMode = defaultRole === 'user';
+
   const {
     character,
     updateCharacter,
@@ -55,7 +61,7 @@ export default function CharacterStudio() {
     selectItem,
     selectedItemId,
     selectedItemType
-  } = useCharacterStudio({ characterId });
+  } = useCharacterStudio({ characterId, defaultRole });
 
   // Image model state - track reference image for Image Match Mode filtering
   const hasReferenceImage = !!character.reference_image_url;
@@ -265,6 +271,7 @@ export default function CharacterStudio() {
           onImageModelChange={setSelectedImageModel}
           imageModelOptions={imageModelOptions}
           onOpenImagePicker={() => setShowImagePicker(true)}
+          isPersonaMode={isPersonaMode}
         />
         
         {/* Image Picker Dialog */}
@@ -310,7 +317,10 @@ export default function CharacterStudio() {
             trigger={
               <Button variant="ghost" size="sm" className="gap-2">
                 <Users className="w-4 h-4" />
-                {isNewCharacter ? 'New Character' : character.name || 'Character'}
+                {isNewCharacter
+                  ? isPersonaMode ? 'New Persona' : 'New Character'
+                  : character.name || (isPersonaMode ? 'Persona' : 'Character')
+                }
               </Button>
             }
           />
@@ -511,6 +521,7 @@ interface MobileCharacterStudioProps {
   onImageModelChange: (modelId: string) => void;
   imageModelOptions: ReturnType<typeof useImageModels>['modelOptions'];
   onOpenImagePicker: () => void;
+  isPersonaMode?: boolean;
 }
 
 function MobileCharacterStudio({
@@ -536,7 +547,8 @@ function MobileCharacterStudio({
   selectedImageModel,
   onImageModelChange,
   imageModelOptions,
-  onOpenImagePicker
+  onOpenImagePicker,
+  isPersonaMode = false
 }: MobileCharacterStudioProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'details' | 'portraits' | 'scenes'>('details');
@@ -561,7 +573,10 @@ function MobileCharacterStudio({
           trigger={
             <button className="flex items-center gap-1 text-sm font-medium text-foreground">
               <span className="truncate max-w-[120px]">
-                {isNewCharacter ? 'New Character' : character.name || 'Character'}
+                {isNewCharacter
+                  ? isPersonaMode ? 'New Persona' : 'New Character'
+                  : character.name || (isPersonaMode ? 'Persona' : 'Character')
+                }
               </span>
               <ChevronDown className="w-4 h-4 text-muted-foreground" />
             </button>

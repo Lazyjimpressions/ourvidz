@@ -883,6 +883,8 @@ const MobileRoleplayChat: React.FC = () => {
             selected_image_model: getValidImageModel(),
             // Scene style for user representation in images
             scene_style: sceneStyle,
+            // ✅ Multi-reference: user character reference for both_characters scenes
+            user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
             // ✅ Pass consistency settings from UI
             consistency_settings: consistencySettings,
             // 🔄 Scene continuity (initial kickoff - no previous scene yet)
@@ -1343,6 +1345,8 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: validImageModel,
           // ✅ Scene style for user representation in images
           scene_style: sceneStyle,
+          // ✅ Multi-reference: user character reference for both_characters scenes
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // 🔄 Scene continuity for I2I iteration
@@ -1511,6 +1515,8 @@ const MobileRoleplayChat: React.FC = () => {
           // NOTE: Template selection is handled server-side based on model_provider
           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
           scene_style: sceneStyle, // ✅ Scene style for user representation
+          // ✅ Multi-reference: user character reference for both_characters scenes
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // 🔄 Scene continuity for I2I iteration
@@ -1698,6 +1704,8 @@ const MobileRoleplayChat: React.FC = () => {
           user_id: user.id,
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle,
+          // ✅ Multi-reference: user character reference for both_characters scenes
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
           consistency_settings: effectiveConsistencySettings,
           // Scene regeneration/modification fields
           scene_prompt_override: editedPrompt,
@@ -1826,6 +1834,8 @@ const MobileRoleplayChat: React.FC = () => {
           user_id: user.id,
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
+          // ✅ Multi-reference: user character reference for both_characters scenes
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // 🔄 Scene continuity (kickoff retry - use existing previous scene if any)
@@ -1972,6 +1982,8 @@ const MobileRoleplayChat: React.FC = () => {
           user_id: user.id,
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
+          // ✅ Multi-reference: user character reference for both_characters scenes
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // NOTE: Template selection is handled server-side based on model_provider
@@ -2346,7 +2358,7 @@ const MobileRoleplayChat: React.FC = () => {
           imageModels={imageModelOptions}
           chatWorkerHealthy={chatWorkerHealthy}
           sdxlWorkerHealthy={false}
-          hasUserCharacter={!!selectedUserCharacterId}
+          hasUserCharacter={!!selectedUserCharacterId && !!selectedUserCharacter?.reference_image_url}
         />
 
         {/* Bottom Navigation (Mobile) */}

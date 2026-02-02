@@ -258,8 +258,10 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
       }
 
       // Update character with new image path
+      // ✅ Multi-reference: Also set reference_image_url for both_characters scene generation
       await updateUserCharacter(localUserCharacterId, {
-        image_url: result.data.path
+        image_url: result.data.path,
+        reference_image_url: result.data.path  // Sync reference image for scene generation
       });
 
       // Refresh signed URL
@@ -291,8 +293,10 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
 
     setIsUploadingAvatar(true);
     try {
+      // ✅ Multi-reference: Also clear reference_image_url
       await updateUserCharacter(localUserCharacterId, {
-        image_url: null
+        image_url: null,
+        reference_image_url: null  // Clear reference image when avatar is removed
       });
 
       setSignedAvatarUrl(null);
@@ -877,10 +881,10 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
 
                   <button
                     onClick={() => setLocalSceneStyle('both_characters')}
-                    disabled={!localUserCharacterId}
+                    disabled={!localUserCharacterId || !selectedUserCharacter?.reference_image_url}
                     className={cn(
                       "w-full text-left p-3 rounded-lg border transition-colors",
-                      !localUserCharacterId
+                      (!localUserCharacterId || !selectedUserCharacter?.reference_image_url)
                         ? "bg-gray-800/30 border-gray-700 cursor-not-allowed opacity-60"
                         : localSceneStyle === 'both_characters'
                           ? "bg-blue-600/20 border-blue-500"
@@ -892,9 +896,11 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                       <div>
                         <div className="font-medium text-white text-sm">Show Both of Us</div>
                         <div className="text-xs text-gray-400">
-                          {localUserCharacterId
-                            ? "Show both you and the AI character"
-                            : "Select a character above to enable"}
+                          {!localUserCharacterId
+                            ? "Select a character above to enable"
+                            : !selectedUserCharacter?.reference_image_url
+                              ? "Upload an avatar above to enable"
+                              : "Show both you and the AI character"}
                         </div>
                       </div>
                     </div>

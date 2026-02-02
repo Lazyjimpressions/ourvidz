@@ -211,7 +211,7 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
             </div>
             {!hasUserCharacter && (
               <p className="text-xs text-muted-foreground">
-                Select a character in Advanced Settings to enable "Both" mode
+                Select a character with a reference image in Advanced Settings to enable "Both" mode
               </p>
             )}
           </div>

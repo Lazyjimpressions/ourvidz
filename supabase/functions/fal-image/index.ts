@@ -465,7 +465,9 @@ serve(async (req) => {
     const contentMode = body.metadata?.contentType || 'nsfw';
 
     // Detect if this is an i2i/i2v request
-    const hasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url);
+    // ✅ MULTI-REFERENCE: Also check for image_urls array (used by v4.5/edit multi-source composition)
+    const hasImageUrlsArray = Array.isArray(body.input?.image_urls) && body.input.image_urls.length > 0;
+    const hasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url || hasImageUrlsArray);
     const generationMode = hasReferenceImage ? (isVideo ? 'i2v' : 'i2i') : (isVideo ? 'txt2vid' : 'txt2img');
     
     // Check capabilities from database (no hard-coded checks)
@@ -595,92 +597,139 @@ serve(async (req) => {
     // This needs to run even if body.input is empty, as long as hasReferenceImage is true
     // Skip for video I2V - handled separately in video-specific section
     if (hasReferenceImage && !isVideo) {
-        const imageUrl = body.input.image_url || body.input.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url;
-
-        // Validate that image URL exists and is not empty for I2I requests
-        if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.trim() === '')) {
-          console.error('❌ I2I request detected but no valid image URL provided:', {
-            input_image_url: body.input?.image_url,
-            input_image: body.input?.image,
-            metadata_referenceImage: body.metadata?.referenceImage,
-            metadata_reference_image_url: body.metadata?.reference_image_url
-          });
-          return new Response(
-            JSON.stringify({ 
-              error: 'I2I request requires a valid reference image URL',
-              details: 'Please provide image_url in input, or reference_image_url in metadata. The URL cannot be empty.'
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-          );
-        }
-
-        // Sign URL if it's a Supabase storage path
-        let finalImageUrl = imageUrl;
-        if (typeof imageUrl === 'string' && !imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
-          const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
-          const parts = imageUrl.split('/');
-          let bucket = '';
-          let path = '';
-          if (knownBuckets.includes(parts[0])) {
-            bucket = parts[0];
-            path = parts.slice(1).join('/');
-          } else {
-            bucket = 'user-library';
-            path = imageUrl;
+        // ✅ MULTI-REFERENCE: Check for pre-existing image_urls array first (v4.5/edit multi-source composition)
+        if (hasImageUrlsArray && requiresImageUrlsArray) {
+          // Multi-reference mode: Use the array as-is, signing any Supabase paths
+          const signedImageUrls: string[] = [];
+          for (const url of body.input.image_urls) {
+            let signedUrl = url;
+            if (typeof url === 'string' && !url.startsWith('http') && !url.startsWith('data:')) {
+              const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+              const parts = url.split('/');
+              let bucket = '';
+              let path = '';
+              if (knownBuckets.includes(parts[0])) {
+                bucket = parts[0];
+                path = parts.slice(1).join('/');
+              } else {
+                bucket = 'user-library';
+                path = url;
+              }
+              const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+              if (!signError && signed?.signedUrl) {
+                signedUrl = signed.signedUrl;
+                console.log(`🔏 Signed multi-ref image URL for bucket "${bucket}"`);
+              }
+            }
+            if (signedUrl && signedUrl.trim() !== '') {
+              signedImageUrls.push(signedUrl);
+            }
           }
-          const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-          if (!signError && signed?.signedUrl) {
-            finalImageUrl = signed.signedUrl;
-            console.log(`🔏 Signed i2i image URL for bucket "${bucket}"`);
-          } else {
-            console.warn(`⚠️ Failed to sign image URL for bucket "${bucket}":`, signError);
-            // Continue with original URL - might be already signed or external
+
+          if (signedImageUrls.length === 0) {
+            console.error('❌ Multi-reference mode: All image URLs are invalid');
+            return new Response(
+              JSON.stringify({
+                error: 'Multi-reference request requires valid image URLs',
+                details: 'None of the provided image URLs could be resolved'
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
           }
-        }
 
-        // Validate final image URL before setting
-        if (!finalImageUrl || finalImageUrl.trim() === '') {
-          console.error('❌ Final image URL is empty after processing');
-          return new Response(
-            JSON.stringify({ 
-              error: 'Invalid reference image URL',
-              details: 'Image URL could not be resolved or signed'
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-          );
-        }
-
-        // Validate URL format (must be http/https or data URI)
-        if (!finalImageUrl.startsWith('http://') && !finalImageUrl.startsWith('https://') && !finalImageUrl.startsWith('data:')) {
-          console.error('❌ Invalid image URL format:', finalImageUrl.substring(0, 100));
-          return new Response(
-            JSON.stringify({ 
-              error: 'Invalid reference image URL format',
-              details: 'Image URL must be a valid HTTP/HTTPS URL or data URI'
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-          );
-        }
-
-        // Use requiresImageUrlsArray already computed above (no need to recompute)
-
-        console.log('🔍 I2I parameter detection:', {
-          model_key: modelKey,
-          is_overridden: isModelOverridden,
-          requires_image_urls_array: requiresImageUrlsArray,
-          supports_i2i: supportsI2I
-        });
-
-        if (requiresImageUrlsArray) {
-          modelInput.image_urls = [finalImageUrl];
-          // Remove image_url if it was set by input_defaults
+          modelInput.image_urls = signedImageUrls;
           delete modelInput.image_url;
-          console.log(`✅ I2I image_urls (array) set: ${finalImageUrl.substring(0, 60)}...`);
+          console.log(`✅ MULTI-REFERENCE: image_urls array set with ${signedImageUrls.length} images`);
+          console.log('📸 Figure references:', signedImageUrls.map((url, i) => `Figure ${i + 1}: ${url.substring(0, 50)}...`).join(', '));
         } else {
-          modelInput.image_url = finalImageUrl;
-          // Remove image_urls if it was set by input_defaults
-          delete modelInput.image_urls;
-          console.log(`✅ I2I image_url (string) set: ${finalImageUrl.substring(0, 60)}...`);
+          // Single image mode
+          const imageUrl = body.input.image_url || body.input.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url;
+
+          // Validate that image URL exists and is not empty for I2I requests
+          if (!imageUrl || (typeof imageUrl === 'string' && imageUrl.trim() === '')) {
+            console.error('❌ I2I request detected but no valid image URL provided:', {
+              input_image_url: body.input?.image_url,
+              input_image: body.input?.image,
+              metadata_referenceImage: body.metadata?.referenceImage,
+              metadata_reference_image_url: body.metadata?.reference_image_url
+            });
+            return new Response(
+              JSON.stringify({
+                error: 'I2I request requires a valid reference image URL',
+                details: 'Please provide image_url in input, or reference_image_url in metadata. The URL cannot be empty.'
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+
+          // Sign URL if it's a Supabase storage path
+          let finalImageUrl = imageUrl;
+          if (typeof imageUrl === 'string' && !imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
+            const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+            const parts = imageUrl.split('/');
+            let bucket = '';
+            let path = '';
+            if (knownBuckets.includes(parts[0])) {
+              bucket = parts[0];
+              path = parts.slice(1).join('/');
+            } else {
+              bucket = 'user-library';
+              path = imageUrl;
+            }
+            const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+            if (!signError && signed?.signedUrl) {
+              finalImageUrl = signed.signedUrl;
+              console.log(`🔏 Signed i2i image URL for bucket "${bucket}"`);
+            } else {
+              console.warn(`⚠️ Failed to sign image URL for bucket "${bucket}":`, signError);
+              // Continue with original URL - might be already signed or external
+            }
+          }
+
+          // Validate final image URL before setting
+          if (!finalImageUrl || finalImageUrl.trim() === '') {
+            console.error('❌ Final image URL is empty after processing');
+            return new Response(
+              JSON.stringify({
+                error: 'Invalid reference image URL',
+                details: 'Image URL could not be resolved or signed'
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+
+          // Validate URL format (must be http/https or data URI)
+          if (!finalImageUrl.startsWith('http://') && !finalImageUrl.startsWith('https://') && !finalImageUrl.startsWith('data:')) {
+            console.error('❌ Invalid image URL format:', finalImageUrl.substring(0, 100));
+            return new Response(
+              JSON.stringify({
+                error: 'Invalid reference image URL format',
+                details: 'Image URL must be a valid HTTP/HTTPS URL or data URI'
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+
+          // Use requiresImageUrlsArray already computed above (no need to recompute)
+
+          console.log('🔍 I2I parameter detection:', {
+            model_key: modelKey,
+            is_overridden: isModelOverridden,
+            requires_image_urls_array: requiresImageUrlsArray,
+            supports_i2i: supportsI2I
+          });
+
+          if (requiresImageUrlsArray) {
+            modelInput.image_urls = [finalImageUrl];
+            // Remove image_url if it was set by input_defaults
+            delete modelInput.image_url;
+            console.log(`✅ I2I image_urls (array) set: ${finalImageUrl.substring(0, 60)}...`);
+          } else {
+            modelInput.image_url = finalImageUrl;
+            // Remove image_urls if it was set by input_defaults
+            delete modelInput.image_urls;
+            console.log(`✅ I2I image_url (string) set: ${finalImageUrl.substring(0, 60)}...`);
+          }
         }
 
         // Strength for i2i (default to 0.5 if not provided for modify mode)

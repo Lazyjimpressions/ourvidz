@@ -7,13 +7,24 @@ import {
   ResponsiveModalTitle,
 } from '@/components/ui/responsive-modal';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Edit3, Save, X, Plus, Wand2, Upload, Library } from 'lucide-react';
+import { Edit3, Save, X, Plus, Wand2, Upload, Library, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useGeneration } from '@/hooks/useGeneration';
@@ -29,13 +40,19 @@ interface CharacterEditModalProps {
   onClose: () => void;
   character?: any;
   onCharacterUpdated?: (character: any) => void;
+  /** 'create' for new character, 'edit' for existing (default: 'edit') */
+  mode?: 'create' | 'edit';
+  /** Default role when creating: 'user' for persona, 'ai' for companion */
+  defaultRole?: 'user' | 'ai';
 }
 
-export const CharacterEditModal = ({ 
-  isOpen, 
-  onClose, 
-  character, 
-  onCharacterUpdated 
+export const CharacterEditModal = ({
+  isOpen,
+  onClose,
+  character,
+  onCharacterUpdated,
+  mode = 'edit',
+  defaultRole = 'ai'
 }: CharacterEditModalProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -58,7 +75,11 @@ export const CharacterEditModal = ({
 
   // Check if user can edit this character (owner OR admin)
   const isOwner = !!user && !!character?.user_id && character.user_id === user.id;
-  const canEdit = isOwner || !!isAdmin;
+  // In create mode, anyone can "edit" (create new)
+  const canEdit = mode === 'create' || isOwner || !!isAdmin;
+
+  // Determine default content rating based on role
+  const getDefaultContentRating = () => defaultRole === 'user' ? 'sfw' : 'nsfw';
 
   const [formData, setFormData] = useState({
     name: '',
@@ -78,12 +99,14 @@ export const CharacterEditModal = ({
   const [newTag, setNewTag] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
-  const { updateUserCharacter } = useUserCharacters();
+  const { updateUserCharacter, createUserCharacter, deleteUserCharacter } = useUserCharacters();
   const { generateContent, isGenerating } = useGeneration();
   const { createScene } = useCharacterScenes(character?.id);
 
   const handleGeneratePortrait = async () => {
-    if (!character?.id) return;
+    // In create mode, we can still generate but won't save to character_scenes yet
+    const characterId = character?.id;
+
     try {
       const prompt = buildCharacterPortraitPrompt({
         name: formData.name,
@@ -151,25 +174,34 @@ export const CharacterEditModal = ({
           }
         }
 
-        // Save to character scenes
-        const payload: any = {
-          character_id: character.id,
-          image_url: imageUrl,
-          scene_prompt: `${formData.name} portrait`,
-          generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
-        };
-        
-        createScene(payload)
-          .then(() => {
-            toast({ 
-              title: 'Portrait generated', 
-              description: shouldSetAsAvatar ? 'Set as avatar and saved to scenes' : 'Saved to character scenes'
+        // Save to character scenes (only if we have an existing character)
+        if (characterId) {
+          const payload: any = {
+            character_id: characterId,
+            image_url: imageUrl,
+            scene_prompt: `${formData.name} portrait`,
+            generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
+          };
+
+          createScene(payload)
+            .then(() => {
+              toast({
+                title: 'Portrait generated',
+                description: shouldSetAsAvatar ? 'Set as avatar and saved to scenes' : 'Saved to character scenes'
+              });
+            })
+            .catch((err) => console.error('Failed to save portrait scene', err))
+            .finally(() => {
+              window.removeEventListener('generation-completed', onComplete as any);
             });
-          })
-          .catch((err) => console.error('Failed to save portrait scene', err))
-          .finally(() => {
-            window.removeEventListener('generation-completed', onComplete as any);
+        } else {
+          // In create mode, just show success toast
+          toast({
+            title: 'Portrait generated',
+            description: shouldSetAsAvatar ? 'Set as avatar' : 'Portrait ready to use'
           });
+          window.removeEventListener('generation-completed', onComplete as any);
+        }
       };
 
       window.addEventListener('generation-completed', onComplete as any);
@@ -233,26 +265,102 @@ export const CharacterEditModal = ({
   };
 
   useEffect(() => {
-    if (character && isOpen) {
-      setFormData({
-        name: character.name || '',
-        description: character.description || '',
-        persona: character.persona || '',
-        traits: character.traits || '',
-        voice_tone: character.voice_tone || '',
-        mood: character.mood || '',
-        appearance_tags: character.appearance_tags || [],
-        image_url: character.image_url || '',
-        reference_image_url: character.reference_image_url || '',
-        content_rating: character.content_rating || 'nsfw',
-        gender: character.gender || '',
-        role: character.role || '',
-        is_public: character.is_public ?? false
-      });
+    if (isOpen) {
+      if (mode === 'create') {
+        // Initialize with defaults for new character
+        setFormData({
+          name: '',
+          description: '',
+          persona: '',
+          traits: '',
+          voice_tone: '',
+          mood: '',
+          appearance_tags: [],
+          image_url: '',
+          reference_image_url: '',
+          content_rating: getDefaultContentRating(),
+          gender: '',
+          role: defaultRole,
+          is_public: false
+        });
+      } else if (character) {
+        // Load existing character data
+        setFormData({
+          name: character.name || '',
+          description: character.description || '',
+          persona: character.persona || '',
+          traits: character.traits || '',
+          voice_tone: character.voice_tone || '',
+          mood: character.mood || '',
+          appearance_tags: character.appearance_tags || [],
+          image_url: character.image_url || '',
+          reference_image_url: character.reference_image_url || '',
+          content_rating: character.content_rating || 'nsfw',
+          gender: character.gender || '',
+          role: character.role || '',
+          is_public: character.is_public ?? false
+        });
+      }
     }
-  }, [character, isOpen]);
+  }, [character, isOpen, mode, defaultRole]);
 
   const handleSave = async () => {
+    // Validate required fields
+    if (!formData.name.trim()) {
+      toast({
+        title: "Name Required",
+        description: "Please enter a name for your character.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.description.trim()) {
+      toast({
+        title: "Description Required",
+        description: "Please enter a description for your character.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Handle CREATE mode
+    if (mode === 'create') {
+      try {
+        const newCharacter = await createUserCharacter({
+          name: formData.name,
+          description: formData.description,
+          persona: formData.persona || undefined,
+          traits: formData.traits || undefined,
+          voice_tone: formData.voice_tone || undefined,
+          mood: formData.mood || undefined,
+          appearance_tags: formData.appearance_tags.length > 0 ? formData.appearance_tags : undefined,
+          image_url: formData.image_url || undefined,
+          reference_image_url: formData.reference_image_url || undefined,
+          content_rating: formData.content_rating,
+          gender: formData.gender || undefined,
+          role: formData.role || defaultRole,
+        });
+
+        toast({
+          title: defaultRole === 'user' ? "Persona Created" : "Character Created",
+          description: `${formData.name} has been created successfully.`,
+        });
+
+        onCharacterUpdated?.(newCharacter);
+        onClose();
+      } catch (error) {
+        console.error('Failed to create character:', error);
+        toast({
+          title: "Creation Failed",
+          description: "Failed to create character. Please try again.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+
+    // Handle EDIT mode
     if (!character?.id) return;
 
     if (!canEdit) {
@@ -301,7 +409,7 @@ export const CharacterEditModal = ({
       } else {
         // Use hook for owner editing
         await updateUserCharacter(character.id, formData);
-        
+
         toast({
           title: "Character Updated",
           description: `${formData.name} has been successfully updated.`,
@@ -315,6 +423,30 @@ export const CharacterEditModal = ({
       toast({
         title: "Update Failed",
         description: "Failed to update character. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle delete
+  const handleDelete = async () => {
+    if (!character?.id) return;
+
+    try {
+      await deleteUserCharacter(character.id);
+
+      toast({
+        title: "Character Deleted",
+        description: `${character.name} has been permanently deleted.`,
+      });
+
+      onCharacterUpdated?.(null);
+      onClose();
+    } catch (error) {
+      console.error('Failed to delete character:', error);
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete character. Please try again.",
         variant: "destructive",
       });
     }
@@ -337,7 +469,8 @@ export const CharacterEditModal = ({
     }));
   };
 
-  if (!canEdit && character) {
+  // Only show permission denied in edit mode with existing character
+  if (mode === 'edit' && !canEdit && character) {
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="bg-background border-border">
@@ -353,6 +486,13 @@ export const CharacterEditModal = ({
     );
   }
 
+  // Get appropriate labels
+  const isPersona = formData.role === 'user' || defaultRole === 'user';
+  const entityLabel = isPersona ? 'Persona' : 'Character';
+  const titleLabel = mode === 'create'
+    ? `Create ${entityLabel}`
+    : `Edit ${character?.name || entityLabel}`;
+
   return (
     <ResponsiveModal open={isOpen} onOpenChange={onClose}>
       <ResponsiveModalContent className="bg-background border-border max-w-2xl">
@@ -360,8 +500,8 @@ export const CharacterEditModal = ({
         <div className="flex-shrink-0 px-4 pt-4 pb-3 border-b border-border">
           <ResponsiveModalTitle className="flex items-center gap-2">
             <Edit3 className="w-5 h-5" />
-            Edit {character?.name || 'Character'}
-            {isAdmin && !isOwner && (
+            {titleLabel}
+            {mode === 'edit' && isAdmin && !isOwner && (
               <Badge variant="outline" className="ml-2">Admin Edit</Badge>
             )}
           </ResponsiveModalTitle>
@@ -586,14 +726,44 @@ export const CharacterEditModal = ({
         </div>
 
         {/* Fixed Footer */}
-        <div className="flex-shrink-0 px-4 py-4 border-t border-border flex gap-3">
-          <Button variant="outline" onClick={onClose} className="flex-1">
-            Cancel
-          </Button>
-          <Button onClick={handleSave} className="flex-1" disabled={!canEdit}>
-            <Save className="w-4 h-4 mr-2" />
-            Save Changes
-          </Button>
+        <div className="flex-shrink-0 px-4 py-4 border-t border-border">
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={onClose} className="flex-1">
+              Cancel
+            </Button>
+            <Button onClick={handleSave} className="flex-1" disabled={mode === 'edit' && !canEdit}>
+              <Save className="w-4 h-4 mr-2" />
+              {mode === 'create' ? `Create ${entityLabel}` : 'Save Changes'}
+            </Button>
+          </div>
+
+          {/* Delete button - only in edit mode for owned characters */}
+          {mode === 'edit' && character?.id && canEdit && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="w-full">
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete {entityLabel}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {character.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action cannot be undone. This will permanently delete the {entityLabel.toLowerCase()} and all associated data including portraits and conversation history.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          )}
         </div>
       </ResponsiveModalContent>
 

@@ -410,6 +410,87 @@ These were used when `character_scenes` was overloaded for both templates and ar
 
 ---
 
+---
+
+## Multi-Reference Scene Generation
+
+### Overview
+
+For `both_characters` scene style, the system uses **multi-reference composition** with Seedream v4.5/edit to combine:
+- Scene environment (Figure 1)
+- AI character appearance (Figure 2)
+- User character appearance (Figure 3)
+
+### Requirements
+
+| Component | Required | Source |
+|-----------|----------|--------|
+| Scene preview_image_url | **YES** | scenes.preview_image_url |
+| Character reference_image_url | **YES** | characters.reference_image_url |
+| User character reference_image_url | **YES** | characters.reference_image_url |
+
+### Scene Style Options
+
+| Style | References | Description |
+|-------|------------|-------------|
+| character_only | 2 | Scene + AI character |
+| pov | 2 | Scene + AI character (first-person view) |
+| both_characters | 3 | Scene + AI character + User character |
+
+### UI Validation
+
+The `both_characters` option is **disabled** in QuickSettingsDrawer if:
+- User has not set a reference image for their character
+- A toast notification explains the requirement
+
+```typescript
+// QuickSettingsDrawer validation
+const canUseBothCharacters = useMemo(() => {
+  return (
+    character?.reference_image_url &&
+    userCharacter?.reference_image_url
+  );
+}, [character, userCharacter]);
+```
+
+### Prompt Construction (Figure Notation)
+
+```typescript
+prompt: `
+In the setting from Figure 1, show two people together.
+
+SCENE (from Figure 1): ${sceneDescription}
+
+CHARACTER 1 - AI CHARACTER (from Figure 2): ${characterVisual}
+
+CHARACTER 2 - USER (from Figure 3): ${userCharacterVisual}
+
+ACTION: ${action}
+
+RULES:
+- Maintain environment from Figure 1
+- Preserve Character 1's appearance from Figure 2
+- Preserve Character 2's appearance from Figure 3
+`
+```
+
+### API Structure
+
+```typescript
+// v4.5/edit API call
+{
+  prompt: "In the setting from Figure 1...",
+  image_urls: [
+    scene.preview_image_url,           // Figure 1
+    character.reference_image_url,      // Figure 2
+    userCharacter.reference_image_url   // Figure 3
+  ],
+  enable_safety_checker: false
+}
+```
+
+---
+
 ## Related Docs
 
 - [PURPOSE.md](./PURPOSE.md) - Business requirements
@@ -417,3 +498,5 @@ These were used when `character_scenes` was overloaded for both templates and ar
 - [UX_CHARACTER.md](./UX_CHARACTER.md) - Character creation
 - [UX_DASHBOARD.md](./UX_DASHBOARD.md) - Dashboard layout
 - [../../03-SYSTEMS/PROMPTING_SYSTEM.md](../../03-SYSTEMS/PROMPTING_SYSTEM.md) - Prompt templates
+- [../../09-REFERENCE/FAL_AI_SEEDREAM_DEFINITIVE.md](../../09-REFERENCE/FAL_AI_SEEDREAM_DEFINITIVE.md) - Seedream API reference
+- [../../09-REFERENCE/ROLEPLAY_SCENE_GENERATION.md](../../09-REFERENCE/ROLEPLAY_SCENE_GENERATION.md) - Scene generation workflow

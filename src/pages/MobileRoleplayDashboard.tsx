@@ -3,9 +3,10 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X, Pencil, HelpCircle } from 'lucide-react';
+import { Plus, Settings, Sparkles, User, Globe, Shield, RefreshCw, PlayCircle, ImageIcon, Trash2, X, Pencil, HelpCircle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { MobileCharacterCard } from '@/components/roleplay/MobileCharacterCard';
@@ -46,6 +47,10 @@ const MobileRoleplayDashboard = () => {
   const [activeSection, setActiveSection] = useState<'characters' | 'scenes'>('characters');
   // Track scene images that failed to load to prevent infinite re-render loops
   const [erroredSceneImages, setErroredSceneImages] = useState<Set<string>>(new Set());
+  // Persona creation choice modal
+  const [showPersonaCreateChoice, setShowPersonaCreateChoice] = useState(false);
+  // For creating new persona via CharacterEditModal
+  const [creatingPersona, setCreatingPersona] = useState(false);
 
   // Settings state - persisted to localStorage
   const [selectedImageModel, setSelectedImageModel] = useState(() =>
@@ -753,15 +758,23 @@ const MobileRoleplayDashboard = () => {
           />
         </div>
 
-        {/* My Personas Section */}
-        {filteredMyPersonas.length > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <h2 className="text-sm font-medium text-white">My Personas</h2>
-                <span className="text-xs text-muted-foreground/70">({filteredMyPersonas.length})</span>
-              </div>
+        {/* My Personas Section - Always show to allow creation */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm font-medium text-white">My Personas</h2>
+              <span className="text-xs text-muted-foreground/70">({filteredMyPersonas.length})</span>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowPersonaCreateChoice(true)}
+              className="h-6 text-xs"
+            >
+              <Plus className="w-3 h-3 mr-1" /> Create
+            </Button>
+          </div>
+          {filteredMyPersonas.length > 0 ? (
             <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))' }}>
               {filteredMyPersonas.map((character) => (
                 <div key={character.id} className="relative">
@@ -781,8 +794,17 @@ const MobileRoleplayDashboard = () => {
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div
+              className="border border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:bg-muted/20 transition-colors"
+              onClick={() => setShowPersonaCreateChoice(true)}
+            >
+              <Users className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">No personas yet</p>
+              <p className="text-xs text-muted-foreground/70 mt-1">Create a persona to represent yourself in roleplay</p>
+            </div>
+          )}
+        </div>
 
         {/* My Characters Section (AI Companions) */}
         {filteredMyCharacters.length >= 0 && (
@@ -875,6 +897,69 @@ const MobileRoleplayDashboard = () => {
           character={editingCharacter}
           onCharacterUpdated={handleCharacterUpdated}
         />
+
+        {/* Character Edit Modal - Create Persona Mode */}
+        <CharacterEditModal
+          isOpen={creatingPersona}
+          onClose={() => setCreatingPersona(false)}
+          character={null}
+          mode="create"
+          defaultRole="user"
+          onCharacterUpdated={(char) => {
+            loadUserCharacters();
+            setCreatingPersona(false);
+          }}
+        />
+
+        {/* Persona Creation Choice Dialog */}
+        <Dialog open={showPersonaCreateChoice} onOpenChange={setShowPersonaCreateChoice}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create Persona</DialogTitle>
+              <DialogDescription>
+                A persona represents you in roleplay conversations
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 pt-4">
+              <Button
+                variant="outline"
+                className="h-auto py-4 px-4 justify-start"
+                onClick={() => {
+                  setShowPersonaCreateChoice(false);
+                  setCreatingPersona(true);
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <User className="w-5 h-5 mt-0.5 text-muted-foreground" />
+                  <div className="text-left">
+                    <div className="font-medium">Quick Create</div>
+                    <div className="text-xs text-muted-foreground">
+                      Simple form, create a persona in seconds
+                    </div>
+                  </div>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-auto py-4 px-4 justify-start"
+                onClick={() => {
+                  setShowPersonaCreateChoice(false);
+                  navigate('/character-studio?role=user');
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <Sparkles className="w-5 h-5 mt-0.5 text-purple-400" />
+                  <div className="text-left">
+                    <div className="font-medium">Full Editor</div>
+                    <div className="text-xs text-muted-foreground">
+                      Portrait gallery, I2I reference, advanced options
+                    </div>
+                  </div>
+                </div>
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Dashboard Settings Sheet */}
         <DashboardSettings
