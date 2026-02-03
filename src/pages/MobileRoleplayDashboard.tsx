@@ -154,6 +154,7 @@ const MobileRoleplayDashboard = () => {
       state: {
         sceneConfig: config,
         userCharacterId: config.userCharacterId,
+        sceneStyle: sceneStyle,  // Pass sceneStyle to chat page
         secondaryCharacterId: config.secondaryCharacterId,
         userRole: config.userRole,
         forceNewConversation: true,  // Explicit flag for chat component

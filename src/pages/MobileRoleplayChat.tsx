@@ -215,9 +215,11 @@ const MobileRoleplayChat: React.FC = () => {
       // ✅ FIX: Priority order for user character selection: navigationState → localStorage → profileDefault
       const locationState = location.state as {
         userCharacterId?: string | null;
+        sceneStyle?: 'character_only' | 'pov' | 'both_characters';
       } | null;
 
       const userCharacterIdFromNavigation = locationState?.userCharacterId;
+      const sceneStyleFromNavigation = locationState?.sceneStyle;
       let effectiveUserCharacterId: string | null = null;
       let userCharacterSource = '';
 
@@ -240,14 +242,19 @@ const MobileRoleplayChat: React.FC = () => {
       }
 
       setSelectedUserCharacterId(effectiveUserCharacterId);
-      setSceneStyle(settings.sceneStyle);
+      
+      // ✅ FIX: Priority order for sceneStyle: navigationState → localStorage
+      const effectiveSceneStyle = sceneStyleFromNavigation || settings.sceneStyle;
+      setSceneStyle(effectiveSceneStyle);
+      
       hasInitializedModelDefaults.current = true;
       console.log('✅ Initialized model defaults from database:', {
         chatModel: settings.modelProvider,
         imageModel: settings.selectedImageModel,
         userCharacterId: effectiveUserCharacterId,
         userCharacterSource,  // ✅ FIX: Log which source was used
-        sceneStyle: settings.sceneStyle,
+        sceneStyle: effectiveSceneStyle,
+        sceneStyleSource: sceneStyleFromNavigation ? 'navigation state' : 'localStorage',
         chatModelType: roleplayModelOptions.find(m => m.value === settings.modelProvider)?.isLocal ? 'local' : 'api',
         imageModelType: imageModelOptions.find(m => m.value === settings.selectedImageModel)?.type || 'unknown'
       });
