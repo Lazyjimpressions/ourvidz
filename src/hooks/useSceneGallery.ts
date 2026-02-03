@@ -94,6 +94,15 @@ export const useSceneGallery = (
     }
 
     try {
+      // Refresh session to ensure valid JWT token for RLS
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('Session refresh failed:', sessionError);
+        setError('Session expired. Please refresh the page and try again.');
+        return null;
+      }
+
       // Convert SceneTemplate types to database-compatible types
       const dbData = {
         name: sceneData.name,
