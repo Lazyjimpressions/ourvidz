@@ -1,116 +1,112 @@
 
-
-## Fix: Scene Creation Fails Due to RLS Policy Violation
+## Fix: Scene Creation Fails for Private Scenes - JWT Validation Required
 
 ### Problem Analysis
 
-When you try to save a scene from the Create Scene modal, the operation fails with:
-```
-new row violates row-level security policy for table "scenes"
-```
+**Root Cause Identified:**
+The issue is that `supabase.auth.getSession()` **does NOT validate the JWT token** - it merely reads the cached session from localStorage. According to Supabase documentation:
 
-**Why This Happens:**
-The RLS (Row Level Security) policy on the `scenes` table requires `creator_id = auth.uid()`. Even though you're logged in on the frontend, the authentication token sent to Supabase may be expired or stale, causing `auth.uid()` to return `null` on the server side.
+> "Unlike `supabase.auth.getSession()`, which returns the session _without_ validating the JWT, `getUser()` validates the JWT before returning."
 
-This creates a mismatch:
-- Frontend thinks: "User is logged in" (cached user object exists)
-- Server sees: "No valid auth token" (JWT expired or not refreshed)
+When inserting a scene with `.insert(...).select().single()`:
+1. The INSERT uses the (possibly stale) JWT token
+2. The automatic SELECT that follows needs to satisfy RLS: `(is_public = true) OR (creator_id = auth.uid())`
 
----
+For **public scenes**: `is_public = true` satisfies the SELECT policy regardless of JWT validity
+For **private scenes**: The SELECT requires `creator_id = auth.uid()`, but if the JWT is stale/invalid, `auth.uid()` returns null or a mismatched value
 
 ### Solution
 
-Add session refresh before attempting scene creation to ensure a valid JWT token:
+Replace `getSession()` with `getUser()` to validate the JWT before database operations:
 
 **File: `src/hooks/useSceneCreation.ts`**
 
-```text
-CHANGE (around line 380-420):
+```typescript
+// CURRENT (does NOT validate JWT):
+const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+if (sessionError || !session) { ... }
+const sessionUserId = session.user.id;
 
-Before the database insert, add session refresh:
-
-const createScene = useCallback(async (formData: SceneFormData) => {
-  if (!user?.id) {
-    toast({ title: "Not Logged In", ... });
-    return null;
-  }
-
-  setIsCreating(true);
-
-  try {
-    // ADD: Refresh session to ensure valid JWT token
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
-      console.error('Session refresh failed:', sessionError);
-      toast({
-        title: "Session Expired",
-        description: "Please refresh the page and try again.",
-        variant: "destructive",
-      });
-      return null;
-    }
-
-    // Existing insert logic...
+// FIXED (validates JWT with server):
+const { data: { user }, error: userError } = await supabase.auth.getUser();
+if (userError || !user) {
+  console.error('Auth validation failed:', userError);
+  toast({
+    title: "Session Expired", 
+    description: "Please refresh the page and log in again.",
+    variant: "destructive",
+  });
+  return null;
+}
+const validatedUserId = user.id;  // This ID is guaranteed to match auth.uid()
 ```
 
-**Also update `src/hooks/useSceneGallery.ts`** with the same pattern for its `createScene` function.
-
----
-
-### Alternative/Additional Fix
-
-The `SceneCreationModal` should validate auth state before enabling the save button:
-
-**File: `src/components/roleplay/SceneCreationModal.tsx`**
-
-```text
-CHANGE: Add session validation before the create/update operation
-
-In handleCreate function (around line 225):
-
-const handleCreate = useCallback(async () => {
-  // ADD: Verify session is still valid
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    toast({
-      title: "Session Expired",
-      description: "Your session has expired. Please log in again.",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  const formData: SceneFormData = { ... };
-  // rest of existing logic
-```
-
----
-
-### Changes Summary
+### Changes Required
 
 | File | Change |
 |------|--------|
-| `src/hooks/useSceneCreation.ts` | Add `supabase.auth.getSession()` check before insert |
-| `src/hooks/useSceneGallery.ts` | Add `supabase.auth.getSession()` check before insert |
-| `src/components/roleplay/SceneCreationModal.tsx` | Add session validation in `handleCreate` |
+| `src/hooks/useSceneCreation.ts` | Replace `getSession()` with `getUser()` in `createScene` function |
+| `src/hooks/useSceneGallery.ts` | Replace `getSession()` with `getUser()` in `createScene` function |
+| `src/components/roleplay/SceneCreationModal.tsx` | Replace `getSession()` with `getUser()` in `handleCreate` function |
 
----
+### Technical Details
 
-### Why This Fixes It
+**Why this works:**
+- `getUser()` makes a network request to Supabase Auth to validate the JWT
+- If the token is expired, Supabase will automatically refresh it (if possible)
+- The returned `user.id` is guaranteed to match what `auth.uid()` sees on the server
+- This ensures the RLS policy `creator_id = auth.uid()` will pass for private scenes
 
-1. **Fresh Token**: Calling `getSession()` ensures the token is valid and triggers a refresh if needed
-2. **Clear Error Message**: Users see "Session Expired" instead of a cryptic RLS error
-3. **Graceful Handling**: The operation fails cleanly with actionable feedback
+**Why public scenes work with the current code:**
+- The SELECT policy has `(is_public = true) OR (creator_id = auth.uid())`
+- When `is_public = true`, the first condition passes regardless of JWT validity
+- Private scenes fail because they rely solely on `creator_id = auth.uid()` matching
 
----
+### Specific Code Changes
 
-### Technical Note
+**In `src/hooks/useSceneCreation.ts` (around lines 412-427):**
 
-The Supabase client has automatic token refresh, but there can be edge cases where:
-- The refresh fails silently
-- The client thinks it has a valid session but the token expired during a long form-filling session
-- Network issues caused the refresh to fail
+Replace:
+```typescript
+// Refresh session to ensure valid JWT token for RLS
+const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-Explicitly calling `getSession()` before critical operations ensures the token is validated.
+if (sessionError || !session) {
+  console.error('Session refresh failed:', sessionError);
+  toast({
+    title: "Session Expired",
+    description: "Please refresh the page and try again.",
+    variant: "destructive",
+  });
+  return null;
+}
 
+// Use session user ID to ensure it matches auth.uid() for RLS
+const sessionUserId = session.user.id;
+```
+
+With:
+```typescript
+// Validate JWT token with server to ensure auth.uid() matches for RLS
+// NOTE: getSession() does NOT validate JWT - only getUser() does
+const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+if (userError || !user) {
+  console.error('Auth validation failed:', userError);
+  toast({
+    title: "Session Expired",
+    description: "Please refresh the page and log in again.",
+    variant: "destructive",
+  });
+  return null;
+}
+
+// Use validated user ID to ensure it matches auth.uid() for RLS
+const validatedUserId = user.id;
+```
+
+Then update the insert to use `validatedUserId` instead of `sessionUserId`.
+
+**Same pattern applied to:**
+- `src/hooks/useSceneGallery.ts` (lines 97-104)
+- `src/components/roleplay/SceneCreationModal.tsx` (lines 231-238)
