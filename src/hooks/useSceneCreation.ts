@@ -410,6 +410,19 @@ export const useSceneCreation = (): UseSceneCreationResult => {
     setIsCreating(true);
 
     try {
+      // Refresh session to ensure valid JWT token for RLS
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('Session refresh failed:', sessionError);
+        toast({
+          title: "Session Expired",
+          description: "Please refresh the page and try again.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
       console.log('💾 Creating scene:', {
         name: formData.name,
         hasPreview: !!formData.preview_image_url,

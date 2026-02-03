@@ -19,6 +19,8 @@ import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
 import { Sparkles, Undo2, ImageIcon, RefreshCw, Loader2, Plus, X, HelpCircle, MessageSquare } from 'lucide-react';
 import type { ContentRating, SceneTemplate } from '@/types/roleplay';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface SceneCreationModalProps {
   isOpen: boolean;
@@ -221,8 +223,20 @@ export const SceneCreationModal = ({
     setTags(prev => prev.filter(t => t !== tagToRemove));
   }, []);
 
+  const { toast } = useToast();
+
   // Handle create or update scene
   const handleCreate = useCallback(async () => {
+    // Verify session is still valid before attempting database operation
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast({
+        title: "Session Expired",
+        description: "Your session has expired. Please log in again.",
+        variant: "destructive",
+      });
+      return;
+    }
     const formData: SceneFormData = {
       name,
       description,
