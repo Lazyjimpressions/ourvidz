@@ -79,7 +79,7 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
                 <SelectValue placeholder="Select model..." />
               </SelectTrigger>
               <SelectContent>
-                {chatModels.map((model) => (
+                {chatModels.filter(model => model.value).map((model) => (
                   <SelectItem
                     key={model.value}
                     value={model.value}
@@ -128,7 +128,7 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
                 <SelectValue placeholder="Select model..." />
               </SelectTrigger>
               <SelectContent>
-                {imageModels.map((model) => (
+                {imageModels.filter(model => model.value).map((model) => (
                   <SelectItem
                     key={model.value}
                     value={model.value}
