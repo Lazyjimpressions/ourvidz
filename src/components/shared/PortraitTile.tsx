@@ -82,7 +82,8 @@ export function PortraitTile({
           <img
             src={displayUrl}
             alt={alt}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover object-center"
+            style={{ objectFit: 'cover', objectPosition: 'center' }}
             loading="lazy"
             onError={() => setHasError(true)}
           />
