@@ -94,12 +94,13 @@ export const useSceneGallery = (
     }
 
     try {
-      // Refresh session to ensure valid JWT token for RLS
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // Validate JWT token with server to ensure auth.uid() matches for RLS
+      // NOTE: getSession() does NOT validate JWT - only getUser() does
+      const { data: { user: validatedUser }, error: userError } = await supabase.auth.getUser();
       
-      if (sessionError || !session) {
-        console.error('Session refresh failed:', sessionError);
-        setError('Session expired. Please refresh the page and try again.');
+      if (userError || !validatedUser) {
+        console.error('Auth validation failed:', userError);
+        setError('Session expired. Please refresh the page and log in again.');
         return null;
       }
 
