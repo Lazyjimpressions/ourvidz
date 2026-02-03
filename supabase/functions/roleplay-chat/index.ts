@@ -3784,16 +3784,34 @@ COMPOSITION RULES:
             // ✅ First scene in conversation with continuity enabled - use character reference
             i2iReferenceImage = character.reference_image_url || undefined;
             i2iStrength = refStrength ?? 0.7;
-            console.log('📝 Scene continuity enabled but no previous scene - using T2I with character reference:', {
-              has_character_reference: !!i2iReferenceImage,
-              reference_url_preview: i2iReferenceImage?.substring(0, 80),
-              strength: i2iStrength
-            });
+            
+            // FIX: If character has reference image, switch to I2I model (v4.5/edit)
+            // T2I models ignore image_url parameter completely
+            if (i2iReferenceImage) {
+              effectiveI2IModelOverride = await getI2IModelKey();
+              console.log('📝 First scene with character reference - using I2I model:', {
+                model: effectiveI2IModelOverride,
+                has_character_reference: true,
+                reference_url_preview: i2iReferenceImage?.substring(0, 80),
+                strength: i2iStrength
+              });
+            } else {
+              console.log('📝 First scene without character reference - using T2I:', {
+                has_character_reference: false
+              });
+            }
           } else {
-            // T2I mode: Use character reference image if available
+            // T2I fallback mode - only when no reference available
             i2iReferenceImage = character.reference_image_url || undefined;
             i2iStrength = refStrength ?? 0.7;
-            console.log('🎨 T2I Mode: Using character reference for consistency');
+            
+            // FIX: Also switch to I2I if character has reference
+            if (i2iReferenceImage) {
+              effectiveI2IModelOverride = await getI2IModelKey();
+              console.log('🎨 Using I2I model with character reference for consistency');
+            } else {
+              console.log('🎨 T2I Mode: No character reference available');
+            }
           }
 
           // ✅ CONTENT POLICY COMPLIANCE: Sanitize prompt for fal.ai
