@@ -227,9 +227,10 @@ export const SceneCreationModal = ({
 
   // Handle create or update scene
   const handleCreate = useCallback(async () => {
-    // Verify session is still valid before attempting database operation
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    // Validate JWT token with server to ensure auth.uid() matches for RLS
+    // NOTE: getSession() does NOT validate JWT - only getUser() does
+    const { data: { user: validatedUser }, error: userError } = await supabase.auth.getUser();
+    if (userError || !validatedUser) {
       toast({
         title: "Session Expired",
         description: "Your session has expired. Please log in again.",

@@ -410,27 +410,28 @@ export const useSceneCreation = (): UseSceneCreationResult => {
     setIsCreating(true);
 
     try {
-      // Refresh session to ensure valid JWT token for RLS
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // Validate JWT token with server to ensure auth.uid() matches for RLS
+      // NOTE: getSession() does NOT validate JWT - only getUser() does
+      const { data: { user: validatedUser }, error: userError } = await supabase.auth.getUser();
       
-      if (sessionError || !session) {
-        console.error('Session refresh failed:', sessionError);
+      if (userError || !validatedUser) {
+        console.error('Auth validation failed:', userError);
         toast({
           title: "Session Expired",
-          description: "Please refresh the page and try again.",
+          description: "Please refresh the page and log in again.",
           variant: "destructive",
         });
         return null;
       }
 
-      // Use session user ID to ensure it matches auth.uid() for RLS
-      const sessionUserId = session.user.id;
+      // Use validated user ID to ensure it matches auth.uid() for RLS
+      const validatedUserId = validatedUser.id;
 
       console.log('💾 Creating scene:', {
         name: formData.name,
         hasPreview: !!formData.preview_image_url,
         isPublic: formData.is_public,
-        userId: sessionUserId
+        userId: validatedUserId
       });
 
       const { data, error } = await supabase
@@ -438,7 +439,7 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         .insert({
           name: formData.name.trim(),
           description: formData.description.trim(),
-          creator_id: sessionUserId,
+          creator_id: validatedUserId,
           scenario_type: formData.scenario_type,
           content_rating: formData.content_rating,
           tags: formData.tags,
