@@ -423,10 +423,14 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         return null;
       }
 
+      // Use session user ID to ensure it matches auth.uid() for RLS
+      const sessionUserId = session.user.id;
+
       console.log('💾 Creating scene:', {
         name: formData.name,
         hasPreview: !!formData.preview_image_url,
-        isPublic: formData.is_public
+        isPublic: formData.is_public,
+        userId: sessionUserId
       });
 
       const { data, error } = await supabase
@@ -434,7 +438,7 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         .insert({
           name: formData.name.trim(),
           description: formData.description.trim(),
-          creator_id: user.id,
+          creator_id: sessionUserId,
           scenario_type: formData.scenario_type,
           content_rating: formData.content_rating,
           tags: formData.tags,
