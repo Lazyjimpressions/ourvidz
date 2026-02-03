@@ -13,8 +13,8 @@ interface PortraitTileProps {
 }
 
 /**
- * Shared portrait tile component used by both Roleplay and Character Studio.
- * Ensures consistent image rendering across the application.
+ * Shared portrait tile component - matches MobileCharacterCard pattern.
+ * Simple, reliable image rendering without loading states that break on mobile.
  */
 export function PortraitTile({ 
   imageUrl, 
@@ -24,9 +24,7 @@ export function PortraitTile({
   onClick,
   children 
 }: PortraitTileProps) {
-  // Initialize with imageUrl as fallback to prevent flash of empty state
-  const [signedUrl, setSignedUrl] = useState<string>(imageUrl || '');
-  const [isLoading, setIsLoading] = useState(true);
+  const [signedUrl, setSignedUrl] = useState<string>('');
   const [hasError, setHasError] = useState(false);
 
   // Sign image URL if it's a private storage path
@@ -34,48 +32,32 @@ export function PortraitTile({
     const signImageUrl = async () => {
       if (!imageUrl) {
         setSignedUrl('');
-        setIsLoading(false);
         return;
       }
 
       // Skip signing if URL already has a token (already signed)
       if (imageUrl.includes('?token=') || imageUrl.includes('&token=')) {
         setSignedUrl(imageUrl);
-        setIsLoading(false);
         return;
       }
 
-      // Check if URL needs signing (user-library or workspace-temp paths without tokens)
+      // Check if URL needs signing (user-library or workspace-temp paths)
       if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/')) {
         try {
           const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
           const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
           setSignedUrl(signed);
-          setIsLoading(false);
         } catch (error) {
           console.error('Failed to sign image URL:', error);
           setSignedUrl(imageUrl); // Fallback to original
-          setIsLoading(false);
         }
       } else {
         setSignedUrl(imageUrl); // Use as-is for public URLs
-        setIsLoading(false);
       }
     };
 
-    setIsLoading(true);
     setHasError(false);
-
-    // Safety: if iOS/Safari never fires onLoad/onError, don't leave the tile blank forever
-    const timeoutId = window.setTimeout(() => {
-      setIsLoading(false);
-    }, 2500);
-
     signImageUrl();
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
   }, [imageUrl]);
 
   const displayUrl = signedUrl || imageUrl;
@@ -94,23 +76,15 @@ export function PortraitTile({
       )}
       onClick={onClick}
     >
-      {/* Image container - exact same structure as MobileCharacterCard */}
+      {/* Image container - matches MobileCharacterCard exactly */}
       <div className="relative w-full h-full">
-        {/* Loading skeleton */}
-        {isLoading && displayUrl && (
-          <div className="absolute inset-0 bg-muted animate-pulse rounded-lg" />
-        )}
-        
         {displayUrl && !hasError ? (
           <img
             src={displayUrl}
             alt={alt}
-            className={cn("w-full h-full object-contain md:object-cover")}
-            onLoad={() => setIsLoading(false)}
-            onError={() => {
-              setHasError(true);
-              setIsLoading(false);
-            }}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setHasError(true)}
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-muted to-muted/80 flex items-center justify-center">
