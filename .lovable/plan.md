@@ -1,151 +1,116 @@
 
 
-## Fix: First Scene Character Reference Not Being Used (T2I vs I2I Model Selection)
+## Fix: Scene Creation Fails Due to RLS Policy Violation
 
 ### Problem Analysis
 
-**The Issue:**
-When generating the first scene with a character reference image, the system:
-1. Correctly passes the character reference as `image_url`
-2. Correctly passes `strength: 0.35`
-3. **Incorrectly uses T2I model** (`fal-ai/bytedance/seedream/v4/text-to-image`)
-
-T2I (text-to-image) models **completely ignore** the `image_url` parameter - they only generate from text. The character reference is passed but never used.
-
-**Edge Function Logs Confirm:**
+When you try to save a scene from the Create Scene modal, the operation fails with:
 ```
-generation_mode: "t2i"                    // Should be "i2i"
-model_key: "fal-ai/.../v4/text-to-image"  // Should be "v4.5/edit"
-image_url: "present"                      // Being ignored!
+new row violates row-level security policy for table "scenes"
 ```
 
----
+**Why This Happens:**
+The RLS (Row Level Security) policy on the `scenes` table requires `creator_id = auth.uid()`. Even though you're logged in on the frontend, the authentication token sent to Supabase may be expired or stale, causing `auth.uid()` to return `null` on the server side.
 
-### Root Cause
-
-**File: `supabase/functions/roleplay-chat/index.ts` (Lines 3783-3791)**
-
-```typescript
-} else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
-  // First scene with continuity enabled
-  i2iReferenceImage = character.reference_image_url || undefined;
-  i2iStrength = refStrength ?? 0.7;
-  // BUG: effectiveI2IModelOverride is NOT set!
-  // Model stays as T2I (Seedream v4) which ignores image_url
-}
-```
-
-The code sets the reference image but **forgets to switch the model** from T2I to I2I.
-
----
-
-### Documentation Requirement
-
-Per `ROLEPLAY_SCENE_GENERATION.md` Model Selection Matrix:
-
-| Scene Style | First Scene (with ref) | Model |
-|-------------|------------------------|-------|
-| character_only | v4.5/edit | **I2I** |
-| pov | v4.5/edit | **I2I** |
-| both_characters | v4.5/edit | **I2I (multi-ref)** |
-
-First scene with character reference **must use I2I model** (v4.5/edit), not T2I.
+This creates a mismatch:
+- Frontend thinks: "User is logged in" (cached user object exists)
+- Server sees: "No valid auth token" (JWT expired or not refreshed)
 
 ---
 
 ### Solution
 
-**Update the first-scene branch to set the I2I model override:**
+Add session refresh before attempting scene creation to ensure a valid JWT token:
 
-**File: `supabase/functions/roleplay-chat/index.ts`**
+**File: `src/hooks/useSceneCreation.ts`**
 
-**Current Code (Lines 3783-3797):**
-```typescript
-} else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
-  // First scene in conversation with continuity enabled - use character reference
-  i2iReferenceImage = character.reference_image_url || undefined;
-  i2iStrength = refStrength ?? 0.7;
-  console.log('📝 Scene continuity enabled but no previous scene - using T2I with character reference:', {
-    has_character_reference: !!i2iReferenceImage,
-    reference_url_preview: i2iReferenceImage?.substring(0, 80),
-    strength: i2iStrength
-  });
-} else {
-  // T2I mode: Use character reference image if available
-  i2iReferenceImage = character.reference_image_url || undefined;
-  i2iStrength = refStrength ?? 0.7;
-  console.log('🎨 T2I Mode: Using character reference for consistency');
-}
-```
+```text
+CHANGE (around line 380-420):
 
-**Fixed Code:**
-```typescript
-} else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
-  // First scene in conversation with continuity enabled - use character reference
-  i2iReferenceImage = character.reference_image_url || undefined;
-  i2iStrength = refStrength ?? 0.7;
-  
-  // FIX: If character has reference image, switch to I2I model (v4.5/edit)
-  // T2I models ignore image_url parameter completely
-  if (i2iReferenceImage) {
-    effectiveI2IModelOverride = await getI2IModelKey();
-    console.log('📝 First scene with character reference - using I2I model:', {
-      model: effectiveI2IModelOverride,
-      has_character_reference: true,
-      reference_url_preview: i2iReferenceImage?.substring(0, 80),
-      strength: i2iStrength
-    });
-  } else {
-    console.log('📝 First scene without character reference - using T2I:', {
-      has_character_reference: false
-    });
+Before the database insert, add session refresh:
+
+const createScene = useCallback(async (formData: SceneFormData) => {
+  if (!user?.id) {
+    toast({ title: "Not Logged In", ... });
+    return null;
   }
-} else {
-  // T2I fallback mode - only when no reference available
-  i2iReferenceImage = character.reference_image_url || undefined;
-  i2iStrength = refStrength ?? 0.7;
-  
-  // FIX: Also switch to I2I if character has reference
-  if (i2iReferenceImage) {
-    effectiveI2IModelOverride = await getI2IModelKey();
-    console.log('🎨 Using I2I model with character reference for consistency');
-  } else {
-    console.log('🎨 T2I Mode: No character reference available');
+
+  setIsCreating(true);
+
+  try {
+    // ADD: Refresh session to ensure valid JWT token
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      console.error('Session refresh failed:', sessionError);
+      toast({
+        title: "Session Expired",
+        description: "Please refresh the page and try again.",
+        variant: "destructive",
+      });
+      return null;
+    }
+
+    // Existing insert logic...
+```
+
+**Also update `src/hooks/useSceneGallery.ts`** with the same pattern for its `createScene` function.
+
+---
+
+### Alternative/Additional Fix
+
+The `SceneCreationModal` should validate auth state before enabling the save button:
+
+**File: `src/components/roleplay/SceneCreationModal.tsx`**
+
+```text
+CHANGE: Add session validation before the create/update operation
+
+In handleCreate function (around line 225):
+
+const handleCreate = useCallback(async () => {
+  // ADD: Verify session is still valid
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    toast({
+      title: "Session Expired",
+      description: "Your session has expired. Please log in again.",
+      variant: "destructive",
+    });
+    return;
   }
-}
+
+  const formData: SceneFormData = { ... };
+  // rest of existing logic
 ```
 
 ---
 
-### Additional Fix: Scene Style Not Passed to Chat
+### Changes Summary
 
-The original issue about scene style (`both_characters`) not being used is a separate bug. **Both fixes are needed:**
-
-1. **Model Selection Fix** (this plan) - Ensure I2I model is used when character reference exists
-2. **Scene Style Propagation Fix** - Pass `sceneStyle` from dashboard to chat page (from previous plan)
-
----
-
-### Technical Summary
-
-| Change | File | Lines | Description |
-|--------|------|-------|-------------|
-| Add I2I model override for first scene | roleplay-chat/index.ts | 3783-3797 | Call `getI2IModelKey()` when `i2iReferenceImage` exists |
-| Update log messages | roleplay-chat/index.ts | 3787-3796 | Change "T2I with character reference" to "I2I model" |
-| Pass sceneStyle in navigation | MobileRoleplayDashboard.tsx | ~153 | Add `sceneStyle` to navigate state |
-| Read sceneStyle from navigation | MobileRoleplayChat.tsx | ~216-250 | Prioritize navigation state for sceneStyle |
+| File | Change |
+|------|--------|
+| `src/hooks/useSceneCreation.ts` | Add `supabase.auth.getSession()` check before insert |
+| `src/hooks/useSceneGallery.ts` | Add `supabase.auth.getSession()` check before insert |
+| `src/components/roleplay/SceneCreationModal.tsx` | Add session validation in `handleCreate` |
 
 ---
 
-### Expected Result After Fix
+### Why This Fixes It
 
-**Edge Function Logs Should Show:**
-```
-generation_mode: "i2i"                         // Fixed
-model_key: "fal-ai/.../v4.5/edit"              // Fixed - I2I model
-image_url: "present"                           // Now used!
-sceneStyle: "both_characters"                  // Fixed (from navigation)
-```
+1. **Fresh Token**: Calling `getSession()` ensures the token is valid and triggers a refresh if needed
+2. **Clear Error Message**: Users see "Session Expired" instead of a cryptic RLS error
+3. **Graceful Handling**: The operation fails cleanly with actionable feedback
 
-The character reference will now be **actually used** by the I2I model to maintain character consistency in the generated scene.
+---
+
+### Technical Note
+
+The Supabase client has automatic token refresh, but there can be edge cases where:
+- The refresh fails silently
+- The client thinks it has a valid session but the token expired during a long form-filling session
+- Network issues caused the refresh to fail
+
+Explicitly calling `getSession()` before critical operations ensures the token is validated.
 
