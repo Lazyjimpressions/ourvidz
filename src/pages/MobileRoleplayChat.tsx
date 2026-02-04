@@ -31,7 +31,7 @@ import { ScenarioSetupWizard } from '@/components/roleplay/ScenarioSetupWizard';
 import { SceneGenerationModal } from '@/components/roleplay/SceneGenerationModal';
 import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
-import { Character, Message, CharacterScene, SceneStyle, ScenarioSessionPayload } from '@/types/roleplay';
+import { Character, Message, CharacterScene, SceneStyle, ScenarioSessionPayload, ImageGenerationMode } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -70,6 +70,7 @@ const MobileRoleplayChat: React.FC = () => {
   const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [generatingSceneForMessageId, setGeneratingSceneForMessageId] = useState<string | null>(null);
   const [showCharacterInfo, setShowCharacterInfo] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -170,7 +171,8 @@ const MobileRoleplayChat: React.FC = () => {
             modify_strength: 0.5
           },
           userCharacterId: parsed.userCharacterId || null,
-          sceneStyle: parsed.sceneStyle || 'character_only'
+          sceneStyle: parsed.sceneStyle || 'character_only',
+          imageGenerationMode: parsed.imageGenerationMode || 'auto'
         };
       } catch (error) {
         console.warn('Failed to parse saved roleplay settings:', error);
@@ -188,7 +190,8 @@ const MobileRoleplayChat: React.FC = () => {
         modify_strength: 0.5
       },
       userCharacterId: null,
-      sceneStyle: 'character_only' as const
+      sceneStyle: 'character_only' as const,
+      imageGenerationMode: 'auto' as const
     };
   };
   
@@ -202,6 +205,7 @@ const MobileRoleplayChat: React.FC = () => {
     modify_strength: 0.5
   });
   const [sceneStyle, setSceneStyle] = useState<'character_only' | 'pov' | 'both_characters'>('character_only');
+  const [imageGenerationMode, setImageGenerationMode] = useState<ImageGenerationMode>('auto');
   
   // Update defaults when models are loaded (only once)
   const hasInitializedModelDefaults = useRef(false);
@@ -216,10 +220,12 @@ const MobileRoleplayChat: React.FC = () => {
       const locationState = location.state as {
         userCharacterId?: string | null;
         sceneStyle?: 'character_only' | 'pov' | 'both_characters';
+        imageGenerationMode?: ImageGenerationMode;
       } | null;
 
       const userCharacterIdFromNavigation = locationState?.userCharacterId;
       const sceneStyleFromNavigation = locationState?.sceneStyle;
+      const imageGenerationModeFromNavigation = locationState?.imageGenerationMode;
       let effectiveUserCharacterId: string | null = null;
       let userCharacterSource = '';
 
@@ -247,6 +253,10 @@ const MobileRoleplayChat: React.FC = () => {
       const effectiveSceneStyle = sceneStyleFromNavigation || settings.sceneStyle;
       setSceneStyle(effectiveSceneStyle);
       
+      // ✅ Priority order for imageGenerationMode: navigationState → localStorage
+      const effectiveImageGenerationMode = imageGenerationModeFromNavigation || settings.imageGenerationMode;
+      setImageGenerationMode(effectiveImageGenerationMode);
+      
       hasInitializedModelDefaults.current = true;
       console.log('✅ Initialized model defaults from database:', {
         chatModel: settings.modelProvider,
@@ -255,6 +265,7 @@ const MobileRoleplayChat: React.FC = () => {
         userCharacterSource,  // ✅ FIX: Log which source was used
         sceneStyle: effectiveSceneStyle,
         sceneStyleSource: sceneStyleFromNavigation ? 'navigation state' : 'localStorage',
+        imageGenerationMode: effectiveImageGenerationMode,
         chatModelType: roleplayModelOptions.find(m => m.value === settings.modelProvider)?.isLocal ? 'local' : 'api',
         imageModelType: imageModelOptions.find(m => m.value === settings.selectedImageModel)?.type || 'unknown'
       });
@@ -1334,6 +1345,9 @@ const MobileRoleplayChat: React.FC = () => {
       }
 
       // Call the roleplay-chat edge function with prompt template
+      // ✅ Determine if scene should be generated based on mode
+      const shouldGenerateScene = imageGenerationMode === 'auto' && !!validImageModel;
+      
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
           message: content.trim(),
@@ -1342,7 +1356,7 @@ const MobileRoleplayChat: React.FC = () => {
           model_provider: modelProvider,
           memory_tier: memoryTier,
           content_tier: contentTier, // ✅ DYNAMIC CONTENT TIER
-          scene_generation: !!validImageModel, // ✅ Only enable if valid API model available
+          scene_generation: shouldGenerateScene, // ✅ Respects imageGenerationMode
           user_id: user.id,
           // ✅ ADD SCENE CONTEXT:
           scene_context: selectedScene?.scene_prompt || null,
@@ -1642,6 +1656,105 @@ const MobileRoleplayChat: React.FC = () => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Handler to generate scene for a specific message (manual mode)
+  const handleGenerateSceneForMessage = async (messageId: string) => {
+    if (!character || !conversationId || !user) return;
+    
+    // Find the message to get its content for scene generation
+    const targetMessage = messages.find(m => m.id === messageId);
+    if (!targetMessage) return;
+    
+    setGeneratingSceneForMessageId(messageId);
+    
+    try {
+      const contentTier = 'nsfw';
+      const validImageModel = getValidImageModel();
+      
+      if (!validImageModel) {
+        toast({
+          title: 'No image model available',
+          description: 'Please configure an image model in settings.',
+          variant: 'destructive'
+        });
+        setGeneratingSceneForMessageId(null);
+        return;
+      }
+      
+      // Sign previous scene image if needed
+      let signedPreviousSceneImageUrl: string | null = null;
+      if (previousSceneImageUrl) {
+        if (previousSceneImageUrl.startsWith('http://') || previousSceneImageUrl.startsWith('https://')) {
+          signedPreviousSceneImageUrl = previousSceneImageUrl;
+        } else {
+          const bucket = previousSceneImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          signedPreviousSceneImageUrl = await getSignedUrl(previousSceneImageUrl, bucket);
+        }
+      }
+      
+      // Use the message content as context for scene generation
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        body: {
+          message: `Generate a scene image for this moment: ${targetMessage.content.substring(0, 500)}`,
+          conversation_id: conversationId,
+          character_id: character.id,
+          model_provider: modelProvider,
+          memory_tier: memoryTier,
+          content_tier: contentTier,
+          scene_generation: true,
+          scene_only: true, // Flag to indicate we only want scene, no chat response
+          user_id: user.id,
+          scene_context: selectedScene?.scene_prompt || null,
+          selected_image_model: validImageModel,
+          scene_style: sceneStyle,
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+          consistency_settings: consistencySettings,
+          scene_continuity_enabled: sceneContinuityEnabled,
+          previous_scene_id: previousSceneId || null,
+          previous_scene_image_url: signedPreviousSceneImageUrl || null
+        }
+      });
+      
+      if (error) throw error;
+      
+      const newJobId = data?.scene_job_id || data?.job_id;
+      
+      if (newJobId) {
+        // Update the message to indicate scene is being generated
+        setMessages(prev => prev.map(msg => 
+          msg.id === messageId 
+            ? { 
+                ...msg, 
+                metadata: { 
+                  ...msg.metadata, 
+                  scene_generated: true,
+                  job_id: newJobId 
+                } 
+              }
+            : msg
+        ));
+        
+        // Subscribe to job completion
+        subscribeToJobCompletion(newJobId, messageId);
+        
+        toast({
+          title: 'Generating scene...',
+          description: 'Your scene image is being created.'
+        });
+      } else {
+        throw new Error('No job ID returned');
+      }
+    } catch (error) {
+      console.error('Error generating scene for message:', error);
+      toast({
+        title: 'Scene generation failed',
+        description: 'Could not generate scene. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setGeneratingSceneForMessageId(null);
     }
   };
 
@@ -2243,6 +2356,9 @@ const MobileRoleplayChat: React.FC = () => {
                 consistencySettings={consistencySettings}
                 onSceneRegenerate={handleSceneRegenerate}
                 contentMode="nsfw"
+                imageGenerationMode={imageGenerationMode}
+                onGenerateSceneForMessage={handleGenerateSceneForMessage}
+                isGeneratingSceneForMessage={generatingSceneForMessageId === message.id}
               />
           ))}
           
@@ -2322,6 +2438,8 @@ const MobileRoleplayChat: React.FC = () => {
           onUserCharacterChange={setSelectedUserCharacterId}
           sceneStyle={sceneStyle}
           onSceneStyleChange={setSceneStyle}
+          imageGenerationMode={imageGenerationMode}
+          onImageGenerationModeChange={setImageGenerationMode}
           characterId={characterId || undefined}
           character={character ? {
             reference_image_url: character.reference_image_url,

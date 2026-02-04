@@ -126,12 +126,20 @@ export interface Conversation {
  */
 export type SceneStyle = 'character_only' | 'pov' | 'both_characters';
 
+/**
+ * Image generation mode for roleplay scenes
+ * - auto: Images generated automatically with each AI response (current behavior)
+ * - manual: User manually triggers image generation via per-message button (faster chat)
+ */
+export type ImageGenerationMode = 'auto' | 'manual';
+
 export interface RoleplaySettings {
   memoryTier: 'conversation' | 'character' | 'profile';
   modelProvider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
   contentTier: 'sfw' | 'nsfw';
   sceneGeneration: boolean;
   sceneStyle?: SceneStyle;
+  imageGenerationMode?: ImageGenerationMode;
 }
 
 export interface ConsistencySettings {

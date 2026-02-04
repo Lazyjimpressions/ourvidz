@@ -19,7 +19,7 @@ import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
 import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera, Lock, Image as ImageIcon, Sparkles, HelpCircle, Link2, Upload, X, Loader2, Plus, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SceneStyle } from '@/types/roleplay';
+import { SceneStyle, ImageGenerationMode } from '@/types/roleplay';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { uploadFile } from '@/lib/storage';
@@ -45,6 +45,9 @@ interface RoleplaySettingsModalProps {
   onUserCharacterChange?: (characterId: string | null) => void;
   sceneStyle?: SceneStyle;
   onSceneStyleChange?: (style: SceneStyle) => void;
+  // Image generation mode
+  imageGenerationMode?: ImageGenerationMode;
+  onImageGenerationModeChange?: (mode: ImageGenerationMode) => void;
   // Character data for validation
   characterId?: string;
   character?: {
@@ -70,6 +73,8 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   onUserCharacterChange,
   sceneStyle = 'character_only',
   onSceneStyleChange,
+  imageGenerationMode = 'auto',
+  onImageGenerationModeChange,
   characterId,
   character
 }) => {
@@ -90,6 +95,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   const [localConsistencySettings, setLocalConsistencySettings] = useState(consistencySettings);
   const [localUserCharacterId, setLocalUserCharacterId] = useState<string | null>(selectedUserCharacterId || null);
   const [localSceneStyle, setLocalSceneStyle] = useState<SceneStyle>(sceneStyle);
+  const [localImageGenerationMode, setLocalImageGenerationMode] = useState<ImageGenerationMode>(imageGenerationMode);
   const [setAsDefault, setSetAsDefault] = useState(false);
   
   // Avatar editing state
@@ -419,7 +425,8 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
       selectedI2IModel: localSelectedI2IModel,
       consistencySettings: localConsistencySettings,
       userCharacterId: localUserCharacterId,
-      sceneStyle: localSceneStyle
+      sceneStyle: localSceneStyle,
+      imageGenerationMode: localImageGenerationMode
     };
 
     localStorage.setItem('roleplay-settings', JSON.stringify(settings));
@@ -447,6 +454,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
     onConsistencySettingsChange(localConsistencySettings);
     onUserCharacterChange?.(localUserCharacterId);
     onSceneStyleChange?.(localSceneStyle);
+    onImageGenerationModeChange?.(localImageGenerationMode);
 
     toast({
       title: 'Settings saved',
