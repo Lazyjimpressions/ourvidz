@@ -17,7 +17,7 @@ import { useImageModels } from '@/hooks/useImageModels';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
-import { SceneStyle } from '@/types/roleplay';
+import { SceneStyle, ImageGenerationMode } from '@/types/roleplay';
 
 interface DashboardSettingsProps {
   isOpen: boolean;
@@ -32,6 +32,8 @@ interface DashboardSettingsProps {
   onMemoryTierChange: (tier: 'conversation' | 'character' | 'profile') => void;
   sceneStyle: SceneStyle;
   onSceneStyleChange: (style: SceneStyle) => void;
+  imageGenerationMode: ImageGenerationMode;
+  onImageGenerationModeChange: (mode: ImageGenerationMode) => void;
 }
 
 export const DashboardSettings: React.FC<DashboardSettingsProps> = ({
@@ -47,6 +49,8 @@ export const DashboardSettings: React.FC<DashboardSettingsProps> = ({
   onMemoryTierChange,
   sceneStyle,
   onSceneStyleChange,
+  imageGenerationMode,
+  onImageGenerationModeChange,
 }) => {
   const { modelOptions: imageModelOptions, isLoading: imageLoading, defaultModel: defaultImageModel } = useImageModels();
   const { allModelOptions: chatModelOptions, isLoading: chatLoading, defaultModel: defaultChatModel } = useRoleplayModels();
@@ -177,6 +181,30 @@ export const DashboardSettings: React.FC<DashboardSettingsProps> = ({
                 </SelectItem>
                 <SelectItem value="both_characters">
                   <span className="text-xs">Both Characters</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Image Generation Mode */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Image Generation</Label>
+            <Select value={imageGenerationMode} onValueChange={(value: ImageGenerationMode) => onImageGenerationModeChange(value)}>
+              <SelectTrigger className="w-full bg-card h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-w-[280px]">
+                <SelectItem value="auto">
+                  <div className="flex flex-col">
+                    <span className="text-xs">Auto</span>
+                    <span className="text-[10px] text-muted-foreground">Generate images with each response</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="manual">
+                  <div className="flex flex-col">
+                    <span className="text-xs">Manual</span>
+                    <span className="text-[10px] text-muted-foreground">Faster chat, generate on demand</span>
+                  </div>
                 </SelectItem>
               </SelectContent>
             </Select>

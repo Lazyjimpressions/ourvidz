@@ -19,7 +19,7 @@ import { SceneCreationModal } from '@/components/roleplay/SceneCreationModal';
 import { SceneSetupSheet, SceneSetupConfig } from '@/components/roleplay/SceneSetupSheet';
 import { MobileRoleplayBottomBar } from '@/components/roleplay/MobileRoleplayBottomBar';
 import { MobileRoleplayFilterSheet } from '@/components/roleplay/MobileRoleplayFilterSheet';
-import type { ScenarioSessionPayload, SceneStyle, SceneTemplate } from '@/types/roleplay';
+import type { ScenarioSessionPayload, SceneStyle, SceneTemplate, ImageGenerationMode } from '@/types/roleplay';
 import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
 import { useUserConversations } from '@/hooks/useUserConversations';
 import { useSceneGallery } from '@/hooks/useSceneGallery';
@@ -68,6 +68,9 @@ const MobileRoleplayDashboard = () => {
   const [sceneStyle, setSceneStyle] = useState<SceneStyle>(() =>
     (localStorage.getItem('roleplay_scene_style') as SceneStyle) || 'character_only'
   );
+  const [imageGenerationMode, setImageGenerationMode] = useState<ImageGenerationMode>(() =>
+    (localStorage.getItem('roleplay_image_generation_mode') as ImageGenerationMode) || 'auto'
+  );
 
   // Persist settings to localStorage
   useEffect(() => {
@@ -89,6 +92,10 @@ const MobileRoleplayDashboard = () => {
   useEffect(() => {
     localStorage.setItem('roleplay_scene_style', sceneStyle);
   }, [sceneStyle]);
+
+  useEffect(() => {
+    localStorage.setItem('roleplay_image_generation_mode', imageGenerationMode);
+  }, [imageGenerationMode]);
 
   // Clear selected scene after sheet closes (prevents blank screen race condition)
   useEffect(() => {
@@ -976,6 +983,8 @@ const MobileRoleplayDashboard = () => {
           onMemoryTierChange={setMemoryTier}
           sceneStyle={sceneStyle}
           onSceneStyleChange={setSceneStyle}
+          imageGenerationMode={imageGenerationMode}
+          onImageGenerationModeChange={setImageGenerationMode}
         />
 
         {/* Scenario Setup Wizard */}
