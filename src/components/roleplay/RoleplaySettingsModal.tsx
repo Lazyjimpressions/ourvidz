@@ -916,6 +916,58 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 </div>
               </div>
 
+              {/* Image Generation Mode */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4" />
+                  Image Generation
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Control when scene images are generated during chat.
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setLocalImageGenerationMode('auto')}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg border transition-colors",
+                      localImageGenerationMode === 'auto'
+                        ? "bg-blue-600/20 border-blue-500"
+                        : "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Sparkles className="w-5 h-5 text-purple-400" />
+                      <div>
+                        <div className="font-medium text-white text-sm">Auto</div>
+                        <div className="text-xs text-gray-400">
+                          Generate images with each AI response
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setLocalImageGenerationMode('manual')}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg border transition-colors",
+                      localImageGenerationMode === 'manual'
+                        ? "bg-blue-600/20 border-blue-500"
+                        : "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Camera className="w-5 h-5 text-blue-400" />
+                      <div>
+                        <div className="font-medium text-white text-sm">Manual</div>
+                        <div className="text-xs text-gray-400">
+                          Faster chat, tap camera icon to generate
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               {/* Selected Character Preview */}
               {localUserCharacterId && (
                 <Card className="p-4 bg-gray-800/50 border-gray-700">
