@@ -37,6 +37,9 @@ export class CharacterImageService {
       let requestBody: any = {
         prompt: characterPrompt,
         quality: 'high',
+        input: {
+          image_size: { width: 768, height: 1024 } // 3:4 portrait to match UI containers
+        },
         metadata: {
           destination: 'character_portrait',
           character_id: params.characterId,
@@ -106,7 +109,7 @@ export class CharacterImageService {
                 steps: 20,
                 guidance_scale: 7.5,
                 seed: params.seedLocked,
-                width: 1024,
+                width: 768,  // 3:4 portrait to match UI containers
                 height: 1024
               },
               metadata: {
@@ -128,6 +131,7 @@ export class CharacterImageService {
               apiModelId: params.apiModelId,
               quality: 'high',
               input: {
+                image_size: { width: 768, height: 1024 }, // 3:4 portrait to match UI containers
                 image_url: params.referenceImageUrl,
                 seed: params.seedLocked,
                 strength: params.referenceImageUrl ? 0.65 : undefined
