@@ -38,7 +38,7 @@ export class CharacterImageService {
         prompt: characterPrompt,
         quality: 'high',
         input: {
-          image_size: { width: 768, height: 1024 } // 3:4 portrait to match UI containers
+          image_size: 'portrait_4_3' // 4:3 portrait preset to match UI containers
         },
         metadata: {
           destination: 'character_portrait',
@@ -131,7 +131,7 @@ export class CharacterImageService {
               apiModelId: params.apiModelId,
               quality: 'high',
               input: {
-                image_size: { width: 768, height: 1024 }, // 3:4 portrait to match UI containers
+                image_size: 'portrait_4_3', // 4:3 portrait preset to match UI containers
                 image_url: params.referenceImageUrl,
                 seed: params.seedLocked,
                 strength: params.referenceImageUrl ? 0.65 : undefined
