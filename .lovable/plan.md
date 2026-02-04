@@ -1,112 +1,111 @@
 
-## Fix: Scene Creation Fails for Private Scenes - JWT Validation Required
+# Plan: Align Character Studio Image Generation with Roleplay
 
-### Problem Analysis
+## Problem Summary
+Character Studio portraits appear "zoomed in" compared to Roleplay character cards because of an aspect ratio mismatch between generation and display.
 
-**Root Cause Identified:**
-The issue is that `supabase.auth.getSession()` **does NOT validate the JWT token** - it merely reads the cached session from localStorage. According to Supabase documentation:
+**Current State:**
+- Both Roleplay and Character Studio display images in 3:4 portrait containers (`aspect-[3/4]`)
+- Both generate images at 1:1 square (1024x1024)
+- The `object-cover` CSS crops square images to fit portrait containers, cutting off top/bottom
 
-> "Unlike `supabase.auth.getSession()`, which returns the session _without_ validating the JWT, `getUser()` validates the JWT before returning."
+**Why Roleplay "works":**
+Roleplay characters often have pre-made or externally sourced images that may already be portrait-oriented. Character Studio always generates fresh images at 1:1, so the cropping is consistently noticeable.
 
-When inserting a scene with `.insert(...).select().single()`:
-1. The INSERT uses the (possibly stale) JWT token
-2. The automatic SELECT that follows needs to satisfy RLS: `(is_public = true) OR (creator_id = auth.uid())`
+---
 
-For **public scenes**: `is_public = true` satisfies the SELECT policy regardless of JWT validity
-For **private scenes**: The SELECT requires `creator_id = auth.uid()`, but if the JWT is stale/invalid, `auth.uid()` returns null or a mismatched value
+## Solution: Standardize Image Generation Aspect Ratio
 
-### Solution
-
-Replace `getSession()` with `getUser()` to validate the JWT before database operations:
-
-**File: `src/hooks/useSceneCreation.ts`**
-
-```typescript
-// CURRENT (does NOT validate JWT):
-const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-if (sessionError || !session) { ... }
-const sessionUserId = session.user.id;
-
-// FIXED (validates JWT with server):
-const { data: { user }, error: userError } = await supabase.auth.getUser();
-if (userError || !user) {
-  console.error('Auth validation failed:', userError);
-  toast({
-    title: "Session Expired", 
-    description: "Please refresh the page and log in again.",
-    variant: "destructive",
-  });
-  return null;
-}
-const validatedUserId = user.id;  // This ID is guaranteed to match auth.uid()
-```
+Modify both image generation paths to produce 3:4 portrait images (768x1024) that match the display containers exactly.
 
 ### Changes Required
 
+#### 1. Update `CharacterImageService.ts` (Frontend Service)
+Add `image_size` parameter to all generation requests to enforce 3:4 aspect ratio:
+
+**Location:** `src/services/CharacterImageService.ts`
+
+For the fal provider path (lines 124-146), add:
+```typescript
+input: {
+  image_size: { width: 768, height: 1024 }, // 3:4 portrait
+  image_url: params.referenceImageUrl,
+  seed: params.seedLocked,
+  strength: params.referenceImageUrl ? 0.65 : undefined
+}
+```
+
+For the replicate provider path (lines 97-123), change:
+```typescript
+input: {
+  width: 768,  // Changed from 1024
+  height: 1024, // Changed from 1024
+  // ...rest unchanged
+}
+```
+
+For the default fal-image path (lines 37-51), add:
+```typescript
+input: {
+  image_size: { width: 768, height: 1024 } // 3:4 portrait
+},
+metadata: {
+  // ...existing metadata
+}
+```
+
+#### 2. Update `character-portrait` Edge Function
+Add explicit image size override after building modelInput:
+
+**Location:** `supabase/functions/character-portrait/index.ts` (around line 239)
+
+After:
+```typescript
+const modelInput: Record<string, any> = {
+  prompt,
+  ...(apiModel.input_defaults || {})
+};
+```
+
+Add:
+```typescript
+// Force 3:4 portrait aspect ratio to match frontend display containers
+modelInput.image_size = { width: 768, height: 1024 };
+```
+
+#### 3. Update `roleplay-chat` Edge Function (Scene Images)
+Align scene image generation to also use 3:4:
+
+**Location:** `supabase/functions/roleplay-chat/index.ts` (around line 3883)
+
+Change:
+```typescript
+image_size: { width: 1024, height: 1024 },
+```
+
+To:
+```typescript
+image_size: { width: 768, height: 1024 }, // 3:4 portrait
+```
+
+---
+
+## Technical Details
+
+### Why 768x1024?
+- Maintains the 3:4 aspect ratio used by `aspect-[3/4]` CSS
+- Within fal.ai Seedream's supported dimensions
+- Matches the display container exactly, eliminating cropping
+- Total pixels: 786,432 (vs 1,048,576 for 1024x1024) - slightly faster generation
+
+### Files Modified
 | File | Change |
 |------|--------|
-| `src/hooks/useSceneCreation.ts` | Replace `getSession()` with `getUser()` in `createScene` function |
-| `src/hooks/useSceneGallery.ts` | Replace `getSession()` with `getUser()` in `createScene` function |
-| `src/components/roleplay/SceneCreationModal.tsx` | Replace `getSession()` with `getUser()` in `handleCreate` function |
+| `src/services/CharacterImageService.ts` | Add `image_size: { width: 768, height: 1024 }` to all generation paths |
+| `supabase/functions/character-portrait/index.ts` | Override `modelInput.image_size` after applying defaults |
+| `supabase/functions/roleplay-chat/index.ts` | Change scene image size from 1024x1024 to 768x1024 |
 
-### Technical Details
-
-**Why this works:**
-- `getUser()` makes a network request to Supabase Auth to validate the JWT
-- If the token is expired, Supabase will automatically refresh it (if possible)
-- The returned `user.id` is guaranteed to match what `auth.uid()` sees on the server
-- This ensures the RLS policy `creator_id = auth.uid()` will pass for private scenes
-
-**Why public scenes work with the current code:**
-- The SELECT policy has `(is_public = true) OR (creator_id = auth.uid())`
-- When `is_public = true`, the first condition passes regardless of JWT validity
-- Private scenes fail because they rely solely on `creator_id = auth.uid()` matching
-
-### Specific Code Changes
-
-**In `src/hooks/useSceneCreation.ts` (around lines 412-427):**
-
-Replace:
-```typescript
-// Refresh session to ensure valid JWT token for RLS
-const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-if (sessionError || !session) {
-  console.error('Session refresh failed:', sessionError);
-  toast({
-    title: "Session Expired",
-    description: "Please refresh the page and try again.",
-    variant: "destructive",
-  });
-  return null;
-}
-
-// Use session user ID to ensure it matches auth.uid() for RLS
-const sessionUserId = session.user.id;
-```
-
-With:
-```typescript
-// Validate JWT token with server to ensure auth.uid() matches for RLS
-// NOTE: getSession() does NOT validate JWT - only getUser() does
-const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-if (userError || !user) {
-  console.error('Auth validation failed:', userError);
-  toast({
-    title: "Session Expired",
-    description: "Please refresh the page and log in again.",
-    variant: "destructive",
-  });
-  return null;
-}
-
-// Use validated user ID to ensure it matches auth.uid() for RLS
-const validatedUserId = user.id;
-```
-
-Then update the insert to use `validatedUserId` instead of `sessionUserId`.
-
-**Same pattern applied to:**
-- `src/hooks/useSceneGallery.ts` (lines 97-104)
-- `src/components/roleplay/SceneCreationModal.tsx` (lines 231-238)
+### Backward Compatibility
+- Existing 1:1 images will continue to display (with current cropping behavior)
+- Only newly generated images will use the 3:4 aspect ratio
+- No database migrations required
