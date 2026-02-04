@@ -239,7 +239,9 @@ serve(async (req) => {
     };
 
     // Force 3:4 portrait aspect ratio to match frontend display containers
-    modelInput.image_size = { width: 768, height: 1024 };
+    // Seedream v4.5 requires preset strings for sizes under 2560x1440 pixels
+    // "portrait_4_3" generates 4:3 portrait orientation (closest to 3:4 UI tiles)
+    modelInput.image_size = 'portrait_4_3';
 
     // Safety checker based on content
     modelInput.enable_safety_checker = effectiveContentRating !== 'nsfw';
