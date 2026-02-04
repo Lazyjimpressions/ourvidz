@@ -25,7 +25,6 @@ export function PortraitTile({
   children 
 }: PortraitTileProps) {
   const [signedUrl, setSignedUrl] = useState<string>('');
-  const [hasError, setHasError] = useState(false);
 
   // Sign image URL if it's a private storage path
   useEffect(() => {
@@ -56,8 +55,7 @@ export function PortraitTile({
       }
     };
 
-    setHasError(false);
-    signImageUrl();
+      signImageUrl();
   }, [imageUrl]);
 
   const displayUrl = signedUrl || imageUrl;
@@ -78,20 +76,18 @@ export function PortraitTile({
     >
       {/* Image container - matches MobileCharacterCard exactly */}
       <div className="relative w-full h-full">
-        {displayUrl && !hasError ? (
-          <img
-            src={displayUrl}
+        {displayUrl ? (
+          <img 
+            src={displayUrl} 
             alt={alt}
-            className="w-full h-full object-cover object-center"
-            style={{ objectFit: 'cover', objectPosition: 'center' }}
+            className="w-full h-full object-cover"
             loading="lazy"
-            onError={() => setHasError(true)}
           />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-muted to-muted/80 flex items-center justify-center">
             <div className="text-center text-muted-foreground">
               <Sparkles className="w-6 h-6 mx-auto mb-1 opacity-50" />
-              <p className="text-xs">{hasError ? 'Failed to load' : 'No Image'}</p>
+              <p className="text-xs">No Image</p>
             </div>
           </div>
         )}
