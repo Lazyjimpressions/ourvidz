@@ -3880,7 +3880,7 @@ COMPOSITION RULES:
             job_type: 'fal_image',
             quality: 'high',
             input: {
-              image_size: { width: 1024, height: 1024 },
+              image_size: { width: 768, height: 1024 }, // 3:4 portrait to match UI containers
               num_inference_steps: 30,
               guidance_scale: 7.5,
               seed: seedLocked ?? undefined,

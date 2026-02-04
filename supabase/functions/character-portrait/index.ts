@@ -238,6 +238,9 @@ serve(async (req) => {
       ...(apiModel.input_defaults || {})
     };
 
+    // Force 3:4 portrait aspect ratio to match frontend display containers
+    modelInput.image_size = { width: 768, height: 1024 };
+
     // Safety checker based on content
     modelInput.enable_safety_checker = effectiveContentRating !== 'nsfw';
 
