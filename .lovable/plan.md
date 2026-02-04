@@ -1,111 +1,55 @@
 
-# Plan: Align Character Studio Image Generation with Roleplay
+# Plan: Match PortraitTile to MobileCharacterCard
 
-## Problem Summary
-Character Studio portraits appear "zoomed in" compared to Roleplay character cards because of an aspect ratio mismatch between generation and display.
+## Problem
+The same image displays correctly on the Roleplay page (MobileCharacterCard) but appears "zoomed in" on the Character Studio portrait grid (PortraitTile) on mobile.
 
-**Current State:**
-- Both Roleplay and Character Studio display images in 3:4 portrait containers (`aspect-[3/4]`)
-- Both generate images at 1:1 square (1024x1024)
-- The `object-cover` CSS crops square images to fit portrait containers, cutting off top/bottom
+## Root Cause
+PortraitTile has extra CSS that conflicts on mobile:
+- Duplicate inline `style={{ objectFit: 'cover', objectPosition: 'center' }}`
+- Extra `object-center` class
+- `onError` handler that may trigger re-renders
 
-**Why Roleplay "works":**
-Roleplay characters often have pre-made or externally sourced images that may already be portrait-oriented. Character Studio always generates fresh images at 1:1, so the cropping is consistently noticeable.
+MobileCharacterCard uses simple, minimal styling that works.
 
----
+## Solution
+Make PortraitTile's `<img>` element match MobileCharacterCard exactly.
 
-## Solution: Standardize Image Generation Aspect Ratio
+## Changes
 
-Modify both image generation paths to produce 3:4 portrait images (768x1024) that match the display containers exactly.
+### File: `src/components/shared/PortraitTile.tsx`
 
-### Changes Required
-
-#### 1. Update `CharacterImageService.ts` (Frontend Service)
-Add `image_size` parameter to all generation requests to enforce 3:4 aspect ratio:
-
-**Location:** `src/services/CharacterImageService.ts`
-
-For the fal provider path (lines 124-146), add:
-```typescript
-input: {
-  image_size: { width: 768, height: 1024 }, // 3:4 portrait
-  image_url: params.referenceImageUrl,
-  seed: params.seedLocked,
-  strength: params.referenceImageUrl ? 0.65 : undefined
-}
+**Current (lines 82-89):**
+```tsx
+<img
+  src={displayUrl}
+  alt={alt}
+  className="w-full h-full object-cover object-center"
+  style={{ objectFit: 'cover', objectPosition: 'center' }}
+  loading="lazy"
+  onError={() => setHasError(true)}
+/>
 ```
 
-For the replicate provider path (lines 97-123), change:
-```typescript
-input: {
-  width: 768,  // Changed from 1024
-  height: 1024, // Changed from 1024
-  // ...rest unchanged
-}
+**Change to:**
+```tsx
+<img 
+  src={displayUrl} 
+  alt={alt}
+  className="w-full h-full object-cover"
+  loading="lazy"
+/>
 ```
 
-For the default fal-image path (lines 37-51), add:
-```typescript
-input: {
-  image_size: { width: 768, height: 1024 } // 3:4 portrait
-},
-metadata: {
-  // ...existing metadata
-}
-```
+This removes:
+- The `object-center` class
+- The inline `style` override
+- The `onError` handler (keep error state but rely on natural image failure)
 
-#### 2. Update `character-portrait` Edge Function
-Add explicit image size override after building modelInput:
+Also remove the `hasError` state since we're removing the error handler:
+- Remove `const [hasError, setHasError] = useState(false);`
+- Remove `setHasError(false);` in useEffect
+- Simplify conditional from `displayUrl && !hasError` to just `displayUrl`
 
-**Location:** `supabase/functions/character-portrait/index.ts` (around line 239)
-
-After:
-```typescript
-const modelInput: Record<string, any> = {
-  prompt,
-  ...(apiModel.input_defaults || {})
-};
-```
-
-Add:
-```typescript
-// Force 3:4 portrait aspect ratio to match frontend display containers
-modelInput.image_size = { width: 768, height: 1024 };
-```
-
-#### 3. Update `roleplay-chat` Edge Function (Scene Images)
-Align scene image generation to also use 3:4:
-
-**Location:** `supabase/functions/roleplay-chat/index.ts` (around line 3883)
-
-Change:
-```typescript
-image_size: { width: 1024, height: 1024 },
-```
-
-To:
-```typescript
-image_size: { width: 768, height: 1024 }, // 3:4 portrait
-```
-
----
-
-## Technical Details
-
-### Why 768x1024?
-- Maintains the 3:4 aspect ratio used by `aspect-[3/4]` CSS
-- Within fal.ai Seedream's supported dimensions
-- Matches the display container exactly, eliminating cropping
-- Total pixels: 786,432 (vs 1,048,576 for 1024x1024) - slightly faster generation
-
-### Files Modified
-| File | Change |
-|------|--------|
-| `src/services/CharacterImageService.ts` | Add `image_size: { width: 768, height: 1024 }` to all generation paths |
-| `supabase/functions/character-portrait/index.ts` | Override `modelInput.image_size` after applying defaults |
-| `supabase/functions/roleplay-chat/index.ts` | Change scene image size from 1024x1024 to 768x1024 |
-
-### Backward Compatibility
-- Existing 1:1 images will continue to display (with current cropping behavior)
-- Only newly generated images will use the 3:4 aspect ratio
-- No database migrations required
+## Summary
+One file change to make the image rendering identical to what works on Roleplay.
