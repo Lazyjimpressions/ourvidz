@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Download, Share2, RotateCcw, Info, Camera } from 'lucide-react';
+import { Download, Share2, RotateCcw, Info } from 'lucide-react';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
@@ -20,7 +20,7 @@ import { ScenePromptEditModal } from './ScenePromptEditModal';
 import { QuickModificationSheet, ModificationPreset } from './QuickModificationSheet';
 import { SceneDebugPanel } from './SceneDebugPanel';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
-import { Character, Message, UserCharacter, ImageGenerationMode } from '@/types/roleplay';
+import { Character, Message, UserCharacter } from '@/types/roleplay';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { MessageActions } from './MessageActions';
 import { useState, useEffect } from 'react';
@@ -44,10 +44,6 @@ interface ChatMessageProps {
   };
   onSceneRegenerate?: (editedPrompt: string, currentSceneImageUrl?: string, strengthOverride?: number) => void;
   contentMode?: 'sfw' | 'nsfw';
-  // Manual scene generation props
-  imageGenerationMode?: ImageGenerationMode;
-  onGenerateSceneForMessage?: (messageId: string) => void;
-  isGeneratingSceneForMessage?: boolean;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -61,10 +57,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   conversationId,
   consistencySettings,
   onSceneRegenerate,
-  contentMode = 'nsfw',
-  imageGenerationMode = 'auto',
-  onGenerateSceneForMessage,
-  isGeneratingSceneForMessage = false
+  contentMode = 'nsfw'
 }) => {
   const { isMobile } = useMobileDetection();
   const { getSignedUrl } = useSignedImageUrls();
@@ -450,23 +443,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               "flex-shrink-0 pt-1 flex items-center gap-1",
               isUser ? 'order-2' : 'order-1'
             )}>
-              {/* Manual Scene Generation Button - Only for AI messages in manual mode without existing scene */}
-              {!isUser && !hasScene && imageGenerationMode === 'manual' && onGenerateSceneForMessage && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onGenerateSceneForMessage(message.id)}
-                  disabled={isGeneratingSceneForMessage}
-                  className="opacity-60 hover:opacity-100 h-7 px-2"
-                  title="Generate scene image"
-                >
-                  {isGeneratingSceneForMessage ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Camera className="w-3 h-3" />
-                  )}
-                </Button>
-              )}
               <MessageActions
                 message={message}
                 onCopy={() => {

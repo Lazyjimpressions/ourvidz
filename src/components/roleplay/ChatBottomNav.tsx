@@ -1,22 +1,18 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { User, Sparkles, Settings } from 'lucide-react';
+import { User, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ChatBottomNavProps {
   onCharacterInfoClick: () => void;
-  onGenerateSceneClick: () => void;
   onSettingsClick: () => void;
-  isGenerating?: boolean;
   isVisible?: boolean;
   className?: string;
 }
 
 export const ChatBottomNav: React.FC<ChatBottomNavProps> = ({
   onCharacterInfoClick,
-  onGenerateSceneClick,
   onSettingsClick,
-  isGenerating = false,
   isVisible = true,
   className
 }) => {
@@ -32,7 +28,6 @@ export const ChatBottomNav: React.FC<ChatBottomNavProps> = ({
       )}
       style={{
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        // Ensure it's above input area
         boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)'
       }}
     >
@@ -46,24 +41,6 @@ export const ChatBottomNav: React.FC<ChatBottomNavProps> = ({
         >
           <User className="w-5 h-5 text-muted-foreground" />
           <span className="text-[10px] text-muted-foreground font-medium">Character</span>
-        </Button>
-
-        {/* Generate Scene Button - Primary Action */}
-        <Button
-          onClick={onGenerateSceneClick}
-          disabled={isGenerating}
-          className={cn(
-            "flex items-center gap-2 h-11 px-6 rounded-full",
-            "bg-gradient-to-r from-purple-600 to-blue-600",
-            "hover:from-purple-700 hover:to-blue-700",
-            "text-white font-medium shadow-lg",
-            "min-h-[44px] min-w-[140px]",
-            "disabled:opacity-50 disabled:cursor-not-allowed"
-          )}
-          aria-label="Generate scene"
-        >
-          <Sparkles className={cn("w-4 h-4", isGenerating && "animate-pulse")} />
-          <span className="text-sm">{isGenerating ? 'Generating...' : 'Generate Scene'}</span>
         </Button>
 
         {/* Settings Button */}

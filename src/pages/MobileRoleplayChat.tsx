@@ -2356,9 +2356,6 @@ const MobileRoleplayChat: React.FC = () => {
                 consistencySettings={consistencySettings}
                 onSceneRegenerate={handleSceneRegenerate}
                 contentMode="nsfw"
-                imageGenerationMode={imageGenerationMode}
-                onGenerateSceneForMessage={handleGenerateSceneForMessage}
-                isGeneratingSceneForMessage={generatingSceneForMessageId === message.id}
               />
           ))}
           
@@ -2490,9 +2487,7 @@ const MobileRoleplayChat: React.FC = () => {
         {isMobile && (
           <ChatBottomNav
             onCharacterInfoClick={() => setShowCharacterInfo(true)}
-            onGenerateSceneClick={() => setShowSceneGenerationModal(true)}
             onSettingsClick={() => setShowQuickSettings(true)}
-            isGenerating={isLoading}
             isVisible={!isKeyboardVisible}
           />
         )}
