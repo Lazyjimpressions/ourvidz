@@ -1,296 +1,215 @@
 
 
-# Playground Page Model Integration Plan (Updated)
+# Fix Admin Prompt Builder: Proper Edge Function Integration
 
-## Summary
+## Problem Summary
 
-Integrate dynamic third-party API model selection across all Playground tabs (Chat, Roleplay, Creative, Admin) using existing edge functions and database tables. Add a compact global settings panel for model configuration that applies to all tabs.
-
----
-
-## Architecture Overview
-
-```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ Playground Page                                                      │
-├──────────────────────────────────────────────────────────────────────┤
-│ Header: [Title] [SFW] [⚙️ Settings Popover] [History]               │
-│                                                                      │
-│ ┌──────────────────────────────────────────────────────────────────┐│
-│ │ Settings Popover (compact dropdown)                              ││
-│ │ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐     ││
-│ │ │ Chat Model    ▼ │ │ Image Model   ▼ │ │ Video Model   ▼ │     ││
-│ │ │ MythoMax 13B    │ │ Seedream v4     │ │ WAN 2.1 I2V     │     ││
-│ │ └─────────────────┘ └─────────────────┘ └─────────────────┘     ││
-│ │ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐     ││
-│ │ │ I2I Model     ▼ │ │ Prompt Tpl   ▼  │ │ Content      ▼  │     ││
-│ │ │ Seedream v4.5   │ │ Admin Asst.     │ │ NSFW            │     ││
-│ │ └─────────────────┘ └─────────────────┘ └─────────────────┘     ││
-│ └──────────────────────────────────────────────────────────────────┘│
-│                                                                      │
-│ Tabs: [Chat] [Roleplay] [Creative] [Admin]                          │
-│                                                                      │
-│ Chat Area (uses selected models from global settings)               │
-└──────────────────────────────────────────────────────────────────────┘
-```
+The Admin Prompt Builder fails because `PlaygroundContext` calls `roleplay-chat` which **requires** `character_id` as a mandatory field. Admin tools have no character, so the request fails with a 400 error.
 
 ---
 
-## Key Decisions
+## Solution: Route Admin Chat Through `playground-chat`
 
-| Concern | Decision |
-|---------|----------|
-| Edge Function | **Reuse `roleplay-chat`** for all playground chat - it already has OpenRouter integration, model routing, and template handling |
-| Fallback | **No fallback** - Default to third-party APIs (OpenRouter for chat, fal.ai for image/video) |
-| UI Style | **Compact** - Small fonts (text-xs), small buttons (h-7), preserve real estate |
-| Settings Scope | **Global** - One settings panel controls all tabs |
-
----
-
-## Model Defaults
-
-| Model Type | Default Model | Provider |
-|------------|---------------|----------|
-| Chat/Roleplay | MythoMax 13B (`gryphe/mythomax-l2-13b`) | OpenRouter |
-| Image (T2I) | Seedream v4 (`fal-ai/bytedance/seedream/v4/text-to-image`) | fal.ai |
-| Video | WAN 2.1 I2V (`fal-ai/wan-i2v`) | fal.ai |
-| I2I/Edit | Seedream v4.5 Edit (`fal-ai/bytedance/seedream/v4.5/edit`) | fal.ai |
-| Enhancement | MythoMax 13B (via OpenRouter) | OpenRouter |
+The `playground-chat` edge function already handles general conversations without requiring a character. We need to:
+1. Add OpenRouter model routing to `playground-chat` (it currently only supports local Qwen worker)
+2. Update `PlaygroundContext.sendMessage` to route based on context (use `playground-chat` for admin/general, keep `roleplay-chat` for character-based roleplay)
 
 ---
 
 ## Implementation Steps
 
-### Phase 1: Fix Edge Function Build Errors
+### Phase 1: Upgrade `playground-chat` Edge Function
 
 **File**: `supabase/functions/playground-chat/index.ts`
 
-The build errors are caused by missing Database type definitions. Fix by:
-1. Add proper Database interface matching `roleplay-chat` pattern
-2. Add explicit type casts for Supabase query results
-3. Add proper error type guards
+Add OpenRouter API integration:
+1. Accept `model_provider` and `model_variant` parameters
+2. Add OpenRouter API call function (similar to `roleplay-chat`)
+3. Load API model config from `api_models` table
+4. Use `prompt_template_id` for template selection
 
-Similar fixes needed for:
-- `supabase/functions/refresh-prompt-cache/index.ts`
-- `supabase/functions/register-chat-worker/index.ts`
-- `supabase/functions/replicate-image/index.ts`
-- `supabase/functions/replicate-webhook/index.ts`
-- `supabase/functions/roleplay-chat/index.ts`
+Key changes:
+- Add `callOpenRouterWithConfig()` function
+- Add model config lookup from `api_models` table
+- Support `model_provider: 'openrouter'` in request body
+- Return model metadata in response (for admin debugging)
 
-### Phase 2: Create Global Settings Hook
-
-**File**: `src/hooks/usePlaygroundSettings.ts` (new)
-
-```typescript
-interface PlaygroundSettings {
-  chatModel: string;        // OpenRouter model key
-  imageModel: string;       // fal.ai T2I model key
-  videoModel: string;       // fal.ai video model key
-  i2iModel: string;         // fal.ai I2I model key
-  promptTemplateId: string; // Prompt template UUID
-  contentMode: 'sfw' | 'nsfw';
-}
-
-// Hook to manage settings with localStorage persistence
-export const usePlaygroundSettings = () => {
-  // State with defaults
-  // Load from localStorage on mount
-  // Save to localStorage on change
-  // Return settings + setters
-};
-
-// Hook to fetch available models grouped by type
-export const usePlaygroundModels = () => {
-  // Query api_models table
-  // Group by modality: chat, image, video
-  // Filter I2I models (task = 'style_transfer')
-};
-
-// Hook to fetch prompt templates
-export const usePlaygroundTemplates = (useCase?: string) => {
-  // Query prompt_templates table
-  // Filter by use_case if provided
-};
-```
-
-### Phase 3: Create Compact Settings Popover
-
-**File**: `src/components/playground/PlaygroundSettingsPopover.tsx` (new)
-
-Compact settings UI with:
-- Settings icon button (h-7 w-7)
-- Popover with grid layout (3 columns on desktop, 2 on mobile)
-- Small select dropdowns (h-7 text-xs)
-- Grouped by: Chat | Image | Video | I2I | Template | Content
-
-UI Design:
-```text
-┌─────────────────────────────────────────────────┐
-│ ⚙️ Settings                               [X]   │
-├─────────────────────────────────────────────────┤
-│ Chat        [MythoMax 13B         ▼]           │
-│ Image       [Seedream v4          ▼]           │
-│ Video       [WAN 2.1 I2V          ▼]           │
-│ I2I         [Seedream v4.5 Edit   ▼]           │
-│ Template    [Admin Assistant      ▼]           │
-│ Content     [NSFW                 ▼]           │
-└─────────────────────────────────────────────────┘
-```
-
-### Phase 4: Update PlaygroundContext
+### Phase 2: Update PlaygroundContext Routing
 
 **File**: `src/contexts/PlaygroundContext.tsx`
 
-Transform from stub to functional implementation:
+Change `sendMessage` to:
+1. Use `playground-chat` for admin/general/creative conversations
+2. Use `roleplay-chat` only when `selectedCharacter` is set (roleplay mode)
 
-1. Add settings state from `usePlaygroundSettings`
-2. Implement real `sendMessage` that calls `roleplay-chat` edge function
-3. Pass model configuration to edge function:
-   - `model_provider`: 'openrouter'
-   - `model_variant`: selected chat model key
-   - `content_tier`: from settings
-   - `prompt_template_id`: from settings
+```typescript
+const edgeFunction = state.selectedCharacter?.id 
+  ? 'roleplay-chat' 
+  : 'playground-chat';
 
-4. Implement real conversation CRUD operations
-
-### Phase 5: Update AdminTools for Dynamic Models
-
-**File**: `src/components/playground/AdminTools.tsx`
-
-Changes:
-1. Import `usePlaygroundModels` hook
-2. Replace hardcoded SelectItem values with dynamic list
-3. Use compact styling (h-7, text-xs)
-4. Show model provider badge (OpenRouter/fal.ai)
-
-Before:
-```tsx
-<SelectItem value="sdxl">SDXL Image Generation</SelectItem>
-<SelectItem value="wan_video">WAN Video Generation</SelectItem>
+const { data, error } = await supabase.functions.invoke(edgeFunction, {
+  body: {
+    message: messageText,
+    conversation_id: conversationId,
+    // Different params based on function
+    ...(state.selectedCharacter?.id 
+      ? { character_id: state.selectedCharacter.id, model_provider: 'openrouter' }
+      : { model_provider: 'openrouter', model_variant: settings.chatModel }
+    ),
+    content_tier: settings.contentMode,
+    prompt_template_id: settings.promptTemplateId || undefined,
+  },
+});
 ```
 
-After:
-```tsx
-{chatModels.map(m => (
-  <SelectItem key={m.id} value={m.model_key} className="text-xs">
-    {m.display_name}
-  </SelectItem>
-))}
-```
-
-### Phase 6: Update ChatInterface Header
+### Phase 3: Update ChatInterface Admin Handler
 
 **File**: `src/components/playground/ChatInterface.tsx`
 
-Add settings popover to header:
-```tsx
-<div className="flex items-center gap-1">
-  <PlaygroundSettingsPopover />
-  {/* existing SFW toggle, history button */}
-</div>
-```
+Ensure `handleStartAdminTool` properly sets up the conversation context:
+1. Create conversation with type `admin`
+2. Send structured system message
+3. Store tool context for reference
 
 ---
-
-## Files to Create
-
-| File | Purpose |
-|------|---------|
-| `src/hooks/usePlaygroundSettings.ts` | Settings state + localStorage persistence |
-| `src/hooks/usePlaygroundModels.ts` | Fetch models from api_models table |
-| `src/components/playground/PlaygroundSettingsPopover.tsx` | Compact global settings UI |
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/playground-chat/index.ts` | Fix TypeScript errors with Database types |
-| `supabase/functions/refresh-prompt-cache/index.ts` | Fix `error.message` type guard |
-| `supabase/functions/register-chat-worker/index.ts` | Fix `error.message` type guard |
-| `supabase/functions/replicate-image/index.ts` | Fix `error.message` type guard |
-| `supabase/functions/replicate-webhook/index.ts` | Fix null checks and type guards |
-| `supabase/functions/roleplay-chat/index.ts` | Fix null destructuring on requestBody |
-| `src/contexts/PlaygroundContext.tsx` | Real implementation calling roleplay-chat |
-| `src/components/playground/ChatInterface.tsx` | Add settings popover to header |
-| `src/components/playground/AdminTools.tsx` | Dynamic model selection |
-| `src/components/playground/CreativeTools.tsx` | Dynamic model selection |
-| `src/components/playground/RoleplaySetup.tsx` | Use global settings |
+| `supabase/functions/playground-chat/index.ts` | Add OpenRouter integration, model config lookup |
+| `src/contexts/PlaygroundContext.tsx` | Route to correct edge function based on context |
+| `src/components/playground/ChatInterface.tsx` | Minor cleanup of admin tool handler |
 
 ---
 
 ## Technical Details
 
-### Edge Function Integration
+### OpenRouter Integration in playground-chat
 
-The playground will use `roleplay-chat` edge function which already supports:
-- OpenRouter API calls (lines 300-450 of roleplay-chat/index.ts)
-- Model variant selection via `model_variant` parameter
-- Prompt template lookup via `prompt_template_id`
-- Content tier filtering via `content_tier`
+Add function to call OpenRouter:
 
-Request format:
 ```typescript
-await supabase.functions.invoke('roleplay-chat', {
-  body: {
-    message: userMessage,
-    conversation_id: conversationId,
-    character_id: null, // Optional for general chat
-    model_provider: 'openrouter',
-    model_variant: settings.chatModel, // e.g., 'gryphe/mythomax-l2-13b'
-    memory_tier: 'conversation',
-    content_tier: settings.contentMode,
-    prompt_template_id: settings.promptTemplateId
-  }
-});
+async function callOpenRouter(
+  systemPrompt: string,
+  userMessage: string,
+  modelKey: string,
+  contentTier: string,
+  supabase: any,
+  userId?: string
+): Promise<string> {
+  const apiKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
+  if (!apiKey) throw new Error('OpenRouter API key not configured');
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://ourvidz.lovable.app',
+    },
+    body: JSON.stringify({
+      model: modelKey,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: 2048,
+      temperature: 0.7,
+    }),
+  });
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
+}
 ```
 
-### Database Queries
+### Request Body Schema for playground-chat
 
-Models query:
-```sql
-SELECT id, display_name, model_key, modality, task, model_family, is_default,
-       api_providers.name as provider_name
-FROM api_models
-JOIN api_providers ON api_models.provider_id = api_providers.id
-WHERE is_active = true
-ORDER BY modality, priority DESC
-```
-
-Templates query:
-```sql
-SELECT id, template_name, use_case, target_model, content_mode
-FROM prompt_templates
-WHERE is_active = true
-ORDER BY use_case, template_name
+```typescript
+interface PlaygroundChatRequest {
+  conversation_id: string;
+  message: string;
+  model_provider?: 'openrouter' | 'chat_worker';  // Default: 'openrouter'
+  model_variant?: string;                         // e.g., 'gryphe/mythomax-l2-13b'
+  content_tier?: 'sfw' | 'nsfw';                  // Default: 'nsfw'
+  prompt_template_id?: string;                    // Optional template override
+  character_id?: string;                          // Optional, for character context
+  context_type?: string;                          // 'admin' | 'general' | 'creative'
+}
 ```
 
 ---
 
 ## Validation Criteria
 
-After implementation, users should be able to:
+After implementation, the admin should be able to:
 
-1. Open `/playground` page
-2. Click settings icon to open compact popover
-3. See dropdowns populated from api_models table:
-   - Chat: MythoMax 13B, Lumimaid 70B, Celeste 12B, Dolphin variants
-   - Image: Seedream v4, v4.5, SDXL variants
-   - Video: WAN 2.1 I2V
-   - I2I: Seedream v4/v4.5 Edit
-4. See templates from prompt_templates table
-5. Select MythoMax 13B + Admin Assistant template
-6. Send a message in Admin tab
-7. Receive response from OpenRouter API
-8. Settings persist across page refreshes (localStorage)
+1. Go to `/playground` → Admin tab
+2. Click "Admin Tools" → Select "Prompt Builder"
+3. Choose target model (e.g., Seedream v4 from `api_models`)
+4. Choose template (e.g., "Admin Assistant" from `prompt_templates`)
+5. Enter purpose: "Help me create an NSFW scene prompt"
+6. Click "Start Prompt Builder"
+7. **Conversation starts successfully** (no 400 error)
+8. AI responds with prompt-building guidance
+9. Admin can continue chatting to refine prompts
 
 ---
 
-## UI Guidelines
+## Edge Function Flow Diagram
 
-- **Font sizes**: text-xs (0.75rem) for labels, text-sm for values
-- **Button heights**: h-7 (1.75rem) for actions, h-8 max
-- **Spacing**: gap-1 to gap-2, p-2 padding
-- **Selects**: h-7 with text-xs content
-- **Colors**: Use existing theme (muted, border, background)
-- **No large buttons or oversized elements**
+```text
+User clicks "Start Prompt Builder"
+          │
+          ▼
+ChatInterface.handleStartAdminTool()
+          │
+          ├─► createConversation('Admin: Prompt Builder', null, 'admin')
+          │
+          ▼
+sendMessage(systemMessage, { conversationId })
+          │
+          ├─► No character selected
+          │
+          ▼
+PlaygroundContext.sendMessage()
+          │
+          ├─► Detects: no selectedCharacter
+          │
+          ▼
+supabase.functions.invoke('playground-chat', {
+  body: {
+    message: "[System: Prompt Builder Mode]...",
+    conversation_id: "uuid",
+    model_provider: 'openrouter',
+    model_variant: 'gryphe/mythomax-l2-13b',
+    content_tier: 'nsfw',
+    context_type: 'admin'
+  }
+})
+          │
+          ▼
+playground-chat edge function
+          │
+          ├─► Load model config from api_models
+          ├─► Build system prompt for admin context
+          ├─► Call OpenRouter API
+          ├─► Save messages to database
+          │
+          ▼
+Return response to frontend
+          │
+          ▼
+UI displays AI response
+```
+
+---
+
+## Dependencies
+
+- Existing `OpenRouter_Roleplay_API_KEY` secret (already configured)
+- `api_models` table with OpenRouter models
+- `prompt_templates` table with admin templates
+- RLS policies allow authenticated users to read models/templates
 
