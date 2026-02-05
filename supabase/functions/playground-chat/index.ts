@@ -11,6 +11,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// OpenRouter API configuration
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const DEFAULT_OPENROUTER_MODEL = 'gryphe/mythomax-l2-13b';
+
 // In-memory cache for processed character roleplay prompts (per warm instance)
 const roleplayPromptCache = new Map<string, string>();
 
@@ -470,7 +474,11 @@ You say: ...`;
       content_tier,
       roleplay_settings,
       participants,
-      long_response = false
+    long_response = false,
+    model_provider = 'chat_worker',
+    model_variant,
+    context_type: requestedContextType,
+    prompt_template_id
     } = body;
 
     if (!conversation_id || !message) {
@@ -708,11 +716,11 @@ You say: ...`;
     }
 
     // Convert conversation history and current message to messages array format
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
+    const chatMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
     
     // Add system prompt as first message if available
     if (systemPrompt) {
-      messages.push({
+      chatMessages.push({
         role: 'system',
         content: systemPrompt,
       });
@@ -723,7 +731,7 @@ You say: ...`;
       for (const msg of conversationHistory) {
         // Skip the current message if it's already in history (just saved)
         if (msg.content === message && msg.sender === 'user') continue;
-        messages.push({
+        chatMessages.push({
           role: msg.sender === 'user' ? 'user' : 'assistant',
           content: msg.content,
         });
@@ -731,23 +739,101 @@ You say: ...`;
     }
     
     // Add current user message
-    messages.push({ role: 'user', content: message });
+    chatMessages.push({ role: 'user', content: message });
 
     // Derive content tier and NSFW enforcement for worker payload
     const chosenTier: 'sfw' | 'nsfw' = finalTier;
     const nsfwEnforce = chosenTier === 'nsfw'; // Apply to ALL contexts, not just character_roleplay
     
-    console.log(`🚀 Worker payload: tier=${chosenTier}, nsfwEnforce=${nsfwEnforce}, tierReason=${tierReason}`);
+    console.log(`🚀 Worker payload: tier=${chosenTier}, nsfwEnforce=${nsfwEnforce}, tierReason=${tierReason}, provider=${model_provider}`);
 
-    // Call the chat worker with messages array format
-    const basePayload: any = {
-      messages,
+    // Route to appropriate provider based on model_provider parameter
+    let aiResponse: string;
+    const workerStart = Date.now();
+    
+    if (model_provider === 'openrouter') {
+      // Use OpenRouter API for admin/general chats without character requirement
+      const openRouterApiKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
+      if (!openRouterApiKey) {
+        throw new Error('OpenRouter API key not configured');
+      }
+      
+      const modelKey = model_variant || DEFAULT_OPENROUTER_MODEL;
+      console.log(`🌐 Calling OpenRouter with model: ${modelKey}`);
+      
+      const openRouterPayload = {
+        model: modelKey,
+        messages: chatMessages,
+        max_tokens: long_response ? 4096 : 2048,
+        temperature: nsfwEnforce ? 0.95 : 0.8,
+        top_p: 0.95,
+        presence_penalty: 0.6,
+        frequency_penalty: 0.25,
+      };
+      
+      const openRouterResponse = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openRouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://ourvidz.lovable.app',
+          'X-Title': 'OurVidz Playground',
+        },
+        body: JSON.stringify(openRouterPayload),
+        signal: AbortSignal.timeout(long_response ? 90000 : 45000),
+      });
+      
+      if (!openRouterResponse.ok) {
+        const errorText = await openRouterResponse.text();
+        console.error('OpenRouter error:', errorText);
+        throw new Error(`OpenRouter error: ${openRouterResponse.status} - ${errorText}`);
+      }
+      
+      const openRouterData = await openRouterResponse.json();
+      aiResponse = openRouterData.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.';
+      
+      console.log('✅ OpenRouter response received', {
+        model: modelKey,
+        usage: openRouterData.usage,
+        response_length: aiResponse.length,
+      });
+    } else {
+      // Use original chat worker for character roleplay
+      // Resolve chat worker URL with TTL cache to avoid frequent reads
+      let chatWorkerUrl = cachedChatWorkerUrl;
+      if (!chatWorkerUrl || (Date.now() - cachedConfigFetchedAt) > CONFIG_TTL_MS) {
+        const { data: systemConfig, error: configError } = await supabaseClient
+          .from('system_config')
+          .select('config')
+          .single();
+ 
+        const configData = systemConfig?.config as { chatWorkerUrl?: string } | undefined;
+        if (configError || !configData?.chatWorkerUrl) {
+          console.error('Failed to get chat worker URL:', configError);
+          throw new Error('Chat worker not configured');
+        }
+ 
+        chatWorkerUrl = configData.chatWorkerUrl;
+        cachedChatWorkerUrl = chatWorkerUrl;
+        cachedConfigFetchedAt = Date.now();
+      }
+ 
+      console.log('Using chat worker URL:', chatWorkerUrl);
+ 
+      // Get API key for chat worker
+      const apiKey = Deno.env.get('WAN_WORKER_API_KEY');
+      if (!apiKey) {
+        throw new Error('WAN_WORKER_API_KEY not configured');
+      }
+      
+      const basePayload: any = {
+        messages: chatMessages,
       conversation_id,
       project_id,
       context_type: contextType,
       project_context: projectContext,
       content_tier: chosenTier,
-    };
+      };
     // Sampling parameters (worker may ignore unsupported keys)
     const temperature = nsfwEnforce ? 0.95 : 0.8;
     const top_p = 0.95;
@@ -761,7 +847,7 @@ You say: ...`;
     }
 
     console.log('Calling chat worker with payload:', {
-      messages: `${messages.length} messages`,
+        messages: `${chatMessages.length} messages`,
       conversation_id,
       context_type: contextType,
       project_context: projectContext ? 'included' : 'none',
@@ -770,7 +856,6 @@ You say: ...`;
       nsfw_reason: tierReason || 'none'
     });
 
-    const workerStart = Date.now();
     const timeoutMs = long_response ? 90000 : 45000; // 90s for long responses, 45s default
     const chatResponse = await fetch(`${chatWorkerUrl}/chat`, {
       method: 'POST',
@@ -789,13 +874,15 @@ You say: ...`;
     }
 
     const chatData = await chatResponse.json();
-    workerTime = Date.now() - workerStart;
     
     if (!chatData.success) {
       throw new Error(chatData.error || 'Chat worker returned failure');
     }
 
-    const rawResponse = chatData.response || 'Sorry, I could not generate a response.';
+      aiResponse = chatData.response || 'Sorry, I could not generate a response.';
+    }
+    
+    workerTime = Date.now() - workerStart;
 
     // Sanitize persona/meta violations before strict formatting
     function sanitizeRoleplayPersonaViolations(text: string, characterName: string) {
@@ -897,7 +984,6 @@ You say: ...`;
     }
 
     // Post-process for quality in NSFW strict roleplay
-    let aiResponse = rawResponse;
     let enforcementDiagnostics: any = { persona: null, nsfw_qa: null, format: null };
 
     // Persona/meta sanitization before QA and format enforcement
@@ -1023,12 +1109,14 @@ You say: ...`;
         success: true,
         response: aiResponse,
         conversation_id,
-        generation_time: chatData.generation_time || 0,
+        generation_time: workerTime,
         context_type: contextType,
         content_tier: chosenTier,
         nsfw_enforce: nsfwEnforce || false,
         template_meta: lastPromptMeta,
         enforcement_diagnostics: enforcementDiagnostics,
+        model_provider,
+        model_used: model_provider === 'openrouter' ? (model_variant || DEFAULT_OPENROUTER_MODEL) : 'chat_worker',
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

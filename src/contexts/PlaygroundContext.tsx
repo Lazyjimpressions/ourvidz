@@ -58,7 +58,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
      updateSettings({ contentMode: mode ? 'sfw' : 'nsfw' });
   };
 
-   const sendMessage = async (messageText: string, options?: { conversationId?: string }) => {
+   const sendMessage = async (messageText: string, options?: { conversationId?: string; characterId?: string }) => {
      const conversationId = options?.conversationId || state.activeConversationId;
      if (!conversationId) {
        console.error('No active conversation');
@@ -76,13 +76,19 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
      setState(prev => ({ ...prev, isLoadingMessage: true, error: null }));
  
      try {
-       // Call roleplay-chat edge function with settings
-       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+       // Determine which edge function to use based on character selection
+       const hasCharacter = !!(state.selectedCharacter?.id || options?.characterId);
+       const edgeFunction = hasCharacter ? 'roleplay-chat' : 'playground-chat';
+       
+       console.log(`🔀 Routing to ${edgeFunction} (hasCharacter: ${hasCharacter})`);
+       
+       const { data, error } = await supabase.functions.invoke(edgeFunction, {
          body: {
            message: messageText,
            conversation_id: conversationId,
-           character_id: state.selectedCharacter?.id || null,
-           model_provider: 'openrouter',
+           character_id: state.selectedCharacter?.id || options?.characterId || null,
+           // Use OpenRouter for admin/general chats, chat_worker for roleplay
+           model_provider: hasCharacter ? 'chat_worker' : 'openrouter',
            model_variant: settings.chatModel,
            memory_tier: 'conversation',
            content_tier: settings.contentMode,
@@ -106,6 +112,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
              model_used: data.model_used,
              content_tier: settings.contentMode,
              template_meta: { origin: data.prompt_template_name || 'auto' },
+             model_provider: data.model_provider,
            },
          }));
        } else if (data?.error) {
