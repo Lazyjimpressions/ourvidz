@@ -1,8 +1,6 @@
 import React, { createContext, useContext, ReactNode, useState } from 'react';
-
-// Stub context for playground/roleplay functionality
-// This is a minimal implementation to prevent import errors
-// The actual playground logic can be implemented separately if needed
+ import { supabase } from '@/integrations/supabase/client';
+ import { usePlaygroundSettings, PlaygroundSettings } from '@/hooks/usePlaygroundSettings';
 
 interface PlaygroundState {
   activeConversation: any;
@@ -14,11 +12,9 @@ interface PlaygroundState {
 }
 
 interface PlaygroundContextType {
-  // Add minimal interface properties as needed by playground components
   messages: any[];
   sendMessage: (...args: any[]) => Promise<void>;
   isLoading: boolean;
-  // Additional properties expected by components
   state: PlaygroundState;
   isLoadingMessages: boolean;
   createConversation: (...args: any[]) => Promise<string>;
@@ -31,6 +27,9 @@ interface PlaygroundContextType {
   isLoadingConversations: boolean;
   setActiveConversation: (conversation: any) => void;
   regenerateAssistantMessage: (...args: any[]) => Promise<void>;
+   // Settings
+   settings: PlaygroundSettings;
+   updateSettings: (updates: Partial<PlaygroundSettings>) => void;
 }
 
 const PlaygroundContext = createContext<PlaygroundContextType | undefined>(undefined);
@@ -38,49 +37,171 @@ const PlaygroundContext = createContext<PlaygroundContextType | undefined>(undef
 export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [messages, setMessages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [state, setState] = useState<PlaygroundState>({ 
-    activeConversation: null, 
+   const [state, setState] = useState<PlaygroundState>({
+     activeConversation: null,
     activeConversationId: null,
-    selectedCharacter: null, 
+     selectedCharacter: null,
     isLoadingMessage: false,
     lastResponseMeta: null,
-    error: null
+     error: null,
   });
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-  const [sfwMode, setSfwMode] = useState(true);
   const [conversations, setConversations] = useState<any[]>([]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
 
-  const sendMessage = async (...args: any[]) => {
-    console.warn('PlaygroundProvider: This is a stub implementation.', args);
-    setIsLoading(true);
-    // Simulate async operation
-    setTimeout(() => {
-      const message = args[0];
-      setMessages(prev => [...prev, { text: typeof message === 'string' ? message : message?.text || 'message', type: 'user' }]);
-      setIsLoading(false);
-    }, 1000);
+   // Use playground settings hook
+   const { settings, updateSettings } = usePlaygroundSettings();
+ 
+   // Derive SFW mode from settings
+   const sfwMode = settings.contentMode === 'sfw';
+   const setSfwMode = (mode: boolean) => {
+     updateSettings({ contentMode: mode ? 'sfw' : 'nsfw' });
   };
 
-  const createConversation = async (...args: any[]): Promise<string> => {
-    console.warn('createConversation: stub implementation', args);
-    return 'mock-conversation-id';
+   const sendMessage = async (messageText: string, options?: { conversationId?: string }) => {
+     const conversationId = options?.conversationId || state.activeConversationId;
+     if (!conversationId) {
+       console.error('No active conversation');
+       return;
+     }
+ 
+     // Add user message to UI immediately
+     const userMessage = {
+       id: `temp-${Date.now()}`,
+       content: messageText,
+       sender: 'user',
+       created_at: new Date().toISOString(),
+     };
+     setMessages(prev => [...prev, userMessage]);
+     setState(prev => ({ ...prev, isLoadingMessage: true, error: null }));
+ 
+     try {
+       // Call roleplay-chat edge function with settings
+       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+         body: {
+           message: messageText,
+           conversation_id: conversationId,
+           character_id: state.selectedCharacter?.id || null,
+           model_provider: 'openrouter',
+           model_variant: settings.chatModel,
+           memory_tier: 'conversation',
+           content_tier: settings.contentMode,
+           prompt_template_id: settings.promptTemplateId || undefined,
+         },
+       });
+ 
+       if (error) throw error;
+ 
+       if (data?.success && data?.response) {
+         const assistantMessage = {
+           id: data.message_id || `msg-${Date.now()}`,
+           content: data.response,
+           sender: 'assistant',
+           created_at: new Date().toISOString(),
+         };
+         setMessages(prev => [...prev, assistantMessage]);
+         setState(prev => ({
+           ...prev,
+           lastResponseMeta: {
+             model_used: data.model_used,
+             content_tier: settings.contentMode,
+             template_meta: { origin: data.prompt_template_name || 'auto' },
+           },
+         }));
+       } else if (data?.error) {
+         throw new Error(data.error);
+       }
+     } catch (error) {
+       console.error('Failed to send message:', error);
+       setState(prev => ({
+         ...prev,
+         error: error instanceof Error ? error.message : 'Failed to send message',
+       }));
+     } finally {
+       setState(prev => ({ ...prev, isLoadingMessage: false }));
+     }
+   };
+ 
+   const createConversation = async (
+     title?: string,
+     characterId?: string,
+     conversationType?: string
+   ): Promise<string> => {
+     try {
+       const { data: { user } } = await supabase.auth.getUser();
+       if (!user) throw new Error('Not authenticated');
+ 
+       const { data, error } = await supabase
+         .from('conversations')
+         .insert({
+           user_id: user.id,
+           title: title || 'New Playground Chat',
+           conversation_type: conversationType || 'general',
+           character_id: characterId || null,
+         } as any)
+         .select()
+         .single();
+ 
+       if (error) throw error;
+ 
+       setState(prev => ({
+         ...prev,
+         activeConversation: data,
+         activeConversationId: data.id,
+       }));
+       setMessages([]);
+       return data.id;
+     } catch (error) {
+       console.error('Failed to create conversation:', error);
+       throw error;
+     }
   };
 
   const refreshPromptCache = async (...args: any[]) => {
-    console.warn('refreshPromptCache: stub implementation', args);
+     try {
+       await supabase.functions.invoke('refresh-prompt-cache', {});
+       console.log('Prompt cache refreshed');
+     } catch (error) {
+       console.error('Failed to refresh prompt cache:', error);
+     }
   };
 
   const deleteConversation = async (id: string) => {
-    console.warn('deleteConversation: stub implementation');
+     try {
+       const { error } = await supabase
+         .from('conversations')
+         .delete()
+         .eq('id', id);
+       if (error) throw error;
+       setConversations(prev => prev.filter(c => c.id !== id));
+       if (state.activeConversationId === id) {
+         setState(prev => ({ ...prev, activeConversation: null, activeConversationId: null }));
+         setMessages([]);
+       }
+     } catch (error) {
+       console.error('Failed to delete conversation:', error);
+     }
   };
 
   const updateConversationTitle = async (id: string, title: string) => {
-    console.warn('updateConversationTitle: stub implementation');
+     try {
+       const { error } = await supabase
+         .from('conversations')
+         .update({ title })
+         .eq('id', id);
+       if (error) throw error;
+       setConversations(prev => prev.map(c => c.id === id ? { ...c, title } : c));
+     } catch (error) {
+       console.error('Failed to update conversation title:', error);
+     }
   };
 
   const setActiveConversation = (conversation: any) => {
-    setState(prev => ({ ...prev, activeConversation: conversation }));
+     setState(prev => ({
+       ...prev,
+       activeConversation: conversation,
+       activeConversationId: conversation?.id || null,
+     }));
   };
 
   const regenerateAssistantMessage = async (...args: any[]) => {
@@ -102,7 +223,9 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     conversations,
     isLoadingConversations,
     setActiveConversation,
-    regenerateAssistantMessage
+     regenerateAssistantMessage,
+     settings,
+     updateSettings,
   };
 
   return (
