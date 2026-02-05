@@ -130,11 +130,54 @@ Begin the roleplay naturally, embodying the character fully with all their trait
     try {
       const convId = await createConversation(`Admin: ${tool.name}`, undefined, 'admin');
 
-      const userMessage = `I want to use the ${tool.name} tool.
+      let userMessage = '';
+
+      if (tool.id === 'prompt-builder') {
+        userMessage = `[System: Prompt Builder Mode]
+
+I need help creating optimized prompts for the following:
+
+TARGET MODEL: ${context.targetModelName || context.targetModel} (${context.targetModelCategory || 'Unknown category'})
+${context.targetModelFamily ? `MODEL FAMILY: ${context.targetModelFamily}` : ''}
+${context.selectedTemplateName ? `TEMPLATE: ${context.selectedTemplateName}` : ''}
+
+PURPOSE/GOAL:
+${context.purpose || 'General prompt optimization'}
+
+Please help me create effective, optimized prompts for this model. Consider:
+1. The model's specific capabilities and syntax requirements
+2. Best practices for the model type (${context.targetModelCategory})
+3. How to structure prompts for maximum quality output`;
+      } else if (tool.id === 'prompt-tester') {
+        userMessage = `[System: Prompt Tester Mode]
+
+I want to test and analyze prompt effectiveness.
+
+TARGET MODEL: ${context.targetModelName || context.targetModel}
+${context.purpose ? `TESTING GOAL: ${context.purpose}` : ''}
+
+Help me evaluate prompts for this model and suggest improvements.`;
+      } else if (tool.id === 'system-monitor') {
+        userMessage = `[System: System Monitor Mode]
+
+I want to monitor system performance and health.
+${context.purpose ? `FOCUS AREA: ${context.purpose}` : ''}
+
+Please provide system status and performance metrics.`;
+      } else if (tool.id === 'model-config') {
+        userMessage = `[System: Model Config Mode]
+
+I want to configure model parameters for: ${context.targetModelName || context.targetModel}
+${context.purpose ? `GOAL: ${context.purpose}` : ''}
+
+Help me understand and optimize the configuration options for this model.`;
+      } else {
+        userMessage = `I want to use the ${tool.name} tool.
 Target Model: ${context.targetModel || 'Not specified'}
 Purpose: ${context.purpose || 'Not specified'}
 
 Please help me with this admin task.`;
+      }
 
       await sendMessage(userMessage, { conversationId: convId });
     } catch (error) {
