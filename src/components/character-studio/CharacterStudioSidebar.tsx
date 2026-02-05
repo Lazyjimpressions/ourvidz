@@ -315,43 +315,42 @@ export function CharacterStudioSidebar({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4 pb-20">
+      <ScrollArea className="flex-1 overflow-x-hidden">
+        <div className="p-4 space-y-4 pb-6">
           {/* Character Avatar Preview */}
-          <div className="flex flex-col items-center gap-3 pb-4 border-b border-border">
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-muted border-2 border-border relative">
-              {/* Loading spinner overlay during generation */}
+          <div className="flex items-center gap-3 pb-4 border-b border-border">
+            <div className="w-16 h-16 rounded-full overflow-hidden bg-muted border-2 border-border relative flex-shrink-0">
               {isGenerating && (
                 <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  <Loader2 className="w-5 h-5 animate-spin text-primary" />
                 </div>
               )}
               {primaryPortraitUrl || character.image_url ? (
-                <img 
-                  src={primaryPortraitUrl || character.image_url || ''} 
-                  alt={character.name || 'Character'} 
+                <img
+                  src={primaryPortraitUrl || character.image_url || ''}
+                  alt={character.name || 'Character'}
                   className="w-full h-full object-cover"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <User className="w-10 h-10 text-muted-foreground" />
+                  <User className="w-7 h-7 text-muted-foreground" />
                 </div>
               )}
             </div>
-            <span className="text-sm font-medium text-foreground">
-              {character.name || 'New Character'}
-            </span>
-            
-            {/* Enhance All Button */}
-            <SuggestButton
-              type="all"
-              onClick={() => fetchSuggestions('all')}
-              isLoading={isLoadingSuggestion !== null}
-              loadingType={isLoadingSuggestion}
-              disabled={!character.name}
-              variant="full"
-              className="w-full"
-            />
+            <div className="flex-1 min-w-0 overflow-hidden">
+              <span className="text-sm font-medium text-foreground block truncate">
+                {character.name || 'New Character'}
+              </span>
+              <SuggestButton
+                type="all"
+                onClick={() => fetchSuggestions('all')}
+                isLoading={isLoadingSuggestion !== null}
+                loadingType={isLoadingSuggestion}
+                disabled={!character.name}
+                variant="text"
+                className="mt-1"
+              />
+            </div>
           </div>
 
           {/* Basic Info Section */}

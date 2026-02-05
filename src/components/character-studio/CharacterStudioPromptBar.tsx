@@ -44,6 +44,10 @@ interface CharacterStudioPromptBarProps {
     estimatedTimeRemaining: number;
     stage: 'queued' | 'processing' | 'finalizing';
   } | null;
+
+  /** Controlled prompt text (optional - for pose presets integration) */
+  value?: string;
+  onValueChange?: (value: string) => void;
 }
 
 export function CharacterStudioPromptBar({
@@ -58,11 +62,17 @@ export function CharacterStudioPromptBar({
   referenceImageUrl,
   onReferenceImageChange,
   generationProgress,
+  value,
+  onValueChange,
 }: CharacterStudioPromptBarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [prompt, setPrompt] = React.useState('');
+  const [internalPrompt, setInternalPrompt] = React.useState('');
   const [isUploading, setIsUploading] = React.useState(false);
+
+  // Use controlled value if provided, otherwise use internal state
+  const prompt = value !== undefined ? value : internalPrompt;
+  const setPrompt = onValueChange || setInternalPrompt;
 
   const selectedModelData = imageModelOptions.find((m) => m.value === selectedImageModel);
 

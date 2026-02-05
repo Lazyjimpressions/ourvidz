@@ -5,9 +5,11 @@
 **Priority:** High
 
 ## **🎯 Purpose Statement**
+
 Character Studio is the main iterative workspace for developing AI roleplay characters through portrait generation, scene creation, and AI-powered enhancements.
 
 ## **👤 User Intent**
+
 - **Primary**: Create and refine high-quality AI characters with multiple portrait versions and customized roleplay scenarios
 - **Secondary**:
   - Iterate on character appearance through portrait versioning
@@ -17,6 +19,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - **Context**: Users access this page after initial character creation to refine portraits, develop personality, and prepare characters for roleplay conversations
 
 ## **💼 Business Value**
+
 - **Revenue Driver**: Generates portrait generation API calls (fal.ai, Replicate), creating direct revenue from character refinement
 - **User Engagement**: Portrait versioning encourages iterative improvement, increasing time-on-platform and generation volume
 - **Quality Differentiation**: Advanced character development tools create competitive advantage over simpler character creators
@@ -30,6 +33,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **🏗️ Core Functionality**
 
 ### **Primary Features**
+
 1. **Portrait Generation & Versioning** - Status: Complete
    - Multi-model support (fal.ai, Replicate, local RunPod)
    - Image-to-image (I2I) workflow with reference images
@@ -52,6 +56,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
    - Launch chat directly from scene
 
 ### **Secondary Features**
+
 1. **AI-Powered Suggestions** - Status: Complete
    - Description enhancement
    - Appearance tag generation
@@ -74,7 +79,9 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **🎨 UX/UI Design**
 
 ### **Layout Structure**
+
 **Desktop (Grid Layout)**:
+
 - **Left Sidebar** (360px): CharacterStudioSidebar
   - Avatar preview (96x96px) with loading spinner
   - Collapsible sections:
@@ -98,6 +105,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
   - Generate button
 
 **Mobile (Tabs)**:
+
 - Top: Character selector + action buttons
 - Tab navigation: Details / Portraits / Scenes
 - Details tab: Collapsible sections from sidebar
@@ -105,6 +113,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - Bottom prompt bar: Compact layout
 
 ### **User Flow**
+
 1. **Entry**: Navigate from CreateCharacter page or select existing character
 2. **Overview**: View character avatar, name, current portraits/scenes count
 3. **Editing**: Expand sidebar sections, modify fields (marks dirty state)
@@ -117,6 +126,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 8. **Save & Launch**: Unsaved indicator prompts save → "Start Chat" launches roleplay
 
 ### **Key Interactions**
+
 - **Dirty State Indicator**: Orange dot on header shows unsaved changes
 - **Auto-Save on Generate**: Portrait generation auto-saves character if not yet saved (silent mode, no toast spam)
 - **Primary Portrait Badge**: Gold star on primary portrait in gallery
@@ -133,13 +143,16 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **🔧 Technical Architecture**
 
 ### **Core Components**
+
 **Page Component**: [CharacterStudio.tsx](src/pages/CharacterStudio.tsx:1) (560 lines)
+
 - Route: `/character-studio/:id` or `/character-studio` (new)
 - Main orchestrator for all sub-components
 - Handles routing params (characterId)
 - Manages unsaved changes dialog
 
 **Sub-Components**:
+
 - [CharacterStudioSidebar.tsx](src/components/character-studio/CharacterStudioSidebar.tsx:1) (751 lines)
   - Character form fields
   - AI suggestion integration
@@ -169,6 +182,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
   - Download/delete/set primary actions
 
 **State Management**:
+
 - Primary Hook: [useCharacterStudio.ts](src/hooks/useCharacterStudio.ts:1) (464 lines)
   - Character CRUD operations
   - Scene management
@@ -183,6 +197,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
   - Reordering (not yet exposed in UI)
 
 **Data Flow**:
+
 1. Load character data on mount (if characterId provided)
 2. Load scenes when characterId available
 3. Portrait versions loaded via realtime subscription
@@ -193,6 +208,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ### **Integration Points**
 
 **Database Tables**:
+
 - `characters` - Main character profile
   - Fields: name, description, gender, content_rating, is_public, traits, persona, image_url, reference_image_url, appearance_tags[], voice_tone, mood, first_message, system_prompt, alternate_greetings[], default_presets
   - Relations: belongs_to users, has_many character_portraits, has_many character_scenes
@@ -209,6 +225,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
   - Fields: display_name, model_key, modality, capabilities, is_active, priority
 
 **Edge Functions**:
+
 - [character-portrait](supabase/functions/character-portrait/index.ts:1) (539 lines)
   - Portrait generation pipeline
   - Model resolution (I2I capability matching)
@@ -223,15 +240,18 @@ Character Studio is the main iterative workspace for developing AI roleplay char
   - Returns suggestions for description, appearance, traits, persona
 
 **Storage Buckets**:
+
 - `reference_images` - User-uploaded reference images for I2I
 - `user-library` - Permanent portrait storage
 
 **External APIs**:
+
 - fal.ai - Primary image generation provider
 - Replicate - Alternative image provider
 - OpenRouter - AI suggestion models
 
 ### **Performance Requirements**
+
 - **Page Load**: < 1s for character data fetch
 - **Portrait Generation**: 5-15s depending on model (shown in toast)
 - **Realtime Latency**: < 500ms for portrait updates
@@ -240,6 +260,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **📊 Success Criteria**
 
 ### **User Experience Metrics**
+
 - **Portrait Generation Rate**: 70%+ of characters have 2+ portraits
 - **Scene Creation Rate**: 40%+ of characters have 1+ custom scenes
 - **AI Suggestion Usage**: 50%+ of characters use AI suggestions
@@ -247,6 +268,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - **Chat Conversion**: 60%+ of characters launched to chat within 24 hours of studio work
 
 ### **Technical Performance**
+
 - **Character Load Time**: < 1s (p95)
 - **Portrait Generation**: < 20s (p95)
 - **Realtime Update Latency**: < 500ms (p95)
@@ -254,6 +276,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - **Storage Upload Success**: > 98%
 
 ### **Business Metrics**
+
 - **Revenue per Character**: Track API costs vs. subscription value
 - **Character Completion**: Characters with portraits + scenes vs. empty profiles
 - **Retention**: Users who access studio 3+ times have 2x retention
@@ -261,6 +284,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **🚨 Error Scenarios & Handling**
 
 ### **Common Failure Modes**
+
 - **Portrait Generation Failures**:
   - Model unavailable: Show error toast, suggest alternative models
   - API timeout: Retry with exponential backoff, fallback to different provider
@@ -277,6 +301,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
   - Channel timeout: Manual refresh button in gallery
 
 ### **Error Handling Strategy**
+
 - **User Feedback**: Toast notifications for all async operations
 - **Graceful Degradation**:
   - Storage fails → Use fal.ai URL
@@ -288,6 +313,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **📋 Implementation Progress**
 
 ### **✅ Completed Features**
+
 - [x] CharacterStudio page layout (desktop + mobile) - Jan 13, 2026
 - [x] CharacterStudioSidebar with collapsible sections - Jan 13, 2026
 - [x] PortraitGallery with realtime updates - Jan 13, 2026
@@ -307,6 +333,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - [x] Portrait URL signing and caching - Jan 16, 2026
 
 ### **🚧 Planned**
+
 - [ ] Portrait reordering UI - Medium - Not yet exposed (hook function exists)
 - [ ] Scene deletion confirmation - Low - Currently logs only
 - [ ] Portrait batch operations (delete multiple) - Medium - UX improvement
@@ -314,6 +341,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - [ ] Character templates/cloning - Medium - User request
 
 ### **🐛 Known Issues**
+
 - [ ] Scene deletion not fully implemented - Low impact - Edit works, delete logs only
 - [ ] Portrait regeneration creates new instead of versioning - Medium impact - Intentional design, but could improve
 - [ ] No prompt preview before generation - Low impact - Users want control, not preview friction
@@ -321,6 +349,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **🔗 Dependencies**
 
 ### **Technical Dependencies**
+
 - **Required Hooks**:
   - useCharacterStudio (primary state)
   - usePortraitVersions (portrait management)
@@ -343,6 +372,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
   - user-library bucket (portrait storage)
 
 ### **Business Dependencies**
+
 - **API Credits**: Requires active fal.ai or Replicate API keys
 - **Model Availability**: At least one active image model in api_models table
 - **User Permissions**: Authenticated users only, ownership enforced
@@ -351,6 +381,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **📈 Future Enhancements**
 
 ### **Phase 2 Features**
+
 - [ ] Portrait style transfer - Apply reference style to existing portraits
 - [ ] Batch portrait generation - Generate multiple variations at once
 - [ ] Character templates - Pre-built character archetypes
@@ -358,6 +389,7 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - [ ] Advanced scene editor - Visual scene builder with branching narratives
 
 ### **Phase 3 Features**
+
 - [ ] Voice cloning integration - Generate voice samples for characters
 - [ ] 3D avatar generation - Convert 2D portraits to 3D models
 - [ ] Character analytics - Track usage, conversation quality, user engagement
@@ -366,18 +398,21 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ## **📝 Notes**
 
 **Design Decisions**:
+
 - **Dual-Page Approach**: CreateCharacter for initial setup, CharacterStudio for iteration. This reduces cognitive load for new users while providing power users with advanced tools.
 - **Auto-Save on Generate**: Prevents orphaned portraits by ensuring character exists before generation. Silent mode avoids toast spam during rapid iteration.
 - **Primary Portrait System**: Single source of truth for character.image_url simplifies roleplay integration.
 - **Realtime Subscriptions**: Eliminates manual refresh, enables multi-device editing (future).
 
 **Technical Notes**:
+
 - Portrait versioning uses sort_order + created_at for stable ordering
 - generation_metadata JSON stores full generation context for debugging
 - I2I capability matching uses api_models.capabilities->supports_i2i boolean
 - Reference images uploaded to reference_images bucket for security isolation
 
 **Commit History Context**:
+
 - 30+ commits related to character studio (Jan 10-17, 2026)
 - Major refactors: Portrait URL signing (Jan 16), mobile layout (Jan 14), lightbox (Jan 14)
 - Performance improvements: Constrain lightbox images, optimize mobile modals
@@ -385,5 +420,6 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 ---
 
 **Related Documentation**:
+
 - [CREATE_CHARACTER_PAGE.md](CREATE_CHARACTER_PAGE.md) - Initial character creation form
 - [TECHNICAL_ARCHITECTURE.md](TECHNICAL_ARCHITECTURE.md) - Deep technical implementation details

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,9 +11,13 @@ import {
   Users,
   ChevronDown,
   Check,
-  AlertCircle
+  AlertCircle,
+  Image as ImageIcon,
+  Film,
+  GripVertical
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PosePresets } from '@/components/character-studio/PosePresets';
 import { useCharacterStudio } from '@/hooks/useCharacterStudio';
 import { CharacterStudioSidebar } from '@/components/character-studio/CharacterStudioSidebar';
 import { PortraitGallery } from '@/components/character-studio/PortraitGallery';
@@ -161,6 +165,46 @@ export default function CharacterStudio() {
   const [showSceneModal, setShowSceneModal] = useState(false);
   const [sceneToEdit, setSceneToEdit] = useState<CharacterScene | null>(null);
 
+  // Workspace tab state (desktop)
+  const [workspaceTab, setWorkspaceTab] = useState<'portraits' | 'scenes'>('portraits');
+
+  // Prompt state for pose presets
+  const [promptText, setPromptText] = useState('');
+
+  // Resizable sidebar state
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const isResizing = useRef(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const newWidth = Math.min(Math.max(e.clientX, 280), 480);
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
   // Handle portrait generation from prompt bar
   const handleGenerateFromPrompt = async (prompt: string, referenceImageUrl?: string, modelId?: string) => {
     await generatePortrait(prompt, { 
@@ -272,6 +316,10 @@ export default function CharacterStudio() {
           imageModelOptions={imageModelOptions}
           onOpenImagePicker={() => setShowImagePicker(true)}
           isPersonaMode={isPersonaMode}
+          onEditScene={handleEditScene}
+          onDeleteScene={handleDeleteScene}
+          onAddScene={() => setShowSceneModal(true)}
+          onStartChatWithScene={handleStartChatWithScene}
         />
         
         {/* Image Picker Dialog */}
@@ -392,76 +440,142 @@ export default function CharacterStudio() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar */}
-        <div className="w-80 flex-shrink-0 hidden md:block">
-          <CharacterStudioSidebar
-            character={character}
-            onUpdateCharacter={updateCharacter}
-            onSave={saveCharacter}
-            onGenerate={generatePortrait}
-            isSaving={isSaving}
-            isGenerating={isGenerating}
-            isDirty={isDirty}
-            isNewCharacter={isNewCharacter}
-            primaryPortraitUrl={primaryPortrait?.image_url}
-            selectedImageModel={selectedImageModel}
-            onImageModelChange={setSelectedImageModel}
-            imageModelOptions={imageModelOptions}
-            onOpenImagePicker={() => setShowImagePicker(true)}
-          />
+        {/* Left Sidebar - Resizable */}
+        <div
+          ref={sidebarRef}
+          className="flex-shrink-0 hidden md:flex relative"
+          style={{ width: sidebarWidth }}
+        >
+          <div className="flex-1 overflow-hidden">
+            <CharacterStudioSidebar
+              character={character}
+              onUpdateCharacter={updateCharacter}
+              onSave={saveCharacter}
+              onGenerate={generatePortrait}
+              isSaving={isSaving}
+              isGenerating={isGenerating}
+              isDirty={isDirty}
+              isNewCharacter={isNewCharacter}
+              primaryPortraitUrl={primaryPortrait?.image_url}
+              selectedImageModel={selectedImageModel}
+              onImageModelChange={setSelectedImageModel}
+              imageModelOptions={imageModelOptions}
+              onOpenImagePicker={() => setShowImagePicker(true)}
+            />
+          </div>
+          {/* Resize Handle */}
+          <div
+            onMouseDown={handleMouseDown}
+            className="w-1 hover:w-1.5 bg-transparent hover:bg-primary/20 cursor-col-resize transition-all flex items-center justify-center group absolute right-0 top-0 bottom-0 z-10"
+          >
+            <div className="w-0.5 h-8 bg-border group-hover:bg-primary/50 rounded-full" />
+          </div>
         </div>
 
-        {/* Main Workspace */}
+        {/* Main Workspace - Tabbed */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <ScrollArea className="flex-1">
-            <div className="p-6 space-y-8 max-w-6xl">
-              {/* Portrait Gallery */}
-              <PortraitGallery
-                portraits={portraits}
-                primaryPortraitId={primaryPortrait?.id}
-                selectedPortraitId={selectedItemType === 'portrait' ? selectedItemId : null}
+          {/* Workspace Tabs */}
+          <div className="flex items-center border-b border-border bg-card px-4">
+            <button
+              onClick={() => setWorkspaceTab('portraits')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
+                workspaceTab === 'portraits'
+                  ? 'text-primary border-primary'
+                  : 'text-muted-foreground border-transparent hover:text-foreground'
+              )}
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              Portraits
+              {portraits.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                  {portraits.length}
+                </Badge>
+              )}
+            </button>
+            <button
+              onClick={() => setWorkspaceTab('scenes')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
+                workspaceTab === 'scenes'
+                  ? 'text-primary border-primary'
+                  : 'text-muted-foreground border-transparent hover:text-foreground'
+              )}
+            >
+              <Film className="w-3.5 h-3.5" />
+              Scenes
+              {scenes.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+                  {scenes.length}
+                </Badge>
+              )}
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          {workspaceTab === 'portraits' ? (
+            <>
+              <ScrollArea className="flex-1">
+                <div className="p-4 space-y-4 max-w-6xl">
+                  {/* Pose Presets */}
+                  <PosePresets
+                    onSelect={(posePrompt) => setPromptText(prev => prev ? `${prev}, ${posePrompt}` : posePrompt)}
+                    compact
+                  />
+                  {/* Portrait Gallery */}
+                  <PortraitGallery
+                    portraits={portraits}
+                    primaryPortraitId={primaryPortrait?.id}
+                    selectedPortraitId={selectedItemType === 'portrait' ? selectedItemId : null}
+                    isGenerating={isGenerating}
+                    isNewCharacter={isNewCharacter}
+                    onSelect={handleSelectPortrait}
+                    onSetPrimary={setPrimaryPortrait}
+                    onDelete={deletePortrait}
+                    onAddNew={() => handleGenerateFromPrompt(promptText || character.traits || character.name || 'portrait')}
+                    onUseAsReference={handleUseAsReference}
+                    onRegenerate={(prompt, referenceUrl) => {
+                      updateCharacter({ reference_image_url: referenceUrl });
+                      handleGenerateFromPrompt(prompt, referenceUrl, selectedImageModel);
+                    }}
+                    characterAppearanceTags={character.appearance_tags || []}
+                  />
+                </div>
+              </ScrollArea>
+
+              {/* Bottom Prompt Bar - Only on Portraits tab */}
+              <CharacterStudioPromptBar
+                onGenerate={handleGenerateFromPrompt}
                 isGenerating={isGenerating}
-                isNewCharacter={isNewCharacter}
-                onSelect={handleSelectPortrait}
-                onSetPrimary={setPrimaryPortrait}
-                onDelete={deletePortrait}
-                onAddNew={() => handleGenerateFromPrompt(character.traits || character.name || 'portrait')}
-                onUseAsReference={handleUseAsReference}
-                onRegenerate={(prompt, referenceUrl) => {
-                  updateCharacter({ reference_image_url: referenceUrl });
-                  handleGenerateFromPrompt(prompt, referenceUrl, selectedImageModel);
-                }}
-                characterAppearanceTags={character.appearance_tags || []}
+                generationProgress={generationProgress}
+                isDisabled={false}
+                placeholder={`Describe a portrait for ${character.name || 'your character'}...`}
+                selectedImageModel={selectedImageModel}
+                onImageModelChange={setSelectedImageModel}
+                imageModelOptions={imageModelOptions}
+                onOpenImagePicker={() => setShowImagePicker(true)}
+                referenceImageUrl={character.reference_image_url}
+                onReferenceImageChange={(url) => updateCharacter({ reference_image_url: url })}
+                value={promptText}
+                onValueChange={setPromptText}
               />
-
-              {/* Scenes Gallery */}
-              <ScenesGallery
-                scenes={scenes}
-                selectedSceneId={selectedItemType === 'scene' ? selectedItemId : null}
-                isNewCharacter={isNewCharacter}
-                onSelect={handleSelectScene}
-                onEdit={handleEditScene}
-                onDelete={handleDeleteScene}
-                onAddNew={() => setShowSceneModal(true)}
-                onStartChat={handleStartChatWithScene}
-              />
-            </div>
-          </ScrollArea>
-
-          {/* Bottom Prompt Bar */}
-          <CharacterStudioPromptBar
-            onGenerate={handleGenerateFromPrompt}
-            isGenerating={isGenerating}
-            generationProgress={generationProgress}
-            isDisabled={false}
-            placeholder={`Describe a portrait for ${character.name || 'your character'}...`}
-            selectedImageModel={selectedImageModel}
-            onImageModelChange={setSelectedImageModel}
-            imageModelOptions={imageModelOptions}
-            onOpenImagePicker={() => setShowImagePicker(true)}
-            referenceImageUrl={character.reference_image_url}
-            onReferenceImageChange={(url) => updateCharacter({ reference_image_url: url })}
-          />
+            </>
+          ) : (
+            <ScrollArea className="flex-1">
+              <div className="p-4 max-w-6xl">
+                <ScenesGallery
+                  scenes={scenes}
+                  selectedSceneId={selectedItemType === 'scene' ? selectedItemId : null}
+                  isNewCharacter={isNewCharacter}
+                  onSelect={handleSelectScene}
+                  onEdit={handleEditScene}
+                  onDelete={handleDeleteScene}
+                  onAddNew={() => setShowSceneModal(true)}
+                  onStartChat={handleStartChatWithScene}
+                />
+              </div>
+            </ScrollArea>
+          )}
         </div>
       </div>
 
@@ -522,6 +636,11 @@ interface MobileCharacterStudioProps {
   imageModelOptions: ReturnType<typeof useImageModels>['modelOptions'];
   onOpenImagePicker: () => void;
   isPersonaMode?: boolean;
+  // Scene handlers
+  onEditScene: (scene: CharacterScene) => void;
+  onDeleteScene: (sceneId: string) => void;
+  onAddScene: () => void;
+  onStartChatWithScene: (scene: CharacterScene) => void;
 }
 
 function MobileCharacterStudio({
@@ -548,10 +667,15 @@ function MobileCharacterStudio({
   onImageModelChange,
   imageModelOptions,
   onOpenImagePicker,
-  isPersonaMode = false
+  isPersonaMode = false,
+  onEditScene,
+  onDeleteScene,
+  onAddScene,
+  onStartChatWithScene
 }: MobileCharacterStudioProps) {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'details' | 'portraits' | 'scenes'>('details');
+  const [mobilePromptText, setMobilePromptText] = useState('');
 
   return (
     <div className="h-screen w-full flex flex-col bg-background overflow-x-hidden">
@@ -639,7 +763,12 @@ function MobileCharacterStudio({
         {activeTab === 'portraits' && (
           <div className="flex flex-col h-full">
             <ScrollArea className="flex-1">
-              <div className="p-3 pb-2">
+              <div className="p-3 pb-2 space-y-3">
+                {/* Pose Presets for quick iteration */}
+                <PosePresets
+                  onSelect={(posePrompt) => setMobilePromptText(prev => prev ? `${prev}, ${posePrompt}` : posePrompt)}
+                  compact
+                />
                 <PortraitGallery
                   portraits={portraits}
                   primaryPortraitId={primaryPortrait?.id}
@@ -649,23 +778,23 @@ function MobileCharacterStudio({
                   onSelect={(id) => selectItem(id, 'portrait')}
                   onSetPrimary={setPrimaryPortrait}
                   onDelete={deletePortrait}
-                  onAddNew={() => generatePortrait(character.traits || character.name || 'portrait', { 
+                  onAddNew={() => generatePortrait(mobilePromptText || character.traits || character.name || 'portrait', {
                     referenceImageUrl: character.reference_image_url || undefined,
-                    model: selectedImageModel 
+                    model: selectedImageModel
                   })}
                   onUseAsReference={(p) => updateCharacter({ reference_image_url: p.image_url })}
                   onRegenerate={(prompt, referenceUrl) => {
                     updateCharacter({ reference_image_url: referenceUrl });
-                    generatePortrait(prompt, { 
+                    generatePortrait(prompt, {
                       referenceImageUrl: referenceUrl,
-                      model: selectedImageModel 
+                      model: selectedImageModel
                     });
                   }}
                   characterAppearanceTags={character.appearance_tags || []}
                 />
               </div>
             </ScrollArea>
-            
+
             {/* Prompt Bar for mobile portraits tab */}
             <CharacterStudioPromptBar
               onGenerate={(prompt, refUrl, modelId) =>
@@ -675,6 +804,8 @@ function MobileCharacterStudio({
                 })
               }
               isGenerating={isGenerating}
+              value={mobilePromptText}
+              onValueChange={setMobilePromptText}
               generationProgress={generationProgress}
               isDisabled={false}
               placeholder={`Describe a portrait for ${character.name || 'your character'}...`}
@@ -696,10 +827,10 @@ function MobileCharacterStudio({
                 selectedSceneId={selectedItemType === 'scene' ? selectedItemId : null}
                 isNewCharacter={isNewCharacter}
                 onSelect={(id) => selectItem(id, 'scene')}
-                onEdit={() => {}}
-                onDelete={() => {}}
-                onAddNew={() => {}}
-                onStartChat={() => {}}
+                onEdit={onEditScene}
+                onDelete={onDeleteScene}
+                onAddNew={onAddScene}
+                onStartChat={onStartChatWithScene}
               />
             </div>
           </ScrollArea>
