@@ -6,6 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, Settings, TestTube, Monitor, Wrench } from 'lucide-react';
+ import { useGroupedModels, usePlaygroundTemplates } from '@/hooks/usePlaygroundModels';
+ import { Skeleton } from '@/components/ui/skeleton';
 
 interface AdminTool {
   id: string;
@@ -51,11 +53,25 @@ export const AdminTools: React.FC<AdminToolsProps> = ({ onStartTool }) => {
   const [targetModel, setTargetModel] = useState('');
   const [purpose, setPurpose] = useState('');
 
+   const { grouped, isLoading: modelsLoading } = useGroupedModels();
+   const { data: templates, isLoading: templatesLoading } = usePlaygroundTemplates();
+ 
+   // Combine all models for selection
+   const allModels = [
+     ...grouped.chat.map(m => ({ ...m, category: 'Chat' })),
+     ...grouped.image.map(m => ({ ...m, category: 'Image' })),
+     ...grouped.video.map(m => ({ ...m, category: 'Video' })),
+     ...grouped.i2i.map(m => ({ ...m, category: 'I2I' })),
+   ];
+ 
   const handleToolStart = () => {
     const tool = adminTools.find(t => t.id === selectedTool);
     if (tool) {
+       const selectedModelData = allModels.find(m => m.model_key === targetModel);
       const context = {
         targetModel,
+         targetModelName: selectedModelData?.display_name || targetModel,
+         targetModelCategory: selectedModelData?.category,
         purpose,
       };
       onStartTool(tool, context);
@@ -72,7 +88,7 @@ export const AdminTools: React.FC<AdminToolsProps> = ({ onStartTool }) => {
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <Card className="mt-2 border-gray-800 bg-gray-900/50">
+         <Card className="mt-2 border-border bg-muted/50">
           <CardHeader className="p-3">
             <CardTitle className="text-sm">Admin Tools</CardTitle>
           </CardHeader>
@@ -97,35 +113,71 @@ export const AdminTools: React.FC<AdminToolsProps> = ({ onStartTool }) => {
             {selectedTool && (
               <>
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Target Model</label>
-                  <Select value={targetModel} onValueChange={setTargetModel}>
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select model..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sdxl" className="text-xs">SDXL Image Generation</SelectItem>
-                      <SelectItem value="wan_video" className="text-xs">WAN Video Generation</SelectItem>
-                      <SelectItem value="wan_image" className="text-xs">WAN Image Generation</SelectItem>
-                      <SelectItem value="gpt" className="text-xs">Chat Model</SelectItem>
-                    </SelectContent>
-                  </Select>
+                   <label className="text-xs text-muted-foreground block mb-1">Target Model</label>
+                   {modelsLoading ? (
+                     <Skeleton className="h-7 w-full" />
+                   ) : (
+                     <Select value={targetModel} onValueChange={setTargetModel}>
+                       <SelectTrigger className="h-7 text-xs">
+                         <SelectValue placeholder="Select model..." />
+                       </SelectTrigger>
+                       <SelectContent>
+                         {grouped.chat.length > 0 && (
+                           <>
+                             <SelectItem value="_chat_header" disabled className="text-xs font-medium text-muted-foreground">
+                               — Chat Models —
+                             </SelectItem>
+                             {grouped.chat.filter(m => m.model_key).map(m => (
+                               <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                                 {m.display_name}
+                               </SelectItem>
+                             ))}
+                           </>
+                         )}
+                         {grouped.image.length > 0 && (
+                           <>
+                             <SelectItem value="_image_header" disabled className="text-xs font-medium text-muted-foreground">
+                               — Image Models —
+                             </SelectItem>
+                             {grouped.image.filter(m => m.model_key).map(m => (
+                               <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                                 {m.display_name}
+                               </SelectItem>
+                             ))}
+                           </>
+                         )}
+                         {grouped.video.length > 0 && (
+                           <>
+                             <SelectItem value="_video_header" disabled className="text-xs font-medium text-muted-foreground">
+                               — Video Models —
+                             </SelectItem>
+                             {grouped.video.filter(m => m.model_key).map(m => (
+                               <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                                 {m.display_name}
+                               </SelectItem>
+                             ))}
+                           </>
+                         )}
+                       </SelectContent>
+                     </Select>
+                   )}
                 </div>
 
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Purpose/Goal</label>
+                   <label className="text-xs text-muted-foreground block mb-1">Purpose/Goal</label>
                   <Textarea
                     value={purpose}
                     onChange={(e) => setPurpose(e.target.value)}
                     placeholder="Describe what you want to achieve..."
-                    className="min-h-[60px] text-xs resize-none"
+                     className="min-h-[50px] text-xs resize-none"
                   />
                 </div>
 
-                <Button 
+                 <Button
                   onClick={handleToolStart}
                   disabled={!selectedTool}
                   size="sm"
-                  className="w-full h-8 text-xs"
+                   className="w-full h-7 text-xs"
                 >
                   Start Tool
                 </Button>

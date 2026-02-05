@@ -16,6 +16,7 @@ import { PromptCounter } from './PromptCounter';
 import { CharacterDetailsPanel } from './CharacterDetailsPanel';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+ import { PlaygroundSettingsPopover } from './PlaygroundSettingsPopover';
 
 export const ChatInterface = () => {
   const {
@@ -27,6 +28,8 @@ export const ChatInterface = () => {
     refreshPromptCache,
     sfwMode,
     setSfwMode,
+     settings,
+     updateSettings,
   } = usePlayground();
 
   const { isAdmin } = useAuth();
@@ -230,7 +233,8 @@ Please help me with this creative project.`;
           
           {/* Controls: SFW toggle + Conversation History */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
+             <PlaygroundSettingsPopover settings={settings} onSettingsChange={updateSettings} />
+             <div className="flex items-center gap-1 ml-1">
               <Label htmlFor="sfw-toggle-empty" className="text-xs text-muted-foreground">SFW</Label>
               <Switch id="sfw-toggle-empty" checked={sfwMode} onCheckedChange={setSfwMode} />
             </div>
@@ -305,6 +309,7 @@ Please help me with this creative project.`;
         </div>
         
 <div className="flex items-center gap-1">
+   <PlaygroundSettingsPopover settings={settings} onSettingsChange={updateSettings} />
   <div className="flex items-center gap-1 mr-2">
     <Label htmlFor="sfw-toggle" className="text-xs text-muted-foreground">SFW</Label>
     <Switch id="sfw-toggle" checked={sfwMode} onCheckedChange={setSfwMode} />
