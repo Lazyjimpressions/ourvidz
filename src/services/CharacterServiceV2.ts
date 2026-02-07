@@ -23,6 +23,27 @@ export class CharacterServiceV2 {
             const basePrompt = `(character: ${character.name}), ${character.description}. ${prompt}`;
             const negativePrompt = "blurry, low quality, distortion, disfigured";
 
+            // 1. Create a placeholder record in character_scenes to track this generation
+            // This ensures we have a stable ID and the user sees a "loading" state in history immediately
+            const { data: sceneData, error: sceneError } = await supabase
+                .from('character_scenes')
+                .insert({
+                    character_id: character.id,
+                    scene_prompt: basePrompt,
+                    image_url: null, // Loading state
+                    generation_metadata: {
+                        source: 'character-studio-v2',
+                        consistency_mode: consistencyControls.consistency_mode,
+                        media_type: mediaType
+                    }
+                })
+                .select()
+                .single();
+
+            if (sceneError) throw sceneError;
+
+            const sceneId = sceneData.id;
+
             let requestBody: any = {
                 prompt: basePrompt,
                 quality: 'high',
@@ -32,7 +53,9 @@ export class CharacterServiceV2 {
                     character_name: character.name,
                     source: 'character-studio-v2',
                     media_type: mediaType,
-                    modality: mediaType
+                    modality: mediaType,
+                    destination: 'character_scene', // Tell fal-image to update this scene
+                    scene_id: sceneId
                 }
             };
 
@@ -64,6 +87,7 @@ export class CharacterServiceV2 {
             return {
                 success: true,
                 jobId: data?.jobId,
+                sceneId: sceneId,
                 imageUrl: data?.imageUrl, // Some immediate returns
                 message: "Generation started"
             };

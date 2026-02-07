@@ -258,8 +258,8 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
                     title: "Generation Started",
                     description: "Your preview is being generated..."
                 });
-                // In a real app, we'd poll for the result or subscription
-                // For now, let's assume we get a notification or handle it via realtime later
+                // Invalidate history to show the new "loading" item immediately
+                queryClient.invalidateQueries({ queryKey: ['character-history', id] });
             }
 
         } catch (error: any) {

@@ -31,6 +31,7 @@ User personas are characters that represent the player in roleplay scenarios. Th
 3. **Visual consistency** - User's appearance maintained across scenes
 
 **Key Requirements:**
+
 - Must have `reference_image_url` for multi-reference scene generation
 - Stored in same `characters` table with `user_id` matching current user
 - Default persona stored in `profiles.default_character_id`
@@ -92,6 +93,7 @@ Two-path choice dialog for creating user personas. Accessed via "+" button in My
 ### Full Editor Path
 
 Opens Character Studio (`/character-studio`) with:
+
 - Pre-selected "Persona" mode
 - I2I reference generation enabled
 - Avatar upload option
@@ -107,6 +109,7 @@ For multi-reference scene generation (`both_characters` style):
 | ❌ No | `both_characters` style disabled, falls back to `character_only` |
 
 **Reference Image Sources:**
+
 - Generated via Character Studio
 - Uploaded via avatar upload
 - Set from existing library asset
@@ -154,6 +157,7 @@ For multi-reference scene generation (`both_characters` style):
 ### Form Fields
 
 #### Quick Mode Fields
+
 | Field | Type | Required | Validation |
 |-------|------|----------|------------|
 | Name | Text input | Yes | 2-50 chars |
@@ -163,6 +167,7 @@ For multi-reference scene generation (`both_characters` style):
 | Portrait | Image | No | Generated or uploaded |
 
 #### Detailed Mode Additional Fields
+
 | Field | Type | Options |
 |-------|------|---------|
 | Voice Tone | Select | Warm, Direct, Teasing, Formal, Soft-spoken, Confident, Playful |
@@ -255,6 +260,7 @@ The `reference_image_url` field is critical for scene generation consistency:
 | `reference_image_url` | Source for I2I generation | Scene generation, multi-reference |
 
 **Auto-Population:**
+
 - When generating a new portrait, both `image_url` and `reference_image_url` are set
 - When uploading, user can choose to also set as reference
 - Reference image should be high-quality, clear face/body shot
@@ -270,6 +276,7 @@ The `reference_image_url` field is critical for scene generation consistency:
 ## Interaction Specs
 
 ### Tag Input
+
 | Gesture | Action |
 |---------|--------|
 | Type + Enter | Add tag |
@@ -277,6 +284,7 @@ The `reference_image_url` field is critical for scene generation consistency:
 | Max tags | 10 per field |
 
 ### Image Generation
+
 | State | UI |
 |-------|-----|
 | Idle | "Generate Portrait" button |
@@ -289,6 +297,7 @@ The `reference_image_url` field is critical for scene generation consistency:
 ## Data Flow
 
 ### Create Character
+
 1. User fills form
 2. Optional: Generate portrait
 3. Click "Save"
@@ -298,6 +307,7 @@ The `reference_image_url` field is critical for scene generation consistency:
 7. Modal closes
 
 ### Edit Character
+
 1. User modifies fields
 2. Click "Save"
 3. Owner: `updateUserCharacter()` via hook

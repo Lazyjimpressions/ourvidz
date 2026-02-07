@@ -57,109 +57,122 @@ export default function CharacterStudioV2() {
   }
 
   return (
-    <OurVidzDashboardLayout>
-      <div className="h-[calc(100vh-64px)] overflow-hidden bg-background text-foreground flex flex-col">
-
-        {/* Header Toolbar */}
-        <div className="h-14 border-b border-border/50 flex items-center justify-between px-4 bg-background/50 backdrop-blur-sm z-20">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/character-hub-v2')}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <h1 className="text-lg font-semibold leading-none">
-                {mode === 'edit' ? 'Edit Character' : 'New Character'}
-              </h1>
-              <p className="text-xs text-muted-foreground mt-1">
-                {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Settings
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate('/character-hub-v2')}>
-              Discard
-            </Button>
-            <Button
-              size="sm"
-              className="bg-primary hover:bg-primary/90"
-              onClick={handleSave}
-              disabled={isSaving}
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              Save Character
-            </Button>
+    <div className="min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
+      {/* Header Toolbar */}
+      <div className="h-14 border-b border-border/50 flex items-center justify-between px-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            onClick={() => navigate('/character-hub-v2')}
+            title="Back to Hub"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div className="w-px h-4 bg-border/50 mx-1" />
+          <div>
+            <h1 className="text-sm font-semibold leading-none flex items-center gap-2">
+              {mode === 'edit' ? formData.name || 'Edit Character' : 'New Character'}
+              {isSaving && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+            </h1>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Mode
+            </p>
           </div>
         </div>
 
-        {/* Main 3-Column Layout */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/character-hub-v2')}
+            className="text-xs h-8"
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            className="bg-primary hover:bg-primary/90 text-xs h-8 gap-1.5"
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            Save Changes
+          </Button>
+        </div>
+      </div>
 
-          {/* Left Column: Configuration Controls (Scrollable) */}
-          <div className="w-full lg:w-[400px] border-b lg:border-r border-border/50 flex flex-col bg-card/30 h-[40vh] lg:h-full">
-            <div className="p-2 border-b border-border/50">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-4 h-9">
-                  <TabsTrigger value="identity" className="text-xs">Identity</TabsTrigger>
-                  <TabsTrigger value="appearance" className="text-xs">Visuals</TabsTrigger>
-                  <TabsTrigger value="style" className="text-xs">Style</TabsTrigger>
-                  <TabsTrigger value="media" className="text-xs">Media</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
+      {/* Main 3-Column Layout */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
 
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-              {activeTab === 'identity' && <IdentityTab formData={formData} updateField={updateField} />}
-              {activeTab === 'appearance' && (
-                <AppearanceTab
-                  formData={formData}
-                  updateField={updateField}
-                  anchors={formData.character_anchors || []}
-                  onUploadAnchor={uploadAnchor}
-                  onDeleteAnchor={deleteAnchor}
-                  onSetPrimaryAnchor={setPrimaryAnchor}
-                />
-              )}
-              {activeTab === 'style' && <StyleTab formData={formData} updateField={updateField} />}
-              {activeTab === 'media' && <MediaTab formData={formData} updateField={updateField} />}
-            </div>
+        {/* Left Column: Configuration Controls (Scrollable) */}
+        <div className="w-full lg:w-[400px] border-b lg:border-r border-border/50 flex flex-col bg-card/30 lg:h-full">
+          <div className="px-4 py-3 border-b border-border/50">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-4 h-8 bg-muted/50 p-0.5">
+                <TabsTrigger value="identity" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Identity</TabsTrigger>
+                <TabsTrigger value="appearance" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Visuals</TabsTrigger>
+                <TabsTrigger value="style" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Style</TabsTrigger>
+                <TabsTrigger value="media" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Media</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
 
-          {/* Middle Column: Preview Canvas (Fixed) */}
-          <div className="w-full lg:flex-1 bg-black/50 relative flex items-center justify-center p-4 lg:p-8 h-[40vh] lg:h-full border-b lg:border-b-0 border-border/50">
-            <div className="absolute top-4 left-4 z-10">
-              <div className="bg-black/60 backdrop-blur-sm rounded-lg p-2 text-xs text-muted-foreground border border-white/10">
-                Preview Mode: Portrait
-              </div>
-            </div>
+          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6">
+            {activeTab === 'identity' && <IdentityTab formData={formData} updateField={updateField} />}
+            {activeTab === 'appearance' && (
+              <AppearanceTab
+                formData={formData}
+                updateField={updateField}
+                anchors={formData.character_anchors || []}
+                onUploadAnchor={uploadAnchor}
+                onDeleteAnchor={deleteAnchor}
+                onSetPrimaryAnchor={setPrimaryAnchor}
+              />
+            )}
+            {activeTab === 'style' && <StyleTab formData={formData} updateField={updateField} />}
+            {activeTab === 'media' && <MediaTab formData={formData} updateField={updateField} />}
+          </div>
+        </div>
 
-            {/* Canvas Area */}
-            <div className="relative aspect-[3/4] h-full max-h-[800px] bg-gray-900/50 rounded-lg border border-white/5 shadow-2xl flex items-center justify-center overflow-hidden group">
-              {formData.image_url ? (
-                <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
-              ) : (
-                <div className="text-center space-y-4">
-                  <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto">
-                    <Sparkles className="w-8 h-8 text-muted-foreground/50" />
-                  </div>
-                  <p className="text-muted-foreground text-sm">Configure settings to generate preview</p>
+        {/* Middle Column: Preview Canvas (Fixed) */}
+        <div className="w-full lg:flex-1 bg-black/50 relative flex flex-col items-center justify-center p-4 lg:p-8 h-[50vh] lg:h-full border-b lg:border-b-0 border-border/50">
+          {/* Canvas Area */}
+          <div className="relative aspect-[3/4] h-full max-h-[800px] w-full max-w-[600px] bg-gray-900/50 rounded-lg border border-white/5 shadow-2xl flex items-center justify-center overflow-hidden group">
+            {formData.image_url ? (
+              <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover transition-opacity duration-300" />
+            ) : (
+              <div className="text-center space-y-4 p-8">
+                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/5">
+                  <Sparkles className="w-8 h-8 text-muted-foreground/30" />
                 </div>
-              )}
-
-              {/* Overlay Controls */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <Button size="lg" className="rounded-full shadow-lg bg-primary hover:bg-primary/90">
-                  <Wand2 className="w-4 h-4 mr-2" />
-                  Generate Preview
-                </Button>
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">No Preview Generated</h3>
+                  <p className="text-xs text-muted-foreground/60 mt-1 max-w-[200px] mx-auto">
+                    Configure your character settings and use the prompt bar to generate a preview.
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
 
-          {/* Right Column: Prompt & Generation Controls */}
-          <div className="w-full lg:w-[320px] bg-card/30 flex flex-col h-[60vh] lg:h-full border-l border-border/50">
-            {/* Prompt Bar (Top) */}
-            <div className="flex-none h-[60%] border-b border-border/50">
+            {/* Loading Overlay */}
+            {isGenerating && (
+              <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <span className="text-xs font-medium text-white/90 animate-pulse">
+                  Generating Preview...
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Prompt & Generation Controls */}
+        <div className="w-full lg:w-[320px] bg-card/30 flex flex-col h-[60vh] lg:h-full border-l border-border/50">
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* Prompt Bar Section */}
+            <div className="p-0 border-b border-border/50 flex-none z-10 bg-background/50 backdrop-blur-sm">
               <CharacterStudioPromptBarV2
                 prompt={prompt}
                 onPromptChange={setPrompt}
@@ -173,11 +186,13 @@ export default function CharacterStudioV2() {
               />
             </div>
 
-            {/* History Strip (Bottom) */}
-            <div className="flex-1 flex flex-col min-h-0 bg-black/20">
-              <div className="p-3 border-b border-border/50 flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">History</h3>
-                <span className="text-[10px] text-muted-foreground/50">{history?.length || 0} items</span>
+            {/* History Section (Scrollable Area) */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/10">
+              <div className="sticky top-0 p-3 bg-card/95 backdrop-blur-sm border-b border-border/50 flex items-center justify-between z-10">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Generation History</h3>
+                <span className="text-[10px] text-muted-foreground/50 bg-white/5 px-1.5 py-0.5 rounded-full">
+                  {history?.length || 0}
+                </span>
               </div>
               <CharacterHistoryStrip
                 history={history || []}
@@ -187,9 +202,9 @@ export default function CharacterStudioV2() {
               />
             </div>
           </div>
-
         </div>
+
       </div>
-    </OurVidzDashboardLayout>
+    </div>
   );
 }

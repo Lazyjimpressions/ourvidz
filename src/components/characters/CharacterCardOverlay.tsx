@@ -80,50 +80,34 @@ export const CharacterCardOverlay: React.FC<CharacterCardOverlayProps> = ({
     // Render Hub Actions
     if (context === 'hub') {
         return (
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col p-4 animate-in fade-in duration-200">
-                <div className="flex-1 flex flex-col justify-center gap-2">
-                    <Button
-                        variant="default"
-                        size="sm"
-                        className="w-full justify-start gap-2 bg-primary/90 hover:bg-primary"
-                        onClick={(e) => { e.stopPropagation(); onGenerate?.(e); }}
-                    >
-                        <Sparkles className="w-4 h-4" /> Generate Image
-                    </Button>
-                    <Button
-                        variant="secondary"
-                        size="sm"
-                        className="w-full justify-start gap-2 bg-white/10 hover:bg-white/20 text-white border-white/10"
-                        onClick={(e) => { e.stopPropagation(); console.log('Video gen not implemented'); }}
-                    >
-                        <Video className="w-4 h-4" /> Generate Video
-                    </Button>
-                </div>
-
-                <div className="pt-2 border-t border-white/10 flex flex-col gap-1">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex flex-col items-end justify-start p-3 animate-in fade-in duration-200 pointer-events-none">
+                <div className="flex flex-col gap-2 pointer-events-auto">
                     <Button
                         variant="ghost"
-                        size="sm"
-                        className="w-full justify-start gap-2 text-white/70 hover:text-white hover:bg-white/10 h-8"
+                        size="icon"
+                        className="h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 text-white border border-white/10 shadow-sm backdrop-blur-md"
                         onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
+                        title="Edit Character"
                     >
-                        <Pencil className="w-3.5 h-3.5" /> Edit Character
+                        <Pencil className="w-4 h-4" />
                     </Button>
                     <Button
                         variant="ghost"
-                        size="sm"
-                        className="w-full justify-start gap-2 text-white/70 hover:text-white hover:bg-white/10 h-8"
+                        size="icon"
+                        className="h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 text-white border border-white/10 shadow-sm backdrop-blur-md"
                         onClick={(e) => { e.stopPropagation(); onDuplicate?.(); }}
+                        title="Duplicate"
                     >
-                        <Copy className="w-3.5 h-3.5" /> Duplicate
+                        <Copy className="w-4 h-4" />
                     </Button>
                     <Button
                         variant="ghost"
-                        size="sm"
-                        className="w-full justify-start gap-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 h-8"
+                        size="icon"
+                        className="h-8 w-8 rounded-full bg-black/40 hover:bg-red-900/60 text-red-200 hover:text-red-100 border border-white/10 shadow-sm backdrop-blur-md"
                         onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
+                        title="Delete"
                     >
-                        <Trash className="w-3.5 h-3.5" /> Delete
+                        <Trash className="w-4 h-4" />
                     </Button>
                 </div>
             </div>

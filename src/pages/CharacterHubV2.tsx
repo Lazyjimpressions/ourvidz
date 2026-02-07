@@ -151,87 +151,86 @@ export default function CharacterHubV2() {
     };
 
     return (
-        <OurVidzDashboardLayout>
-            <div className="min-h-screen bg-background text-foreground pb-20">
+        <div className="min-h-screen bg-background text-foreground pb-20">
 
-                {/* Header Section */}
-                <div className="pt-8 pb-6 px-4 md:px-8 max-w-7xl mx-auto">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                        <div>
-                            <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
-                                <Users className="w-8 h-8 text-primary" />
-                                Character Hub
-                            </h1>
-                            <p className="text-muted-foreground mt-1 text-sm md:text-base">
-                                Manage your AI characters, consistency anchors, and style presets.
-                            </p>
-                        </div>
-
-                        <Button
-                            size="lg"
-                            className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all hover:scale-105"
-                            onClick={() => navigate('/character-studio-v2?mode=from-images')}
-                        >
-                            <Plus className="mr-2 h-5 w-5" />
-                            Create Character
-                        </Button>
+            {/* Header Section */}
+            <div className="pt-8 pb-6 px-4 md:px-8 max-w-7xl mx-auto">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+                            <Users className="w-8 h-8 text-primary" />
+                            Character Hub
+                        </h1>
+                        <p className="text-muted-foreground mt-1 text-sm md:text-base">
+                            Manage your AI characters, consistency anchors, and style presets.
+                        </p>
                     </div>
 
-                    {/* Filters Component */}
-                    <div className="mb-8">
-                        <CharacterFilters
-                            filters={filters}
-                            onFilterChange={handleFilterChange}
-                            className="rounded-xl border border-white/5 bg-black/40 p-4 shadow-xl backdrop-blur-md"
-                        />
-                    </div>
-
-                    {/* Content Area */}
-                    {isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
-                            <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-                            <p className="text-muted-foreground animate-pulse text-lg">Loading your characters...</p>
-                        </div>
-                    ) : !filteredCharacters || filteredCharacters.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-xl bg-black/20 min-h-[400px]">
-                            <div className="bg-white/5 p-6 rounded-full mb-4">
-                                <Users className="w-12 h-12 text-muted-foreground/50" />
-                            </div>
-                            <h3 className="text-xl font-semibold text-white mb-2">No characters found</h3>
-                            <p className="text-muted-foreground mb-8 text-center max-w-md">
-                                {characters?.length === 0
-                                    ? "You haven't created any AI characters yet. Start by creating your first character!"
-                                    : "No characters match your current filters. Try adjusting your search criteria."}
-                            </p>
-                            {characters?.length === 0 && (
-                                <Button
-                                    size="lg"
-                                    className="bg-primary hover:bg-primary/90"
-                                    onClick={() => navigate('/character-studio-v2?mode=from-images')}
-                                >
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Create First Character
-                                </Button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
-                            {filteredCharacters.map((character) => (
-                                <div key={character.id} className="transform transition-all duration-300 hover:-translate-y-1">
-                                    <CharacterCard
-                                        character={character}
-                                        context="hub"
-                                        onEdit={() => handleEdit(character.id)}
-                                        onDelete={() => handleDelete(character.id)}
-                                        onDuplicate={() => handleDuplicate(character)}
-                                    // onGenerate handled internally by card or can be overridden here
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    <Button
+                        size="lg"
+                        className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all hover:scale-105"
+                        onClick={() => navigate('/character-studio-v2?mode=from-images')}
+                    >
+                        <Plus className="mr-2 h-5 w-5" />
+                        Create Character
+                    </Button>
                 </div>
+
+                {/* Filters Component */}
+                <div className="mb-8">
+                    <CharacterFilters
+                        filters={filters}
+                        onFilterChange={handleFilterChange}
+                        className="rounded-xl border border-white/5 bg-black/40 p-4 shadow-xl backdrop-blur-md"
+                    />
+                </div>
+
+                {/* Content Area */}
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
+                        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+                        <p className="text-muted-foreground animate-pulse text-lg">Loading your characters...</p>
+                    </div>
+                ) : !filteredCharacters || filteredCharacters.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-xl bg-black/20 min-h-[400px]">
+                        <div className="bg-white/5 p-6 rounded-full mb-4">
+                            <Users className="w-12 h-12 text-muted-foreground/50" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-white mb-2">No characters found</h3>
+                        <p className="text-muted-foreground mb-8 text-center max-w-md">
+                            {characters?.length === 0
+                                ? "You haven't created any AI characters yet. Start by creating your first character!"
+                                : "No characters match your current filters. Try adjusting your search criteria."}
+                        </p>
+                        {characters?.length === 0 && (
+                            <Button
+                                size="lg"
+                                className="bg-primary hover:bg-primary/90"
+                                onClick={() => navigate('/character-studio-v2?mode=from-images')}
+                            >
+                                <Plus className="mr-2 h-4 w-4" />
+                                Create First Character
+                            </Button>
+                        )}
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
+                        {filteredCharacters.map((character) => (
+                            <div key={character.id} className="transform transition-all duration-300 hover:-translate-y-1">
+                                <CharacterCard
+                                    character={character}
+                                    context="hub"
+                                    onSelect={() => navigate(`/character-studio-v2/${character.id}`)}
+                                    onEdit={() => handleEdit(character.id)}
+                                    onDelete={() => handleDelete(character.id)}
+                                    onDuplicate={() => handleDuplicate(character)}
+                                // onGenerate handled internally by card or can be overridden here
+                                />
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
-        </OurVidzDashboardLayout>
+        </div>
     );
 }

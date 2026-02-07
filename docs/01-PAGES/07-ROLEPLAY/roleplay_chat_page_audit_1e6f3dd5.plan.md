@@ -1,6 +1,6 @@
 ---
 name: Roleplay Chat Page Audit
-overview: "Audit of the roleplay \"two-way chat\" feature: all related files, Supabase tables, storage buckets, and edge functions, based on the codebase and docs/01-PAGES/07-ROLEPLAY/."
+overview: "Audit of the roleplay \"two-way chat\" feature: all related files, Supabase tables (and schema verified via Supabase MCP), storage buckets, and edge functions, based on the codebase, docs/01-PAGES/07-ROLEPLAY/, and list_tables/execute_sql."
 todos: []
 isProject: false
 ---
@@ -95,75 +95,62 @@ The roleplay chat (two-way conversation) is implemented as a single page compone
 
 ---
 
-## 2. Supabase tables used by the roleplay chat flow
+## 2. Supabase tables and schema (MCP-verified)
 
-Tables are used either in [MobileRoleplayChat.tsx](src/pages/MobileRoleplayChat.tsx) or in hooks/services the chat page uses, or in the [roleplay-chat](supabase/functions/roleplay-chat/index.ts) edge function.
+**Verification:** Tables and schema below were confirmed using the Supabase MCP: `list_tables` (schemas: `['public']`) and `execute_sql` for table names and RPCs. This section reflects the **current production schema** supporting the roleplay chat process flow.
+
+Tables are used in [MobileRoleplayChat.tsx](src/pages/MobileRoleplayChat.tsx), its hooks/services, or the [roleplay-chat](supabase/functions/roleplay-chat/index.ts) edge function.
 
 ### Core chat and identity
 
-
-| Table             | Where used                                                                                                          | Purpose                                                                           |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **conversations** | MobileRoleplayChat, useUserConversations, roleplay-chat                                                             | Conversation rows; `last_scene_image`, `user_character_id`; create/update by chat |
-| **messages**      | MobileRoleplayChat, useUserConversations, roleplay-chat                                                             | Chat messages; insert/select for current thread                                   |
-| **characters**    | MobileRoleplayChat, roleplay-chat, useUserCharacters, ImageConsistencyService                                       | AI character metadata, image_url, prompts                                         |
-| **user_roles**    | useUserCharacters, MobileCharacterCard, CharacterInfoDrawer, CharacterEditModal, CharacterPreviewModal, AuthContext | User roles (e.g. admin); character ownership                                      |
-| **profiles**      | useUserCharacters, AuthContext, AgeVerificationModal                                                                | User profile                                                                      |
-
+| Table | Key columns (MCP-verified) | Purpose in chat flow |
+|-------|----------------------------|----------------------|
+| **conversations** | id, user_id, character_id, user_character_id, title, conversation_type, status, memory_tier, memory_data, **last_scene_image**, **current_location**, created_at, updated_at | One row per chat thread; FK to characters (AI + user persona). `last_scene_image` stores path for dashboard thumbnails; updated when a scene is persisted to user-library. |
+| **messages** | id, conversation_id, sender ('user' \| 'assistant'), content, message_type, created_at | Chat messages; insert on send, select for thread. No metadata column in DB; scene image URLs live in client/workspace_assets. |
+| **characters** | id, user_id, name, description, image_url, system_prompt, persona, first_message, alternate_greetings, role ('ai' \| 'user'), content_rating, consistency_method, scene_behavior_rules, ... | AI characters and user personas. roleplay-chat loads character for system prompt and greeting. |
+| **user_roles** | id, user_id, role (enum: admin, moderator, premium_user, basic_user, guest) | Used for admin/ownership checks (e.g. character edit). |
+| **profiles** | id (FK auth.users), username, subscription_status, token_balance, age_verified, **default_user_character_id** (FK characters) | User profile; default_user_character_id used for persona default in chat. |
 
 ### Scenes and templates
 
-
-| Table                | Where used                                                                                                                   | Purpose                                                              |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **character_scenes** | MobileRoleplayChat, roleplay-chat, useUserConversations, useSceneContinuity, CharacterInfoDrawer, ScenePromptEditModal, etc. | Scene templates per character; scene prompts and refs for generation |
-| **scenes**           | MobileRoleplayChat, useSceneGallery, useSceneCreation                                                                        | Scene templates (e.g. gallery); used in chat for template list       |
-| **prompt_templates** | MobileRoleplayChat, roleplay-chat                                                                                            | System/content prompts for chat and scene generation                 |
-
+| Table | Key columns (MCP-verified) | Purpose in chat flow |
+|-------|----------------------------|----------------------|
+| **character_scenes** | id, character_id, conversation_id, scene_prompt, system_prompt, image_url, generation_metadata, job_id, scene_type ('preset' \| 'conversation'), **previous_scene_id**, **previous_scene_image_url**, **generation_mode** ('t2i' \| 'i2i' \| 'modification') | Per-character scene templates and conversation-generated scenes; I2I chain via previous_scene_id. Used for scene selection and generation prompts. |
+| **scenes** | id, name, description, scene_prompt, image_url, creator_id, scenario_type, setting, atmosphere (jsonb), scene_focus, narrative_style, max_words, ... | Global scene templates (gallery); used for template list and scene creation flow. |
+| **prompt_templates** | id, template_name, system_prompt, use_case, content_mode, enhancer_model, job_type ('video' \| 'image' \| 'chat' \| 'roleplay'), **target_model**, is_active, token_limit, metadata | System prompts for chat and generation. roleplay-chat selects by job_type='roleplay' and target_model; scene pipeline uses job_type and target_model. |
 
 ### Models and config
 
+| Table | Key columns (MCP-verified) | Purpose in chat flow |
+|-------|----------------------------|----------------------|
+| **api_models** | id, provider_id, model_key, display_name, modality ('chat' \| 'image' \| ...), task ('roleplay' \| 'chat' \| ...), endpoint_path, input_defaults (jsonb), is_active, is_default, priority | Chat and image model config; roleplay-chat and frontend load models for routing and UI. |
+| **api_providers** | id, name, base_url, auth_scheme, secret_name, is_active | Provider config for API calls from roleplay-chat. |
+| **system_config** | id (single row), **config** (jsonb) | App config; holds worker URLs and workerHealthCache for local model availability. |
 
-| Table             | Where used                                                                                   | Purpose                               |
-| ----------------- | -------------------------------------------------------------------------------------------- | ------------------------------------- |
-| **api_models**    | roleplay-chat, useRoleplayModels, useImageModels, ModelSelectionModal, CharacterImageService | Chat and image model config           |
-| **api_providers** | roleplay-chat, useApiProviders                                                               | Provider config for API models        |
-| **system_config** | roleplay-chat, useLocalModelHealth, SystemConfigTab                                          | Worker URLs, health cache, app config |
+### Memory (referenced in roleplay-chat code only)
 
-
-### Memory (referenced in roleplay-chat)
-
-
-| Table                | Where used    | Purpose                          |
-| -------------------- | ------------- | -------------------------------- |
-| **character_memory** | roleplay-chat | Character-level memory (if used) |
-| **profile_memory**   | roleplay-chat | Profile-level memory (if used)   |
-
+**MCP finding:** Tables **character_memory** and **profile_memory** are **not present** in the current `public` schema. The roleplay-chat edge function references them for a planned three-tier memory feature (see DEVELOPMENT_STATUS.md “Missing”). If/when added, they would back conversation/character/profile memory.
 
 ### Assets and library
 
-
-| Table                | Where used                                                                           | Purpose                                                                            |
-| -------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| **workspace_assets** | MobileRoleplayChat, WorkspaceAssetService, useUserConversations, useGeneration, etc. | Temporary scene images; job results; realtime updates                              |
-| **user_library**     | MobileRoleplayChat, useUserConversations, LibraryAssetService, AssetService, etc.    | Persisted assets (e.g. scene thumbnails); path in `conversations.last_scene_image` |
-
+| Table | Key columns (MCP-verified) | Purpose in chat flow |
+|-------|----------------------------|----------------------|
+| **workspace_assets** | id, user_id, asset_type ('image' \| 'video'), temp_storage_path, job_id, original_prompt, generation_settings (jsonb), expires_at | Temporary scene images; chat creates rows and uses temp_storage_path for signed URLs; scene persistence copies to user-library and updates conversations.last_scene_image. |
+| **user_library** | id, user_id, asset_type, storage_path, roleplay_metadata (jsonb), ... | Persisted assets; scene thumbnails stored here; roleplay_metadata can hold conversation_id for dashboard “Continue” thumbnails. |
 
 ### Usage and jobs
 
+| Table | Key columns (MCP-verified) | Purpose in chat flow |
+|-------|----------------------------|----------------------|
+| **api_usage_logs** | id, provider_id, model_id, user_id, request_type ('chat' \| 'image' \| 'video'), tokens_*, cost_*, response_status, response_time_ms | roleplay-chat logs each chat and image request. |
+| **jobs** | id, user_id, job_type, status, api_model_id, destination ('library' \| 'workspace'), workspace_session_id, ... | Generation jobs; scene generation creates jobs; job_id linked to workspace_assets and character_scenes. |
 
-| Table              | Where used                                                | Purpose                                     |
-| ------------------ | --------------------------------------------------------- | ------------------------------------------- |
-| **api_usage_logs** | roleplay-chat                                             | Log chat/image usage                        |
-| **jobs**           | useUserCharacters, useGeneration, useClipGeneration, etc. | Generation jobs (scene gen can create jobs) |
+### RPCs (MCP-verified)
 
-
-### RPC (used by roleplay-chat)
-
-
-| RPC                        | Purpose       |
-| -------------------------- | ------------- |
-| **upsert_usage_aggregate** | roleplay-chat |
+| RPC | Schema | Purpose in chat flow |
+|-----|--------|----------------------|
+| **upsert_usage_aggregate** | public | roleplay-chat calls after each api_usage_logs insert to update api_usage_aggregates (by provider_id, model_id, date_bucket, hour_bucket). |
+| **backfill_usage_aggregates** | public | Exists in DB; not invoked by roleplay chat flow (admin/backfill use). |
 
 
 ---
