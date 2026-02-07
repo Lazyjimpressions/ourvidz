@@ -39,38 +39,44 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   ];
 
   const creativeToolsItems = [
-    { 
-      icon: FileText, 
+    {
+      icon: FileText,
       label: "New Storyboard",
       onClick: () => navigate("/storyboard"),
       active: isActiveRoute("/storyboard")
     },
-    { 
-      icon: Play, 
+    {
+      icon: Play,
       label: "Generate Motion",
       onClick: () => navigate("/workspace?mode=video"),
       active: isActiveRoute("/workspace", "video")
     },
-    { 
-      icon: Image, 
+    {
+      icon: Image,
       label: "Generate Images",
       onClick: () => navigate("/workspace?mode=image"),
       active: isActiveRoute("/workspace", "image")
     },
-    { 
-      icon: Users, 
+    {
+      icon: Users,
       label: "Character Studio",
       onClick: () => navigate("/character-studio"),
       active: isActiveRoute("/character-studio")
     },
-    { 
-      icon: Brain, 
+    {
+      icon: Users,
+      label: "Character Hub V2",
+      onClick: () => navigate("/character-hub-v2"),
+      active: isActiveRoute("/character-hub-v2")
+    },
+    {
+      icon: Brain,
       label: "🧠 Playground",
       onClick: () => navigate("/playground"),
       active: isActiveRoute("/playground")
     },
-    { 
-      icon: Users, 
+    {
+      icon: Users,
       label: "🎭 Roleplay",
       onClick: () => {
         console.log('🎭 Roleplay: Navigation clicked, navigating to /roleplay');
@@ -81,14 +87,14 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   ];
 
   const otherItems = [
-    { 
-      icon: Library, 
+    {
+      icon: Library,
       label: "Library",
       onClick: () => navigate("/library"),
       active: isActiveRoute("/library")
     },
-    { 
-      icon: Settings, 
+    {
+      icon: Settings,
       label: "Settings",
       onClick: () => navigate("/profile"),
       active: isActiveRoute("/profile")
@@ -119,11 +125,10 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
           <div>
             <button
               onClick={() => navigate("/dashboard")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                isActiveRoute("/dashboard") 
-                  ? 'bg-blue-600 text-white' 
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${isActiveRoute("/dashboard")
+                  ? 'bg-blue-600 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-800'
-              }`}
+                }`}
             >
               <Home className="w-5 h-5" />
               <span className="text-sm font-medium">Home</span>
@@ -140,11 +145,10 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                 <li key={index}>
                   <button
                     onClick={item.onClick}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                      item.active 
-                        ? 'bg-blue-600 text-white' 
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${item.active
+                        ? 'bg-blue-600 text-white'
                         : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                    }`}
+                      }`}
                   >
                     <item.icon className="w-5 h-5" />
                     <span className="text-sm font-medium">{item.label}</span>
@@ -164,11 +168,10 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                 <li key={index}>
                   <button
                     onClick={item.onClick}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                      item.active 
-                        ? 'bg-blue-600 text-white' 
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${item.active
+                        ? 'bg-blue-600 text-white'
                         : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                    }`}
+                      }`}
                   >
                     <item.icon className="w-5 h-5" />
                     <span className="text-sm font-medium">{item.label}</span>
@@ -185,11 +188,10 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                 <li key={index}>
                   <button
                     onClick={item.onClick}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                      item.active 
-                        ? 'bg-blue-600 text-white' 
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${item.active
+                        ? 'bg-blue-600 text-white'
                         : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                    }`}
+                      }`}
                   >
                     <item.icon className="w-5 h-5" />
                     <span className="text-sm font-medium">{item.label}</span>
@@ -217,21 +219,21 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                 <Menu className="h-5 w-5" />
               </Button>
             )}
-            
+
             {/* Mobile Navigation Drawer */}
-            <MobileNavDrawer 
-              isOpen={mobileNavOpen} 
-              onClose={() => setMobileNavOpen(false)} 
+            <MobileNavDrawer
+              isOpen={mobileNavOpen}
+              onClose={() => setMobileNavOpen(false)}
             />
             <div className="flex justify-end items-center flex-1">
               <div className={`flex items-center ${isCompactRoute ? 'gap-2 md:gap-4' : 'gap-4'}`}>
                 <Button
-                    variant="outline"
-                    size="sm"
-                    className={`text-white border-gray-600 hover:bg-gray-800 ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
-                  >
-                    Upgrade
-                  </Button>
+                  variant="outline"
+                  size="sm"
+                  className={`text-white border-gray-600 hover:bg-gray-800 ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
+                >
+                  Upgrade
+                </Button>
                 {isAdmin && (
                   <Button
                     variant="outline"

@@ -1,7 +1,7 @@
 # Roleplay Dashboard UX Specification
 
-**Document Version:** 1.2
-**Last Updated:** January 10, 2026
+**Document Version:** 2.0
+**Last Updated:** February 6, 2026
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/roleplay`
@@ -70,8 +70,39 @@ Character selection grid with quick access to recent conversations and scene tem
 |------|---------|----------|
 | `useUserConversations` | Fetch/manage user conversations | `hooks/useUserConversations.ts` |
 | `usePublicCharacters` | Fetch public characters | `hooks/usePublicCharacters.ts` |
-| `useUserCharacters` | Fetch user's characters | `hooks/useUserCharacters.ts` |
+| `useUserCharacters` | Fetch user's characters (AI + personas) | `hooks/useUserCharacters.ts` |
 | `useSceneGallery` | Fetch scene templates from `scenes` table | `hooks/useSceneGallery.ts` |
+| `useCharacterImageUpdates` | Realtime subscription for character image changes | `hooks/useCharacterImageUpdates.ts` |
+
+---
+
+## My Personas Section
+
+User personas (user characters) for roleplay identity. Separate from AI characters.
+
+### Display
+- Horizontal scroll of persona cards
+- "+" button opens persona creation dialog
+- Default persona marked with checkmark
+
+### Persona Creation Dialog
+
+Two-path choice dialog:
+
+| Option | Action |
+|--------|--------|
+| **Quick Create** | Simple form: name, description, traits |
+| **Full Editor** | Opens Character Studio with I2I reference support |
+
+### Persona Selection
+- Tap persona card to set as default
+- Default stored in `profiles.default_character_id`
+- Used for multi-reference scene generation (`both_characters` style)
+
+### Reference Image Requirement
+- Personas need `reference_image_url` for multi-reference scenes
+- Without reference image, `both_characters` style is disabled
+- Character Studio allows generating/uploading reference images
 
 ---
 

@@ -1,7 +1,7 @@
 # Roleplay Purpose & PRD (Product Requirements Document)
 
-**Last Updated:** January 10, 2026
-**Status:** ✅ **90% Complete - Production Ready**
+**Last Updated:** February 6, 2026
+**Status:** ✅ **95% Complete - Production Ready**
 **Priority:** **HIGH** - Core MVP Feature
 
 ## **🎯 Purpose Statement**
@@ -31,18 +31,21 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 ## **🏗️ Core Functionality Requirements**
 
 ### **Primary Features (MVP)**
-1. **Character Selection Dashboard** - Mobile-first grid, immediate chat start
-2. **Chat Interface** - Responsive chat with character avatars and streaming
-3. **Scene Integration** - Auto-selected scenes, optional manual selection in chat
-4. **Scene Builder** - Create, edit, and manage character scenes with name, description, and prompts
-5. **Character & Scene Editing** - Full editing capabilities for owners and admins
+1. **Character Selection Dashboard** - Mobile-first grid, immediate chat start ✅
+2. **Chat Interface** - Responsive chat with character avatars and streaming ✅
+3. **Scene Integration** - Auto-selected scenes, optional manual selection in chat ✅
+4. **Scene Builder** - Create, edit, and manage scene templates with AI enhancement ✅
+5. **Character & Scene Editing** - Full editing capabilities for owners and admins ✅
 6. **Memory System** - Three-tier memory (conversation, character, profile)
-7. **Image Consistency** - Hybrid approach using i2i reference (70%+ consistency)
-8. **Scene Continuity** - I2I iteration maintains visual consistency across scenes (Phase 1-2 complete)
-9. **Scene Regeneration** - Edit and regenerate scenes with I2I modification or fresh T2I generation
-10. **Quick Modification UI** - Preset-based scene modifications with intensity control (Phase 2 complete)
-11. **Non-Blocking UI** - Drawers for character info, scenes, and settings (no modal blockers)
-12. **Model Selection** - Dynamic model selection from `api_models` table with health-based availability
+7. **Image Consistency** - Hybrid approach using I2I reference (70%+ consistency) ✅
+8. **Scene Continuity** - I2I iteration maintains visual consistency across scenes ✅
+9. **Scene Regeneration** - Edit and regenerate scenes with I2I modification or fresh T2I ✅
+10. **Quick Modification UI** - Preset-based scene modifications with intensity control ✅
+11. **Non-Blocking UI** - Drawers for character info, scenes, and settings ✅
+12. **Model Selection** - Dynamic model selection from `api_models` table with health-based availability ✅
+13. **User Personas** - Separate user character identity for roleplay with avatar upload ✅
+14. **Multi-Reference Generation** - Combine scene + character references with Seedream v4.5/edit ✅
+15. **I2I Model Selection** - User-selectable I2I models via `useI2IModels` hook ✅
 
 **Model Selection Details:**
 - **Settings Drawer**: Quick access to model selection in chat interface
@@ -53,15 +56,17 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 - **Health-Based Availability**: Local models conditionally available based on worker health checks
 - **Default Selection**: Always uses non-local default model for reliability
 
-### **Secondary Features (Phase 2)**
-1. **Custom Character Creation** - Character builder with real-time preview
+### **Secondary Features (Phase 2)** - Mostly Complete
+1. **Custom Character Creation** - Character builder with real-time preview ✅ Complete
 2. **Scene Generation** - Dynamic scene creation with consistency controls ✅ Complete
 3. **Scene Continuity System** - I2I iteration for visual consistency ✅ Complete
 4. **Scene Regeneration & Modification** - Edit prompts, regenerate with I2I or T2I ✅ Complete
 5. **Quick Modification UI** - Preset-based modifications with intensity control ✅ Complete
-6. **Model Management** - Admin/power user model selection and configuration
-7. **Advanced Mobile Gestures** - Swipe navigation, advanced touch gestures, pinch-to-zoom
-8. **Long-Press Actions** - Context menus and advanced message actions
+6. **Model Management** - Admin/power user model selection and configuration ✅ Complete
+7. **Enhanced Scene Creation** - Phase 1 narrative fields (focus, style, perspective, max_words) ✅ Complete
+8. **WebSocket Cleanup** - Proper subscription management with `activeChannelsRef` pattern ✅ Complete
+9. **Advanced Mobile Gestures** - Swipe navigation, advanced touch gestures, pinch-to-zoom
+10. **Long-Press Actions** - Context menus and advanced message actions
 
 ## **🎨 UX/UI Design Requirements**
 
@@ -119,6 +124,14 @@ The roleplay system provides dynamic model selection through the following UI co
 - **`useRoleplayModels`**: Loads roleplay models from `api_models` table where `modality = 'roleplay'` and `is_active = true`. Combines local models (Qwen) with API models (OpenRouter). Exposes `chatWorkerHealthy` status for local model availability. Always returns a non-local default model for reliability.
 
 - **`useImageModels`**: Loads image/video models from `api_models` table where `modality IN ('image', 'video')` and `is_active = true`. Supports both Replicate and fal.ai models. Used for scene generation and workspace media creation.
+
+- **`useI2IModels`**: Loads style_transfer (I2I) models for scene refinement. Filters by `task = 'style_transfer'` and `is_active = true`. Includes "auto" option for default model selection. Exposes `supports_i2i` and `uses_strength_param` capabilities.
+
+- **`useSceneContinuity`**: Tracks previous scene for I2I iteration. Stores `sceneId` + `imageUrl` per conversation in localStorage with database fallback. Realtime subscription to `character_scenes` table for image updates. Configurable strength (0.2-0.8, default 0.45). Max 25 conversation histories before cleanup.
+
+- **`useSceneCreation`**: Enhanced scene creation with AI pipeline. Includes `enhanceScene()`, `generatePreview()`, `generateStarters()`. Supports Phase 1 narrative fields (focus, style, perspective, max_words). Smart parsing for different AI response formats.
+
+- **`useSceneGallery`**: Loads scene templates from `scenes` table. Supports filtering by content rating, popularity, and recency. CRUD operations with JWT validation. Usage count tracking.
 
 **Model Availability:**
 - Models are only displayed in UI dropdowns when `is_active = true` in `api_models` table
@@ -224,34 +237,77 @@ Model selection is accessible via:
 
 ### **Overview**
 
-The scene/scenario builder allows users to create, edit, and manage character scenes that provide context for roleplay conversations. Scenes are stored in the `character_scenes` table and linked to characters and conversations.
+The scene/scenario builder allows users to create, edit, and manage **character-agnostic scene templates** that provide context for roleplay conversations. Scene templates are stored in the `scenes` table and can be used with any character.
+
+### **Architecture (Updated February 2026)**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      scenes table                               │
+│  (THE source for Scene Gallery - agnostic templates)            │
+│  ───────────────────────────────────────────────────            │
+│  • System templates: creator_id = NULL, is_public = true        │
+│  • User templates: creator_id = user.id, is_public = true/false │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    User starts roleplay
+                    (picks scene → picks character)
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  character_scenes table                          │
+│  (Conversation image artifacts ONLY - not templates)             │
+│  ───────────────────────────────────────────────────             │
+│  • Tracks generated scene images during conversation             │
+│  • Used for scene continuity (I2I generation)                    │
+│  • NOT for template storage                                      │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### **Scene Creation**
 
 **UI Components:**
-- **`SceneGenerationModal`**: Condensed modal (`max-w-sm`) for creating new scenes
+- **`SceneCreationModal`**: Full-featured modal for creating/editing scene templates
   - Scene name field (required)
-  - Scene description field (optional)
-  - Scene prompt field (required)
-  - Character selection (AI characters, user character, narrator)
-  - Auto-navigation to chat after creation
+  - Scene description field (required)
+  - Scene prompt field (required, for image generation)
+  - Scenario type selector
+  - Content rating (SFW/NSFW)
+  - Conversation starters (AI-generated or manual)
+  - **Phase 1 Narrative Fields:**
+    - Scene focus (setting, character, interaction, atmosphere)
+    - Narrative style (concise, detailed, atmospheric)
+    - Visual priority (lighting, clothing, positioning, setting)
+    - Perspective hint (third_person, pov, observer)
+    - Max words slider (20-200)
+  - AI enhancement pipeline (enhance, preview, generate starters)
 
-**Database Schema:**
-- `character_scenes.scene_name`: User-friendly name for the scene
-- `character_scenes.scene_description`: Optional description providing context
-- `character_scenes.scene_prompt`: The actual prompt used for scene generation
-- `character_scenes.scene_rules`: Optional rules or constraints
-- `character_scenes.scene_starters`: Array of conversation starter prompts
-- `character_scenes.priority`: Integer for sorting (higher = first)
+**Database Schema (`scenes` table):**
+- `scenes.name`: User-friendly name for the scene
+- `scenes.description`: Narrative context for AI and users
+- `scenes.scene_prompt`: The prompt used for image generation
+- `scenes.scene_starters`: Array of conversation starter prompts
+- `scenes.scenario_type`: Category (stranger, relationship, fantasy, etc.)
+- `scenes.content_rating`: 'sfw' or 'nsfw'
+- `scenes.suggested_user_role`: Default role for user
+- `scenes.preview_image_url`: Gallery thumbnail
+- `scenes.scene_focus`: Focus priority for narrative generation
+- `scenes.narrative_style`: Tone for AI-generated content
+- `scenes.visual_priority`: Array of visual elements to emphasize
+- `scenes.perspective_hint`: POV for scene description
+- `scenes.max_words`: Word limit for narrative generation
 
 **Creation Flow:**
-1. User opens `SceneGenerationModal` from character detail pane
-2. Enters scene name, description, and prompt
-3. Selects participants (characters, narrator, user character)
-4. Scene record created in database via `useSceneNarrative` hook
-5. Scene ID returned and passed to `onSceneCreated` callback
-6. Parent component auto-selects new scene and navigates to chat
-7. Scene context applied to conversation via `roleplay-chat` edge function
+1. User clicks "+ Create" in Scene Gallery section
+2. `SceneCreationModal` opens
+3. User enters name, description, and prompt (required)
+4. Optional: Use "Enhance with AI" to improve description
+5. Optional: Generate preview image
+6. Optional: Generate conversation starters
+7. Scene saved to `scenes` table with `creator_id = user.id`
+8. Scene appears in user's gallery section
+9. User can start roleplay by selecting scene → then picking character
 
 ### **Scene Display & Management**
 
@@ -341,17 +397,20 @@ const canEdit = isOwner || isAdmin;
 
 ### **Database Tables**
 
-**`character_scenes` Table:**
-- Primary table for roleplay scenes
-- Linked to `characters` and `conversations`
-- Supports scene name, description, prompt, rules, starters
-- Stores generation metadata (model used, consistency settings, etc.)
+**`scenes` Table (Primary - Scene Templates):**
+- Primary table for roleplay scene templates
+- Character-agnostic: scenes can be used with any character
+- System templates: `creator_id = NULL`, `is_public = true`
+- User templates: `creator_id = user.id`, public or private
+- Includes Phase 1 narrative fields (focus, style, perspective, max_words)
+- Tracks usage count for popularity metrics
 
-**`scenes` Table:**
-- Separate table linked to `projects` (storyboard functionality)
-- Not used for roleplay (0 rows currently)
-- Reserved for future storyboard/project features
-- Documented separately from `character_scenes`
+**`character_scenes` Table (Artifacts Only):**
+- Stores generated scene images during conversations
+- Linked to `conversations` via `conversation_id`
+- Used for scene continuity (I2I iteration with previous scene)
+- Tracks `previous_scene_id` and `previous_scene_image_url` for I2I
+- NOT for template storage (templates live in `scenes` table)
 
 ## **📊 Success Criteria & Metrics**
 
@@ -463,27 +522,48 @@ const canEdit = isOwner || isAdmin;
 
 ---
 
-## **🚀 Upcoming Features (Q1 2026)**
+## **🚀 Recently Completed (January-February 2026)**
 
-### **Phase 2: Enhanced Character Creation**
-- **Structured character wizard**: 6-layer character creation (identity, personality, appearance, voice, role, constraints)
-- **AI suggestions ("Sprinkle")**: AI-generated suggestions for traits, voice, appearance
-- **Content rating toggle**: SFW/NSFW with NSFW default
-- **Character templates**: Pre-built character archetypes
+### **Scene Continuity System** ✅
+- **I2I iteration**: First scene uses T2I, subsequent scenes use I2I with previous scene as reference
+- **`useSceneContinuity` hook**: Tracks previous scene per conversation with localStorage + DB fallback
+- **Configurable strength**: 0.2-0.8 range, default 0.45
+- **Realtime updates**: Supabase subscription for scene image completion
 
-### **Phase 2: Scenario Setup Wizard**
-- **8-screen guided flow**: Mode select → Age gate → Scenario type → Characters → Setting → Consent → Style → Hook
-- **5 scenario types**: Stranger, Relationship, Power Dynamic, Fantasy, Slow Burn
-- **AI-generated hooks**: Scenario opening suggestions based on character/type
-- **Quick Start mode**: Minimal setup for fast session start
+### **Multi-Reference Scene Generation** ✅
+- **`both_characters` scene style**: Combines scene + AI character + user character references
+- **Seedream v4.5/edit integration**: Multi-reference composition with Figure notation
+- **I2I model selection**: User-selectable via `useI2IModels` hook with override support
+- **Validation**: Ensures reference images exist before enabling multi-reference
+
+### **Enhanced Scene Creation (Phase 1)** ✅
+- **Narrative generation fields**: scene_focus, narrative_style, visual_priority, perspective_hint, max_words
+- **AI enhancement pipeline**: Enhance description, generate preview, generate starters
+- **SceneCreationModal refactor**: Full-featured modal with collapsible advanced settings
+
+### **User Persona System** ✅
+- **Quick Create vs Full Editor**: Two paths for persona creation
+- **Default persona**: Set and persist default user character
+- **Avatar upload**: Direct upload integration in RoleplaySettingsModal
+- **Reference images**: Used for multi-reference scene generation
+
+### **WebSocket Reliability** ✅
+- **`activeChannelsRef` pattern**: Track all Realtime subscriptions for cleanup
+- **Status callbacks**: Handle SUBSCRIBED, CHANNEL_ERROR, TIMED_OUT, CLOSED states
+- **User notifications**: Toast messages for connection issues
+- **Unmount cleanup**: Proper channel removal prevents orphaned connections
+
+## **🚀 Upcoming Features (Q2 2026)**
 
 ### **Phase 3: Advanced Features**
-- **Multi-character scenarios**: Support for multiple AI characters
+- **Multi-character scenarios**: Support for multiple AI characters in same conversation
 - **Memory anchors**: Key facts characters remember across sessions
+- **Advanced Mobile Gestures**: Swipe navigation, pinch-to-zoom for images
+- **Long-Press Actions**: Context menus and advanced message actions
 - **Scenario templates**: Save and reuse scenario configurations
 
 ---
 
-**Status**: PRD updated January 2026. 85% complete, production ready. This document serves as the strategic foundation for all roleplay development decisions and success metrics.
+**Status**: PRD updated February 6, 2026. 95% complete, production ready. Scene continuity, multi-reference generation, user personas, and enhanced scene creation are fully implemented.
 
 **Document Purpose**: This is the definitive Product Requirements Document (PRD) that defines the business goals, user requirements, and success criteria for the roleplay feature. It serves as the strategic foundation for all development decisions.

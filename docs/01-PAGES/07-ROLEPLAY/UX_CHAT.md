@@ -1,7 +1,7 @@
 # Roleplay Chat UX Specification
 
-**Document Version:** 1.0
-**Last Updated:** January 10, 2026
+**Document Version:** 2.0
+**Last Updated:** February 6, 2026
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/roleplay/chat/:characterId` and `/roleplay/chat/:characterId/scene/:sceneId`
@@ -241,13 +241,52 @@ Full-screen chat interface for roleplay conversations with AI characters. Suppor
 
 ## Scene Continuity System
 
-When enabled, maintains visual consistency across scenes:
+When enabled, maintains visual consistency across scenes using the `useSceneContinuity` hook.
 
-1. First scene in conversation: T2I (text-to-image) using character reference
-2. Subsequent scenes: I2I (image-to-image) using previous scene
-3. Reference passed via `useSceneContinuity` hook with localStorage persistence + DB fallback
-4. Strength setting controls how much previous scene influences new one (default: 0.45)
-5. Persistence: Previous scenes stored in localStorage (max 25 conversations) with database fallback
+### I2I Iteration Flow
+
+1. **First scene**: T2I (text-to-image) using character `reference_image_url`
+2. **Subsequent scenes**: I2I (image-to-image) using previous scene as reference
+3. **Reference tracking**: `useSceneContinuity` hook with localStorage + DB + realtime updates
+4. **Strength control**: Configurable 0.2-0.8 range (default: 0.45)
+5. **Cleanup**: Max 25 conversation histories stored before automatic cleanup
+
+### useSceneContinuity Hook
+
+```typescript
+const {
+  previousScene,        // { sceneId, imageUrl, timestamp, isPending }
+  setLastScene,         // (conversationId, sceneId, imageUrl) => void
+  refreshSceneFromDB,   // (conversationId) => Promise<void>
+  settings,             // { enabled, defaultStrength }
+  updateSettings        // (settings) => void
+} = useSceneContinuity(conversationId);
+```
+
+**Storage Layers:**
+- **localStorage**: Fast lookup, `scene-continuity-scenes` key
+- **Database**: Fallback query to `character_scenes` table
+- **Realtime**: Supabase subscription for `image_url` updates
+
+**Polling for Pending Scenes:**
+- Polls DB every 2 seconds for up to 15 attempts (30s max)
+- Returns `isPending: true` while image generates
+- Auto-updates when image URL becomes available
+
+### Multi-Reference Scene Generation
+
+For `both_characters` scene style, combines multiple reference images:
+
+| Style | References | Description |
+|-------|------------|-------------|
+| `character_only` | 2 | Previous scene + AI character reference |
+| `pov` | 2 | Previous scene + AI character (first-person view) |
+| `both_characters` | 3 | Previous scene + AI character + User character |
+
+**Requirements for `both_characters`:**
+- AI character must have `reference_image_url`
+- User character (persona) must have `reference_image_url`
+- Uses Seedream v4.5/edit for multi-reference composition
 
 ### Scene Regeneration & Modification
 
@@ -256,6 +295,7 @@ Users can edit and regenerate scenes with two modes:
 **I2I Modification Mode:**
 - Edit button (hover-revealed) on scene images
 - Uses current scene as reference for I2I generation
+- User-selectable I2I model via `useI2IModels` hook
 - Strength: 0.5 (higher for modifications)
 - Preserves visual context while applying prompt changes
 
@@ -284,6 +324,42 @@ Presets automatically include continuity phrases to maintain character identity 
 - Scene image updates via workspace asset polling (`subscribeToJobCompletion`)
 - Scene continuity tracking via `useSceneContinuity` hook
 - Previous scene persistence (localStorage + DB fallback)
+
+### WebSocket Subscription Management
+
+All Realtime subscriptions use the `activeChannelsRef` pattern for proper cleanup:
+
+```typescript
+// Track all subscriptions
+const activeChannelsRef = useRef<Set<any>>(new Set());
+
+// Subscribe with status callback
+channel.subscribe((status, err) => {
+  if (status === 'SUBSCRIBED') {
+    activeChannelsRef.current.add(channel);
+  } else if (status === 'CHANNEL_ERROR') {
+    activeChannelsRef.current.delete(channel);
+    toast({ title: 'Connection issue', description: 'Updates may be delayed.' });
+  } else if (status === 'TIMED_OUT' || status === 'CLOSED') {
+    activeChannelsRef.current.delete(channel);
+  }
+});
+
+// Cleanup on unmount
+useEffect(() => {
+  return () => {
+    activeChannelsRef.current.forEach(channel => {
+      supabase.removeChannel(channel);
+    });
+    activeChannelsRef.current.clear();
+  };
+}, []);
+```
+
+**Key Safeguards:**
+- `isCleanedUp` flag prevents retry after unmount
+- Explicit `supabase.removeChannel()` before clearing refs
+- Timeout-based cleanup for job polling (30s max)
 
 ## Scene Generation Flow
 

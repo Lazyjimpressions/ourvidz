@@ -1,7 +1,7 @@
 # Roleplay Scene UX Specification
 
-**Document Version:** 2.0
-**Last Updated:** January 10, 2026
+**Document Version:** 3.0
+**Last Updated:** February 6, 2026
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/roleplay/chat/:characterId` (modal-based)
@@ -65,7 +65,7 @@ Scene templates provide context, setting, and conversation starters for roleplay
 
 ## SceneCreationModal
 
-Unified modal for creating AND editing scene templates. Character-agnostic - no character selection in this modal.
+Unified modal for creating AND editing scene templates. Character-agnostic - no character selection in this modal. Includes AI enhancement pipeline and Phase 1 narrative generation fields.
 
 ### Layout Structure
 
@@ -74,34 +74,45 @@ Unified modal for creating AND editing scene templates. Character-agnostic - no 
 │  Dialog Header                      │
 │  "Create Scene Template"     [X]    │
 ├─────────────────────────────────────┤
-│                                     │
 │  Scene Name: *                      │
 │  [________________________]         │
+│                                     │
+│  Scene Description: *               │
+│  [________________________]         │
+│  [Enhance with AI ✨] [Undo ↩]      │
 │                                     │
 │  Scenario Type:                     │
 │  [stranger | relationship | ...]    │
 │                                     │
-│  Scene Description:                 │
-│  [________________________]         │
-│  [________________________]         │
+│  Content Rating: ( ) SFW (•) NSFW   │
 │                                     │
 │  Scene Prompt: * (for images)       │
 │  [________________________]         │
-│  [________________________]         │
-│  [________________________]         │
-│                                     │
-│  [Enhance ✨] [Undo ↩]              │
+│  [Generate Preview 🖼️]              │
 │                                     │
 │  Conversation Starters:             │
 │  [________________________]         │
-│  (one per line)                     │
+│  [Generate Starters 💬]             │
 │                                     │
-│  Content Rating:                    │
-│  ( ) SFW   (•) NSFW                 │
+│  ▼ Advanced Narrative Settings      │
+│  ┌─────────────────────────────────┐│
+│  │ Scene Focus:                    ││
+│  │ [setting|character|interaction] ││
+│  │                                 ││
+│  │ Narrative Style:                ││
+│  │ [concise|detailed|atmospheric]  ││
+│  │                                 ││
+│  │ Visual Priority: (checkboxes)   ││
+│  │ □ Lighting  □ Clothing          ││
+│  │ □ Positioning  □ Setting        ││
+│  │                                 ││
+│  │ Perspective:                    ││
+│  │ [third_person|pov|observer]     ││
+│  │                                 ││
+│  │ Max Words: [====●====] 60       ││
+│  └─────────────────────────────────┘│
 │                                     │
-│  Visibility:                        │
-│  [x] Make Public                    │
-│                                     │
+│  Visibility: [x] Make Public        │
 ├─────────────────────────────────────┤
 │                   [Cancel] [Create] │
 └─────────────────────────────────────┘
@@ -112,30 +123,53 @@ Unified modal for creating AND editing scene templates. Character-agnostic - no 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | Scene Name | Text | Yes | Display name (2-100 chars) |
+| Scene Description | Textarea | Yes | Narrative context for AI and users |
 | Scenario Type | Select | No | Category (stranger, relationship, fantasy, etc.) |
-| Scene Description | Textarea | No | User-facing context |
 | Scene Prompt | Textarea | Yes | Prompt for image generation (10-2000 chars) |
 | Conversation Starters | Multi-line | No | One starter per line, stored as array |
 | Content Rating | Radio | Yes | SFW or NSFW |
 | Make Public | Checkbox | No | Whether others can see/use this scene |
 
-### Prompt Enhancement
+### Phase 1 Narrative Fields (Advanced Section)
 
-| Button | Action |
-|--------|--------|
-| Enhance | Calls `useScenePromptEnhancement` to improve prompt |
-| Undo | Restores original prompt before enhancement |
+| Field | Type | Options | Description |
+|-------|------|---------|-------------|
+| Scene Focus | Select | setting, character, interaction, atmosphere | What to emphasize in narrative |
+| Narrative Style | Select | concise, detailed, atmospheric | Tone for AI-generated content |
+| Visual Priority | Checkboxes | lighting, clothing, positioning, setting | Visual elements to emphasize |
+| Perspective Hint | Select | third_person, pov, observer | POV for scene description |
+| Max Words | Slider | 20-200 (default: 60) | Word limit for narrative generation |
+
+### AI Enhancement Pipeline
+
+| Button | Action | Hook |
+|--------|--------|------|
+| Enhance with AI | Improves description using AI | `useSceneCreation.enhanceScene()` |
+| Undo | Restores original before enhancement | Local state |
+| Generate Preview | Creates thumbnail image | `useSceneCreation.generatePreview()` |
+| Generate Starters | Creates 3+ conversation openers | `useSceneCreation.generateStarters()` |
+
+### Enhancement Flow
+
+1. User enters scene description
+2. Clicks "Enhance with AI"
+3. Calls `enhance-prompt` edge function with narrative fields
+4. Response parsed for: enhanced_description, scene_prompt, tags, scenario_type
+5. Form fields auto-populated with enhanced values
+6. User can undo or further edit
 
 ### Creation Flow
 
 1. User clicks "+ Create Scene" in Scene Gallery section
-2. Fills in scene name and prompt (required)
-3. Optionally: set type, description, starters, rating
-4. Optionally: click "Enhance" to improve prompt
-5. Click "Create"
-6. Scene saved to `scenes` table with `creator_id = user.id`
-7. `onSceneCreated` callback with scene ID
-8. Scene appears in user's gallery section
+2. Fills in scene name and description (required)
+3. Optionally: click "Enhance with AI" to improve description
+4. Optionally: generate preview image
+5. Optionally: generate conversation starters
+6. Optionally: expand Advanced section for narrative fields
+7. Click "Create"
+8. Scene saved to `scenes` table with `creator_id = user.id`
+9. `onSceneCreated` callback with scene ID
+10. Scene appears in user's gallery section
 
 ### Edit Mode
 
@@ -299,7 +333,7 @@ Primary table for scene templates shown in Scene Gallery.
 |--------|------|-------------|
 | id | UUID | Primary key |
 | name | Text | Required display name |
-| description | Text | User-facing context |
+| description | Text | Narrative context for AI and users |
 | creator_id | UUID | FK to auth.users (NULL = system template) |
 | scenario_type | Text | Category (stranger, relationship, fantasy, etc.) |
 | setting | Text | Location description |
@@ -315,6 +349,11 @@ Primary table for scene templates shown in Scene Gallery.
 | preview_image_url | Text | Gallery thumbnail |
 | scene_prompt | Text | Prompt for image generation |
 | scene_starters | Text[] | Conversation opener suggestions |
+| scene_focus | Text | Phase 1: Focus priority (setting, character, interaction, atmosphere) |
+| narrative_style | Text | Phase 1: Tone (concise, detailed, atmospheric) |
+| visual_priority | Text[] | Phase 1: Elements to emphasize (lighting, clothing, positioning, setting) |
+| perspective_hint | Text | Phase 1: POV (third_person, pov, observer) |
+| max_words | Int | Phase 1: Word limit for narrative (20-200, default: 60) |
 | created_at | Timestamp | Creation time |
 | updated_at | Timestamp | Last update |
 
@@ -404,9 +443,10 @@ These were used when `character_scenes` was overloaded for both templates and ar
 
 | Hook | Purpose |
 |------|---------|
-| `useSceneGallery` | Fetch scene templates from `scenes` table |
-| `useSceneContinuity` | Track previous scene for I2I generation |
-| `useScenePromptEnhancement` | Enhance scene prompts with AI |
+| `useSceneGallery` | Fetch scene templates from `scenes` table with CRUD operations |
+| `useSceneContinuity` | Track previous scene for I2I generation (localStorage + DB + realtime) |
+| `useSceneCreation` | Enhanced scene creation with AI pipeline (enhance, preview, starters) |
+| `useI2IModels` | Load style_transfer (I2I) models for scene refinement |
 
 ---
 

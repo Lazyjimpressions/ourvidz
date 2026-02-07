@@ -1,409 +1,230 @@
-# Scene System Bug Fixes - January 11, 2026
+# Roleplay Scene I2I & Multi-Reference System
 
-## Summary
-
-Fixed critical bugs preventing proper scene template usage in roleplay chat. The scene system was querying the wrong database table and not passing scene data to the edge function.
-
----
-
-## Frontend Fixes (Completed ✅)
-
-### 1. Fixed Scene Loading Table Query
-
-**File:** [src/pages/MobileRoleplayChat.tsx](../../../src/pages/MobileRoleplayChat.tsx#L479-503)
-
-**Problem:** Scene loading was querying `character_scenes` table (conversation artifacts) instead of `scenes` table (templates).
-
-**Fix:**
-```typescript
-// Before (WRONG):
-const { data: sceneData } = await supabase
-  .from('character_scenes')  // ❌ Wrong table - artifacts, not templates
-  .select('*')
-  .eq('id', sceneId)
-  .eq('character_id', characterId)  // ❌ Scenes are character-agnostic
-  .single();
-
-// After (CORRECT):
-const { data: sceneData } = await supabase
-  .from('scenes')  // ✅ Correct table - scene templates
-  .select('*')
-  .eq('id', sceneId)  // ✅ No character filter - scenes are agnostic
-  .single();
-```
-
-### 2. Added Scene Data to Kickoff Call
-
-**File:** [src/pages/MobileRoleplayChat.tsx](../../../src/pages/MobileRoleplayChat.tsx#L750-778)
-
-**Problem:** Scene template data (name, description, starters) was not being passed to the edge function. The edge function was trying to load from the old `character_scenes` table relationship.
-
-**Fix:**
-```typescript
-// Added to kickoff request body:
-scene_name: loadedScene?.name || null,
-scene_description: loadedScene?.description || null,
-scene_starters: loadedScene?.scene_starters || null,
-```
-
-**Why:** The edge function needs explicit scene data from the `scenes` table, not from the deprecated `character.activeScene` relationship.
+**Document Version:** 2.0
+**Last Updated:** February 6, 2026
+**Status:** Active
+**Author:** AI Assistant
 
 ---
 
-## Edge Function Updates (Completed ✅)
+## Purpose
 
-**File:** `supabase/functions/roleplay-chat/index.ts`
-
-**Status:** All changes completed on January 11, 2026
-
-**Deployment:** Ready to be deployed via **Supabase Online Dashboard** (no CLI per CLAUDE.md)
-
-### Summary of Completed Changes
-
-All 6 required changes have been successfully implemented:
-
-1. ✅ Added `scene_starters?: string[]` to RoleplayChatRequest interface (line 47)
-2. ✅ Extracted `scene_starters` from request body (line 220)
-3. ✅ Passed `scene_starters` through all function calls (lines 390, 432, 447, 1613)
-4. ✅ Updated buildSystemPrompt, buildRoleplayContext, callModelWithConfig function signatures
-5. ✅ Updated buildSystemPromptFromTemplate to accept and use scene_starters (lines 995-1003, 1054-1061)
-6. ✅ Changed character_scenes join from INNER to LEFT JOIN (scenes now optional, line 3527)
-
-**Key Implementation Details:**
-
-- Scene starters now come from request body instead of `character.activeScene.scene_starters`
-- Maintained backward compatibility with existing character_scenes data
-- Added console logging for debugging scene starter application
-- Character query no longer fails when no character_scenes exist
+This document describes the image-to-image (I2I) and multi-reference scene generation system used in roleplay chat. The system maintains visual consistency across scenes and supports combining multiple character references.
 
 ---
 
-### Change 1: Add `scene_starters` to Request Interface ✅
+## Scene Generation Modes
 
-**Location:** Lines 27-54 (RoleplayChatRequest interface)
+### Scene Style Options
+
+| Style | References Used | Description |
+|-------|----------------|-------------|
+| `character_only` | AI character reference | Scene shows only the AI character |
+| `pov` | AI character reference | First-person view, user implied but not shown |
+| `both_characters` | AI + User references | Both characters visible in scene |
+
+### Reference Image Requirements
+
+| Scene Style | AI Character | User Persona | Previous Scene |
+|-------------|--------------|--------------|----------------|
+| `character_only` | Required | Not used | Optional (I2I) |
+| `pov` | Required | Not used | Optional (I2I) |
+| `both_characters` | Required | Required | Optional (I2I) |
+
+---
+
+## Multi-Reference Scene Generation
+
+### How It Works
+
+Multi-reference generation uses Seedream v4.5/edit with Figure notation to combine multiple character images into a single scene.
+
+### Request Structure
 
 ```typescript
-interface RoleplayChatRequest {
-  // ... existing fields ...
-  scene_name?: string; // ✅ Already exists
-  scene_description?: string; // ✅ Already exists
-  scene_starters?: string[]; // ✅ COMPLETED (line 47)
+// fal-image edge function request
+{
+  model_key: "seedream-v4.5-edit",
+  prompt: "Figure 1 and Figure 2 in a romantic scene...",
+  reference_images: [
+    "https://storage.url/ai-character-reference.jpg",  // Figure 1
+    "https://storage.url/user-persona-reference.jpg"   // Figure 2
+  ],
+  strength: 0.45,
+  scene_continuity_enabled: true,
+  previous_scene_url: "https://storage.url/previous-scene.jpg"
 }
 ```
 
-### Change 2: Extract `scene_starters` from Request Body ✅
+### Figure Notation
 
-**Location:** Line 220 (destructure request body)
+When using multi-reference, the prompt must use Figure notation:
+
+| Notation | Refers To |
+|----------|-----------|
+| `Figure 1` | First image in `reference_images` array (AI character) |
+| `Figure 2` | Second image in `reference_images` array (User persona) |
+
+**Example Prompt:**
+```
+Figure 1 and Figure 2 embrace in a dimly lit room. Figure 1 wears a red dress while Figure 2 stands behind her.
+```
+
+---
+
+## Scene Continuity (I2I Iteration)
+
+### Purpose
+
+Maintains visual consistency across scenes by using the previous scene as a reference for the next generation.
+
+### Flow
+
+1. **First Scene (T2I):** Text-to-image using only character `reference_image_url`
+2. **Subsequent Scenes (I2I):** Image-to-image using previous scene + character reference
+
+### useSceneContinuity Hook
 
 ```typescript
 const {
-  message,
-  conversation_id,
-  character_id,
-  // ... other fields ...
-  scene_name,
-  scene_description,
-  scene_starters, // ✅ COMPLETED (line 220)
-} = await req.json() as RoleplayChatRequest;
+  previousScene,        // { sceneId, imageUrl, timestamp, isPending }
+  setLastScene,         // (conversationId, sceneId, imageUrl) => void
+  refreshSceneFromDB,   // (conversationId) => Promise<void>
+  settings,             // { enabled, defaultStrength }
+  updateSettings        // (settings) => void
+} = useSceneContinuity(conversationId);
 ```
 
-### Change 3: Pass `scene_starters` Through Function Calls ✅
+### Storage Layers
 
-**Locations:** Lines 390, 432, 447, 908, 1613
+| Layer | Purpose | Key/Location |
+|-------|---------|--------------|
+| localStorage | Fast lookup | `scene-continuity-scenes` |
+| Database | Fallback | `character_scenes.image_url` |
+| Realtime | Live updates | Supabase subscription |
 
-All function calls updated to pass `scene_starters`:
+### I2I Strength Control
 
-- buildRoleplayContext (line 390)
-- buildSystemPrompt (line 432)
-- callModelWithConfig (line 447)
-- buildSystemPromptFromTemplate (line 908)
-- buildRoleplayContext fallback (line 1613)
+| Strength | Effect |
+|----------|--------|
+| 0.2 | Minimal change, preserves most of previous scene |
+| 0.45 | Balanced (default), moderate changes |
+| 0.7 | Significant changes, may lose some consistency |
+| 0.8 | Maximum variation, minimal reference influence |
 
-### Change 4: Update Function Signatures ✅
+---
 
-**Locations:** Lines 881, 1401, 1003, 1510
+## Model Selection
 
-All functions updated to accept `sceneStarters?: string[]`:
+### I2I Models Available
 
-- callModelWithConfig (line 881)
-- buildRoleplayContext (line 1401)
-- buildSystemPromptFromTemplate (line 1003)
-- buildSystemPrompt (line 1510)
-
-### Change 5: Use Request Body `scene_starters` Instead of `character.activeScene` ✅
-
-**Locations:** Lines 1440-1447 (buildRoleplayContext), Lines 1580-1586 (buildSystemPrompt), Lines 1054-1061 (buildSystemPromptFromTemplate)
-
-**Implementation:** Replaced OLD architecture (character.activeScene) with NEW architecture (request body parameter)
+The `useI2IModels` hook provides available models for I2I/style transfer:
 
 ```typescript
-// NEW ARCHITECTURE - uses request body parameter:
-if (sceneStarters && sceneStarters.length > 0) {
-  systemPrompt += `\n\nCONVERSATION STARTERS - Use these to begin or continue:\n`;
-  sceneStarters.forEach((starter: string, index: number) => {
-    systemPrompt += `Starter ${index + 1}: "${starter}"\n`;
+const { models, isLoading, error } = useI2IModels();
+```
+
+### Model Routing
+
+| Model Key | Provider | Best For |
+|-----------|----------|----------|
+| `seedream-v4.5-edit` | fal.ai | Multi-reference, high quality |
+| `rv5.1-i2i` | Replicate | Single reference, fast |
+| `sdxl-i2i` | Local | Privacy, no API cost |
+
+### Model Override for Modifications
+
+When regenerating scenes, users can override the default model:
+
+```typescript
+// In QuickModificationSheet
+const regenerateScene = async (preset: string, modelOverride?: string) => {
+  await generateScene({
+    ...currentParams,
+    i2i_model_override: modelOverride,
+    strength: intensityValue
   });
-  console.log('✅ Applied scene starters from request body:', sceneStarters.length);
+};
+```
+
+---
+
+## Validation Requirements
+
+### Before Multi-Reference Generation
+
+```typescript
+// Validate both characters have reference images
+const canUseMultiReference =
+  aiCharacter.reference_image_url &&
+  userPersona.reference_image_url;
+
+if (!canUseMultiReference && sceneStyle === 'both_characters') {
+  // Fall back to character_only style
+  sceneStyle = 'character_only';
+  toast({
+    title: 'Missing reference image',
+    description: 'Using single character mode'
+  });
 }
 ```
 
-### Change 6: Make Character Query Scene-Optional ✅
+### Reference Image Quality
 
-**Location:** Line 3527 (character query)
+For best results, reference images should be:
 
-**Implementation:** Changed from INNER JOIN to LEFT JOIN (scenes optional)
-
-```typescript
-// Changed from: character_scenes!inner(...)
-// To: character_scenes(...)
-.select(`
-  *,
-  character_scenes(
-    scene_rules,
-    scene_starters,
-    system_prompt,
-    priority,
-    scene_name,
-    scene_description,
-    scene_type
-  )
-`)
-```
-
-**Result:** Character query no longer fails when no character_scenes exist, while maintaining backward compatibility with existing scene data.
+- Clear, well-lit photos/renders
+- Face and upper body visible
+- Consistent style (photo vs anime vs realistic)
+- Minimum 512x512 resolution
 
 ---
 
-## Why These Changes Are Needed
+## Edge Function Integration
 
-### Architecture Migration
+### fal-image Request Flow
 
-**Old Architecture (Deprecated):**
-- Scenes stored in `character_scenes` table with `character_id` foreign key
-- Scenes tied to specific characters
-- Edge function loaded scene data via `character.activeScene` database join
+1. Frontend sends request with `reference_images` array
+2. Edge function validates images are accessible
+3. fal.ai Seedream processes with Figure notation
+4. Result stored in `workspace_assets` table
+5. Frontend polls or subscribes for completion
 
-**New Architecture (Current):**
-- Scene templates stored in `scenes` table (character-agnostic)
-- Scenes can be used with ANY character via Scene Gallery + SceneSetupSheet
-- Frontend loads scene template and passes data to edge function via request body
-- Edge function receives explicit scene data, no database join needed
+### Error Handling
 
-### The Problem That Was Occurring
-
-1. User clicked "A Steamy Shower" scene (sceneId from `scenes` table)
-2. Frontend tried to load scene from `character_scenes` table → NOT FOUND
-3. `loadedScene` was null
-4. No scene data passed to edge function
-5. Edge function tried to load from `character.activeScene` → NULL (no join relationship)
-6. System prompt had no scene context
-7. AI generated generic campus greeting instead of locker room scenario
-
-### After These Fixes
-
-1. User clicks "A Steamy Shower" scene (sceneId from `scenes` table)
-2. Frontend loads scene template from `scenes` table → ✅ FOUND
-3. `loadedScene` has correct data (name, description, prompt, starters)
-4. Scene data passed to edge function in request body
-5. Edge function uses request body parameters (scene_name, scene_description, scene_starters)
-6. System prompt includes scene context and conversation starters
-7. AI generates scene-appropriate greeting: "A shadowy figure slips into the locker room..."
+| Error | Cause | Recovery |
+|-------|-------|----------|
+| 422 Validation Error | Invalid reference URLs | Check URL accessibility |
+| Missing reference | I2I model without images | Fall back to T2I |
+| Timeout | Large image processing | Retry with lower resolution |
 
 ---
 
-## Testing After Edge Function Deployment
+## Related Components
 
-Once the edge function changes are deployed, test the following:
-
-### Test Case 1: Scene Template Loading
-1. Open Scene Gallery on dashboard
-2. Click "A Steamy Shower" scene card
-3. SceneSetupSheet opens with scene details
-4. Verify scene_starters are displayed (3 locker room scenarios)
-
-### Test Case 2: Scene Context in Kickoff
-1. Select character (e.g., Heather) in SceneSetupSheet
-2. Click "Start Roleplay"
-3. Navigate to chat with URL: `/roleplay/chat/{charId}?scene={sceneId}&fresh=true`
-4. Check browser console for log: `🎬 Loaded scene template: A Steamy Shower - Steamy locker room...`
-5. Verify kickoff message references locker room setting (not generic campus)
-
-### Test Case 3: Conversation Starters Applied
-1. In kickoff response, verify AI uses one of the three scene_starters:
-   - "A shadowy figure slips into the locker room..."
-   - "The locker room steam surrounds your bodies..."
-   - "Water cascades over toned muscles..."
-2. Check that response is first-person ("I" statements)
-3. Check that response is in-character (Heather's personality)
-
-### Test Case 4: Fresh Conversation Creation
-1. Start scene with character
-2. Verify new conversation created in database
-3. Check `conversations` table:
-   - `conversation_type` = 'scene_roleplay'
-   - `memory_data.scene_id` = scene UUID
-   - `memory_data.scene_name` = "A Steamy Shower"
-4. Start SAME scene again → Should create ANOTHER fresh conversation (not reuse)
+| Component | Purpose |
+|-----------|---------|
+| `QuickModificationSheet` | Preset-based I2I modifications |
+| `IntensitySelector` | Strength slider for I2I |
+| `ScenePromptEditModal` | Full prompt editing for regeneration |
+| `ConsistencySettings` | I2I method selection |
 
 ---
 
-## Build Status
+## Related Hooks
 
-✅ **Frontend changes compiled successfully**
-- Build time: 2.70s
-- No TypeScript errors
-- No runtime errors expected
-
----
-
-## Related Files
-
-### Frontend (Fixed)
-- [src/pages/MobileRoleplayChat.tsx](../../../src/pages/MobileRoleplayChat.tsx) - Scene loading and kickoff call
-- [src/pages/MobileRoleplayDashboard.tsx](../../../src/pages/MobileRoleplayDashboard.tsx) - Scene selection and navigation
-
-### Edge Function (Needs Update)
-- `supabase/functions/roleplay-chat/index.ts` - Must be updated via online dashboard
-
-### Documentation
-- [UX_SCENE.md](./UX_SCENE.md) - Scene system specification
-- [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md) - Roleplay implementation status
+| Hook | Purpose |
+|------|---------|
+| `useSceneContinuity` | Previous scene tracking |
+| `useI2IModels` | Available I2I model list |
+| `useRoleplaySettings` | Scene style and strength settings |
 
 ---
 
-## Additional Bug Fixes
+## Related Docs
 
-### 7. Fixed Scene Usage Increment Causing Blank Screen ✅ FIXED
-
-**Location:** [src/hooks/useSceneGallery.ts](../../../src/hooks/useSceneGallery.ts#L217-253)
-
-**Problem:** When initiating a scene, the screen went blank due to database errors:
-- `POST .../rpc/increment_scene_usage 404 (Not Found)` - RPC function doesn't exist
-- `PATCH .../scenes?id=eq.... 400 (Bad Request)` - Invalid SQL syntax in fallback
-
-**Root Cause:**
-```typescript
-// OLD CODE - Lines 217-239
-const incrementUsage = async (sceneId: string): Promise<void> => {
-  try {
-    const { error: rpcError } = await supabase.rpc('increment_scene_usage', {
-      scene_id: sceneId
-    });
-
-    // If RPC doesn't exist, do manual update
-    if (rpcError) {
-      await supabase
-        .from('scenes')
-        .update({ usage_count: supabase.rpc('increment', { x: 1 }) })  // ❌ Invalid syntax
-        .eq('id', sceneId);
-    }
-    // ...
-  }
-};
-```
-
-**Fix Applied:**
-```typescript
-// NEW CODE - Lines 217-253
-const incrementUsage = async (sceneId: string): Promise<void> => {
-  try {
-    // Fetch current usage count
-    const { data, error: fetchError } = await supabase
-      .from('scenes')
-      .select('usage_count')
-      .eq('id', sceneId)
-      .single();
-
-    if (fetchError) {
-      console.warn('Could not fetch scene usage count:', fetchError);
-      return;
-    }
-
-    // Increment and update
-    const newCount = (data?.usage_count || 0) + 1;
-    const { error: updateError } = await supabase
-      .from('scenes')
-      .update({ usage_count: newCount })
-      .eq('id', sceneId);
-
-    if (updateError) {
-      console.warn('Could not update scene usage count:', updateError);
-      return;
-    }
-
-    // Update local state
-    setScenes(prev => prev.map(s =>
-      s.id === sceneId ? { ...s, usage_count: newCount } : s
-    ));
-
-    console.log('✅ Scene usage incremented:', sceneId, 'count:', newCount);
-  } catch (err) {
-    console.warn('Could not increment scene usage:', err);
-  }
-};
-```
-
-**Result:** Scene starts no longer cause blank screen. Usage tracking now works properly without requiring RPC functions.
-
----
-
-### 8. Fixed "Cannot access 'user' before initialization" Error ✅ FIXED
-
-**Location:** [src/pages/MobileRoleplayChat.tsx](../../../src/pages/MobileRoleplayChat.tsx#L103-105)
-
-**Problem:** When navigating to scene chat, app crashed with error:
-```
-Uncaught ReferenceError: Cannot access 'user' before initialization at MobileRoleplayChat.tsx:131
-```
-
-**Root Cause:**
-The `useAuth()` hook was being called at line 248, but the `user` variable was being referenced much earlier at line 109 in a useEffect that loads the default user character.
-
-```typescript
-// Line 109 - USING user before it's declared
-useEffect(() => {
-  if (user?.id && defaultCharacterId && !selectedUserCharacterId) {
-    // ...
-  }
-}, [user?.id, defaultCharacterId]);
-
-// Line 248 - DECLARING user (too late!)
-const { user, profile } = useAuth();
-```
-
-**Fix Applied:**
-Moved `useAuth()` and `useToast()` hook calls to the top of the component (after other hooks, before any state that uses them):
-
-```typescript
-// Line 103-105 - Now declared BEFORE first use
-const { user, profile } = useAuth();
-const { toast } = useToast();
-
-// User character state
-const [selectedUserCharacterId, setSelectedUserCharacterId] = useState<string | null>(null);
-// ...
-
-// Line 112 - Now user is available
-useEffect(() => {
-  if (user?.id && defaultCharacterId && !selectedUserCharacterId) {
-    // ...
-  }
-}, [user?.id, defaultCharacterId]);
-```
-
-**Result:** Scene chat page loads without crashing. Hook ordering follows React best practices.
-
----
-
-## Next Steps
-
-1. ✅ Deploy frontend changes (build complete)
-2. ✅ Fixed scene usage increment blank screen issue
-3. 🔴 Update `roleplay-chat` edge function via Supabase dashboard (6 changes listed above)
-4. ✅ Test scene prompt with "A Steamy Shower" scenario
-5. 🔵 Investigate image inline delivery (scene images in workspace vs chat)
-6. 🔵 Investigate character image usage in scene generation
-
----
-
-**Document Purpose:** This document tracks the bug fixes for scene template integration, providing a clear guide for edge function updates that must be deployed via the Supabase online dashboard.
+- [UX_CHAT.md](./UX_CHAT.md) - Scene continuity in chat
+- [UX_SCENE.md](./UX_SCENE.md) - Scene creation
+- [UX_CHARACTER.md](./UX_CHARACTER.md) - Reference image management
+- [../01-WORKSPACE/SEEDREAM_I2I.md](../01-WORKSPACE/SEEDREAM_I2I.md) - Workspace I2I documentation
+- [../../09-REFERENCE/FAL_AI_SEEDREAM_DEFINITIVE.md](../../09-REFERENCE/FAL_AI_SEEDREAM_DEFINITIVE.md) - Seedream API reference

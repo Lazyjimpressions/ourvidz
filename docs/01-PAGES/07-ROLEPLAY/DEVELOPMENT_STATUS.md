@@ -1,14 +1,14 @@
 # Roleplay Development Status - Consolidated
 
-**Last Updated:** January 10, 2026
-**Status:** **90% Complete - Production Ready**
+**Last Updated:** February 6, 2026
+**Status:** **95% Complete - Production Ready**
 **Purpose:** Single source of truth for roleplay development status, implementation details, and next steps
 
 ---
 
 ## Current Implementation Status
 
-### Production Ready (90% Complete)
+### Production Ready (95% Complete)
 
 **Core Features:**
 - Mobile-first pages: MobileRoleplayDashboard.tsx, MobileRoleplayChat.tsx
@@ -20,21 +20,31 @@
 - **Quick modification UI** - Preset-based scene modifications with intensity control
 - Non-blocking drawers for settings and character info
 - 3rd party API integration (OpenRouter, Replicate, fal.ai)
+- **User Persona System** - Quick create vs Full Editor, default persona, avatar upload
+- **Multi-Reference Scene Generation** - Combine scene + character references with Seedream v4.5/edit
+- **Enhanced Scene Creation** - Phase 1 narrative fields and AI enhancement pipeline
+- **WebSocket Reliability** - Proper subscription cleanup with `activeChannelsRef` pattern
 
-**Recently Completed (5%):**
-- ✅ Scene continuity system (I2I iteration) - Phase 1, 1.5, 1.6 complete
-- ✅ Scene regeneration with I2I modification mode
-- ✅ Quick modification UI with NSFW presets (Phase 2)
-- ✅ Inline scene display in chat messages
+**Recently Completed (January-February 2026):**
+- ✅ Scene continuity system (I2I iteration) - Full implementation with `useSceneContinuity` hook
+- ✅ Scene regeneration with I2I modification mode and model override
+- ✅ Quick modification UI with NSFW presets
+- ✅ Inline scene display in chat messages with proper metadata
 - ✅ Scene persistence (localStorage + DB fallback)
-- ✅ Intensity selector for I2I strength control
+- ✅ Intensity selector for I2I strength control (0.2-0.8 range)
+- ✅ Multi-reference scene generation with Seedream v4.5/edit
+- ✅ User persona system with avatar upload
+- ✅ I2I model selection via `useI2IModels` hook
+- ✅ Enhanced scene creation with Phase 1 narrative fields
+- ✅ WebSocket subscription cleanup patterns
+- ✅ Scene template architecture migration (`scenes` table)
+- ✅ Scene description and user role in system prompts
 
-**Missing (10% Remaining):**
+**Missing (5% Remaining):**
 - Three-tier memory system (conversation, character, profile)
-- Character scene templates integration
-- Dynamic greeting generation
-- Advanced character creation wizard
-- Scenario setup wizard
+- Multi-character scenarios
+- Advanced mobile gestures (swipe, pinch-to-zoom)
+- Long-press context menus
 
 ---
 
@@ -101,7 +111,7 @@ src/pages/
 └── MobileRoleplayChat.tsx (632 lines) - Chat interface
 ```
 
-### Components (20 active files)
+### Components (25+ active files)
 ```
 src/components/roleplay/
 ├── MobileCharacterCard.tsx - Character cards with stats
@@ -109,31 +119,42 @@ src/components/roleplay/
 ├── MobileCharacterSheet.tsx - Character details
 ├── MobileChatHeader.tsx - 56px mobile header
 ├── ChatBottomNav.tsx - Bottom navigation bar
-├── QuickSettingsDrawer.tsx - Mobile settings sheet
+├── QuickSettingsDrawer.tsx - Mobile settings sheet with I2I model selection
 ├── DesktopChatLayout.tsx - Side-by-side desktop layout
-├── ChatMessage.tsx - Message display with scene images & edit
+├── ChatMessage.tsx - Message display with scene images & regeneration
 ├── ContextMenu.tsx - Message context menu
 ├── CharacterGrid.tsx - Dashboard grid
 ├── QuickStartSection.tsx - Dashboard quick start
 ├── SearchAndFilters.tsx - Dashboard search/filters
 ├── CharacterPreviewModal.tsx - Character preview (optional)
 ├── RoleplayHeader.tsx - Desktop header
-├── RoleplaySettingsModal.tsx - Full settings modal
+├── RoleplaySettingsModal.tsx - Full settings with tabs (chat, image, I2I, persona)
 ├── CharacterInfoDrawer.tsx - Character info sheet
 ├── ScenePromptEditModal.tsx - Full prompt editor for regeneration
 ├── QuickModificationSheet.tsx - Quick preset-based modifications
 ├── IntensitySelector.tsx - Strength slider with presets
-└── SceneDebugPanel.tsx - Admin debugging (dev only)
+├── SceneDebugPanel.tsx - Admin debugging (dev only)
+├── SceneCreationModal.tsx - Enhanced scene creation with AI pipeline
+├── SceneGallery.tsx - Scene template gallery with CRUD
+├── SceneSetupSheet.tsx - Character selection for scene start
+├── SceneTemplateCard.tsx - Individual scene card in gallery
+└── ConsistencySettings.tsx - I2I method selection (seed, reference, hybrid)
 ```
 
-### Hooks (5 key files)
+### Hooks (10+ key files)
 ```
 src/hooks/
 ├── useLocalModelHealth.ts - Worker health monitoring
-├── useRoleplayModels.ts - Chat model loading
+├── useRoleplayModels.ts - Chat model loading with health fallback
+├── useImageModels.ts - Image/video model loading
+├── useI2IModels.ts - Style transfer (I2I) models for scene refinement
 ├── useKeyboardVisible.ts - Mobile keyboard detection
-├── useRoleplaySettings.ts - Shared settings state
-└── useSceneContinuity.ts - Scene continuity tracking (localStorage + DB)
+├── useRoleplaySettings.ts - Shared settings state with validation
+├── useSceneContinuity.ts - Scene continuity tracking (localStorage + DB + realtime)
+├── useSceneCreation.ts - Enhanced scene creation with AI pipeline
+├── useSceneGallery.ts - Scene template CRUD with filtering
+├── useCharacterImageUpdates.ts - Realtime character image subscription
+└── useUserConversations.ts - Conversation list with scene images
 ```
 
 ### Services (2 files)
@@ -215,6 +236,12 @@ src/services/
 2. **Subscription Errors:** Fixed by proper channel cleanup and unique channel names
 3. **Local Models Always Shown:** Fixed by health check integration
 4. **No Availability Indicators:** Fixed by adding badges and disabled states
+5. **Scene Template Loading:** Fixed by using `scenes` table instead of `character_scenes`
+6. **Scene Image Display:** Fixed by including metadata in opener message
+7. **User Role Not Passed:** Fixed by adding `user_role` to edge function request
+8. **Scene Description Missing:** Fixed by adding `scene_description` to system prompt
+9. **WebSocket Orphaned Connections:** Fixed by `activeChannelsRef` cleanup pattern
+10. **Hook Ordering Error:** Fixed by moving `useAuth()` before dependent hooks
 
 ---
 
@@ -281,25 +308,70 @@ For each chat interaction, verify:
 
 ---
 
-## Upcoming Features (Q1 2026)
-
-### Phase 2: Enhanced Character Creation
-- Structured character wizard with 6 layers (identity, personality, appearance, voice, role, constraints)
-- AI suggestions ("Sprinkle") for traits, voice, appearance
-- Content rating toggle with NSFW default
-- Character templates for quick creation
-
-### Phase 2: Scenario Setup Wizard
-- 8-screen guided flow per wireframe spec
-- 5 scenario types: Stranger, Relationship, Power Dynamic, Fantasy, Slow Burn
-- AI-generated hooks and opening suggestions
-- Quick Start mode for minimal setup
+## Upcoming Features (Q2 2026)
 
 ### Phase 3: Advanced Features
-- Multi-character scenarios
-- Memory anchors (key facts characters remember)
-- Scenario templates (save and reuse configurations)
-- Three-tier memory system
+- Multi-character scenarios (multiple AI characters in same conversation)
+- Memory anchors (key facts characters remember across sessions)
+- Three-tier memory system (conversation, character, profile)
+- Advanced mobile gestures (swipe navigation, pinch-to-zoom)
+- Long-press context menus for messages
+
+---
+
+## WebSocket Best Practices
+
+### Subscription Cleanup Pattern
+
+All Realtime subscriptions should follow this pattern:
+
+```typescript
+// Track all subscriptions
+const activeChannelsRef = useRef<Set<any>>(new Set());
+
+// Cleanup on unmount
+useEffect(() => {
+  return () => {
+    if (activeChannelsRef.current.size > 0) {
+      console.log('🧹 Cleaning up', activeChannelsRef.current.size, 'subscriptions');
+      activeChannelsRef.current.forEach(channel => {
+        try {
+          supabase.removeChannel(channel);
+        } catch (error) {
+          console.error('Error removing channel:', error);
+        }
+      });
+      activeChannelsRef.current.clear();
+    }
+  };
+}, []);
+```
+
+### Status Callback Handling
+
+```typescript
+.subscribe((status, err) => {
+  if (status === 'SUBSCRIBED') {
+    console.log('✅ Subscribed to channel');
+    activeChannelsRef.current.add(channel);
+  } else if (status === 'CHANNEL_ERROR') {
+    console.error('❌ Channel error:', err);
+    activeChannelsRef.current.delete(channel);
+    toast({ title: 'Connection issue', description: 'Updates may be delayed.' });
+  } else if (status === 'TIMED_OUT') {
+    console.warn('⏱️ Subscription timed out');
+    activeChannelsRef.current.delete(channel);
+  } else if (status === 'CLOSED') {
+    activeChannelsRef.current.delete(channel);
+  }
+});
+```
+
+### Key Safeguards
+- `isCleanedUp` flag prevents retry after unmount
+- `initializationLock` ref prevents duplicate route initializations
+- Explicit `supabase.removeChannel()` before clearing refs
+- Timeout-based cleanup for job polling (prevents orphaned subscriptions)
 
 ---
 

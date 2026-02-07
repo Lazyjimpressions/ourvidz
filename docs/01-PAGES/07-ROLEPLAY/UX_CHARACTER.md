@@ -1,7 +1,7 @@
 # Roleplay Character UX Specification
 
-**Document Version:** 1.0
-**Last Updated:** January 10, 2026
+**Document Version:** 2.0
+**Last Updated:** February 6, 2026
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/roleplay` (modal-based)
@@ -11,7 +11,29 @@
 
 ## Purpose
 
-Character creation and editing interface for roleplay AI companions. Supports quick creation for casual users and detailed customization for power users.
+Character creation and editing interface for roleplay AI companions and user personas. Supports quick creation for casual users and detailed customization for power users. Now includes a distinct path for user personas (player characters) vs AI characters.
+
+---
+
+## Character Types
+
+| Type | Description | Table | Purpose |
+|------|-------------|-------|---------|
+| **AI Character** | AI-controlled roleplay companion | `characters` | Chat partner that responds to user messages |
+| **User Persona** | User's own character for roleplay | `characters` (user_id = current user) | Player identity in multi-reference scenes |
+
+### User Personas
+
+User personas are characters that represent the player in roleplay scenarios. They are used for:
+
+1. **Multi-reference scene generation** - `both_characters` style combines AI + user references
+2. **Role identification** - Clear user identity in scene descriptions
+3. **Visual consistency** - User's appearance maintained across scenes
+
+**Key Requirements:**
+- Must have `reference_image_url` for multi-reference scene generation
+- Stored in same `characters` table with `user_id` matching current user
+- Default persona stored in `profiles.default_character_id`
 
 ---
 
@@ -20,8 +42,74 @@ Character creation and editing interface for roleplay AI companions. Supports qu
 | Trigger | Location | Opens |
 |---------|----------|-------|
 | "+" button | Dashboard header | `AddCharacterModal` |
+| "+" button | My Personas section | Persona Creation Dialog |
 | Edit button | Character preview | `CharacterEditModal` |
 | Edit button | Character info drawer | `CharacterEditModal` |
+
+---
+
+## Persona Creation Dialog
+
+Two-path choice dialog for creating user personas. Accessed via "+" button in My Personas section on dashboard.
+
+### Layout Structure
+
+```
+┌─────────────────────────────────────┐
+│  Create Your Persona                │
+│                                     │
+│  ┌─────────────────────────────┐   │
+│  │  🚀 Quick Create            │   │
+│  │  Simple form: name,         │   │
+│  │  description, traits        │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│  ┌─────────────────────────────┐   │
+│  │  🎨 Full Editor             │   │
+│  │  Character Studio with      │   │
+│  │  I2I reference support      │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│                         [Cancel]    │
+└─────────────────────────────────────┘
+```
+
+### Creation Paths
+
+| Path | Fields | Output | Use Case |
+|------|--------|--------|----------|
+| **Quick Create** | Name, Description, Traits | Basic persona (no reference image) | Users who want text-only identity |
+| **Full Editor** | Full Character Studio access | Complete persona with reference image | Users who want visual consistency in scenes |
+
+### Quick Create Form
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| Name | Text | Yes | User's persona name |
+| Description | Textarea | No | Brief character description |
+| Traits | Tag input | No | Personality traits |
+
+### Full Editor Path
+
+Opens Character Studio (`/character-studio`) with:
+- Pre-selected "Persona" mode
+- I2I reference generation enabled
+- Avatar upload option
+- Full customization options
+
+### Reference Image Requirement
+
+For multi-reference scene generation (`both_characters` style):
+
+| Has Reference Image | Result |
+|---------------------|--------|
+| ✅ Yes | Full multi-reference with AI character + user persona |
+| ❌ No | `both_characters` style disabled, falls back to `character_only` |
+
+**Reference Image Sources:**
+- Generated via Character Studio
+- Uploaded via avatar upload
+- Set from existing library asset
 
 ---
 
@@ -155,6 +243,21 @@ const canEdit = isOwner || isAdmin;
 | Generate | Creates new portrait, prompts to set as avatar |
 | Upload | Opens file picker, uploads to `avatars` bucket |
 | Set from Scene | Option to use existing scene image |
+| Set as Reference | Copies image to `reference_image_url` for I2I/multi-reference |
+
+### Reference Image Field
+
+The `reference_image_url` field is critical for scene generation consistency:
+
+| Field | Purpose | Used By |
+|-------|---------|---------|
+| `image_url` | Display avatar in UI | Dashboard, chat header, cards |
+| `reference_image_url` | Source for I2I generation | Scene generation, multi-reference |
+
+**Auto-Population:**
+- When generating a new portrait, both `image_url` and `reference_image_url` are set
+- When uploading, user can choose to also set as reference
+- Reference image should be high-quality, clear face/body shot
 
 ### Auto-Save Behavior
 
@@ -243,11 +346,24 @@ const canEdit = isOwner || isAdmin;
 | `CharacterPreviewModal` | View-only character details |
 | `CharacterInfoDrawer` | Character info in chat |
 | `MobileCharacterCard` | Grid card display |
+| `PersonaCreationDialog` | Two-path persona creation |
+| `PersonaCard` | Persona display in My Personas section |
+
+---
+
+## Related Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useUserCharacters` | Fetch user's AI characters + personas |
+| `usePublicCharacters` | Fetch public characters |
+| `useAuth` | Get current user and default persona ID |
 
 ---
 
 ## Related Docs
 
 - [PURPOSE.md](./PURPOSE.md) - Business requirements
-- [UX_DASHBOARD.md](./UX_DASHBOARD.md) - Character grid
+- [UX_DASHBOARD.md](./UX_DASHBOARD.md) - Character grid and persona section
 - [UX_SCENE.md](./UX_SCENE.md) - Scene creation
+- [UX_CHAT.md](./UX_CHAT.md) - Multi-reference scene generation
