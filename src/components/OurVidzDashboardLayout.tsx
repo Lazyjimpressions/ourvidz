@@ -235,15 +235,25 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                   Upgrade
                 </Button>
                 {isAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate("/admin")}
-                    className={`gap-2 text-white border-gray-600 hover:bg-gray-800 ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
-                  >
-                    <Settings className="h-4 w-4" />
-                    Admin
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate("/admin")}
+                      className={`gap-2 text-white border-gray-600 hover:bg-gray-800 ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
+                    >
+                      <Settings className="h-4 w-4" />
+                      Admin
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => navigate("/style-guide")}
+                      className={`text-[10px] text-muted-foreground hover:text-white ${isCompactRoute ? 'hidden md:inline-flex' : ''}`}
+                    >
+                      Style Guide
+                    </Button>
+                  </>
                 )}
                 <div className={`flex items-center ${isCompactRoute ? 'gap-2 md:gap-3' : 'gap-3'} text-sm`}>
                   <div className="flex items-center gap-2 text-gray-300">

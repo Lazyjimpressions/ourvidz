@@ -62,18 +62,12 @@ export default {
         'dark-border': '#333333',
       },
       borderRadius: {
-        lg: "0.8rem",
-        md: "0.6rem",
-        sm: "0.4rem",
+        lg: "0.5rem",
+        md: "0.375rem",
+        sm: "0.25rem",
       },
-      spacing: {
-        '1': '8px',
-        '2': '16px',
-        '3': '24px',
-        '4': '32px',
-        '5': '40px',
-        '6': '48px',
-      },
+      // Note: Using Tailwind default spacing (4px base unit)
+      // 1 = 4px, 2 = 8px, 3 = 12px, 4 = 16px, etc.
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',

@@ -3,7 +3,8 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save, Sparkles, Wand2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Sparkles, Wand2, Loader2, User } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useCharacterStudioV2 } from '@/hooks/useCharacterStudioV2';
 import { IdentityTab } from '@/components/character-studio/IdentityTab';
 import { AppearanceTab } from '@/components/character-studio/AppearanceTab';
@@ -74,11 +75,20 @@ export default function CharacterStudioV2() {
     history,
     isLoadingHistory,
     pinAsAnchor,
-    useAsMain
+    useAsMain,
+    deleteFromHistory
   } = useCharacterStudioV2(id, mode);
 
   // Signed preview URL state
   const [signedPreviewUrl, setSignedPreviewUrl] = useState<string>('');
+  // Signed anchor URL state for avatar display
+  const [signedAvatarUrl, setSignedAvatarUrl] = useState<string>('');
+  // Preview mode state
+  const [previewMode, setPreviewMode] = useState<'single' | 'grid' | 'compare'>('single');
+  // Signed history URLs for Grid/Compare modes
+  const [signedHistoryUrls, setSignedHistoryUrls] = useState<Record<string, string>>({});
+  // Signed primary anchor URL for Compare mode
+  const [signedPrimaryAnchorUrl, setSignedPrimaryAnchorUrl] = useState<string>('');
 
   // Sign the preview URL when formData.image_url changes
   useEffect(() => {
@@ -92,6 +102,55 @@ export default function CharacterStudioV2() {
     };
     signUrl();
   }, [formData.image_url]);
+
+  // Sign the avatar URL from primary anchor
+  const primaryAnchor = formData.character_anchors?.find(a => a.is_primary);
+  useEffect(() => {
+    const signUrl = async () => {
+      const avatarSource = primaryAnchor?.image_url || formData.image_url;
+      if (avatarSource) {
+        const signed = await getSignedPreviewUrl(avatarSource);
+        setSignedAvatarUrl(signed);
+      } else {
+        setSignedAvatarUrl('');
+      }
+    };
+    signUrl();
+  }, [primaryAnchor?.image_url, formData.image_url]);
+
+  // Sign the primary anchor URL for Compare mode
+  useEffect(() => {
+    const signUrl = async () => {
+      if (primaryAnchor?.image_url) {
+        const signed = await getSignedPreviewUrl(primaryAnchor.image_url);
+        setSignedPrimaryAnchorUrl(signed);
+      } else {
+        setSignedPrimaryAnchorUrl('');
+      }
+    };
+    signUrl();
+  }, [primaryAnchor?.image_url]);
+
+  // Sign history URLs for Grid mode
+  useEffect(() => {
+    const signUrls = async () => {
+      if (!history || history.length === 0) {
+        setSignedHistoryUrls({});
+        return;
+      }
+      const urlMap: Record<string, string> = {};
+      const toSign = history.slice(0, 4); // Only sign first 4 for grid
+      await Promise.all(
+        toSign.map(async (scene) => {
+          if (scene.image_url) {
+            urlMap[scene.id] = await getSignedPreviewUrl(scene.image_url);
+          }
+        })
+      );
+      setSignedHistoryUrls(urlMap);
+    };
+    signUrls();
+  }, [history]);
 
   // If loading existing character
   if (id && isLoading) {
@@ -156,13 +215,39 @@ export default function CharacterStudioV2() {
 
         {/* Left Column: Configuration Controls (Scrollable) */}
         <div className="w-full lg:w-[400px] border-b lg:border-r border-border/50 flex flex-col bg-card/30 lg:h-full">
-          <div className="px-4 py-3 border-b border-border/50">
+          {/* Character Avatar Header */}
+          <div className="px-4 py-3 border-b border-border/50 flex items-center gap-3">
+            <div className="relative">
+              {signedAvatarUrl ? (
+                <img
+                  src={signedAvatarUrl}
+                  alt={formData.name || 'Character'}
+                  className="w-10 h-10 rounded-full object-cover border border-border/50"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center border border-border/50">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-xs font-semibold truncate">
+                {formData.name || (mode === 'create' ? 'New Character' : 'Unnamed')}
+              </h2>
+              <p className="text-[10px] text-muted-foreground">
+                {mode === 'edit' ? 'Saved • Editing' : 'Unsaved • Creating'}
+              </p>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="px-4 py-2 border-b border-border/50">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4 h-8 bg-muted/50 p-0.5">
-                <TabsTrigger value="identity" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Identity</TabsTrigger>
-                <TabsTrigger value="appearance" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Visuals</TabsTrigger>
-                <TabsTrigger value="style" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Style</TabsTrigger>
-                <TabsTrigger value="media" className="text-[10px] h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm">Media</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 h-7 bg-muted/50 p-0.5">
+                <TabsTrigger value="identity" className="text-[10px] h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">Identity</TabsTrigger>
+                <TabsTrigger value="appearance" className="text-[10px] h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">Visuals</TabsTrigger>
+                <TabsTrigger value="style" className="text-[10px] h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">Style</TabsTrigger>
+                <TabsTrigger value="media" className="text-[10px] h-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">Media</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -185,23 +270,143 @@ export default function CharacterStudioV2() {
         </div>
 
         {/* Middle Column: Preview Canvas (Fixed) */}
-        <div className="w-full lg:flex-1 bg-black/50 relative flex flex-col items-center justify-center p-4 lg:p-8 h-[50vh] lg:h-full border-b lg:border-b-0 border-border/50">
+        <div className="w-full lg:flex-1 bg-black/50 relative flex flex-col items-center p-4 lg:p-6 h-[50vh] lg:h-full border-b lg:border-b-0 border-border/50">
+          {/* View Mode Tabs */}
+          <div className="flex gap-1 mb-3 flex-wrap justify-center">
+            {(['Single', 'Grid', 'Compare', 'Image', 'Video', 'Avatar'] as const).map((mode) => (
+              <button
+                key={mode}
+                className={cn(
+                  "px-2 py-1 text-[10px] rounded transition-colors",
+                  previewMode === mode.toLowerCase()
+                    ? "bg-primary text-white"
+                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                )}
+                onClick={() => {
+                  if (['single', 'grid', 'compare'].includes(mode.toLowerCase())) {
+                    setPreviewMode(mode.toLowerCase() as 'single' | 'grid' | 'compare');
+                  }
+                }}
+                title={!['Single', 'Grid', 'Compare'].includes(mode) ? 'Coming soon' : undefined}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+
           {/* Canvas Area */}
-          <div className="relative aspect-[3/4] h-full max-h-[800px] w-full max-w-[600px] bg-gray-900/50 rounded-lg border border-white/5 shadow-2xl flex items-center justify-center overflow-hidden group">
-            {signedPreviewUrl ? (
-              <img src={signedPreviewUrl} alt="Preview" className="w-full h-full object-cover transition-opacity duration-300" />
-            ) : (
-              <div className="text-center space-y-4 p-8">
-                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/5">
-                  <Sparkles className="w-8 h-8 text-muted-foreground/30" />
+          <div className="relative aspect-[3/4] flex-1 max-h-[800px] w-full max-w-[600px] bg-gray-900/50 rounded-lg border border-white/5 shadow-2xl flex items-center justify-center overflow-hidden group">
+            {/* Grid Mode - 2x2 of recent history */}
+            {previewMode === 'grid' ? (
+              history && history.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 w-full h-full p-2">
+                  {history.slice(0, 4).map((scene) => (
+                    <div key={scene.id} className="relative aspect-square rounded-lg overflow-hidden bg-black/30 border border-white/5">
+                      {signedHistoryUrls[scene.id] ? (
+                        <img
+                          src={signedHistoryUrls[scene.id]}
+                          alt={scene.prompt || 'Generated'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground/50" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {/* Fill empty slots if less than 4 */}
+                  {Array.from({ length: Math.max(0, 4 - (history?.length || 0)) }).map((_, i) => (
+                    <div key={`empty-${i}`} className="relative aspect-square rounded-lg bg-black/20 border border-white/5 flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 text-muted-foreground/20" />
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">No Preview Generated</h3>
-                  <p className="text-xs text-muted-foreground/60 mt-1 max-w-[200px] mx-auto">
-                    Configure your character settings and use the prompt bar to generate a preview.
-                  </p>
+              ) : (
+                <div className="text-center space-y-4 p-8">
+                  <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/5">
+                    <Sparkles className="w-8 h-8 text-muted-foreground/30" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground">No History Yet</h3>
+                    <p className="text-xs text-muted-foreground/60 mt-1 max-w-[200px] mx-auto">
+                      Generate some images to see them in grid view.
+                    </p>
+                  </div>
+                </div>
+              )
+            ) : previewMode === 'compare' ? (
+              /* Compare Mode - Anchor vs Latest side by side */
+              <div className="flex gap-2 w-full h-full p-2">
+                {/* Anchor Side */}
+                <div className="flex-1 relative rounded-lg overflow-hidden bg-black/30 border border-white/5">
+                  {signedPrimaryAnchorUrl ? (
+                    <>
+                      <img
+                        src={signedPrimaryAnchorUrl}
+                        alt="Primary Anchor"
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-2 left-2 text-[10px] bg-black/70 text-white/90 px-2 py-1 rounded font-medium">
+                        Anchor
+                      </span>
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                      <User className="w-8 h-8 text-muted-foreground/30" />
+                      <span className="text-[10px] text-muted-foreground/50">No Anchor</span>
+                    </div>
+                  )}
+                </div>
+                {/* Latest Generation Side */}
+                <div className="flex-1 relative rounded-lg overflow-hidden bg-black/30 border border-white/5">
+                  {history && history.length > 0 && signedHistoryUrls[history[0]?.id] ? (
+                    <>
+                      <img
+                        src={signedHistoryUrls[history[0].id]}
+                        alt="Latest Generation"
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-2 left-2 text-[10px] bg-black/70 text-white/90 px-2 py-1 rounded font-medium">
+                        Latest
+                      </span>
+                    </>
+                  ) : signedPreviewUrl ? (
+                    <>
+                      <img
+                        src={signedPreviewUrl}
+                        alt="Current Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <span className="absolute bottom-2 left-2 text-[10px] bg-black/70 text-white/90 px-2 py-1 rounded font-medium">
+                        Current
+                      </span>
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                      <Sparkles className="w-8 h-8 text-muted-foreground/30" />
+                      <span className="text-[10px] text-muted-foreground/50">No Generation</span>
+                    </div>
+                  )}
                 </div>
               </div>
+            ) : (
+              /* Single Mode - Default */
+              signedPreviewUrl ? (
+                <img src={signedPreviewUrl} alt="Preview" className="w-full h-full object-cover transition-opacity duration-300" />
+              ) : (
+                <div className="text-center space-y-4 p-8">
+                  <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/5">
+                    <Sparkles className="w-8 h-8 text-muted-foreground/30" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-muted-foreground">No Preview Generated</h3>
+                    <p className="text-xs text-muted-foreground/60 mt-1 max-w-[200px] mx-auto">
+                      Configure your character settings and use the prompt bar to generate a preview.
+                    </p>
+                  </div>
+                </div>
+              )
             )}
 
             {/* Loading Overlay */}
@@ -248,6 +453,7 @@ export default function CharacterStudioV2() {
                 isLoading={isLoadingHistory}
                 onPinAsAnchor={pinAsAnchor}
                 onUseAsMain={useAsMain}
+                onDelete={deleteFromHistory}
               />
             </div>
           </div>

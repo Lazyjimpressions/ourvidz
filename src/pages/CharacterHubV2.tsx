@@ -5,16 +5,20 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { CharacterCard } from '@/components/characters/CharacterCard';
 import { CharacterFilters } from '@/components/characters/CharacterFilters';
-import { CharacterHubFilters, CharacterV2, CharacterGenre } from '@/types/character-hub-v2';
+import { CharacterHubSidebar } from '@/components/characters/CharacterHubSidebar';
+import { CharacterCreatePanel } from '@/components/characters/CharacterCreatePanel';
+import { CharacterHubFilters, CharacterV2 } from '@/types/character-hub-v2';
 import { Button } from '@/components/ui/button';
 import { Plus, Users, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 
 export default function CharacterHubV2() {
     const navigate = useNavigate();
     const { user } = useAuth();
     const { toast } = useToast();
+
+    // Selected character state
+    const [selectedCharacter, setSelectedCharacter] = useState<CharacterV2 | null>(null);
 
     // Filter State
     const [filters, setFilters] = useState<CharacterHubFilters>({
@@ -33,11 +37,11 @@ export default function CharacterHubV2() {
             const { data, error } = await supabase
                 .from('characters')
                 .select(`
-            *,
-            character_anchors(*)
-        `)
+                    *,
+                    character_anchors(*)
+                `)
                 .eq('user_id', user.id)
-                .neq('role', 'user') // Exclude user personas (they live in roleplay settings)
+                .neq('role', 'user')
                 .order('created_at', { ascending: false });
 
             if (error) {
@@ -70,26 +74,22 @@ export default function CharacterHubV2() {
                 if (!matchesName && !matchesTagline && !matchesTags) return false;
             }
 
-            // Genre filter (using tags as proxy for now if no explicit genre field)
+            // Genre filter
             if (filters.genres && filters.genres.length > 0) {
-                // Map appearance_tags or category to genres properly
-                // For now, we check if any tag matches selected genres
                 const hasGenre = filters.genres.some(genre =>
                     char.category?.toLowerCase() === genre.toLowerCase() ||
                     char.appearance_tags?.some(tag => tag.toLowerCase() === genre.toLowerCase())
                 );
-                // If strict filtering is desired, return false if no match. 
-                // For now, let's keep it permissive - if ANY genre matches, show it.
                 if (!hasGenre) return false;
             }
 
             // Content Rating filter
             if (filters.contentRating && filters.contentRating !== 'all') {
-                const charRating = char.content_rating || 'sfw'; // Default to sfw
+                const charRating = char.content_rating || 'sfw';
                 if (charRating !== filters.contentRating) return false;
             }
 
-            // Media Ready filter (has image)
+            // Media Ready filter
             if (filters.mediaReady) {
                 if (!char.image_url) return false;
             }
@@ -99,6 +99,10 @@ export default function CharacterHubV2() {
     }, [characters, filters]);
 
     // Handlers
+    const handleSelect = (character: CharacterV2) => {
+        setSelectedCharacter(character);
+    };
+
     const handleEdit = (id: string) => {
         navigate(`/character-studio-v2/${id}`);
     };
@@ -109,7 +113,10 @@ export default function CharacterHubV2() {
             if (error) throw error;
 
             toast({ title: 'Character deleted', description: 'Character successfully removed.' });
-            refetch(); // Refresh list
+            if (selectedCharacter?.id === id) {
+                setSelectedCharacter(null);
+            }
+            refetch();
         } catch (error: any) {
             toast({
                 title: 'Delete failed',
@@ -121,14 +128,12 @@ export default function CharacterHubV2() {
 
     const handleDuplicate = async (char: CharacterV2) => {
         try {
-            // Exclude ID and timestamps for duplication
-            const { id, created_at, updated_at, ...charData } = char;
+            const { id, created_at, updated_at, character_anchors, ...charData } = char;
 
             const newChar = {
                 ...charData,
                 name: `${charData.name} (Copy)`,
                 user_id: user?.id,
-                // Ensure unique constraints handled if any
             };
 
             const { error } = await supabase.from('characters').insert(newChar);
@@ -145,92 +150,128 @@ export default function CharacterHubV2() {
         }
     };
 
-    // Helper for filter change from child component
     const handleFilterChange = (newFilters: CharacterHubFilters) => {
         setFilters(newFilters);
     };
 
     return (
-        <div className="min-h-screen bg-background text-foreground pb-20">
-
-            {/* Header Section */}
-            <div className="pt-8 pb-6 px-4 md:px-8 max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div className="min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="h-12 border-b border-border/50 flex items-center justify-between px-4 bg-background/95 backdrop-blur z-50">
+                <div className="flex items-center gap-3">
+                    <Users className="w-4 h-4 text-primary" />
                     <div>
-                        <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
-                            <Users className="w-8 h-8 text-primary" />
-                            Character Hub
-                        </h1>
-                        <p className="text-muted-foreground mt-1 text-sm md:text-base">
-                            Manage your AI characters, consistency anchors, and style presets.
+                        <h1 className="text-sm font-semibold leading-none">Character Hub</h1>
+                        <p className="text-[10px] text-muted-foreground">
+                            Manage consistent characters for your stories, comics, and videos.
                         </p>
                     </div>
-
-                    <Button
-                        size="lg"
-                        className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all hover:scale-105"
-                        onClick={() => navigate('/character-studio-v2?mode=from-images')}
-                    >
-                        <Plus className="mr-2 h-5 w-5" />
-                        Create Character
-                    </Button>
                 </div>
 
-                {/* Filters Component */}
-                <div className="mb-8">
-                    <CharacterFilters
-                        filters={filters}
-                        onFilterChange={handleFilterChange}
-                        className="rounded-xl border border-white/5 bg-black/40 p-4 shadow-xl backdrop-blur-md"
+                <Button
+                    size="sm"
+                    className="bg-primary hover:bg-primary/90 text-xs h-7 gap-1"
+                    onClick={() => navigate('/character-studio-v2?mode=create')}
+                >
+                    <Plus className="w-3 h-3" />
+                    Create Character
+                </Button>
+            </div>
+
+            {/* Main 3-Panel Layout */}
+            <div className="flex-1 flex overflow-hidden">
+                {/* Left Sidebar - Selected Character */}
+                <div className="w-[320px] border-r border-border/50 bg-card/30 flex-shrink-0 hidden lg:block">
+                    <CharacterHubSidebar
+                        character={selectedCharacter}
+                        onClose={() => setSelectedCharacter(null)}
                     />
                 </div>
 
-                {/* Content Area */}
-                {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-20 min-h-[400px]">
-                        <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-                        <p className="text-muted-foreground animate-pulse text-lg">Loading your characters...</p>
+                {/* Center - Character Grid */}
+                <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                    {/* Filters */}
+                    <div className="px-4 py-3 border-b border-border/50 bg-background/50">
+                        <CharacterFilters
+                            filters={filters}
+                            onFilterChange={handleFilterChange}
+                            className="max-w-none"
+                        />
                     </div>
-                ) : !filteredCharacters || filteredCharacters.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-xl bg-black/20 min-h-[400px]">
-                        <div className="bg-white/5 p-6 rounded-full mb-4">
-                            <Users className="w-12 h-12 text-muted-foreground/50" />
-                        </div>
-                        <h3 className="text-xl font-semibold text-white mb-2">No characters found</h3>
-                        <p className="text-muted-foreground mb-8 text-center max-w-md">
-                            {characters?.length === 0
-                                ? "You haven't created any AI characters yet. Start by creating your first character!"
-                                : "No characters match your current filters. Try adjusting your search criteria."}
-                        </p>
-                        {characters?.length === 0 && (
-                            <Button
-                                size="lg"
-                                className="bg-primary hover:bg-primary/90"
-                                onClick={() => navigate('/character-studio-v2?mode=from-images')}
-                            >
-                                <Plus className="mr-2 h-4 w-4" />
-                                Create First Character
-                            </Button>
+
+                    {/* Grid Content */}
+                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                        {isLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20">
+                                <Loader2 className="w-6 h-6 animate-spin text-primary mb-3" />
+                                <p className="text-xs text-muted-foreground">Loading characters...</p>
+                            </div>
+                        ) : !filteredCharacters || filteredCharacters.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 border border-dashed border-border/30 rounded-lg bg-card/20">
+                                <div className="w-12 h-12 rounded-full bg-muted/30 flex items-center justify-center mb-3">
+                                    <Users className="w-5 h-5 text-muted-foreground/50" />
+                                </div>
+                                <h3 className="text-sm font-medium text-foreground mb-1">No characters found</h3>
+                                <p className="text-[10px] text-muted-foreground mb-4 text-center max-w-xs">
+                                    {characters?.length === 0
+                                        ? "Create your first AI character to get started."
+                                        : "No characters match your filters."}
+                                </p>
+                                {characters?.length === 0 && (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => navigate('/character-studio-v2?mode=create')}
+                                    >
+                                        <Plus className="w-3 h-3 mr-1" />
+                                        Create Character
+                                    </Button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                                {filteredCharacters.map((character) => (
+                                    <div
+                                        key={character.id}
+                                        className={`cursor-pointer transition-all ${selectedCharacter?.id === character.id ? 'ring-2 ring-primary rounded-lg' : ''}`}
+                                        onClick={() => handleSelect(character)}
+                                    >
+                                        <CharacterCard
+                                            character={character}
+                                            context="hub"
+                                            onSelect={() => handleSelect(character)}
+                                            onEdit={() => handleEdit(character.id)}
+                                            onDelete={() => handleDelete(character.id)}
+                                            onDuplicate={() => handleDuplicate(character)}
+                                            onGenerate={() => navigate(`/character-studio-v2/${character.id}`)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </div>
-                ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
-                        {filteredCharacters.map((character) => (
-                            <div key={character.id} className="transform transition-all duration-300 hover:-translate-y-1">
-                                <CharacterCard
-                                    character={character}
-                                    context="hub"
-                                    onSelect={() => navigate(`/character-studio-v2/${character.id}`)}
-                                    onEdit={() => handleEdit(character.id)}
-                                    onDelete={() => handleDelete(character.id)}
-                                    onDuplicate={() => handleDuplicate(character)}
-                                    onGenerate={() => navigate(`/character-studio-v2/${character.id}`)}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                )}
+                </div>
+
+                {/* Right Panel - Create & History */}
+                <div className="w-[280px] border-l border-border/50 bg-card/30 flex-shrink-0 hidden lg:block">
+                    <CharacterCreatePanel recentCharacters={characters?.slice(0, 9) || []} />
+                </div>
             </div>
+
+            {/* Mobile Selected Character Drawer */}
+            {selectedCharacter && (
+                <div className="fixed inset-0 z-50 lg:hidden">
+                    <div
+                        className="absolute inset-0 bg-black/50"
+                        onClick={() => setSelectedCharacter(null)}
+                    />
+                    <div className="absolute right-0 top-0 bottom-0 w-[320px] bg-background border-l border-border/50">
+                        <CharacterHubSidebar
+                            character={selectedCharacter}
+                            onClose={() => setSelectedCharacter(null)}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

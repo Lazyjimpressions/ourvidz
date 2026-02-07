@@ -105,6 +105,9 @@ This plan implements the approved Character Hub and Character Studio designs bas
 | **Hub Generate missing** | Add "Generate Image" (and optionally "Generate Video") to hub card overlay; wire to Studio V2 (navigate to studio with character) or shared generation path. |
 | **Studio generate in create mode** | Disable Generate button in create mode with tooltip: "Save character first to generate." |
 | **Studio generate with consistency ON, no anchor** | Button disabled; add tooltip: "Set a primary anchor in Visuals tab or turn off Character Consistency." |
+| **Broken images (storage paths)** | Images stored as paths (e.g., `workspace-temp/...`) need signing via `createSignedUrl()`. Added to `CharacterHistoryStrip`, `AnchorManager`, `CharacterStudioV2`, `CharacterStudioPromptBarV2`. |
+| **History not updating after generation** | Added Supabase Realtime subscription in `useCharacterStudioV2` for `character_scenes` table changes. |
+| **TypeScript `as any` casts** | Added `character_anchors` and `character_canon` types to `src/integrations/supabase/types.ts`. |
 
 ---
 

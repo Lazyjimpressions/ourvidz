@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Upload, X, Star, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Star, Loader2, Image as ImageIcon, RefreshCw } from 'lucide-react';
 import { CharacterAnchor } from '@/types/character-hub-v2';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -53,8 +53,10 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
     isUploading = false
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const replaceInputRef = useRef<HTMLInputElement>(null);
     const [dragActive, setDragActive] = useState(false);
     const [displayUrls, setDisplayUrls] = useState<Record<string, string>>({});
+    const [replacingAnchorId, setReplacingAnchorId] = useState<string | null>(null);
 
     // Sign URLs when anchors change
     useEffect(() => {
@@ -78,6 +80,24 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
         if (e.target.files && e.target.files[0]) {
             await onUpload(e.target.files[0]);
         }
+    };
+
+    const handleReplaceFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0] && replacingAnchorId) {
+            // Delete the old anchor first, then upload new one
+            await onDelete(replacingAnchorId);
+            await onUpload(e.target.files[0]);
+            setReplacingAnchorId(null);
+        }
+        // Reset the input
+        if (replaceInputRef.current) {
+            replaceInputRef.current.value = '';
+        }
+    };
+
+    const handleReplaceClick = (anchorId: string) => {
+        setReplacingAnchorId(anchorId);
+        replaceInputRef.current?.click();
     };
 
     const handleDrag = (e: React.DragEvent) => {
@@ -130,12 +150,22 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
 
                         {/* Overlay Actions */}
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
-                            <div className="flex justify-end">
+                            <div className="flex justify-between">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-white hover:text-primary hover:bg-white/10"
+                                    onClick={() => handleReplaceClick(anchor.id)}
+                                    title="Replace this anchor"
+                                >
+                                    <RefreshCw className="w-3 h-3" />
+                                </Button>
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     className="h-6 w-6 text-white hover:text-red-400 hover:bg-white/10"
                                     onClick={() => onDelete(anchor.id)}
+                                    title="Delete this anchor"
                                 >
                                     <X className="w-3 h-3" />
                                 </Button>
@@ -180,6 +210,13 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
                         accept="image/*"
                         className="hidden"
                         onChange={handleFileChange}
+                    />
+                    <input
+                        ref={replaceInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleReplaceFileChange}
                     />
 
                     {isUploading ? (

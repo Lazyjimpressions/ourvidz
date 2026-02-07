@@ -110,7 +110,19 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                         placeholder="Description of their default clothing..."
                         className="min-h-[100px] bg-secondary/50 border-white/10 resize-y"
                     />
-                    <p className="text-xs text-muted-foreground">Used as the base prompt for their appearance.</p>
+                    <p className="text-[10px] text-muted-foreground">Used as the base prompt for their appearance.</p>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="signature_items">Signature Items</Label>
+                    <Input
+                        id="signature_items"
+                        value={formData.signature_items || ''}
+                        onChange={(e) => updateField('signature_items', e.target.value)}
+                        placeholder="e.g. Silver pendant, leather jacket, round glasses"
+                        className="bg-secondary/50 border-white/10"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Items that should appear consistently.</p>
                 </div>
 
                 <div className="space-y-2">

@@ -40,6 +40,17 @@ A dedicated, professional-grade editor for character definition and generation.
 - **Studio Generate**: Generate button disabled in create mode with tooltip "Save character first to generate." When consistency is ON and no primary anchor, tooltip: "Set a primary anchor in Visuals tab or turn off Character Consistency."
 - **Hub Generate**: Hub card overlay includes "Generate Image" action; navigates to Studio V2 for that character so the user can use the prompt bar.
 
+### Audit Fixes (2026-02-07)
+
+- **URL Signing for Storage Paths**: Images stored as storage paths (e.g., `workspace-temp/user_id/file.png`) require signing via `supabase.storage.from(bucket).createSignedUrl()`. Added signing logic to:
+  - `CharacterHistoryStrip.tsx` - History images
+  - `AnchorManager.tsx` - Anchor thumbnails
+  - `CharacterStudioV2.tsx` - Center preview image
+  - `CharacterStudioPromptBarV2.tsx` - Primary anchor thumbnail
+- **Real-time Subscriptions**: Added Supabase Realtime subscription in `useCharacterStudioV2` for `character_scenes` table. History now updates automatically when generation completes without manual refresh.
+- **TypeScript Types**: Added `character_anchors` and `character_canon` table definitions to `src/integrations/supabase/types.ts` for full type safety (removed `as any` casts).
+- **Variation Slider Tooltip**: Added tooltip explaining slider semantics: "0% (Strict): Stay very close to anchor appearance. 100% (Creative): Allow more artistic freedom while maintaining character identity."
+
 ### Verification Checklist
 - Save with Role = "AI Character (NPC)" and "Assistant" (no error).
 - Create new character and save without setting content_rating in form (succeeds with default).

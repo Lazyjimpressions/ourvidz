@@ -4,7 +4,9 @@ import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { CharacterV2, VideoFraming, AspectRatio } from '@/types/character-hub-v2';
-import { Video, Mic, Smartphone, Monitor, Square } from 'lucide-react';
+import { Video, Mic, Smartphone, Monitor, Square, MessageSquare } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 
 interface MediaTabProps {
     formData: Partial<CharacterV2>;
@@ -107,21 +109,63 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formData, updateField }) => 
             <div className="space-y-6 pt-4">
                 <div className="flex items-center gap-2 pb-2 border-b border-white/10">
                     <Mic className="w-5 h-5 text-primary" />
-                    <h3 className="font-semibold text-lg">Voice Settings</h3>
+                    <h3 className="font-semibold text-sm">Voice Settings</h3>
                 </div>
 
-                <div className="p-6 border border-dashed border-white/10 rounded-lg bg-secondary/10 flex flex-col items-center text-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center mb-2">
-                        <Mic className="w-5 h-5 text-muted-foreground" />
+                <div className="p-4 border border-dashed border-white/10 rounded-lg bg-secondary/10 flex flex-col items-center text-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center mb-1">
+                        <Mic className="w-4 h-4 text-muted-foreground" />
                     </div>
-                    <h4 className="text-sm font-medium">Voice Synthesis Coming Soon</h4>
-                    <p className="text-xs text-muted-foreground max-w-[200px]">
+                    <h4 className="text-xs font-medium">Voice Synthesis Coming Soon</h4>
+                    <p className="text-[10px] text-muted-foreground max-w-[180px]">
                         Custom voice training and selection will be available in the next update.
                     </p>
-                    <div className="flex items-center gap-2 mt-4 opacity-50 cursor-not-allowed">
-                        <Label className="text-sm">Enable Voice</Label>
+                    <div className="flex items-center gap-2 mt-2 opacity-50 cursor-not-allowed">
+                        <Label className="text-[10px]">Enable Voice</Label>
                         <Switch disabled />
                     </div>
+                </div>
+            </div>
+
+            {/* Roleplay Behavior Section */}
+            <div className="space-y-4 pt-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-white/10">
+                    <MessageSquare className="w-5 h-5 text-primary" />
+                    <h3 className="font-semibold text-sm">Roleplay Behavior</h3>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="roleplay_notes">Behavior Notes</Label>
+                    <Textarea
+                        id="roleplay_notes"
+                        value={formData.scene_behavior_rules || ''}
+                        onChange={(e) => updateField('scene_behavior_rules', e.target.value)}
+                        placeholder="How should this character behave in roleplay? Any rules or restrictions?"
+                        className="min-h-[80px] bg-secondary/50 border-white/10 resize-y"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                        Guidelines for AI behavior when playing this character.
+                    </p>
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="forbidden">Forbidden Topics</Label>
+                    <Input
+                        id="forbidden"
+                        value={(formData.forbidden_phrases || []).join(', ')}
+                        onChange={(e) => {
+                            const phrases = e.target.value
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(s => s.length > 0);
+                            updateField('forbidden_phrases', phrases);
+                        }}
+                        placeholder="Topics to avoid (comma separated)"
+                        className="bg-secondary/50 border-white/10"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                        Topics or phrases that should never be mentioned.
+                    </p>
                 </div>
             </div>
 

@@ -4,7 +4,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Wand2, Sparkles, Image as ImageIcon, Video, AlertCircle, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Wand2, Sparkles, Image as ImageIcon, Video, AlertCircle, Loader2, ChevronDown, Shuffle, Settings2 } from 'lucide-react';
 import { ConsistencyControls, CharacterAnchor } from '@/types/character-hub-v2';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -70,6 +73,12 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
 }) => {
     // Signed anchor URL state
     const [signedAnchorUrl, setSignedAnchorUrl] = useState<string>('');
+    // Batch size state
+    const [batchSize, setBatchSize] = useState<number>(1);
+    // Advanced settings state
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [seed, setSeed] = useState<string>('');
+    const [negativePrompt, setNegativePrompt] = useState<string>('');
 
     // Sign the anchor URL when primaryAnchor changes
     useEffect(() => {
@@ -134,11 +143,44 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
                         placeholder={mediaType === 'image'
                             ? "Describe the scene, lighting, and action..."
                             : "Describe the movement and camera motion..."}
-                        className="min-h-[120px] bg-secondary/50 border-white/10 resize-y focus:ring-primary/50"
+                        className="min-h-[80px] bg-secondary/50 border-white/10 resize-y focus:ring-primary/50"
                     />
-                    <p className="text-xs text-muted-foreground">
-                        Describe <strong>what happens</strong> in the scene. The character's appearance is already defined.
+                    <p className="text-[10px] text-muted-foreground">
+                        Describe <strong>what happens</strong> in the scene.
                     </p>
+                </div>
+
+                {/* Quick Prompt Buttons */}
+                <div className="space-y-1.5">
+                    <Label className="text-[10px] text-muted-foreground">Quick Prompt Buttons</Label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                        {['Portrait', 'Full Body', 'Action Pose', 'Outdoor'].map((btn) => {
+                            const isActive = prompt.toLowerCase().includes(btn.toLowerCase());
+                            return (
+                                <button
+                                    key={btn}
+                                    className={cn(
+                                        "px-2 py-1.5 text-[10px] rounded border transition-colors",
+                                        isActive
+                                            ? "bg-primary/20 border-primary text-primary"
+                                            : "bg-secondary/30 border-border/50 text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                                    )}
+                                    onClick={() => {
+                                        if (isActive) {
+                                            // Remove the keyword
+                                            const regex = new RegExp(`\\b${btn}\\b[,\\s]*`, 'gi');
+                                            onPromptChange(prompt.replace(regex, '').trim());
+                                        } else {
+                                            // Add the keyword at the beginning
+                                            onPromptChange(btn + (prompt ? ', ' + prompt : ''));
+                                        }
+                                    }}
+                                >
+                                    {btn}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Consistency Controls */}
@@ -250,10 +292,69 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
                             : "Consistency mode is off. The AI will reimagine the character based on the description only."}
                     </p>
                 </div>
+
+                {/* Advanced Settings (Collapsible) */}
+                <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                    <CollapsibleTrigger className="flex items-center gap-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors w-full py-2">
+                        <Settings2 className="w-3 h-3" />
+                        <span>Advanced Settings</span>
+                        <ChevronDown className={cn("w-3 h-3 ml-auto transition-transform", advancedOpen && "rotate-180")} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="space-y-4 pt-3 animate-in slide-in-from-top-2 duration-200">
+                        {/* Seed Input */}
+                        <div className="space-y-2">
+                            <Label className="text-[10px] text-muted-foreground">Seed (for reproducibility)</Label>
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    type="number"
+                                    value={seed}
+                                    onChange={(e) => setSeed(e.target.value)}
+                                    placeholder="Random"
+                                    className="h-7 text-xs bg-secondary/50 border-white/10 flex-1"
+                                />
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() => setSeed(Math.floor(Math.random() * 9999999).toString())}
+                                    title="Generate random seed"
+                                >
+                                    <Shuffle className="w-3 h-3" />
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Negative Prompt */}
+                        <div className="space-y-2">
+                            <Label className="text-[10px] text-muted-foreground">Negative Prompt</Label>
+                            <Textarea
+                                value={negativePrompt}
+                                onChange={(e) => setNegativePrompt(e.target.value)}
+                                placeholder="Things to avoid in generation..."
+                                className="min-h-[60px] text-xs bg-secondary/50 border-white/10 resize-y"
+                            />
+                        </div>
+                    </CollapsibleContent>
+                </Collapsible>
             </div>
 
             {/* Footer Actions */}
-            <div className="p-4 border-t border-border/50 bg-background/50 backdrop-blur-sm">
+            <div className="p-4 border-t border-border/50 bg-background/50 backdrop-blur-sm space-y-3">
+                {/* Batch Size Selector */}
+                <div className="flex items-center justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Batch Size</Label>
+                    <Select value={batchSize.toString()} onValueChange={(v) => setBatchSize(parseInt(v))}>
+                        <SelectTrigger className="w-20 h-7 text-xs bg-secondary/50 border-white/10">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1">1x</SelectItem>
+                            <SelectItem value="4">4x</SelectItem>
+                            <SelectItem value="9">9x</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -269,7 +370,7 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
                                     ) : (
                                         <>
                                             <Wand2 className="w-4 h-4 mr-2" />
-                                            Generate {mediaType === 'image' ? 'Image' : 'Video'}
+                                            Generate {batchSize > 1 ? `${batchSize} ${mediaType === 'image' ? 'Images' : 'Videos'}` : (mediaType === 'image' ? 'Image' : 'Video')}
                                         </>
                                     )}
                                 </Button>

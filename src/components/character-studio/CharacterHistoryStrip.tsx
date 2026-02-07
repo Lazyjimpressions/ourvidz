@@ -166,9 +166,14 @@ export const CharacterHistoryStrip: React.FC<CharacterHistoryStripProps> = ({
                             <ContextMenuItem onClick={() => signedUrls[scene.id] && window.open(signedUrls[scene.id], '_blank')}>
                                 <Download className="w-4 h-4 mr-2" /> Download
                             </ContextMenuItem>
-                            {/* <ContextMenuItem className="text-destructive focus:text-destructive">
-                                <Trash2 className="w-4 h-4 mr-2" /> Delete
-                            </ContextMenuItem> */}
+                            {onDelete && (
+                                <ContextMenuItem
+                                    onClick={() => onDelete(scene.id)}
+                                    className="text-destructive focus:text-destructive"
+                                >
+                                    <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                </ContextMenuItem>
+                            )}
                         </ContextMenuContent>
                     </ContextMenu>
                 ))}

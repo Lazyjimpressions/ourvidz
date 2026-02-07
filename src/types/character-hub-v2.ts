@@ -18,9 +18,12 @@ import { Character, CharacterScene } from './roleplay';
 export interface CharacterV2 extends Character {
     // Style and rendering
     style_preset?: StylePreset;
+    lighting?: LightingPreset;
+    rendering_rules?: RenderingRules;
 
-    // Character consistency
+    // Character consistency - guardrails
     locked_traits?: string[];  // Must-keep traits for visual consistency
+    avoid_traits?: string[];   // Traits to avoid in generation
 
     // Media generation defaults
     media_defaults?: MediaDefaults;
@@ -31,8 +34,9 @@ export interface CharacterV2 extends Character {
     // Physical appearance (structured)
     physical_traits?: PhysicalTraits;
 
-    // Outfit description
+    // Outfit and items
     outfit_defaults?: string;
+    signature_items?: string;
 
     // Relations
     character_anchors?: CharacterAnchor[];
@@ -123,6 +127,85 @@ export const STYLE_PRESET_OPTIONS: StylePresetOption[] = [
         description: 'Hand-drawn illustration style'
     }
 ];
+
+// ============================================================================
+// LIGHTING PRESETS
+// ============================================================================
+
+/**
+ * Available lighting presets for character rendering
+ */
+export type LightingPreset =
+    | 'dramatic'
+    | 'soft'
+    | 'studio'
+    | 'natural'
+    | 'golden_hour'
+    | 'neon';
+
+export interface LightingOption {
+    id: LightingPreset;
+    label: string;
+}
+
+export const LIGHTING_OPTIONS: LightingOption[] = [
+    { id: 'dramatic', label: 'Dramatic' },
+    { id: 'soft', label: 'Soft' },
+    { id: 'studio', label: 'Studio' },
+    { id: 'natural', label: 'Natural' },
+    { id: 'golden_hour', label: 'Golden Hour' },
+    { id: 'neon', label: 'Neon' }
+];
+
+// ============================================================================
+// MOOD OPTIONS
+// ============================================================================
+
+export const MOOD_OPTIONS = [
+    'Mysterious',
+    'Cheerful',
+    'Intense',
+    'Romantic',
+    'Dark',
+    'Ethereal',
+    'Playful',
+    'Serious'
+] as const;
+
+export type MoodPreset = typeof MOOD_OPTIONS[number];
+
+// ============================================================================
+// RENDERING RULES
+// ============================================================================
+
+/**
+ * Rendering rule settings for sharpness, grain, texture
+ * Values are 0-100
+ */
+export interface RenderingRules {
+    sharpness: number;  // 0 = soft focus, 100 = sharp
+    grain: number;      // 0 = clean, 100 = film grain
+    texture: number;    // 0 = smooth, 100 = textured
+}
+
+export const DEFAULT_RENDERING_RULES: RenderingRules = {
+    sharpness: 50,
+    grain: 0,
+    texture: 50
+};
+
+// ============================================================================
+// GENRE OPTIONS
+// ============================================================================
+
+export const GENRE_OPTIONS = [
+    'Fantasy',
+    'Sci-Fi',
+    'Modern',
+    'Historical',
+    'Romance',
+    'Adventure'
+] as const;
 
 // ============================================================================
 // MEDIA DEFAULTS

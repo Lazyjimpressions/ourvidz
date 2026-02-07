@@ -24,6 +24,7 @@ import CreateCharacter from "@/pages/CreateCharacter";
 import CharacterStudio from "@/pages/CharacterStudio";
 import CharacterHubV2 from "@/pages/CharacterHubV2";
 import CharacterStudioV2 from "@/pages/CharacterStudioV2";
+import StyleGuide from "@/pages/StyleGuide";
 
 import NotFound from "@/pages/NotFound";
 
@@ -71,6 +72,9 @@ function App() {
                 <Route path="/character-hub-v2" element={<ProtectedRoute><CharacterHubV2 /></ProtectedRoute>} />
                 <Route path="/character-studio-v2" element={<ProtectedRoute><CharacterStudioV2 /></ProtectedRoute>} />
                 <Route path="/character-studio-v2/:id" element={<ProtectedRoute><CharacterStudioV2 /></ProtectedRoute>} />
+
+                {/* Admin Tools */}
+                <Route path="/style-guide" element={<ProtectedRoute><StyleGuide /></ProtectedRoute>} />
 
                 <Route path="*" element={<NotFound />} />
               </Routes>

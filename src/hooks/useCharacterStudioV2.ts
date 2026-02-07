@@ -120,7 +120,9 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
             'is_public', 'gender', 'content_rating', 'role', 'consistency_method', 'seed_locked', 'base_prompt',
             'preview_image_url', 'quick_start', 'voice_examples', 'scene_behavior_rules', 'forbidden_phrases',
             'first_message', 'alternate_greetings', 'default_presets', 'portrait_count', 'scene_count',
-            'style_preset', 'locked_traits', 'media_defaults', 'personality_traits', 'physical_traits', 'outfit_defaults'
+            'style_preset', 'locked_traits', 'media_defaults', 'personality_traits', 'physical_traits', 'outfit_defaults',
+            // New PRD fields
+            'avoid_traits', 'signature_items', 'lighting', 'rendering_rules'
         ] as const);
         const raw = data as Record<string, unknown>;
         const payload: Record<string, unknown> = {};
@@ -384,6 +386,26 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         }
     };
 
+    const deleteFromHistory = async (sceneId: string) => {
+        try {
+            const { error } = await supabase
+                .from('character_scenes')
+                .delete()
+                .eq('id', sceneId);
+
+            if (error) throw error;
+
+            queryClient.invalidateQueries({ queryKey: ['character-history', id] });
+            toast({ title: "Deleted", description: "Image removed from history." });
+        } catch (error: any) {
+            toast({
+                title: "Delete Failed",
+                description: error.message,
+                variant: "destructive"
+            });
+        }
+    };
+
     return {
         character,
         formData,
@@ -412,6 +434,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         history,
         isLoadingHistory,
         pinAsAnchor,
-        useAsMain
+        useAsMain,
+        deleteFromHistory
     };
 }

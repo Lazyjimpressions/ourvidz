@@ -1,7 +1,9 @@
 # Character System PRD
 
 ## Overview
+
 This PRD defines requirements for two core surfaces in OurVidz:
+
 1. **Character Hub** – character library and creation entry point
 2. **Character Studio** – character editor and generation workspace
 
@@ -10,6 +12,7 @@ These designs are visually anchored by the approved reference PNGs and are inten
 ---
 
 ## Goals
+
 - Make characters first‑class, reusable assets
 - Enable visual consistency across images and video
 - Support both fast creation and deep control
@@ -18,6 +21,7 @@ These designs are visually anchored by the approved reference PNGs and are inten
 ---
 
 ## Non‑Goals
+
 - No redesign of underlying generation models
 - No requirement for training custom models
 - No mandatory roleplay/chat system (future‑ready, not required for v1)
@@ -27,6 +31,7 @@ These designs are visually anchored by the approved reference PNGs and are inten
 # 1. Character Hub PRD
 
 ## Purpose
+
 The Character Hub is the primary landing page for managing characters. It answers:
 > “Who are my characters, and what can I do with them?”
 
@@ -35,6 +40,7 @@ The Character Hub is the primary landing page for managing characters. It answer
 ## Core Features
 
 ### Character Grid
+
 - Card‑based grid layout
 - Each card displays:
   - Character thumbnail
@@ -43,6 +49,7 @@ The Character Hub is the primary landing page for managing characters. It answer
   - Tags (genre, style)
 
 ### Card Actions
+
 - Open (Character Studio)
 - Generate Image
 - Generate Video
@@ -56,10 +63,13 @@ The Character Hub is the primary landing page for managing characters. It answer
 ## Create Character Entry
 
 ### Primary CTA
+
 - **Create Character** (top‑right)
 
 ### Creation Choice Panel
+
 User must choose one:
+
 1. **Start from Images** (recommended for consistency)
 2. **Start from Description** (fastest)
 
@@ -68,6 +78,7 @@ This choice determines the initial state of Character Studio but results in the 
 ---
 
 ## Filters & Search
+
 - Text search by name/tag
 - Filter chips:
   - Genre (Fantasy, Sci‑Fi, Modern, etc.)
@@ -76,6 +87,7 @@ This choice determines the initial state of Character Studio but results in the 
 ---
 
 ## Empty State
+
 - Educational empty state explaining benefits of characters
 - Prominent Create Character CTA
 
@@ -84,7 +96,9 @@ This choice determines the initial state of Character Studio but results in the 
 # 2. Character Studio PRD
 
 ## Purpose
+
 The Character Studio is a dedicated editor where users:
+
 - Define and modify character identity
 - Generate and review outputs
 - Control consistency and variation
@@ -92,9 +106,11 @@ The Character Studio is a dedicated editor where users:
 ---
 
 ## Page Layout (Approved)
+
 **Three‑column studio layout**
 
 ### Column A – Left Editor Pane
+
 - Fixed width
 - Contains character metadata and configuration
 - Tabbed interface:
@@ -104,12 +120,14 @@ The Character Studio is a dedicated editor where users:
   4. Media
 
 ### Column B – Preview & History
+
 - Large main preview area
 - Mode toggles: Single / Grid / Compare
 - Media toggle: Image / Video / Avatar
 - Character history strip with thumbnails
 
 ### Column C – Prompt & Generate Panel
+
 - Scene prompt textarea
 - Quick prompt chips
 - Consistency controls
@@ -121,15 +139,18 @@ The Character Studio is a dedicated editor where users:
 ## Tab Specifications
 
 ### Identity Tab
+
 **Purpose:** Define who the character is
 
 Fields:
+
 - Name (required)
 - Role / Tagline
 - Short bio
 - Tags
 
 Optional:
+
 - Personality sliders
 - Tone/voice notes
 - Guardrails (must‑keep / avoid traits)
@@ -137,9 +158,11 @@ Optional:
 ---
 
 ### Appearance Tab
+
 **Purpose:** Define physical consistency
 
 Sections:
+
 - Physical traits (age bracket, hair, eyes, etc.)
 - Outfit defaults and signature items
 - Anchor manager:
@@ -150,9 +173,11 @@ Sections:
 ---
 
 ### Style Tab
+
 **Purpose:** Control rendering and aesthetic
 
 Sections:
+
 - Style presets (realistic, anime, cinematic, etc.)
 - Lighting and mood chips
 - Rendering rules (sharpness, grain, texture)
@@ -160,9 +185,11 @@ Sections:
 ---
 
 ### Media Tab
+
 **Purpose:** Downstream behavior and defaults
 
 Sections:
+
 - Video framing defaults
 - Motion intensity
 - Loop‑safe toggle
@@ -174,15 +201,18 @@ Sections:
 ## Prompt & Generation
 
 ### Prompt Location
+
 - Prompt bar lives **in the right column**, fixed while scrolling
 - Prompt describes the **scene**, not the character
 
 ### Controls
+
 - Consistency Mode toggle
 - Use Pinned Canon toggle
 - Variation slider (low → high)
 
 ### Actions
+
 - Generate
 - Generate Batch
 - Restyle Grid
@@ -192,12 +222,14 @@ Sections:
 ## New vs Existing Character UX
 
 ### New Character
+
 - First‑run flow after creation choice
 - Minimal required inputs (name + description)
 - Studio opens with empty preview and guided CTA
 - Consistency ON but warns if no anchor exists
 
 ### Existing Character
+
 - Loads saved data, pinned canon, and history
 - Changes are staged until Save
 - Generating with unsaved edits is allowed with visual warning
@@ -205,6 +237,7 @@ Sections:
 ---
 
 ## State & Persistence
+
 - Characters are versioned entities
 - Outputs can be attached to character history
 - Users can pin canon outputs
@@ -212,6 +245,7 @@ Sections:
 ---
 
 ## Success Metrics
+
 - % of users creating at least one character
 - Repeat usage of characters across generations
 - Reduction in prompt duplication
@@ -220,9 +254,9 @@ Sections:
 ---
 
 ## References
+
 - Character Hub PNG (approved)
 - Character Studio PNG (approved)
 - character_research.md
 
 These documents together define the locked‑in direction for character functionality in OurVidz.
-

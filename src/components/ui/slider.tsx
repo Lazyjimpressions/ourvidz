@@ -15,7 +15,7 @@ const sliderVariants = cva(
       }
     },
     defaultVariants: {
-      size: "md"
+      size: "sm"
     }
   }
 )
