@@ -1,6 +1,6 @@
 # Character Studio Purpose & Implementation
 
-**Last Updated:** January 26, 2026
+**Last Updated:** February 6, 2026
 **Status:** Complete
 **Priority:** High
 
@@ -82,35 +82,45 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 
 **Desktop (Grid Layout)**:
 
-- **Left Sidebar** (360px): CharacterStudioSidebar
-  - Avatar preview (96x96px) with loading spinner
+- **Left Sidebar** (320px default, resizable 280-480px): CharacterStudioSidebar
+  - **Resizable**: Drag handle on right edge allows width adjustment
+  - Avatar preview (64x64px) with loading spinner
   - Collapsible sections:
-    - Basic Info
-    - Appearance (with presets, tags, reference image)
-    - Personality & Voice
-    - Advanced Settings
-  - AI suggestion buttons throughout
+    - Basic Info (name, gender, rating, description)
+    - Appearance (presets, tags, reference image, Image Match Mode indicator)
+    - Personality & Voice (persona, voice tone, mood, traits, first message)
+    - Advanced Settings (AI model for suggestions, public toggle, system prompt)
+  - AI suggestion buttons throughout (SuggestButton component)
+  - Image model selector with I2I capability badges
   - "Generate Portrait" button
 
 - **Center Workspace** (flex-1):
   - Tab navigation (Portraits / Scenes)
+  - **PosePresets**: Quick pose chips (Standing, Profile, Back, Sitting, Lying, Close-up)
   - PortraitGallery: CSS grid (auto-fill, min 130px)
   - ScenesGallery: CSS grid (2-4 cols, aspect-video)
   - Empty states with call-to-action
 
-- **Bottom Bar** (sticky): CharacterStudioPromptBar
+- **Header Bar**:
+  - Back button + Character Selector dropdown
+  - "Start from Template" button (new characters only)
+  - Save status badge (Saving/Saved/Unsaved)
+  - Start Chat + Preview buttons
+
+- **Bottom Bar** (sticky, portraits tab only): CharacterStudioPromptBar
   - Textarea for custom prompts (44-100px height)
-  - Reference image preview (10x10px thumbnail)
-  - Model selector dropdown
-  - Generate button
+  - Reference image dropdown (upload/library/remove)
+  - Model selector dropdown with I2I badges
+  - Generate button with progress percentage
 
-**Mobile (Tabs)**:
+**Mobile (Tabs)** - MobileCharacterStudio component:
 
-- Top: Character selector + action buttons
+- Top: Character selector + Save button
 - Tab navigation: Details / Portraits / Scenes
-- Details tab: Collapsible sections from sidebar
-- Galleries: Responsive grid (min 130px tiles)
-- Bottom prompt bar: Compact layout
+- Details tab: Full CharacterStudioSidebar in scrollable view
+- Portraits tab: PosePresets + PortraitGallery + CharacterStudioPromptBar
+- Scenes tab: ScenesGallery with bottom Start Chat bar
+- Bottom bar context-aware (prompt bar on portraits, chat button on details/scenes)
 
 ### **User Flow**
 
@@ -127,55 +137,78 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 
 ### **Key Interactions**
 
-- **Dirty State Indicator**: Orange dot on header shows unsaved changes
-- **Auto-Save on Generate**: Portrait generation auto-saves character if not yet saved (silent mode, no toast spam)
+- **Resizable Sidebar**: Drag handle on right edge allows 280-480px width adjustment
+- **Debounced Auto-Save**: Changes auto-save after 2s delay (existing characters only)
+- **Auto-Save on Generate**: Portrait generation auto-saves new characters silently
 - **Primary Portrait Badge**: Gold star on primary portrait in gallery
-- **Model Filtering**: Reference image presence filters models to I2I-capable only
+- **Image Match Mode**:
+  - Toast notification when reference image added/removed
+  - Automatic switch to I2I-compatible model
+  - Badge showing compatible model count
+- **Pose Presets**: Click chip to append pose prompt to textarea
+- **Character Templates**: "Start from Template" opens template selector dialog
+- **Generation Progress**: Real-time percentage display during portrait generation
 - **Loading States**:
-  - Character loading: Skeleton loader
-  - Portrait generating: Spinner in gallery + disabled generate button
+  - Character loading: Full-screen spinner
+  - Portrait generating: Spinner in gallery + progress % in button
   - AI suggestions: Sparkles icon spins
+  - Save status: Badge shows Saving/Saved/Unsaved
 - **Error Recovery**:
   - Toast notifications for generation failures
   - Fallback to fal.ai URL if storage upload fails
-  - Model unavailable → shows error + suggests alternatives
+  - Model unavailable → toast notification + suggested alternatives
 
 ## **🔧 Technical Architecture**
 
 ### **Core Components**
 
-**Page Component**: [CharacterStudio.tsx](src/pages/CharacterStudio.tsx:1) (560 lines)
+**Page Component**: [CharacterStudio.tsx](src/pages/CharacterStudio.tsx:1) (~858 lines)
 
 - Route: `/character-studio/:id` or `/character-studio` (new)
+- Supports `?role=user` param for persona mode (vs. default `ai` companion mode)
 - Main orchestrator for all sub-components
-- Handles routing params (characterId)
-- Manages unsaved changes dialog
+- Includes MobileCharacterStudio component (~212 lines)
+- Manages resizable sidebar state (280-480px range)
+- Debounced auto-save (2s delay for dirty state)
+- Image Match Mode notifications and auto-model-switching
 
 **Sub-Components**:
 
-- [CharacterStudioSidebar.tsx](src/components/character-studio/CharacterStudioSidebar.tsx:1) (751 lines)
-  - Character form fields
-  - AI suggestion integration
+- [CharacterStudioSidebar.tsx](src/components/character-studio/CharacterStudioSidebar.tsx:1) (~767 lines)
+  - Character form fields in collapsible sections
+  - AI suggestion integration (SuggestButton)
+  - Image Match Mode indicator with I2I model count
+  - Reference image upload/library picker
   - Portrait generation trigger
 
-- [PortraitGallery.tsx](src/components/character-studio/PortraitGallery.tsx:1) (263 lines)
+- [PosePresets.tsx](src/components/character-studio/PosePresets.tsx:1) (~63 lines)
+  - Quick pose selection chips for portrait iteration
+  - Presets: Standing, Profile, Back, Sitting, Lying, Close-up
+  - Click to append pose prompt to textarea
+
+- [CharacterTemplateSelector.tsx](src/components/character-studio/CharacterTemplateSelector.tsx:1) (~87 lines)
+  - Dialog for selecting pre-built character templates
+  - Loads from character_templates table
+  - Auto-fills appearance_tags, traits, persona, first_message, voice_tone, mood
+
+- [PortraitGallery.tsx](src/components/character-studio/PortraitGallery.tsx:1) (~263 lines)
   - Grid display of portrait versions
   - Primary selection indicator
   - Options menu (set primary, reference, download, delete)
   - Lightbox trigger
 
-- [ScenesGallery.tsx](src/components/character-studio/ScenesGallery.tsx:1) (203 lines)
+- [ScenesGallery.tsx](src/components/character-studio/ScenesGallery.tsx:1) (~203 lines)
   - Scene card grid
   - Start chat + edit/delete actions
   - Empty state
 
-- [CharacterStudioPromptBar.tsx](src/components/character-studio/CharacterStudioPromptBar.tsx:1) (282 lines)
-  - Custom prompt textarea
-  - Reference image preview + actions
-  - Model selector
-  - Generate button
+- [CharacterStudioPromptBar.tsx](src/components/character-studio/CharacterStudioPromptBar.tsx:1) (~284 lines)
+  - Custom prompt textarea with controlled value support
+  - Reference image dropdown (upload/library/remove)
+  - Model selector with I2I capability badges
+  - Generate button with progress percentage display
 
-- [PortraitLightbox.tsx](src/components/character-studio/PortraitLightbox.tsx:1) (412 lines)
+- [PortraitLightbox.tsx](src/components/character-studio/PortraitLightbox.tsx:1) (~412 lines)
   - Fullscreen portrait viewer
   - Navigation arrows
   - Regeneration controls
@@ -183,14 +216,15 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 
 **State Management**:
 
-- Primary Hook: [useCharacterStudio.ts](src/hooks/useCharacterStudio.ts:1) (464 lines)
+- Primary Hook: [useCharacterStudio.ts](src/hooks/useCharacterStudio.ts:1) (~532 lines)
   - Character CRUD operations
   - Scene management
-  - Portrait generation orchestration
+  - Portrait generation orchestration with progress tracking
   - Dirty state tracking
-  - Auto-save on generate
+  - Auto-save on generate (silent mode)
+  - Supports `defaultRole` option for persona vs. companion
 
-- Delegated Hook: [usePortraitVersions.ts](src/hooks/usePortraitVersions.ts:1) (240 lines)
+- Delegated Hook: [usePortraitVersions.ts](src/hooks/usePortraitVersions.ts:1) (~240 lines)
   - Portrait versioning
   - Primary selection
   - Realtime subscriptions for portrait updates
@@ -331,6 +365,14 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - [x] Mobile responsive layout - Jan 14, 2026
 - [x] HEIC image support - Jan 14, 2026
 - [x] Portrait URL signing and caching - Jan 16, 2026
+- [x] Resizable sidebar (280-480px drag handle) - Feb 4, 2026
+- [x] PosePresets component for quick iteration - Feb 4, 2026
+- [x] CharacterTemplateSelector dialog - Feb 4, 2026
+- [x] Debounced auto-save (2s delay) - Feb 4, 2026
+- [x] Image Match Mode notifications - Feb 4, 2026
+- [x] Auto-switch to I2I model when reference added - Feb 4, 2026
+- [x] Generation progress tracking (percent display) - Feb 4, 2026
+- [x] Persona mode support (?role=user param) - Feb 4, 2026
 
 ### **🚧 Planned**
 
@@ -338,7 +380,6 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - [ ] Scene deletion confirmation - Low - Currently logs only
 - [ ] Portrait batch operations (delete multiple) - Medium - UX improvement
 - [ ] Export character JSON - Low - Developer feature
-- [ ] Character templates/cloning - Medium - User request
 
 ### **🐛 Known Issues**
 
@@ -401,8 +442,13 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 
 - **Dual-Page Approach**: CreateCharacter for initial setup, CharacterStudio for iteration. This reduces cognitive load for new users while providing power users with advanced tools.
 - **Auto-Save on Generate**: Prevents orphaned portraits by ensuring character exists before generation. Silent mode avoids toast spam during rapid iteration.
+- **Debounced Auto-Save**: 2-second delay on field changes for existing characters improves reliability without overwhelming the database.
 - **Primary Portrait System**: Single source of truth for character.image_url simplifies roleplay integration.
 - **Realtime Subscriptions**: Eliminates manual refresh, enables multi-device editing (future).
+- **Resizable Sidebar**: User-adjustable width (280-480px) accommodates varying content lengths and user preferences.
+- **Pose Presets**: Quick iteration workflow - click pose chip to build prompts incrementally.
+- **Image Match Mode**: Clear visual indicator and toast notifications when reference image affects model selection.
+- **Persona Mode**: Supports `?role=user` param to create user personas (vs. AI companions).
 
 **Technical Notes**:
 
@@ -410,12 +456,15 @@ Character Studio is the main iterative workspace for developing AI roleplay char
 - generation_metadata JSON stores full generation context for debugging
 - I2I capability matching uses api_models.capabilities->supports_i2i boolean
 - Reference images uploaded to reference_images bucket for security isolation
+- Resizable sidebar uses useRef for isResizing state (avoids re-render overhead)
+- Generation progress simulates percentage based on estimated duration
 
 **Commit History Context**:
 
 - 30+ commits related to character studio (Jan 10-17, 2026)
 - Major refactors: Portrait URL signing (Jan 16), mobile layout (Jan 14), lightbox (Jan 14)
 - Performance improvements: Constrain lightbox images, optimize mobile modals
+- Feb 4, 2026: UX audit - resizable sidebar, pose presets, debounced auto-save
 
 ---
 

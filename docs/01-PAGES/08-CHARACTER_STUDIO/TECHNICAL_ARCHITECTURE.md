@@ -1,9 +1,10 @@
 # Character Studio Technical Architecture
 
-**Last Updated:** January 26, 2026
+**Last Updated:** February 6, 2026
 **Status:** Complete - Reference Documentation
 
 ## Table of Contents
+
 1. [System Overview](#system-overview)
 2. [Component Hierarchy](#component-hierarchy)
 3. [State Management](#state-management)
@@ -24,62 +25,73 @@
 The Character Studio feature is a comprehensive character development system consisting of:
 
 - **2 Pages**: CharacterStudio (workspace), CreateCharacter (form)
-- **8 Custom Components**: Sidebar, galleries, lightbox, prompt bar, selectors
-- **2 Primary Hooks**: useCharacterStudio (state), usePortraitVersions (portraits)
+- **11 Custom Components**: Sidebar, galleries, lightbox, prompt bar, selectors, pose presets, template selector
+- **3 Primary Hooks**: useCharacterStudio (state), usePortraitVersions (portraits), useCharacterTemplates (templates)
 - **1 Edge Function**: character-portrait (generation pipeline)
-- **4 Database Tables**: characters, character_portraits, character_scenes, api_models
+- **5 Database Tables**: characters, character_portraits, character_scenes, character_templates, api_models
 - **2 Storage Buckets**: reference_images, user-library
 
 ### Architecture Pattern
+
 **Hybrid State Management**: Combines local React state (form fields) with Supabase Realtime subscriptions (portraits) and database queries (characters, scenes).
 
-**Event-Driven Generation**: Portrait generation triggers async edge function, which returns immediately. Realtime subscription updates UI when portrait inserted.
+**Debounced Auto-Save**: Character changes auto-save after 2-second delay for existing characters, reducing manual save burden.
+
+**Event-Driven Generation**: Portrait generation triggers sync edge function, returning image URL directly. Realtime subscription updates UI when portrait inserted.
 
 **Multi-Provider Model Routing**: Dynamically selects image generation provider (fal.ai, Replicate, local RunPod) based on model availability and I2I capability.
+
+**Image Match Mode**: When reference image is set, system automatically switches to I2I-capable model and displays compatible model count.
 
 ---
 
 ## Component Hierarchy
 
 ### CharacterStudio Page
+
 ```
-CharacterStudio.tsx (560 lines)
+CharacterStudio.tsx (~858 lines)
 ├── CharacterSelector (dropdown)
 │   └── List of user's characters + "Create New"
 │
 ├── Header Section
-│   ├── Character name display
-│   ├── Unsaved indicator (isDirty)
+│   ├── Back button
+│   ├── CharacterSelector dropdown
+│   ├── "Start from Template" button (new characters only)
+│   ├── Save Status Badge (Saving/Saved/Unsaved)
 │   ├── "Start Chat" button → /roleplay/chat/:id
-│   └── "Preview" button → /roleplay/character/:id
+│   └── "Preview" button → /roleplay/character/:id (new window)
 │
-├── Desktop Layout (md:grid grid-cols-[360px_1fr])
-│   ├── CharacterStudioSidebar (left, 360px)
-│   │   ├── Avatar Preview (96x96px)
+├── Desktop Layout (flex)
+│   ├── CharacterStudioSidebar (left, resizable 280-480px)
+│   │   ├── Resize Handle (drag to adjust width)
+│   │   ├── Header with Save button
+│   │   ├── Avatar Preview (64x64px)
 │   │   │   └── Loading spinner (isGenerating)
+│   │   ├── SuggestButton "all" (enhance all fields)
 │   │   ├── Collapsible: Basic Info
 │   │   │   ├── Name input
-│   │   │   ├── Gender select
-│   │   │   ├── Content Rating toggle
+│   │   │   ├── Gender select (female/male/non-binary/unspecified)
+│   │   │   ├── Rating select (SFW/NSFW)
 │   │   │   ├── Description textarea
-│   │   │   └── SuggestButton (AI enhancement)
+│   │   │   └── SuggestButton (description)
 │   │   ├── Collapsible: Appearance
 │   │   │   ├── PresetChipCarousel (8 presets)
-│   │   │   ├── Appearance Details textarea
+│   │   │   ├── Appearance Details textarea (traits)
 │   │   │   ├── Add Appearance Tag input
 │   │   │   ├── Current tags (removable chips)
-│   │   │   ├── Reference Image preview
+│   │   │   ├── Reference Image preview + Image Match Mode indicator
+│   │   │   │   └── Badge showing I2I model count
 │   │   │   ├── Upload / Library buttons
-│   │   │   ├── ModelSelector dropdown
+│   │   │   ├── ModelSelector dropdown (with I2I badges)
 │   │   │   ├── SuggestButton (appearance)
 │   │   │   └── "Generate Portrait" button
 │   │   ├── Collapsible: Personality & Voice
-│   │   │   ├── Persona textarea
+│   │   │   ├── Persona textarea + SuggestButton
 │   │   │   ├── Voice Tone select
 │   │   │   ├── Mood select
-│   │   │   ├── Personality Traits input
-│   │   │   ├── First Message textarea
-│   │   │   └── SuggestButton (persona, voice)
+│   │   │   ├── Personality Traits input + SuggestButton
+│   │   │   └── First Message textarea
 │   │   └── Collapsible: Advanced
 │   │       ├── AI Model selector (for suggestions)
 │   │       ├── Public toggle
@@ -87,6 +99,8 @@ CharacterStudio.tsx (560 lines)
 │   │
 │   └── Center Workspace (flex-1)
 │       ├── Tab Navigation (Portraits / Scenes)
+│       ├── PosePresets (when tab=portraits)
+│       │   └── Quick pose chips: Standing, Profile, Back, Sitting, Lying, Close-up
 │       ├── PortraitGallery (when tab=portraits)
 │       │   ├── Grid (auto-fill, min 130px)
 │       │   ├── Portrait Tiles
@@ -110,12 +124,19 @@ CharacterStudio.tsx (560 lines)
 │           │   └── onClick → SceneGenerationModal
 │           └── Add Scene button
 │
-├── CharacterStudioPromptBar (bottom, sticky)
-│   ├── Textarea (custom prompt, 44-100px)
-│   ├── Reference Image thumbnail (10x10px)
+├── CharacterStudioPromptBar (bottom, sticky, portraits tab only)
+│   ├── Textarea (custom prompt, 44-100px, controlled value)
 │   ├── Reference dropdown (Upload, Library, Remove)
-│   ├── ModelSelector dropdown
-│   └── Generate button
+│   ├── ModelSelector dropdown (with I2I badges)
+│   └── Generate button (with progress %)
+│
+├── MobileCharacterStudio (~212 lines inline)
+│   ├── Header with CharacterSelector + Save button
+│   ├── Tab Navigation (Details / Portraits / Scenes)
+│   ├── Details tab: Full CharacterStudioSidebar
+│   ├── Portraits tab: PosePresets + PortraitGallery + PromptBar
+│   ├── Scenes tab: ScenesGallery
+│   └── Bottom bar (context-aware)
 │
 └── Modals (conditional render)
     ├── PortraitLightbox
@@ -134,10 +155,15 @@ CharacterStudio.tsx (560 lines)
     │   ├── Scene starters array
     │   ├── System prompt textarea
     │   └── Create/Update button
-    └── ImagePickerDialog (library browser)
+    ├── ImagePickerDialog (library browser)
+    └── CharacterTemplateSelector (template dialog)
+        ├── Grid of character templates
+        ├── Template cards with icon/name/description
+        └── onClick → applies template data to character
 ```
 
 ### CreateCharacter Page
+
 ```
 CreateCharacter.tsx (532 lines)
 ├── Sticky Header
@@ -190,20 +216,25 @@ CreateCharacter.tsx (532 lines)
 **Purpose**: Central state management for CharacterStudio page
 
 **Interface**:
+
 ```typescript
 function useCharacterStudio(options?: {
   characterId?: string
+  /** Default role for new characters: 'user' for persona, 'ai' for companion */
+  defaultRole?: 'user' | 'ai'
 }): {
   // Character State
   character: CharacterData
   updateCharacter: (updates: Partial<CharacterData>) => void
-  saveCharacter: (options?: { silent?: boolean }) => Promise<void>
-  publishCharacter: () => Promise<void>
+  saveCharacter: (options?: { silent?: boolean }) => Promise<string | null>
+  publishCharacter: () => Promise<boolean>
   loadCharacter: () => Promise<void>
+  isNewCharacter: boolean
 
   // Portrait Management (delegated to usePortraitVersions)
   portraits: CharacterPortrait[]
   primaryPortrait: CharacterPortrait | null
+  portraitsLoading: boolean
   setPrimaryPortrait: (id: string) => Promise<void>
   deletePortrait: (id: string) => Promise<void>
   addPortrait: (portrait: Partial<CharacterPortrait>) => Promise<void>
@@ -212,29 +243,36 @@ function useCharacterStudio(options?: {
   // Generation
   generatePortrait: (prompt: string, options?: {
     referenceImageUrl?: string
-    model?: string
+    model?: string  // api_models.id from database
   }) => Promise<string | null>
   isGenerating: boolean
   activeJobId: string | null
+  generationProgress: {
+    percent: number
+    estimatedTimeRemaining: number
+    stage: 'queued' | 'processing' | 'finalizing'
+  } | null
 
   // Scenes
   scenes: CharacterScene[]
+  loadScenes: () => Promise<void>
 
   // Selection State
   selectedItemId: string | null
   selectedItemType: 'portrait' | 'scene' | null
-  selectItem: (id: string, type: 'portrait' | 'scene') => void
+  selectItem: (id: string | null, type: 'portrait' | 'scene' | null) => void
   getSelectedItem: () => CharacterPortrait | CharacterScene | null
 
   // Loading State
   isLoading: boolean
   isSaving: boolean
   isDirty: boolean
-  savedCharacterId: string | null
+  savedCharacterId: string | undefined
 }
 ```
 
 **State Variables**:
+
 ```typescript
 const [character, setCharacter] = useState<CharacterData>({
   name: '',
@@ -244,26 +282,31 @@ const [character, setCharacter] = useState<CharacterData>({
   is_public: false,
   traits: '',
   persona: '',
+  first_message: '',
+  system_prompt: '',
   image_url: null,
   reference_image_url: null,
   appearance_tags: [],
   voice_tone: 'warm',
   mood: 'friendly',
-  first_message: '',
-  system_prompt: null,
   alternate_greetings: [],
   forbidden_phrases: [],
   voice_examples: [],
-  default_presets: null
+  default_presets: {} as Json
 })
 
 const [scenes, setScenes] = useState<CharacterScene[]>([])
 const [isDirty, setIsDirty] = useState(false)
 const [isLoading, setIsLoading] = useState(false)
 const [isSaving, setIsSaving] = useState(false)
-const [savedCharacterId, setSavedCharacterId] = useState<string | null>(null)
+const [savedCharacterId, setSavedCharacterId] = useState<string | undefined>(characterId)
 const [isGenerating, setIsGenerating] = useState(false)
 const [activeJobId, setActiveJobId] = useState<string | null>(null)
+const [generationProgress, setGenerationProgress] = useState<{
+  percent: number
+  estimatedTimeRemaining: number
+  stage: 'queued' | 'processing' | 'finalizing'
+} | null>(null)
 const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
 const [selectedItemType, setSelectedItemType] = useState<'portrait' | 'scene' | null>(null)
 ```
@@ -271,6 +314,7 @@ const [selectedItemType, setSelectedItemType] = useState<'portrait' | 'scene' | 
 **Key Methods**:
 
 #### `updateCharacter(updates)`
+
 ```typescript
 const updateCharacter = useCallback((updates: Partial<CharacterData>) => {
   setCharacter(prev => ({ ...prev, ...updates }))
@@ -279,6 +323,7 @@ const updateCharacter = useCallback((updates: Partial<CharacterData>) => {
 ```
 
 #### `saveCharacter(options?)`
+
 ```typescript
 const saveCharacter = useCallback(async (options?: { silent?: boolean }) => {
   setIsSaving(true)
@@ -317,63 +362,117 @@ const saveCharacter = useCallback(async (options?: { silent?: boolean }) => {
 ```
 
 #### `generatePortrait(prompt, options?)`
+
 ```typescript
 const generatePortrait = useCallback(async (
   prompt: string,
   options?: { referenceImageUrl?: string, model?: string }
 ) => {
-  setIsGenerating(true)
-  try {
-    // Auto-save if not yet saved (silent mode)
-    if (!savedCharacterId) {
-      await saveCharacter({ silent: true })
+  // Validate required fields before saving
+  let charId = savedCharacterId
+  if (!charId || isDirty) {
+    if (!character.name?.trim() || !character.description?.trim()) {
+      toast({
+        title: 'Missing Required Fields',
+        description: isNewCharacter
+          ? 'New characters need a name and description before generating portraits'
+          : 'Please add a character name and description to continue',
+        variant: 'destructive'
+      })
+      return null
     }
 
-    // Call character-portrait edge function
-    const { data: { session } } = await supabase.auth.getSession()
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/character-portrait`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          characterId: savedCharacterId,
-          promptOverride: prompt,
-          referenceImageUrl: options?.referenceImageUrl,
-          apiModelId: options?.model,
-          contentRating: character.content_rating
-        })
-      }
-    )
+    // Silent auto-save
+    charId = await saveCharacter({ silent: true })
+    if (!charId) return null
 
-    const result = await response.json()
-    if (!response.ok) throw new Error(result.message)
-
-    setActiveJobId(result.jobId)
-
-    // Update character.image_url for immediate feedback
-    updateCharacter({ image_url: result.imageUrl })
-
-    // Refresh portrait gallery (realtime will handle, but force refresh)
-    await fetchPortraits()
-
-    toast.success(`Portrait generated in ${result.generationTimeMs / 1000}s`)
-    return result.imageUrl
-  } catch (error) {
-    console.error('Generation error:', error)
-    toast.error('Failed to generate portrait')
-    return null
-  } finally {
-    setIsGenerating(false)
-    setActiveJobId(null)
+    // Notify user of auto-save on first generation
+    if (!savedCharacterId) {
+      toast({
+        title: 'Character Auto-Saved',
+        description: 'Generating your first portrait...',
+        duration: 2000
+      })
+    }
   }
-}, [savedCharacterId, character, saveCharacter, fetchPortraits, updateCharacter])
+
+  setIsGenerating(true)
+
+  // Initialize progress tracking
+  const estimatedDuration = 20 // seconds
+  const startTime = Date.now()
+  setGenerationProgress({
+    percent: 0,
+    estimatedTimeRemaining: estimatedDuration,
+    stage: 'queued'
+  })
+
+  // Simulate progress updates every 500ms
+  const progressInterval = setInterval(() => {
+    const elapsed = (Date.now() - startTime) / 1000
+    const progress = Math.min(95, (elapsed / estimatedDuration) * 100)
+    const remaining = Math.max(0, estimatedDuration - elapsed)
+
+    setGenerationProgress({
+      percent: Math.round(progress),
+      estimatedTimeRemaining: Math.round(remaining),
+      stage: progress < 30 ? 'queued' : progress < 80 ? 'processing' : 'finalizing'
+    })
+  }, 500)
+
+  try {
+    const effectiveReferenceUrl = options?.referenceImageUrl || character.reference_image_url || undefined
+
+    // Call character-portrait edge function via supabase.functions.invoke
+    const { data, error } = await supabase.functions.invoke('character-portrait', {
+      body: {
+        characterId: charId,
+        referenceImageUrl: effectiveReferenceUrl,
+        contentRating: character.content_rating,
+        apiModelId: options?.model || undefined,
+        presets: {},
+        characterData: null,
+        promptOverride: prompt || undefined
+      }
+    })
+
+    if (error) throw new Error(error.message || 'Edge function failed')
+
+    if (data?.success && data?.imageUrl) {
+      clearInterval(progressInterval)
+      setGenerationProgress({ percent: 100, estimatedTimeRemaining: 0, stage: 'finalizing' })
+
+      await fetchPortraits()
+      updateCharacter({ image_url: data.imageUrl })
+
+      toast({
+        title: 'Portrait generated',
+        description: `Completed in ${Math.round((data.generationTimeMs || 0) / 1000)}s`
+      })
+      setIsGenerating(false)
+      setGenerationProgress(null)
+      return data.imageUrl
+    } else if (data?.error) {
+      throw new Error(data.error)
+    }
+
+    throw new Error('Unexpected response from generation service')
+  } catch (error) {
+    clearInterval(progressInterval)
+    setGenerationProgress(null)
+    toast({
+      title: 'Generation failed',
+      description: error instanceof Error ? error.message : 'Failed to generate portrait',
+      variant: 'destructive'
+    })
+    setIsGenerating(false)
+    return null
+  }
+}, [savedCharacterId, isDirty, character, saveCharacter, fetchPortraits, updateCharacter])
 ```
 
 **Effects**:
+
 ```typescript
 // Load character on mount
 useEffect(() => {
@@ -399,6 +498,7 @@ useEffect(() => {
 **Purpose**: Manage portrait versioning with Realtime subscriptions
 
 **Interface**:
+
 ```typescript
 function usePortraitVersions(options?: {
   characterId?: string
@@ -417,6 +517,7 @@ function usePortraitVersions(options?: {
 ```
 
 **Realtime Subscription**:
+
 ```typescript
 useEffect(() => {
   if (!characterId || !enabled) return
@@ -457,6 +558,7 @@ useEffect(() => {
 **Key Methods**:
 
 #### `setPrimaryPortrait(portraitId)`
+
 ```typescript
 const setPrimaryPortrait = useCallback(async (portraitId: string) => {
   try {
@@ -498,6 +600,7 @@ const setPrimaryPortrait = useCallback(async (portraitId: string) => {
 ## Database Schema
 
 ### characters Table
+
 ```sql
 CREATE TABLE characters (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -535,6 +638,7 @@ CREATE INDEX idx_characters_created_at ON characters(created_at DESC)
 ```
 
 ### character_portraits Table
+
 ```sql
 CREATE TABLE character_portraits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -560,6 +664,7 @@ CREATE INDEX idx_character_portraits_sort_order ON character_portraits(character
 ```
 
 **generation_metadata Structure**:
+
 ```typescript
 {
   model: string                      // api_models.display_name
@@ -578,6 +683,7 @@ CREATE INDEX idx_character_portraits_sort_order ON character_portraits(character
 ```
 
 ### character_scenes Table
+
 ```sql
 CREATE TABLE character_scenes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -599,6 +705,7 @@ CREATE INDEX idx_character_scenes_priority ON character_scenes(character_id, pri
 ```
 
 ### api_models Table
+
 ```sql
 CREATE TABLE api_models (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -622,6 +729,7 @@ CREATE INDEX idx_api_models_is_active ON api_models(is_active) WHERE is_active =
 ```
 
 **capabilities Structure** (for image models):
+
 ```typescript
 {
   supports_i2i: boolean          // Enables I2I filtering
@@ -641,6 +749,7 @@ CREATE INDEX idx_api_models_is_active ON api_models(is_active) WHERE is_active =
 **Purpose**: Generate character portraits with I2I support and multi-provider routing
 
 **Request Contract**:
+
 ```typescript
 interface CharacterPortraitRequest {
   characterId?: string                 // Existing character ID
@@ -659,6 +768,7 @@ interface CharacterPortraitRequest {
 ```
 
 **Response Contract**:
+
 ```typescript
 interface CharacterPortraitResponse {
   success: true
@@ -673,6 +783,7 @@ interface CharacterPortraitResponse {
 **Workflow** (6 phases):
 
 #### Phase 1: Authentication & Authorization
+
 ```typescript
 const authHeader = req.headers.get('Authorization')
 if (!authHeader) return new Response('Missing auth', { status: 401 })
@@ -683,6 +794,7 @@ if (authError || !user) return new Response('Unauthorized', { status: 401 })
 ```
 
 #### Phase 2: Character Resolution
+
 ```typescript
 let character: Character | null = null
 
@@ -708,6 +820,7 @@ if (characterId) {
 ```
 
 #### Phase 3: Model Resolution
+
 ```typescript
 let selectedModel: ApiModel | null = null
 
@@ -758,6 +871,7 @@ if (apiModelId) {
 ```
 
 #### Phase 4: Prompt Construction
+
 ```typescript
 const buildPrompt = (): string => {
   const parts: string[] = []
@@ -805,6 +919,7 @@ const finalPrompt = buildPrompt()
 ```
 
 #### Phase 5: Job Creation & Generation
+
 ```typescript
 // Create job record
 const { data: job, error: jobError } = await supabase
@@ -871,6 +986,7 @@ await supabase
 ```
 
 #### Phase 6: Storage & Database Persistence
+
 ```typescript
 let finalImageUrl = imageUrl
 let storagePath: string | undefined
@@ -970,6 +1086,7 @@ return new Response(JSON.stringify({
 ### Buckets
 
 #### reference_images Bucket
+
 - **Purpose**: User-uploaded reference images for I2I generation
 - **Path Structure**: `{user_id}/{character_id}/{filename}.{ext}`
 - **Security**: RLS policies ensure user can only access own images
@@ -981,6 +1098,7 @@ return new Response(JSON.stringify({
   5. Store URL in character.reference_image_url
 
 #### user-library Bucket
+
 - **Purpose**: Permanent storage for generated character portraits
 - **Path Structure**: `{user_id}/portraits/{character_id}/{job_id}.png`
 - **Security**: RLS policies ensure user can only access own library
@@ -994,6 +1112,7 @@ return new Response(JSON.stringify({
 ### URL Signing & Caching
 
 **UrlSigningService** ([src/lib/services/UrlSigningService.ts](../../../src/lib/services/UrlSigningService.ts)):
+
 ```typescript
 class UrlSigningService {
   static async signUrl(
@@ -1030,6 +1149,7 @@ class UrlSigningService {
 ```
 
 **UrlCache** ([src/lib/services/UrlCache.ts](../../../src/lib/services/UrlCache.ts)):
+
 ```typescript
 class UrlCache {
   private static cache = new Map<string, { url: string, expiry: number }>()
@@ -1067,6 +1187,7 @@ class UrlCache {
 ### Portrait Updates Channel
 
 **Setup** (in usePortraitVersions):
+
 ```typescript
 const channel = supabase
   .channel(`character_portraits:${characterId}`)
@@ -1108,6 +1229,7 @@ const channel = supabase
 ```
 
 **Cleanup**:
+
 ```typescript
 useEffect(() => {
   // ... subscription setup
@@ -1120,6 +1242,7 @@ useEffect(() => {
 ```
 
 **Race Condition Prevention**:
+
 - Check channel status before removeChannel
 - Track subscription state with isSubscribed flag
 - Handle TIMEOUT events gracefully
@@ -1133,6 +1256,7 @@ useEffect(() => {
 **Location**: character-portrait edge function, Phase 3
 
 **Decision Tree**:
+
 ```
 User specifies apiModelId?
 ├─ YES → Fetch that model
@@ -1163,6 +1287,7 @@ User specifies apiModelId?
 ```
 
 **Capabilities Schema**:
+
 ```typescript
 // api_models.capabilities (JSONB)
 {
@@ -1174,6 +1299,7 @@ User specifies apiModelId?
 ```
 
 **Provider Priority** (api_models.priority):
+
 - Higher priority = preferred
 - Example: Seedream (priority: 10), SDXL (priority: 5), Replicate FLUX (priority: 8)
 
@@ -1356,6 +1482,7 @@ User specifies apiModelId?
 **Endpoint**: `POST /functions/v1/character-portrait`
 
 **Request**:
+
 ```typescript
 {
   // Character identifier (one required)
@@ -1384,6 +1511,7 @@ User specifies apiModelId?
 ```
 
 **Response (Success 200)**:
+
 ```typescript
 {
   success: true
@@ -1396,6 +1524,7 @@ User specifies apiModelId?
 ```
 
 **Response (Error 4xx/5xx)**:
+
 ```typescript
 {
   success: false
@@ -1405,6 +1534,7 @@ User specifies apiModelId?
 ```
 
 **Error Codes**:
+
 - `400` - Missing required fields, invalid model ID
 - `401` - Unauthorized (invalid/missing JWT)
 - `404` - Character not found
@@ -1417,6 +1547,7 @@ User specifies apiModelId?
 ### Frontend Error Handling
 
 **Pattern 1: Toast Notifications**
+
 ```typescript
 try {
   await someAsyncOperation()
@@ -1428,6 +1559,7 @@ try {
 ```
 
 **Pattern 2: Inline Field Errors**
+
 ```typescript
 const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -1460,6 +1592,7 @@ const validate = () => {
 ```
 
 **Pattern 3: Retry Mechanism**
+
 ```typescript
 const [retryCount, setRetryCount] = useState(0)
 
@@ -1482,6 +1615,7 @@ const generateWithRetry = async () => {
 ### Edge Function Error Handling
 
 **Pattern 1: Early Return with Status Codes**
+
 ```typescript
 if (!authHeader) {
   return new Response(JSON.stringify({
@@ -1493,6 +1627,7 @@ if (!authHeader) {
 ```
 
 **Pattern 2: Try-Catch with Fallback**
+
 ```typescript
 let finalImageUrl = imageUrl
 
@@ -1509,6 +1644,7 @@ try {
 ```
 
 **Pattern 3: Transactional Rollback**
+
 ```typescript
 try {
   // Phase 1: Create job
@@ -1549,6 +1685,7 @@ try {
 ### Portrait Gallery Optimization
 
 **Virtual Scrolling** (future enhancement):
+
 ```typescript
 // For galleries with 50+ portraits
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -1564,6 +1701,7 @@ const virtualizer = useVirtualizer({
 ```
 
 **Image Lazy Loading** (current):
+
 ```typescript
 <img
   src={portrait.image_url}
@@ -1574,6 +1712,7 @@ const virtualizer = useVirtualizer({
 ```
 
 **URL Caching** (current):
+
 ```typescript
 // UrlCache prevents repeated signed URL generation
 const getCachedUrl = (path: string): string => {
@@ -1589,6 +1728,7 @@ const getCachedUrl = (path: string): string => {
 ### Realtime Subscription Optimization
 
 **Debouncing Updates**:
+
 ```typescript
 const debouncedUpdate = useCallback(
   debounce((payload) => {
@@ -1599,6 +1739,7 @@ const debouncedUpdate = useCallback(
 ```
 
 **Selective Subscription** (enabled flag):
+
 ```typescript
 usePortraitVersions({
   characterId,
@@ -1609,6 +1750,7 @@ usePortraitVersions({
 ### Form Performance
 
 **Controlled Input Optimization**:
+
 ```typescript
 // Use uncontrolled inputs for large textareas
 const descriptionRef = useRef<HTMLTextAreaElement>(null)
@@ -1622,6 +1764,7 @@ const handleSave = () => {
 ```
 
 **Debounced Auto-Save** (future):
+
 ```typescript
 const debouncedSave = useCallback(
   debounce(() => {
@@ -1649,10 +1792,11 @@ useEffect(() => {
 ---
 
 **Maintainers**: This document should be updated when:
+
 - New components added to character studio
 - Database schema changes (add fields, indexes)
 - Edge function workflow modifications
 - New model providers integrated
 - Performance optimizations implemented
 
-**Last Review**: January 26, 2026
+**Last Review**: February 6, 2026
