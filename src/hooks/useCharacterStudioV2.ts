@@ -23,11 +23,12 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         variation: 30 // Low variation default
     });
 
-    // Initial empty state
+    // Initial empty state (role and content_rating must match DB constraints: ai|user|narrator, sfw|nsfw)
     const [formData, setFormData] = useState<Partial<CharacterV2>>({
         name: '',
         description: '',
-        role: 'character',
+        role: 'ai',
+        content_rating: 'sfw',
         style_preset: 'realistic',
         locked_traits: [],
         media_defaults: {},
@@ -80,17 +81,43 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         }
     }, [character]);
 
+    /**
+     * Build payload for characters table. Strips relation keys (e.g. character_anchors)
+     * and ensures required fields for create. role must be one of ai | user | narrator (DB CHECK).
+     */
+    const buildCharactersPayload = useCallback((data: Partial<CharacterV2>, isCreate: boolean) => {
+        const allowedKeys = new Set([
+            'name', 'description', 'traits', 'appearance_tags', 'image_url', 'persona', 'system_prompt',
+            'voice_tone', 'mood', 'creator_id', 'likes_count', 'interaction_count', 'reference_image_url',
+            'is_public', 'gender', 'content_rating', 'role', 'consistency_method', 'seed_locked', 'base_prompt',
+            'preview_image_url', 'quick_start', 'voice_examples', 'scene_behavior_rules', 'forbidden_phrases',
+            'first_message', 'alternate_greetings', 'default_presets', 'portrait_count', 'scene_count',
+            'style_preset', 'locked_traits', 'media_defaults', 'personality_traits', 'physical_traits', 'outfit_defaults'
+        ] as const);
+        const raw = data as Record<string, unknown>;
+        const payload: Record<string, unknown> = {};
+        for (const key of Object.keys(raw)) {
+            if (key === 'character_anchors' || key === 'id' || key === 'user_id' || key === 'created_at' || key === 'updated_at') continue;
+            if (allowedKeys.has(key as any)) payload[key] = raw[key];
+        }
+        if (isCreate) {
+            payload.content_rating = payload.content_rating ?? 'sfw';
+            payload.role = payload.role ?? 'ai';
+        }
+        return payload;
+    }, []);
+
     // Save Mutation
     const saveMutation = useMutation({
         mutationFn: async (data: Partial<CharacterV2>) => {
-            // Create a copy to avoid mutating state
-            const { character_anchors, ...characterData } = data as any; // Exclude relations and cast to any to avoid Partial issues
-
+            const payload = buildCharactersPayload(data, mode === 'create');
 
             if (mode === 'create') {
+                const { data: userData } = await supabase.auth.getUser();
+                const userId = userData.user?.id;
                 const { data: newChar, error } = await supabase
                     .from('characters')
-                    .insert([{ ...characterData, user_id: (await supabase.auth.getUser()).data.user?.id } as any])
+                    .insert([{ ...payload, user_id: userId }])
                     .select()
                     .single();
                 if (error) throw error;
@@ -99,7 +126,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
                 if (!id) throw new Error("No ID for update");
                 const { data: updatedChar, error } = await supabase
                     .from('characters')
-                    .update(characterData)
+                    .update(payload)
                     .eq('id', id)
                     .select()
                     .single();

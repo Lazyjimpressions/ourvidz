@@ -8,7 +8,8 @@ import {
     Trash,
     Video,
     Download,
-    Share2
+    Share2,
+    Image as ImageIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -91,6 +92,17 @@ export const CharacterCardOverlay: React.FC<CharacterCardOverlayProps> = ({
                     >
                         <Pencil className="w-4 h-4" />
                     </Button>
+                    {onGenerate && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full bg-primary/80 hover:bg-primary text-white border border-white/10 shadow-sm backdrop-blur-md"
+                            onClick={(e) => { e.stopPropagation(); onGenerate(e); }}
+                            title="Generate Image"
+                        >
+                            <ImageIcon className="w-4 h-4" />
+                        </Button>
+                    )}
                     <Button
                         variant="ghost"
                         size="icon"

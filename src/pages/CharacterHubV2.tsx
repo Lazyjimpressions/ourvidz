@@ -224,7 +224,7 @@ export default function CharacterHubV2() {
                                     onEdit={() => handleEdit(character.id)}
                                     onDelete={() => handleDelete(character.id)}
                                     onDuplicate={() => handleDuplicate(character)}
-                                // onGenerate handled internally by card or can be overridden here
+                                    onGenerate={() => navigate(`/character-studio-v2/${character.id}`)}
                                 />
                             </div>
                         ))}

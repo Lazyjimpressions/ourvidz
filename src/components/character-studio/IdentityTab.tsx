@@ -45,15 +45,15 @@ export const IdentityTab: React.FC<IdentityTabProps> = ({ formData, updateField 
             <div className="space-y-2">
                 <Label htmlFor="role">Role</Label>
                 <Select
-                    value={formData.role || 'character'}
+                    value={formData.role || 'ai'}
                     onValueChange={(val) => updateField('role', val)}
                 >
                     <SelectTrigger className="bg-secondary/50 border-white/10">
                         <SelectValue placeholder="Select role" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="character">AI Character (NPC)</SelectItem>
-                        <SelectItem value="assistant">Assistant</SelectItem>
+                        <SelectItem value="ai">AI Character (NPC)</SelectItem>
+                        <SelectItem value="narrator">Assistant</SelectItem>
                         <SelectItem value="user">User Persona (Avatar)</SelectItem>
                     </SelectContent>
                 </Select>

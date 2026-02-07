@@ -20,6 +20,8 @@ interface CharacterStudioPromptBarV2Props {
     primaryAnchor: CharacterAnchor | null;
     mediaType: 'image' | 'video';
     onMediaTypeChange: (type: 'image' | 'video') => void;
+    /** When true, generate is disabled with tooltip "Save character first to generate". */
+    isCreateMode?: boolean;
 }
 
 export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Props> = ({
@@ -31,8 +33,15 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
     onConsistencyChange,
     primaryAnchor,
     mediaType,
-    onMediaTypeChange
+    onMediaTypeChange,
+    isCreateMode = false
 }) => {
+    const generateDisabled = isGenerating || isCreateMode || (consistencyControls.consistency_mode && !primaryAnchor);
+    const generateDisabledReason = isCreateMode
+        ? 'Save character first to generate.'
+        : consistencyControls.consistency_mode && !primaryAnchor
+            ? 'Set a primary anchor in Visuals tab or turn off Character Consistency.'
+            : null;
     return (
         <div className="flex flex-col h-full bg-card/30 border-l border-border/50">
             {/* Header */}
@@ -178,21 +187,32 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
 
             {/* Footer Actions */}
             <div className="p-4 border-t border-border/50 bg-background/50 backdrop-blur-sm">
-                <Button
-                    className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 shadow-lg"
-                    size="lg"
-                    onClick={onGenerate}
-                    disabled={isGenerating || (consistencyControls.consistency_mode && !primaryAnchor)}
-                >
-                    {isGenerating ? (
-                        <>Generating...</>
-                    ) : (
-                        <>
-                            <Wand2 className="w-4 h-4 mr-2" />
-                            Generate {mediaType === 'image' ? 'Image' : 'Video'}
-                        </>
-                    )}
-                </Button>
+                <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <span className="block w-full">
+                                <Button
+                                    className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 shadow-lg"
+                                    size="lg"
+                                    onClick={onGenerate}
+                                    disabled={generateDisabled}
+                                >
+                                    {isGenerating ? (
+                                        <>Generating...</>
+                                    ) : (
+                                        <>
+                                            <Wand2 className="w-4 h-4 mr-2" />
+                                            Generate {mediaType === 'image' ? 'Image' : 'Video'}
+                                        </>
+                                    )}
+                                </Button>
+                            </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[240px]">
+                            {generateDisabled && generateDisabledReason ? generateDisabledReason : 'Generate scene with current prompt and consistency settings.'}
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
             </div>
         </div>
     );

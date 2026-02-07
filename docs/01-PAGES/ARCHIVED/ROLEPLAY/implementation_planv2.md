@@ -1,22 +1,22 @@
 Character Hub & Character Studio Implementation Plan
-This plan implements the approved Character Hub and Character Studio designs based on 
+This plan implements the approved Character Hub and Character Studio designs based on
 character_research.md
-, 
+,
 character_prd.md
 , and the locked visual references (
 character_hub.png
-, 
+,
 character_studio.png
 ).
 
 User Review Required
 IMPORTANT
 
-Fresh Start Strategy: This implementation creates NEW independent pages based on the approved designs from 
+Fresh Start Strategy: This implementation creates NEW independent pages based on the approved designs from
 09-CHARACTER_HUB
 . Existing pages (
 CharacterStudio.tsx
-, 
+,
 CreateCharacter.tsx
 ) remain untouched and will be deprecated only when the new implementation is fully validated.
 
@@ -30,18 +30,18 @@ Database Schema Changes: New tables for portraits/anchors and canon outputs will
 
 Proposed Changes
 Database Layer
-[NEW] 
+[NEW]
 20260207_character_hub_schema.sql
 Purpose: Extend database schema to support new character features (backward compatible)
 
 Add character_anchors table for reference images (renamed from portraits)
-Fields: 
+Fields:
 id
 , character_id, image_url, is_primary, created_at, updated_at
 Foreign key to characters table with CASCADE delete
 RLS policies for user isolation
 Add character_canon table for pinned outputs
-Fields: 
+Fields:
 id
 , character_id, output_url, output_type, is_pinned, created_at
 Stores curated reference outputs (separate from character_scenes history)
@@ -58,42 +58,42 @@ idx_character_anchors_primary on primary anchors
 idx_character_canon_character_id on character_canon
 idx_character_canon_pinned on character_canon(is_pinned)
 Type Definitions
-[MODIFY] 
+[MODIFY]
 types/character.ts
 Purpose: Update TypeScript types to match new schema
 
-Extend 
+Extend
 Character
  interface with new fields
-Add 
+Add
 CharacterPortrait
-, 
+,
 CharacterCanon
-, 
+,
 MediaDefaults
-, 
+,
 PersonalityTraits
-, 
+,
 PhysicalTraits
  interfaces
 Update existing hooks to use new types
 Character Components (Unified)
 IMPORTANT
 
-Unified Component Strategy: Refactor existing 
+Unified Component Strategy: Refactor existing
 MobileCharacterCard
- into base 
+ into base
 CharacterCard
  component with context-aware behavior. This eliminates duplication while allowing page-specific customization.
 
-[REFACTOR] 
+[REFACTOR]
 CharacterCard.tsx
-Extracted from: 
+Extracted from:
 MobileCharacterCard.tsx
 
 Strategy: Base component with context prop (
 roleplay
- | hub | 
+ | hub |
 library
 )
 Features:
@@ -101,7 +101,7 @@ Features:
 Shared: Image, name, description, stats display
 Context-aware quick action overlay (replaces individual hover actions)
 Composition pattern for extensibility
-[NEW] 
+[NEW]
 CharacterCardOverlay.tsx
 Purpose: Quick action overlay for character cards
 Interaction:
@@ -109,18 +109,18 @@ Interaction:
 Desktop: Hover → fade in overlay
 Mobile: Tap → slide up overlay from bottom
 Actions vary by context (roleplay: preview/chat, hub: edit/generate/duplicate)
-[NEW] 
+[NEW]
 CharacterFilters.tsx
 Purpose: Filter bar for Character Hub
 Features: Search input, genre chips, media type filters, style preset filters
 
 Character Hub Page
-[NEW] 
+[NEW]
 CharacterHubV2.tsx
 Purpose: Main character library and management page
 Features:
 
-Grid layout using 
+Grid layout using
 CharacterCard
  with context='hub'
 CharacterFilters
@@ -129,60 +129,61 @@ Empty state with creation CTA
 "Create Character" button → Direct navigation to /character-studio-v2?mode=from-images
 Filters out user personas (role='user'), shows only AI characters
 Character Studio Components
-[NEW] 
+[NEW]
 CharacterStudioV2.tsx
 Fresh implementation of three-column layout with tab system, preview area, and prompt panel. Built independently from existing CharacterStudio.
 
-[NEW] 
+[NEW]
 StudioLayout.tsx
 Layout wrapper for three-column responsive design.
 
 [NEW] Tab Components
 IdentityTab.tsx
- - Name, bio, personality
+
+- Name, bio, personality
 AppearanceTab.tsx
- - Physical traits, anchors
+- Physical traits, anchors
 StyleTab.tsx
- - Style presets, rendering
+- Style presets, rendering
 MediaTab.tsx
- - Video/voice defaults
+- Video/voice defaults
 [NEW] Supporting Components
 PersonalitySliders.tsx
- - Trait sliders
+- Trait sliders
 AnchorManager.tsx
- - Upload/manage anchors
+- Upload/manage anchors
 StylePresetSelector.tsx
- - Visual style picker
+- Visual style picker
 CharacterHistoryStrip.tsx
- - Output history carousel
+- Output history carousel
 [NEW] Modified Components for V2
 PortraitGalleryV2.tsx
- - New implementation with view modes
+- New implementation with view modes
 CharacterStudioPromptBarV2.tsx
- - New implementation with consistency controls
+- New implementation with consistency controls
 Hooks & Services
-[NEW] 
+[NEW]
 useCharacterStudioV2.ts
 New hook with tab state, portraits, canon outputs, and save functionality. Independent from existing useCharacterStudio.
 
-[MODIFY] 
+[MODIFY]
 useUserCharacters.ts
 Extend (non-breaking) to support new fields and filtering. Backward compatible.
 
-[NEW] 
+[NEW]
 CharacterServiceV2.ts
 New service layer for v2 character features. Independent from existing services.
 
 Routing & Styling
-[MODIFY] 
+[MODIFY]
 App.tsx
 Add new parallel routes:
 
-/character-hub-v2 → 
+/character-hub-v2 →
 CharacterHubV2
-/character-studio-v2 → 
+/character-studio-v2 →
 CharacterStudioV2
-/character-studio-v2/:id → 
+/character-studio-v2/:id →
 CharacterStudioV2
  (edit mode)
 Existing routes remain unchanged for comparison.
@@ -191,7 +192,7 @@ NOTE
 
 Creation Flow: "Create Character" button in Hub navigates directly to Studio with mode parameter, no modal blocker. Studio handles both "from images" and "from description" flows via query param.
 
-[MODIFY] 
+[MODIFY]
 index.css
 Add overlay animations, card transitions matching roleplay dark theme.
 
@@ -202,6 +203,7 @@ NOTE
 The current codebase does not have comprehensive React component tests. Verification will rely on manual browser testing.
 
 Manual Verification
+
 1. Database Migration
 IMPORTANT
 
@@ -210,7 +212,9 @@ Deployment Method: Use Supabase online dashboard or MCP apply_migration tool. Th
 Option A: MCP Tool (Recommended)
 
 bash
+
 # Use Supabase MCP server to apply migration
+
 mcp_supabase-mcp-server_apply_migration(
   project_id: "ulmdmzhcdwfadbvfpckt",
   name: "character_hub_schema",
@@ -219,7 +223,7 @@ mcp_supabase-mcp-server_apply_migration(
 Option B: Supabase Dashboard
 
 Navigate to Supabase Dashboard → SQL Editor
-Copy contents of 
+Copy contents of
 supabase/migrations/20260207_character_hub_schema.sql
 Execute in SQL Editor
 Verify tables created: character_anchors, character_canon
@@ -248,7 +252,7 @@ Cross-page navigation
 5. Browser Compatibility
 Test on Chrome, Firefox, Safari (desktop + mobile)
 
-6. Visual QA
+1. Visual QA
 Glassmorphism effects
 Color consistency
 Typography and spacing
@@ -271,6 +275,7 @@ Database schema extensions are backward compatible
 After validation, can deprecate old routes by updating navigation/links
 Implementation prioritizes visual excellence per research findings
 Phase 6: Generation & Completion Strategy
+
 1. Prompt & Generation UI
 [NEW] CharacterStudioPromptBarV2:
 
@@ -284,10 +289,10 @@ Update layout to house PromptBar in right column.
 Move History to bottom of right column or a separate drawer.
 2. Logic Integration
 [MODIFY] useCharacterStudioV2:
-Add 
+Add
 generatePreview(prompt, settings)
  function.
-Connect to existing 
+Connect to existing
 CharacterImageService
  or generateImage API.
 Handle loading states (isGenerating).
@@ -302,7 +307,7 @@ Verify "Pin as Anchor" flow.
 Phase 7: Deployment
 Supabase:
 Deploy character_hub_schema migration.
-Deploy 
+Deploy
 fal-image
  edge function (manual).
 Verify Edge Function logs and RLS policies.
@@ -315,14 +320,14 @@ Dedicated header navigation.
 Clean up layout to match reference.
 Phase 9: Logic Audit & Fixes
 Generation Persistence:
-Ensure 
+Ensure
 CharacterServiceV2
  creates scene records before calling AI.
 Pass scene_id and destination to Edge Functions for correct DB updates.
 Fix return values to support optimistic UI.
 Component Wiring:
-Verify all props in 
+Verify all props in
 CharacterStudioPromptBarV2
- and 
+ and
 CharacterStudioV2
 .

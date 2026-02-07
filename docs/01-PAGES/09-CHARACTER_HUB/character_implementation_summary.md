@@ -1,5 +1,7 @@
 # Character Hub & Studio V2 Implementation Summary
 
+For the full phased plan see [implementation_plan_merged.md](implementation_plan_merged.md).
+
 ## 1. Executive Summary
 This document summarizes the current state of the **Character Hub** and **Character Studio V2** implementation. The initiative shifts the user experience from one-off prompts to a **character-centric model**, where characters are persistent assets with defined identities, consistent visual anchors, and reusable data.
 
@@ -14,7 +16,7 @@ The central library for managing character assets.
 - **Grid Layout**: Responsive card-based grid displaying character thumbnails, names, and roles.
 - **Filtering**: Sidebar filters for Search, Genre, and Content Rating.
 - **Card Actions**:
-  - **Quick Actions**: Edit (opens Studio), Delete.
+  - **Quick Actions**: Edit (opens Studio), **Generate Image** (opens Studio V2 prompt panel), Duplicate, Delete.
   - **Context**: Differentiates between User personas and AI Characters.
 - **Creation Flow**: "Create Character" CTA leads directly to Studio V2.
 
@@ -23,7 +25,7 @@ A dedicated, professional-grade editor for character definition and generation.
 - **Three-Column Layout**:
   1.  **Left (Configuration)**: Tabbed interface for deep character customization.
   2.  **Center (Preview)**: Large canvas for reviewing generated outputs.
-  3.  **Right (History/Prompt)**: Generation history and (future) prompting controls.
+  3.  **Right (History/Prompt)**: Generation history and prompt bar with consistency controls.
 - **Tab System**:
   - **Identity Tab**: Name, Tagline, Bio, Role optimization.
   - **Appearance Tab**: Physical traits (age, body, hair), **Anchor Image Management** (upload, delete, set primary).
@@ -33,10 +35,17 @@ A dedicated, professional-grade editor for character definition and generation.
   - **`useCharacterStudioV2` Hook**: Centralized state logic handling form data, tabs, and database synchronization.
   - **Supabase Integration**: seamless fetching and saving to `characters` and `character_anchors` tables.
 
-### 🚧 Pending / Next Steps
-- **Real-time Generation**: Wiring the "Generate Preview" button to the image generation API.
-- **Prompt Panel**: Implementing the right-column scene prompting interface (currently History view).
-- **Integration Testing**: End-to-end verification of the Creation -> Editing -> Generation flow.
+### Recent Fixes (per implementation_plan_merged.md)
+- **Save**: Role values now use DB-allowed values (ai, narrator, user). Create-mode save defaults `content_rating` to `sfw` and uses an allowlist payload to avoid relation/non-column keys.
+- **Studio Generate**: Generate button disabled in create mode with tooltip "Save character first to generate." When consistency is ON and no primary anchor, tooltip: "Set a primary anchor in Visuals tab or turn off Character Consistency."
+- **Hub Generate**: Hub card overlay includes "Generate Image" action; navigates to Studio V2 for that character so the user can use the prompt bar.
+
+### Verification Checklist
+- Save with Role = "AI Character (NPC)" and "Assistant" (no error).
+- Create new character and save without setting content_rating in form (succeeds with default).
+- Hub card: Generate Image opens Studio V2.
+- Studio: Generate with prompt only (consistency off, no anchor); with primary anchor (consistency on).
+- Full flow: Hub → Create → Edit → Save → Return to Hub.
 
 ## 3. Workflow & UX Design
 
@@ -72,3 +81,5 @@ The system implements a clear **Define → Customize → Generate** workflow:
 ---
 **Last Updated**: 2026-02-07
 **Author**: Antigravity (Assistant)
+
+For detailed verification steps and known issues, see [implementation_plan_merged.md](implementation_plan_merged.md).

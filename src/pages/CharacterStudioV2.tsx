@@ -183,6 +183,7 @@ export default function CharacterStudioV2() {
                 primaryAnchor={formData.character_anchors?.find(a => a.is_primary) || null}
                 mediaType={mediaType}
                 onMediaTypeChange={setMediaType}
+                isCreateMode={mode === 'create'}
               />
             </div>
 

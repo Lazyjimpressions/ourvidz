@@ -25,6 +25,7 @@ export interface Character {
   reference_image_url?: string;
   is_public?: boolean;
   gender?: string;
+  /** Character role. DB CHECK allows only: 'ai' | 'user' | 'narrator'. */
   role?: string;
   created_at?: string;
   updated_at?: string;
