@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,38 @@ import { StyleTab } from '@/components/character-studio/StyleTab';
 import { MediaTab } from '@/components/character-studio/MediaTab';
 import { CharacterStudioPromptBarV2 } from '@/components/character-studio/CharacterStudioPromptBarV2';
 import { CharacterHistoryStrip } from '@/components/character-studio/CharacterHistoryStrip';
+import { supabase } from '@/integrations/supabase/client';
+
+// Helper to sign storage URLs for preview display
+async function getSignedPreviewUrl(url: string): Promise<string> {
+    if (!url) return '';
+    // Already a full URL (http/https or data URI)
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+        return url;
+    }
+    // Parse bucket and path from storage path
+    const knownBuckets = ['workspace-temp', 'user-library', 'characters', 'reference_images'];
+    const parts = url.split('/');
+    let bucket = 'characters';
+    let path = url;
+
+    if (knownBuckets.includes(parts[0])) {
+        bucket = parts[0];
+        path = parts.slice(1).join('/');
+    }
+
+    try {
+        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+        if (error) {
+            console.error('Failed to sign preview URL:', error);
+            return url;
+        }
+        return data.signedUrl;
+    } catch (err) {
+        console.error('Error signing preview URL:', err);
+        return url;
+    }
+}
 
 export default function CharacterStudioV2() {
   const { id } = useParams();
@@ -44,6 +76,22 @@ export default function CharacterStudioV2() {
     pinAsAnchor,
     useAsMain
   } = useCharacterStudioV2(id, mode);
+
+  // Signed preview URL state
+  const [signedPreviewUrl, setSignedPreviewUrl] = useState<string>('');
+
+  // Sign the preview URL when formData.image_url changes
+  useEffect(() => {
+    const signUrl = async () => {
+      if (formData.image_url) {
+        const signed = await getSignedPreviewUrl(formData.image_url);
+        setSignedPreviewUrl(signed);
+      } else {
+        setSignedPreviewUrl('');
+      }
+    };
+    signUrl();
+  }, [formData.image_url]);
 
   // If loading existing character
   if (id && isLoading) {
@@ -140,8 +188,8 @@ export default function CharacterStudioV2() {
         <div className="w-full lg:flex-1 bg-black/50 relative flex flex-col items-center justify-center p-4 lg:p-8 h-[50vh] lg:h-full border-b lg:border-b-0 border-border/50">
           {/* Canvas Area */}
           <div className="relative aspect-[3/4] h-full max-h-[800px] w-full max-w-[600px] bg-gray-900/50 rounded-lg border border-white/5 shadow-2xl flex items-center justify-center overflow-hidden group">
-            {formData.image_url ? (
-              <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover transition-opacity duration-300" />
+            {signedPreviewUrl ? (
+              <img src={signedPreviewUrl} alt="Preview" className="w-full h-full object-cover transition-opacity duration-300" />
             ) : (
               <div className="text-center space-y-4 p-8">
                 <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/5">

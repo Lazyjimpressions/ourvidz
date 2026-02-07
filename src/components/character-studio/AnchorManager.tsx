@@ -1,9 +1,41 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Upload, X, Star, Loader2, Image as ImageIcon } from 'lucide-react';
 import { CharacterAnchor } from '@/types/character-hub-v2';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+
+// Helper to get display URL (sign if needed)
+async function getDisplayUrl(url: string): Promise<string> {
+    if (!url) return '';
+    // Already a full URL (http/https or data URI)
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+        return url;
+    }
+    // Parse bucket and path from storage path
+    const knownBuckets = ['workspace-temp', 'user-library', 'characters', 'reference_images'];
+    const parts = url.split('/');
+    let bucket = 'characters';
+    let path = url;
+
+    if (knownBuckets.includes(parts[0])) {
+        bucket = parts[0];
+        path = parts.slice(1).join('/');
+    }
+
+    try {
+        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+        if (error) {
+            console.error('Failed to sign anchor URL:', error);
+            return url;
+        }
+        return data.signedUrl;
+    } catch (err) {
+        console.error('Error signing anchor URL:', err);
+        return url;
+    }
+}
 
 interface AnchorManagerProps {
     anchors: CharacterAnchor[];
@@ -22,6 +54,25 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [dragActive, setDragActive] = useState(false);
+    const [displayUrls, setDisplayUrls] = useState<Record<string, string>>({});
+
+    // Sign URLs when anchors change
+    useEffect(() => {
+        const signUrls = async () => {
+            const newUrls: Record<string, string> = {};
+            for (const anchor of anchors) {
+                if (anchor.image_url) {
+                    newUrls[anchor.id] = await getDisplayUrl(anchor.image_url);
+                }
+            }
+            setDisplayUrls(newUrls);
+        };
+        if (anchors.length > 0) {
+            signUrls();
+        } else {
+            setDisplayUrls({});
+        }
+    }, [anchors]);
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -65,11 +116,17 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
                             anchor.is_primary ? "border-primary ring-2 ring-primary/20" : "border-white/10 hover:border-white/30"
                         )}
                     >
-                        <img
-                            src={anchor.image_url}
-                            alt="Anchor"
-                            className="w-full h-full object-cover"
-                        />
+                        {displayUrls[anchor.id] ? (
+                            <img
+                                src={displayUrls[anchor.id]}
+                                alt="Anchor"
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-muted/20">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            </div>
+                        )}
 
                         {/* Overlay Actions */}
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">

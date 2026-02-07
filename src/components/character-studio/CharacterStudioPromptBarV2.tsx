@@ -1,14 +1,46 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Wand2, Sparkles, Image as ImageIcon, Video, AlertCircle } from 'lucide-react';
+import { Wand2, Sparkles, Image as ImageIcon, Video, AlertCircle, Loader2 } from 'lucide-react';
 import { ConsistencyControls, CharacterAnchor } from '@/types/character-hub-v2';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
+
+// Helper to sign storage URLs for anchor display
+async function getSignedAnchorUrl(url: string): Promise<string> {
+    if (!url) return '';
+    // Already a full URL (http/https or data URI)
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+        return url;
+    }
+    // Parse bucket and path from storage path
+    const knownBuckets = ['workspace-temp', 'user-library', 'characters', 'reference_images'];
+    const parts = url.split('/');
+    let bucket = 'characters';
+    let path = url;
+
+    if (knownBuckets.includes(parts[0])) {
+        bucket = parts[0];
+        path = parts.slice(1).join('/');
+    }
+
+    try {
+        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+        if (error) {
+            console.error('Failed to sign anchor URL:', error);
+            return url;
+        }
+        return data.signedUrl;
+    } catch (err) {
+        console.error('Error signing anchor URL:', err);
+        return url;
+    }
+}
 
 interface CharacterStudioPromptBarV2Props {
     prompt: string;
@@ -36,6 +68,22 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
     onMediaTypeChange,
     isCreateMode = false
 }) => {
+    // Signed anchor URL state
+    const [signedAnchorUrl, setSignedAnchorUrl] = useState<string>('');
+
+    // Sign the anchor URL when primaryAnchor changes
+    useEffect(() => {
+        const signUrl = async () => {
+            if (primaryAnchor?.image_url) {
+                const signed = await getSignedAnchorUrl(primaryAnchor.image_url);
+                setSignedAnchorUrl(signed);
+            } else {
+                setSignedAnchorUrl('');
+            }
+        };
+        signUrl();
+    }, [primaryAnchor?.image_url]);
+
     const generateDisabled = isGenerating || isCreateMode || (consistencyControls.consistency_mode && !primaryAnchor);
     const generateDisabledReason = isCreateMode
         ? 'Save character first to generate.'
@@ -115,11 +163,17 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
                             <div className="flex items-center gap-3 bg-black/20 p-2 rounded-md border border-white/5">
                                 {primaryAnchor ? (
                                     <>
-                                        <img
-                                            src={primaryAnchor.image_url}
-                                            alt="Reference"
-                                            className="w-10 h-10 rounded object-cover border border-white/10"
-                                        />
+                                        {signedAnchorUrl ? (
+                                            <img
+                                                src={signedAnchorUrl}
+                                                alt="Reference"
+                                                className="w-10 h-10 rounded object-cover border border-white/10"
+                                            />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded bg-muted/20 flex items-center justify-center border border-white/10">
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            </div>
+                                        )}
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs font-medium truncate">Using Primary Anchor</p>
                                             <p className="text-[10px] text-green-400">Ready</p>

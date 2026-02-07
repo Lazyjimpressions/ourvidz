@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { CharacterScene } from '@/types/roleplay';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -7,6 +7,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CharacterHistoryStripProps {
     history: CharacterScene[];
@@ -16,6 +17,37 @@ interface CharacterHistoryStripProps {
     onDelete?: (id: string) => void; // Optional for now
 }
 
+// Helper to sign storage URLs
+async function getSignedUrl(url: string): Promise<string> {
+    if (!url) return '';
+    // Already a full URL (http/https or data URI)
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+        return url;
+    }
+    // Parse bucket and path from storage path like "workspace-temp/user_id/file.png" or "user-library/..."
+    const knownBuckets = ['workspace-temp', 'user-library', 'characters', 'reference_images'];
+    const parts = url.split('/');
+    let bucket = 'workspace-temp';
+    let path = url;
+
+    if (knownBuckets.includes(parts[0])) {
+        bucket = parts[0];
+        path = parts.slice(1).join('/');
+    }
+
+    try {
+        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+        if (error) {
+            console.error('Failed to sign URL:', error, { bucket, path });
+            return url;
+        }
+        return data.signedUrl;
+    } catch (err) {
+        console.error('Error signing URL:', err);
+        return url;
+    }
+}
+
 export const CharacterHistoryStrip: React.FC<CharacterHistoryStripProps> = ({
     history,
     isLoading,
@@ -23,6 +55,27 @@ export const CharacterHistoryStrip: React.FC<CharacterHistoryStripProps> = ({
     onUseAsMain,
     onDelete
 }) => {
+    // State to hold signed URLs keyed by scene ID
+    const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+
+    // Sign URLs when history changes
+    useEffect(() => {
+        const signUrls = async () => {
+            const newSignedUrls: Record<string, string> = {};
+            for (const scene of history) {
+                if (scene.image_url && !signedUrls[scene.id]) {
+                    newSignedUrls[scene.id] = await getSignedUrl(scene.image_url);
+                } else if (signedUrls[scene.id]) {
+                    newSignedUrls[scene.id] = signedUrls[scene.id];
+                }
+            }
+            setSignedUrls(newSignedUrls);
+        };
+        if (history.length > 0) {
+            signUrls();
+        }
+    }, [history]);
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center p-4">
@@ -49,9 +102,9 @@ export const CharacterHistoryStrip: React.FC<CharacterHistoryStripProps> = ({
                             <Dialog>
                                 <DialogTrigger asChild>
                                     <div className="group relative aspect-[3/4] bg-secondary/20 rounded-md overflow-hidden border border-white/5 hover:border-primary/50 transition-all cursor-zoom-in">
-                                        {scene.image_url ? (
+                                        {scene.image_url && signedUrls[scene.id] ? (
                                             <img
-                                                src={scene.image_url}
+                                                src={signedUrls[scene.id]}
                                                 alt={scene.scene_prompt || "Generated Image"}
                                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                             />
@@ -81,10 +134,10 @@ export const CharacterHistoryStrip: React.FC<CharacterHistoryStripProps> = ({
                                     </div>
                                 </DialogTrigger>
                                 <DialogContent className="max-w-3xl bg-black/90 border-white/10 p-0 overflow-hidden">
-                                    {scene.image_url && (
+                                    {scene.image_url && signedUrls[scene.id] && (
                                         <div className="relative w-full h-full max-h-[85vh] flex items-center justify-center bg-black/50">
                                             <img
-                                                src={scene.image_url}
+                                                src={signedUrls[scene.id]}
                                                 alt={scene.scene_prompt}
                                                 className="max-w-full max-h-full object-contain"
                                             />
@@ -110,7 +163,7 @@ export const CharacterHistoryStrip: React.FC<CharacterHistoryStripProps> = ({
                             <ContextMenuItem onClick={() => scene.image_url && onUseAsMain(scene.image_url)}>
                                 <User className="w-4 h-4 mr-2" /> Set as Profile
                             </ContextMenuItem>
-                            <ContextMenuItem onClick={() => scene.image_url && window.open(scene.image_url, '_blank')}>
+                            <ContextMenuItem onClick={() => signedUrls[scene.id] && window.open(signedUrls[scene.id], '_blank')}>
                                 <Download className="w-4 h-4 mr-2" /> Download
                             </ContextMenuItem>
                             {/* <ContextMenuItem className="text-destructive focus:text-destructive">
