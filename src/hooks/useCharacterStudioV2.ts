@@ -81,6 +81,34 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         }
     }, [character]);
 
+    // Real-time subscription for character_scenes updates
+    // This ensures history updates immediately when generation completes
+    useEffect(() => {
+        if (!id) return;
+
+        const channel = supabase
+            .channel(`character_scenes:${id}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'character_scenes',
+                filter: `character_id=eq.${id}`
+            }, (payload) => {
+                console.log('📡 Character scene update:', payload.eventType);
+                queryClient.invalidateQueries({ queryKey: ['character-history', id] });
+            })
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ Subscribed to character_scenes updates for:', id);
+                }
+            });
+
+        return () => {
+            console.log('🔌 Unsubscribing from character_scenes updates');
+            supabase.removeChannel(channel);
+        };
+    }, [id, queryClient]);
+
     /**
      * Build payload for characters table. Strips relation keys (e.g. character_anchors)
      * and ensures required fields for create. role must be one of ai | user | narrator (DB CHECK).
@@ -179,7 +207,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
                 .getPublicUrl(filePath);
 
             const { error: dbError } = await supabase
-                .from('character_anchors' as any)
+                .from('character_anchors')
                 .insert({
                     character_id: id,
                     image_url: publicUrl,
@@ -202,7 +230,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
     const deleteAnchor = async (anchorId: string) => {
         try {
             const { error } = await supabase
-                .from('character_anchors' as any)
+                .from('character_anchors')
                 .delete()
                 .eq('id', anchorId);
 
@@ -225,7 +253,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         try {
             // Get anchor URL
             const { data: anchor } = await supabase
-                .from('character_anchors' as any)
+                .from('character_anchors')
                 .select('image_url')
                 .eq('id', anchorId)
                 .single() as any;
@@ -234,13 +262,13 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
 
             // 1. Reset all anchors for this character
             await supabase
-                .from('character_anchors' as any)
+                .from('character_anchors')
                 .update({ is_primary: false })
                 .eq('character_id', id);
 
             // 2. Set new primary
             await supabase
-                .from('character_anchors' as any)
+                .from('character_anchors')
                 .update({ is_primary: true })
                 .eq('id', anchorId);
 
@@ -309,7 +337,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
             // For now, let's just insert the URL record.
 
             const { error } = await supabase
-                .from('character_anchors' as any)
+                .from('character_anchors')
                 .insert({
                     character_id: id,
                     image_url: imageUrl,

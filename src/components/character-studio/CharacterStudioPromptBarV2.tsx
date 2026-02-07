@@ -137,10 +137,23 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
 
                             {/* Variation Slider */}
                             <div className="space-y-2">
-                                <div className="flex justify-between text-xs">
-                                    <span>Strict</span>
-                                    <span>Creative</span>
-                                </div>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex justify-between text-xs cursor-help">
+                                                <span>Strict</span>
+                                                <span className="text-muted-foreground/70">{consistencyControls.variation}%</span>
+                                                <span>Creative</span>
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[260px]">
+                                            <p className="text-xs">
+                                                <strong>0% (Strict):</strong> Stay very close to anchor appearance.<br />
+                                                <strong>100% (Creative):</strong> Allow more artistic freedom while maintaining character identity.
+                                            </p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                                 <Slider
                                     value={[consistencyControls.variation]}
                                     min={0}

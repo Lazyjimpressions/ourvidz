@@ -407,6 +407,79 @@ export type Database = {
           },
         ]
       }
+      character_anchors: {
+        Row: {
+          character_id: string
+          created_at: string | null
+          id: string
+          image_url: string
+          is_primary: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          character_id: string
+          created_at?: string | null
+          id?: string
+          image_url: string
+          is_primary?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          character_id?: string
+          created_at?: string | null
+          id?: string
+          image_url?: string
+          is_primary?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_anchors_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      character_canon: {
+        Row: {
+          character_id: string
+          created_at: string | null
+          id: string
+          is_pinned: boolean | null
+          metadata: Json | null
+          output_type: string
+          output_url: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          metadata?: Json | null
+          output_type: string
+          output_url: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          metadata?: Json | null
+          output_type?: string
+          output_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_canon_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       character_portraits: {
         Row: {
           character_id: string
