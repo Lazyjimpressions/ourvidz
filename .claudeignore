@@ -1,0 +1,32 @@
+# Ignore node_modules - causes ripgrep timeout and OOM
+node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Cache directories
+.cache/
+.turbo/
+.parcel-cache/
+
+# Package manager
+.pnpm-store/
+.yarn/
+
+# Version control
+.git/
+
+# IDE
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

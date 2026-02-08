@@ -105,15 +105,13 @@ The system supports two model pathways that must ALWAYS have fallback/alternativ
 
 **MCP Server Configuration**
 
-MCP servers are configured in `~/.claude.json` (user-scoped, global to all projects):
+MCP servers are configured at the project level in `.mcp.json`:
 
 | Server Name | Purpose |
 |-------------|---------|
-| `supabase-itmanager1341` | Secondary Supabase account |
-| `supabase-lazyjimpressions` | **ourvidz project** - use this for database queries |
-| `playwright` | Browser automation |
+| `supabase` | **ourvidz project** (ID: `ulmdmzhcdwfadbvfpckt`) - database queries and migrations |
 
-Note: Project-scoped `.mcp.json` files are no longer used for this project. All MCP configs live in `~/.claude.json`.
+Note: This project uses project-scoped `.mcp.json` for Supabase access with write permissions.
 
 **Test User**: `pokercpa05` (found via email lookup in `auth.users`)
 
