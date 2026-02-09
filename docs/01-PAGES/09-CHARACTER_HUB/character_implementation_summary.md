@@ -52,6 +52,7 @@ A dedicated, professional-grade editor for character definition and generation.
 ### Recent Updates (2026-02-08)
 
 #### Three Workflow Architecture
+
 The studio now supports three distinct workflows:
 
 1. **Create New Character**: Define identity in Column A, generate portrait in Visuals Tab, pin to Canon, set as Primary.
@@ -59,6 +60,7 @@ The studio now supports three distinct workflows:
 3. **Album Image Generation**: With character "locked" via Canon, use Column C anchor slots for i2i outfit/pose variations.
 
 #### Column C Anchor Reference Panel
+
 - **AnchorReferencePanel Component**: New session-based anchor input panel in Column C above prompt bar.
 - **Three Slots**: Face, Body, Style - each can be filled from:
   - Upload File
@@ -69,6 +71,7 @@ The studio now supports three distinct workflows:
 - **Auto-i2i Mode**: Setting anchors automatically enables i2i generation - no toggle needed.
 
 #### Visuals Tab (Replaces Appearance Tab)
+
 - **Portrait Generation**: Built-in AI portrait generation using fal-image edge function.
 - **Image Upload**: File upload + Library picker for reference images.
 - **AI Suggestions**: SuggestButton for AI-generated physical trait suggestions.
@@ -76,11 +79,13 @@ The studio now supports three distinct workflows:
 - **Outfit & Items**: Default outfit description and signature items.
 
 #### Simplified Prompt Bar
+
 - **Consistency Toggle Removed**: Anchors in Column C imply i2i mode automatically.
 - **Anchor Status Display**: Shows which reference anchors are set (Face/Body/Style).
 - **Variation Slider**: Controls i2i strength (Strict 0% to Creative 100%).
 
 #### Media Strip Reference Actions
+
 - **Use as Reference**: Right-click any image in Canon/Album/Scenes tabs to use as Face/Body/Style reference.
 - **Copies to Column C**: Selected images populate the AnchorReferencePanel slots.
 - **Quick Workflow**: Generate scene, right-click, "Use as Face Reference" to lock identity for next generation.
@@ -88,23 +93,28 @@ The studio now supports three distinct workflows:
 #### Previous Updates
 
 ##### Layout Correction
+
 - **Media Strip Location**: Moved to Column B under preview canvas per reference design.
 - **CharacterMediaStrip**: Canon | Album | Scenes tabs.
 
 ##### Canon Spec Auto-Generation
+
 - **canonSpecBuilder Utility**: Compiles identity fields into structured generation prompt.
 - **IdentityTab Display**: Collapsible Canon Spec preview with copy-to-clipboard.
 
 ##### Album System
+
 - **Save to Album Action**: Copies image to `user-library` bucket.
 - **useCharacterAlbum Hook**: Manages album with `roleplay_metadata.character_id` filter.
 
 ##### Pin to Canon Action
+
 - **Workflow**: Scene → "Pin to Canon" → creates `character_portraits` record.
 
 ### Database Schema Updates
 
 Added columns to `characters` table:
+
 - `tagline` (text)
 - `bio` (text)
 - `backstory` (text)
@@ -115,6 +125,7 @@ Added columns to `characters` table:
 - `canon_spec` (text)
 
 Added column to `character_anchors` table:
+
 - `anchor_type` (text, CHECK constraint: 'face' | 'body' | 'style')
 
 ### Verification Checklist
