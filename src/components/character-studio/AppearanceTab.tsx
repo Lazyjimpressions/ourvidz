@@ -1,27 +1,25 @@
+/**
+ * AppearanceTab Component
+ *
+ * Physical traits and appearance settings for a character.
+ * Note: Anchor management has moved to AnchorReferencePanel in Column C.
+ * Portrait image upload will be added in VisualsTab (Phase 2).
+ */
+
 import React from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { CharacterV2, CharacterAnchor } from '@/types/character-hub-v2';
-import { AnchorManager } from '@/components/character-studio/AnchorManager';
+import { CharacterV2 } from '@/types/character-hub-v2';
 
 interface AppearanceTabProps {
     formData: Partial<CharacterV2>;
     updateField: (field: keyof CharacterV2, value: any) => void;
-    // Anchor specific props (optional to support existing usage, but required for V2 functionality)
-    anchors?: CharacterAnchor[];
-    onUploadAnchor?: (file: File) => Promise<void>;
-    onDeleteAnchor?: (id: string) => Promise<void>;
-    onSetPrimaryAnchor?: (id: string) => Promise<void>;
 }
 
 export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     formData,
     updateField,
-    anchors = [],
-    onUploadAnchor,
-    onDeleteAnchor,
-    onSetPrimaryAnchor
 }) => {
     const physicalTraits = formData.physical_traits || {};
 
@@ -30,20 +28,7 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-300">
-            {/* Anchor Management Section */}
-            {onUploadAnchor && onDeleteAnchor && onSetPrimaryAnchor && (
-                <div className="pb-6 border-b border-border/50">
-                    <AnchorManager
-                        anchors={anchors}
-                        onUpload={onUploadAnchor}
-                        onDelete={onDeleteAnchor}
-                        onSetPrimary={onSetPrimaryAnchor}
-                    />
-                </div>
-            )}
-
-            <div className="space-y-6">
+        <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                         <Label htmlFor="age">Age</Label>
@@ -135,7 +120,6 @@ export const AppearanceTab: React.FC<AppearanceTabProps> = ({
                         className="min-h-[80px] bg-secondary/50 border-white/10 resize-y"
                     />
                 </div>
-            </div>
         </div>
     );
 };

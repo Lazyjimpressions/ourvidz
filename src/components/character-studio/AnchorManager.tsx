@@ -1,7 +1,16 @@
+/**
+ * AnchorManager Component (Simplified)
+ *
+ * Generic grid-based reference image management.
+ * Used for storing saved reference images in the character_anchors table.
+ *
+ * Note: For session-based anchor inputs in Column C, use AnchorReferencePanel instead.
+ */
+
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Upload, X, Star, Loader2, Image as ImageIcon, RefreshCw } from 'lucide-react';
+import { Upload, X, Star, Loader2, RefreshCw } from 'lucide-react';
 import { CharacterAnchor } from '@/types/character-hub-v2';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,6 +52,10 @@ interface AnchorManagerProps {
     onDelete: (id: string) => Promise<void>;
     onSetPrimary: (id: string) => Promise<void>;
     isUploading?: boolean;
+    /** Label for the section */
+    label?: string;
+    /** Help text */
+    helpText?: string;
 }
 
 export const AnchorManager: React.FC<AnchorManagerProps> = ({
@@ -50,7 +63,9 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
     onUpload,
     onDelete,
     onSetPrimary,
-    isUploading = false
+    isUploading = false,
+    label = 'Reference Images',
+    helpText = 'Upload images for visual reference. The primary image is used as the main thumbnail.',
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const replaceInputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +94,10 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             await onUpload(e.target.files[0]);
+        }
+        // Reset the input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
         }
     };
 
@@ -119,10 +138,11 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
         }
     };
 
+    // Grid-based rendering
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
-                <Label className="text-base font-medium">Anchor Images</Label>
+                <Label className="text-base font-medium">{label}</Label>
                 <span className="text-xs text-muted-foreground">{anchors.length} images</span>
             </div>
 
@@ -232,9 +252,7 @@ export const AnchorManager: React.FC<AnchorManagerProps> = ({
                 </div>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-                Upload 3-5 images for best consistency. The primary image is used as the main thumbnail.
-            </p>
+            <p className="text-xs text-muted-foreground">{helpText}</p>
         </div>
     );
 };

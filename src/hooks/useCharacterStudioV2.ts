@@ -191,7 +191,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
 
 
     // Anchor Management
-    const uploadAnchor = async (file: File) => {
+    const uploadAnchor = async (file: File, anchorType?: 'face' | 'body' | 'style') => {
         if (!id) return;
 
         try {
@@ -208,18 +208,37 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
                 .from('characters')
                 .getPublicUrl(filePath);
 
+            // If anchor type is specified, check if one already exists and delete it
+            if (anchorType) {
+                const existingAnchor = formData.character_anchors?.find(
+                    (a: any) => a.anchor_type === anchorType
+                );
+                if (existingAnchor) {
+                    await supabase
+                        .from('character_anchors')
+                        .delete()
+                        .eq('id', existingAnchor.id);
+                }
+            }
+
             const { error: dbError } = await supabase
                 .from('character_anchors')
                 .insert({
                     character_id: id,
                     image_url: publicUrl,
-                    is_primary: false
+                    is_primary: anchorType === 'face', // Face anchor is primary by default
+                    anchor_type: anchorType || 'face'
                 });
 
             if (dbError) throw dbError;
 
             queryClient.invalidateQueries({ queryKey: ['character-studio', id] });
-            toast({ title: "Anchor Uploaded", description: "Image added to character anchors." });
+            toast({
+                title: "Anchor Uploaded",
+                description: anchorType
+                    ? `${anchorType.charAt(0).toUpperCase() + anchorType.slice(1)} anchor set.`
+                    : "Image added to character anchors."
+            });
         } catch (error: any) {
             toast({
                 title: "Upload Failed",
@@ -294,8 +313,12 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         }
     };
 
-    // Generation Logic
-    const generatePreview = async () => {
+    // Generation Logic - accepts optional anchor refs from Column C for i2i generation
+    const generatePreview = async (anchorRefs?: {
+        face: { imageUrl: string; signedUrl?: string; source: string } | null;
+        body: { imageUrl: string; signedUrl?: string; source: string } | null;
+        style: { imageUrl: string; signedUrl?: string; source: string } | null;
+    }) => {
         if (!id || !formData) return;
         setIsGenerating(true);
 
@@ -307,6 +330,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
                 prompt,
                 consistencyControls,
                 primaryAnchorUrl: primaryAnchor?.image_url,
+                anchorRefs: anchorRefs as any, // Pass anchor refs for i2i generation
                 mediaType
             });
 

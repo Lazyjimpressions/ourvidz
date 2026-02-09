@@ -1,11 +1,27 @@
 import { supabase } from '@/integrations/supabase/client';
 import { CharacterV2, ConsistencyControls } from '@/types/character-hub-v2';
+import { buildCanonSpec, combinePromptWithCanon } from '@/lib/utils/canonSpecBuilder';
+
+// Anchor reference type from Column C panel
+interface AnchorReference {
+    imageUrl: string;
+    signedUrl?: string;
+    source: 'file' | 'library' | 'references' | 'canon';
+    sourceId?: string;
+    sourceName?: string;
+}
 
 interface GeneratePreviewParams {
     character: CharacterV2;
     prompt: string;
     consistencyControls: ConsistencyControls;
     primaryAnchorUrl?: string | null;
+    /** Session-based anchor references from Column C for i2i generation */
+    anchorRefs?: {
+        face: AnchorReference | null;
+        body: AnchorReference | null;
+        style: AnchorReference | null;
+    };
     mediaType: 'image' | 'video';
 }
 
@@ -15,13 +31,35 @@ export class CharacterServiceV2 {
      * Generates a preview image or video for a character
      */
     static async generatePreview(params: GeneratePreviewParams) {
-        const { character, prompt, consistencyControls, primaryAnchorUrl, mediaType } = params;
+        const { character, prompt, consistencyControls, primaryAnchorUrl, anchorRefs, mediaType } = params;
+
+        // Check if we have anchor references from Column C (preferred for i2i)
+        const hasAnchorRefs = anchorRefs && (anchorRefs.face || anchorRefs.body || anchorRefs.style);
+        const faceRef = anchorRefs?.face?.signedUrl || anchorRefs?.face?.imageUrl;
+        const bodyRef = anchorRefs?.body?.signedUrl || anchorRefs?.body?.imageUrl;
+        const styleRef = anchorRefs?.style?.signedUrl || anchorRefs?.style?.imageUrl;
+
+        // Use anchor refs if available, otherwise fall back to primaryAnchorUrl
+        const characterReferenceUrl = faceRef || bodyRef || primaryAnchorUrl;
 
         try {
-            // optimized prompt construction
-            // TODO: Use a more sophisticated prompt builder taking traits into account
-            const basePrompt = `(character: ${character.name}), ${character.description}. ${prompt}`;
-            const negativePrompt = "blurry, low quality, distortion, disfigured";
+            // Build the generation prompt using canon spec when consistency mode is enabled
+            let basePrompt: string;
+            let negativePrompt = "blurry, low quality, distortion, disfigured";
+
+            if (consistencyControls.consistency_mode) {
+                // Use structured canon spec for consistent character identity
+                const { canonSpec, negativePrompt: avoidTraits } = buildCanonSpec(character);
+                basePrompt = combinePromptWithCanon(prompt, canonSpec, { position: 'before' });
+
+                // Append avoid_traits to negative prompt
+                if (avoidTraits) {
+                    negativePrompt = `${negativePrompt}, ${avoidTraits}`;
+                }
+            } else {
+                // Fallback to basic prompt construction
+                basePrompt = `(character: ${character.name}), ${character.description}. ${prompt}`;
+            }
 
             // 1. Create a placeholder record in character_scenes to track this generation
             // This ensures we have a stable ID and the user sees a "loading" state in history immediately
@@ -46,6 +84,7 @@ export class CharacterServiceV2 {
 
             let requestBody: any = {
                 prompt: basePrompt,
+                negative_prompt: negativePrompt,
                 quality: 'high',
                 modality: mediaType, // Explicitly set modality for fal-image function
                 metadata: {
@@ -59,17 +98,26 @@ export class CharacterServiceV2 {
                 }
             };
 
-            // Configure Edge Function based on Consistency
-            if (consistencyControls.consistency_mode && primaryAnchorUrl) {
-                // Consistency Mode: Subject Reference / Image-to-Image
+            // Configure Edge Function based on anchor references or consistency mode
+            // Priority: Anchor refs from Column C > Primary anchor > No reference
+            if (hasAnchorRefs || (consistencyControls.consistency_mode && characterReferenceUrl)) {
+                // i2i Mode: Use character reference for consistency
                 requestBody.input = {
-                    image_url: primaryAnchorUrl,
+                    image_url: characterReferenceUrl,
                     strength: (100 - consistencyControls.variation) / 100, // Convert variation (0-100) to strength (1.0-0.0)
-                    // Note: 'strength' meaning varies by model. 
-                    // For img2img: higher strength = more change from original. 
-                    // So variation 30 => Strength 0.3 (Mostly keep original)?
-                    // Usually: Strength 0 = exact original, Strength 1 = full noise.
-                    // If variation is "how much it changes", then Variation 30% => Strength 0.3.
+                };
+
+                // Add style reference if available (separate from character reference)
+                if (styleRef && styleRef !== characterReferenceUrl) {
+                    requestBody.input.style_reference_url = styleRef;
+                }
+
+                // Mark as i2i for tracking
+                requestBody.metadata.is_i2i = true;
+                requestBody.metadata.anchor_sources = {
+                    face: anchorRefs?.face?.source || null,
+                    body: anchorRefs?.body?.source || null,
+                    style: anchorRefs?.style?.source || null,
                 };
             }
 

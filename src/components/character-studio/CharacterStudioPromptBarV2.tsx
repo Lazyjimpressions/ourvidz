@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Wand2, Sparkles, Image as ImageIcon, Video, AlertCircle, Loader2, ChevronDown, Shuffle, Settings2 } from 'lucide-react';
+import { Wand2, Sparkles, Image as ImageIcon, Video, ChevronDown, Shuffle, Settings2, CheckCircle2, User, Shirt, Palette } from 'lucide-react';
 import { ConsistencyControls, CharacterAnchor } from '@/types/character-hub-v2';
-import { Badge } from '@/components/ui/badge';
+import { AnchorReference } from '@/components/character-studio/AnchorReferencePanel';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
@@ -53,6 +52,12 @@ interface CharacterStudioPromptBarV2Props {
     consistencyControls: ConsistencyControls;
     onConsistencyChange: (controls: ConsistencyControls) => void;
     primaryAnchor: CharacterAnchor | null;
+    /** Session-based anchor references for i2i generation (from Column C panel) */
+    anchorRefs?: {
+        face: AnchorReference | null;
+        body: AnchorReference | null;
+        style: AnchorReference | null;
+    };
     mediaType: 'image' | 'video';
     onMediaTypeChange: (type: 'image' | 'video') => void;
     /** When true, generate is disabled with tooltip "Save character first to generate". */
@@ -67,11 +72,12 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
     consistencyControls,
     onConsistencyChange,
     primaryAnchor,
+    anchorRefs,
     mediaType,
     onMediaTypeChange,
     isCreateMode = false
 }) => {
-    // Signed anchor URL state
+    // Signed anchor URL state (for legacy primaryAnchor display)
     const [signedAnchorUrl, setSignedAnchorUrl] = useState<string>('');
     // Batch size state
     const [batchSize, setBatchSize] = useState<number>(1);
@@ -93,12 +99,18 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
         signUrl();
     }, [primaryAnchor?.image_url]);
 
-    const generateDisabled = isGenerating || isCreateMode || (consistencyControls.consistency_mode && !primaryAnchor);
+    // Check if any anchor references are set (from Column C panel)
+    const hasAnchorRefs = anchorRefs && (anchorRefs.face || anchorRefs.body || anchorRefs.style);
+    const anchorCount = anchorRefs ? [anchorRefs.face, anchorRefs.body, anchorRefs.style].filter(Boolean).length : 0;
+
+    // Generate is disabled if:
+    // - Already generating
+    // - In create mode (character not saved yet)
+    // For album generation (i2i), we need at least face anchor set
+    const generateDisabled = isGenerating || isCreateMode;
     const generateDisabledReason = isCreateMode
         ? 'Save character first to generate.'
-        : consistencyControls.consistency_mode && !primaryAnchor
-            ? 'Set a primary anchor in Visuals tab or turn off Character Consistency.'
-            : null;
+        : null;
     return (
         <div className="flex flex-col h-full bg-card/30 border-l border-border/50">
             {/* Header */}
@@ -183,113 +195,92 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
                     </div>
                 </div>
 
-                {/* Consistency Controls */}
-                <div className="space-y-4 rounded-lg bg-secondary/20 p-4 border border-white/5">
-                    <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                            <Label className="text-sm font-medium">Character Consistency</Label>
-                            <p className="text-[10px] text-muted-foreground">Keep appearance stable</p>
+                {/* Anchor Status (shows which reference anchors are set from Column C panel) */}
+                {hasAnchorRefs && (
+                    <div className="space-y-3 rounded-lg bg-secondary/20 p-4 border border-white/5">
+                        <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                                Reference Mode
+                            </Label>
+                            <span className="text-[10px] text-muted-foreground">
+                                {anchorCount}/3 anchors set
+                            </span>
                         </div>
-                        <Switch
-                            checked={consistencyControls.consistency_mode}
-                            onCheckedChange={(checked) => onConsistencyChange({
-                                ...consistencyControls,
-                                consistency_mode: checked
-                            })}
-                        />
-                    </div>
 
-                    {consistencyControls.consistency_mode && (
-                        <div className="space-y-4 pt-2 animate-in slide-in-from-top-2 duration-200">
-                            {/* Primary Anchor Display */}
-                            <div className="flex items-center gap-3 bg-black/20 p-2 rounded-md border border-white/5">
-                                {primaryAnchor ? (
-                                    <>
-                                        {signedAnchorUrl ? (
-                                            <img
-                                                src={signedAnchorUrl}
-                                                alt="Reference"
-                                                className="w-10 h-10 rounded object-cover border border-white/10"
-                                            />
-                                        ) : (
-                                            <div className="w-10 h-10 rounded bg-muted/20 flex items-center justify-center border border-white/10">
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                            </div>
-                                        )}
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium truncate">Using Primary Anchor</p>
-                                            <p className="text-[10px] text-green-400">Ready</p>
+                        {/* Anchor Icons */}
+                        <div className="flex gap-2">
+                            {[
+                                { key: 'face', icon: User, label: 'Face', ref: anchorRefs?.face },
+                                { key: 'body', icon: Shirt, label: 'Body', ref: anchorRefs?.body },
+                                { key: 'style', icon: Palette, label: 'Style', ref: anchorRefs?.style },
+                            ].map(({ key, icon: Icon, label, ref }) => (
+                                <div
+                                    key={key}
+                                    className={cn(
+                                        'flex-1 p-2 rounded border text-center',
+                                        ref
+                                            ? 'bg-green-500/10 border-green-500/30'
+                                            : 'bg-muted/10 border-white/5'
+                                    )}
+                                >
+                                    <Icon className={cn(
+                                        'w-4 h-4 mx-auto mb-1',
+                                        ref ? 'text-green-400' : 'text-muted-foreground/50'
+                                    )} />
+                                    <span className={cn(
+                                        'text-[9px]',
+                                        ref ? 'text-green-300' : 'text-muted-foreground/50'
+                                    )}>
+                                        {label}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Variation Slider */}
+                        <div className="space-y-2 pt-2">
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex justify-between text-[10px] cursor-help">
+                                            <span>Strict</span>
+                                            <span className="text-muted-foreground/70">{consistencyControls.variation}%</span>
+                                            <span>Creative</span>
                                         </div>
-                                    </>
-                                ) : (
-                                    <div className="flex items-center gap-2 text-amber-400">
-                                        <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                                        <p className="text-xs leading-tight">
-                                            No primary anchor set. Upload an image in the <strong>Visuals</strong> tab.
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[260px]">
+                                        <p className="text-xs">
+                                            <strong>0% (Strict):</strong> Stay very close to reference appearance.<br />
+                                            <strong>100% (Creative):</strong> More artistic freedom while maintaining identity.
                                         </p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Variation Slider */}
-                            <div className="space-y-2">
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <div className="flex justify-between text-xs cursor-help">
-                                                <span>Strict</span>
-                                                <span className="text-muted-foreground/70">{consistencyControls.variation}%</span>
-                                                <span>Creative</span>
-                                            </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[260px]">
-                                            <p className="text-xs">
-                                                <strong>0% (Strict):</strong> Stay very close to anchor appearance.<br />
-                                                <strong>100% (Creative):</strong> Allow more artistic freedom while maintaining character identity.
-                                            </p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                                <Slider
-                                    value={[consistencyControls.variation]}
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    onValueChange={([val]) => onConsistencyChange({
-                                        ...consistencyControls,
-                                        variation: val
-                                    })}
-                                    className="py-1"
-                                />
-                            </div>
-
-                            {/* Advanced Options Toggle (Simplified for now) */}
-                            <div className="flex items-center justify-between pt-2">
-                                <Label className="text-xs text-muted-foreground cursor-pointer decoration-dotted underline">
-                                    Referencing: {consistencyControls.use_pinned_canon ? "Canon + Anchor" : "Anchor Only"}
-                                </Label>
-                                <Switch
-                                    checked={consistencyControls.use_pinned_canon}
-                                    onCheckedChange={(checked) => onConsistencyChange({
-                                        ...consistencyControls,
-                                        use_pinned_canon: checked
-                                    })}
-                                    className="scale-75 origin-right"
-                                />
-                            </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                            <Slider
+                                value={[consistencyControls.variation]}
+                                min={0}
+                                max={100}
+                                step={1}
+                                onValueChange={([val]) => onConsistencyChange({
+                                    ...consistencyControls,
+                                    variation: val
+                                })}
+                                className="py-1"
+                            />
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
 
-                {/* Generation Tips or History Placeholder */}
+                {/* Generation Tips */}
                 <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                     <h4 className="text-xs font-semibold text-blue-400 mb-1 flex items-center gap-1">
                         <Wand2 className="w-3 h-3" /> Pro Tip
                     </h4>
                     <p className="text-[11px] text-blue-200/70">
-                        {consistencyControls.consistency_mode
-                            ? "Higher variation allows more dynamic poses but may alter facial details slightly."
-                            : "Consistency mode is off. The AI will reimagine the character based on the description only."}
+                        {hasAnchorRefs
+                            ? "Anchors set! The AI will use your references to maintain character consistency."
+                            : "Set reference anchors above to lock your character's appearance during generation."}
                     </p>
                 </div>
 

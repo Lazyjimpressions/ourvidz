@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { X, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     Select,
@@ -13,7 +14,13 @@ import {
     SelectTrigger,
     SelectValue
 } from '@/components/ui/select';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger
+} from '@/components/ui/collapsible';
 import { CharacterV2, PersonalityTraits, DEFAULT_PERSONALITY_SLIDERS, GENRE_OPTIONS } from '@/types/character-hub-v2';
+import { buildCanonSpec, getCanonSpecSummary } from '@/lib/utils/canonSpecBuilder';
 
 interface IdentityTabProps {
     formData: Partial<CharacterV2>;
@@ -24,6 +31,22 @@ export const IdentityTab: React.FC<IdentityTabProps> = ({ formData, updateField 
     const [newLockedTrait, setNewLockedTrait] = useState('');
     const [newAvoidTrait, setNewAvoidTrait] = useState('');
     const [newCustomTag, setNewCustomTag] = useState('');
+    const [canonSpecOpen, setCanonSpecOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    // Auto-generate canon spec from identity fields
+    const canonSpec = useMemo(() => buildCanonSpec(formData), [formData]);
+    const canonSummary = useMemo(() => getCanonSpecSummary(formData), [formData]);
+
+    const handleCopyCanonSpec = async () => {
+        try {
+            await navigator.clipboard.writeText(canonSpec.canonSpec);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy canon spec:', err);
+        }
+    };
 
     // Update a specific personality trait
     const updatePersonalityTrait = (traitId: keyof PersonalityTraits, value: number) => {
@@ -328,6 +351,75 @@ export const IdentityTab: React.FC<IdentityTabProps> = ({ formData, updateField 
                     Visual features that must or must not appear in generated images.
                 </p>
             </div>
+
+            {/* Canon Spec Preview */}
+            <Collapsible
+                open={canonSpecOpen}
+                onOpenChange={setCanonSpecOpen}
+                className="pt-3 border-t border-border/30"
+            >
+                <CollapsibleTrigger asChild>
+                    <button
+                        type="button"
+                        className="flex items-center justify-between w-full text-left group"
+                    >
+                        <div>
+                            <Label className="text-[11px] cursor-pointer group-hover:text-primary transition-colors">
+                                Canon Spec (Auto-Generated)
+                            </Label>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {canonSummary}
+                            </p>
+                        </div>
+                        {canonSpecOpen ? (
+                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        )}
+                    </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                    <div className="relative">
+                        <div className="p-3 bg-secondary/30 rounded-md border border-border/30">
+                            <p className="text-[11px] text-foreground/80 whitespace-pre-wrap leading-relaxed">
+                                {canonSpec.canonSpec || 'No canon spec data yet. Fill in identity fields above.'}
+                            </p>
+                            {canonSpec.negativePrompt && (
+                                <div className="mt-2 pt-2 border-t border-border/30">
+                                    <span className="text-[10px] text-red-400">Negative: </span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                        {canonSpec.negativePrompt}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                        {canonSpec.canonSpec && (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleCopyCanonSpec}
+                                className="absolute top-2 right-2 h-6 px-2 text-[10px]"
+                            >
+                                {copied ? (
+                                    <>
+                                        <Check className="w-3 h-3 mr-1" />
+                                        Copied
+                                    </>
+                                ) : (
+                                    <>
+                                        <Copy className="w-3 h-3 mr-1" />
+                                        Copy
+                                    </>
+                                )}
+                            </Button>
+                        )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                        This prompt is automatically injected when Consistency Mode is enabled.
+                    </p>
+                </CollapsibleContent>
+            </Collapsible>
         </div>
     );
 };

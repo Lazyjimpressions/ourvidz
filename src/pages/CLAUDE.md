@@ -9,4 +9,12 @@
 |----|------|---|-------|------|
 | #1468 | 6:36 PM | 🔵 | Character Portrait Primary Selection Frontend Architecture | ~554 |
 | #1467 | " | 🔵 | Character Studio UI Manages Reference Images for Scene Generation | ~580 |
+
+### Feb 8, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #2490 | 6:34 PM | 🟣 | AnchorReferencePanel Integrated into CharacterStudioV2 Column C | ~536 |
+| #2489 | " | 🟣 | Session-Based Anchor References State Added to CharacterStudioV2 | ~420 |
+| #2471 | 6:05 PM | 🔵 | Character Studio AI Generation Helper Feature Analysis Complete | ~868 |
 </claude-mem-context>

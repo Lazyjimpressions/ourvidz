@@ -47,6 +47,11 @@ export interface CharacterV2 extends Character {
 // ============================================================================
 
 /**
+ * Anchor type for typed slots
+ */
+export type AnchorType = 'face' | 'body' | 'style';
+
+/**
  * Character anchor image for visual consistency
  * Renamed from CharacterPortrait to match PRD terminology "anchor-based consistency"
  * Stored in character_anchors table
@@ -56,6 +61,7 @@ export interface CharacterAnchor {
     character_id: string;
     image_url: string;
     is_primary: boolean;
+    anchor_type?: AnchorType;  // 'face' | 'body' | 'style'
     created_at: string;
     updated_at: string;
 }

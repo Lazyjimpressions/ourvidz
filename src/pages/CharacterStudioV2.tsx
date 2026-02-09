@@ -7,12 +7,16 @@ import { ArrowLeft, Save, Sparkles, Wand2, Loader2, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCharacterStudioV2 } from '@/hooks/useCharacterStudioV2';
 import { IdentityTab } from '@/components/character-studio/IdentityTab';
-import { AppearanceTab } from '@/components/character-studio/AppearanceTab';
+import { VisualsTab } from '@/components/character-studio/VisualsTab';
 import { StyleTab } from '@/components/character-studio/StyleTab';
 import { MediaTab } from '@/components/character-studio/MediaTab';
 import { CharacterStudioPromptBarV2 } from '@/components/character-studio/CharacterStudioPromptBarV2';
-import { CharacterHistoryStrip } from '@/components/character-studio/CharacterHistoryStrip';
+import { CharacterMediaStrip, SceneItem } from '@/components/character-studio/CharacterMediaStrip';
+import { AnchorReferencePanel, AnchorReference, AnchorSlotType } from '@/components/character-studio/AnchorReferencePanel';
+import { usePortraitVersions } from '@/hooks/usePortraitVersions';
+import { useCharacterAlbum } from '@/hooks/useCharacterAlbum';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 // Helper to sign storage URLs for preview display
 async function getSignedPreviewUrl(url: string): Promise<string> {
@@ -78,6 +82,81 @@ export default function CharacterStudioV2() {
     useAsMain,
     deleteFromHistory
   } = useCharacterStudioV2(id, mode);
+
+  const { toast } = useToast();
+
+  // Canon tab: Portrait versions hook
+  const {
+    portraits,
+    isLoading: isLoadingPortraits,
+    addPortrait,
+    setPrimaryPortrait,
+    deletePortrait,
+  } = usePortraitVersions({ characterId: id, enabled: mode === 'edit' });
+
+  // Album tab: Character album hook
+  const {
+    albumImages,
+    isLoading: isLoadingAlbum,
+    saveToAlbum,
+    removeFromAlbum,
+  } = useCharacterAlbum({ characterId: id, enabled: mode === 'edit' });
+
+  // Handler: Pin scene to Canon (add to character_portraits)
+  const handlePinToCanon = async (scene: SceneItem) => {
+    if (!id || !scene.image_url) return;
+
+    try {
+      await addPortrait({
+        character_id: id,
+        image_url: scene.image_url,
+        thumbnail_url: null,
+        prompt: scene.scene_prompt || scene.prompt || null,
+        enhanced_prompt: null,
+        generation_metadata: {},
+        is_primary: portraits.length === 0, // Make primary if first portrait
+        sort_order: portraits.length,
+      });
+      toast({
+        title: 'Pinned to Canon',
+        description: 'Image added to your character canon.',
+      });
+    } catch (err) {
+      console.error('Error pinning to canon:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to pin to canon',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handler: Save scene to Album (add to user_library)
+  const handleSaveToAlbum = async (scene: SceneItem) => {
+    if (!scene.image_url) return;
+
+    await saveToAlbum(
+      scene.image_url,
+      scene.scene_prompt || scene.prompt || '',
+      formData.name
+    );
+  };
+
+  // Anchor references state (session-based, for Column C i2i generation)
+  const [anchorRefs, setAnchorRefs] = useState<{
+    face: AnchorReference | null;
+    body: AnchorReference | null;
+    style: AnchorReference | null;
+  }>({
+    face: null,
+    body: null,
+    style: null,
+  });
+
+  // Handler for anchor reference changes
+  const handleAnchorChange = (slot: AnchorSlotType, anchor: AnchorReference | null) => {
+    setAnchorRefs(prev => ({ ...prev, [slot]: anchor }));
+  };
 
   // Signed preview URL state
   const [signedPreviewUrl, setSignedPreviewUrl] = useState<string>('');
@@ -255,13 +334,13 @@ export default function CharacterStudioV2() {
           <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6">
             {activeTab === 'identity' && <IdentityTab formData={formData} updateField={updateField} />}
             {activeTab === 'appearance' && (
-              <AppearanceTab
+              <VisualsTab
                 formData={formData}
                 updateField={updateField}
-                anchors={formData.character_anchors || []}
-                onUploadAnchor={uploadAnchor}
-                onDeleteAnchor={deleteAnchor}
-                onSetPrimaryAnchor={setPrimaryAnchor}
+                currentPortraitUrl={signedPreviewUrl}
+                onPortraitChange={(url) => {
+                  updateField('image_url', url);
+                }}
               />
             )}
             {activeTab === 'style' && <StyleTab formData={formData} updateField={updateField} />}
@@ -269,30 +348,32 @@ export default function CharacterStudioV2() {
           </div>
         </div>
 
-        {/* Middle Column: Preview Canvas (Fixed) */}
-        <div className="w-full lg:flex-1 bg-black/50 relative flex flex-col items-center p-4 lg:p-6 h-[50vh] lg:h-full border-b lg:border-b-0 border-border/50">
-          {/* View Mode Tabs */}
-          <div className="flex gap-1 mb-3 flex-wrap justify-center">
-            {(['Single', 'Grid', 'Compare', 'Image', 'Video', 'Avatar'] as const).map((mode) => (
-              <button
-                key={mode}
-                className={cn(
-                  "px-2 py-1 text-[10px] rounded transition-colors",
-                  previewMode === mode.toLowerCase()
-                    ? "bg-primary text-white"
-                    : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )}
-                onClick={() => {
-                  if (['single', 'grid', 'compare'].includes(mode.toLowerCase())) {
-                    setPreviewMode(mode.toLowerCase() as 'single' | 'grid' | 'compare');
-                  }
-                }}
-                title={!['Single', 'Grid', 'Compare'].includes(mode) ? 'Coming soon' : undefined}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
+        {/* Middle Column: Preview Canvas + History Strip */}
+        <div className="w-full lg:flex-1 bg-black/50 relative flex flex-col h-[60vh] lg:h-full border-b lg:border-b-0 border-border/50">
+          {/* Preview Area */}
+          <div className="flex-1 flex flex-col items-center p-4 lg:p-6 min-h-0">
+            {/* View Mode Tabs */}
+            <div className="flex gap-1 mb-3 flex-wrap justify-center flex-none">
+              {(['Single', 'Grid', 'Compare', 'Image', 'Video', 'Avatar'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  className={cn(
+                    "px-2 py-1 text-[10px] rounded transition-colors",
+                    previewMode === mode.toLowerCase()
+                      ? "bg-primary text-white"
+                      : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  )}
+                  onClick={() => {
+                    if (['single', 'grid', 'compare'].includes(mode.toLowerCase())) {
+                      setPreviewMode(mode.toLowerCase() as 'single' | 'grid' | 'compare');
+                    }
+                  }}
+                  title={!['Single', 'Grid', 'Compare'].includes(mode) ? 'Coming soon' : undefined}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
 
           {/* Canvas Area */}
           <div className="relative aspect-[3/4] flex-1 max-h-[800px] w-full max-w-[600px] bg-gray-900/50 rounded-lg border border-white/5 shadow-2xl flex items-center justify-center overflow-hidden group">
@@ -419,43 +500,80 @@ export default function CharacterStudioV2() {
               </div>
             )}
           </div>
+          </div>
+
+          {/* Media Strip Section (Below Preview Canvas) - Canon | Album | Scenes tabs */}
+          <div className="flex-none border-t border-border/50 bg-card/30 h-[220px]">
+            <CharacterMediaStrip
+              characterId={id}
+              // Canon tab props
+              portraits={portraits}
+              isLoadingPortraits={isLoadingPortraits}
+              onSetPrimaryPortrait={setPrimaryPortrait}
+              onDeletePortrait={deletePortrait}
+              // Album tab props
+              albumImages={albumImages}
+              isLoadingAlbum={isLoadingAlbum}
+              onDeleteFromAlbum={removeFromAlbum}
+              // Scenes tab props
+              history={history || []}
+              isLoadingHistory={isLoadingHistory}
+              onPinToCanon={handlePinToCanon}
+              onSaveToAlbum={handleSaveToAlbum}
+              onPinAsAnchor={pinAsAnchor}
+              onUseAsMain={useAsMain}
+              onDeleteScene={deleteFromHistory}
+              // Reference action - copies image to anchor slot in Column C
+              onUseAsReference={(imageUrl, signedUrl, slot, sourceName) => {
+                handleAnchorChange(slot, {
+                  imageUrl,
+                  signedUrl,
+                  source: sourceName === 'Canon' ? 'canon' : sourceName === 'Album' ? 'library' : 'references',
+                  sourceName,
+                });
+                toast({
+                  title: 'Reference Set',
+                  description: `Image set as ${slot} reference.`,
+                });
+              }}
+            />
+          </div>
         </div>
 
         {/* Right Column: Prompt & Generation Controls */}
         <div className="w-full lg:w-[320px] bg-card/30 flex flex-col h-[60vh] lg:h-full border-l border-border/50">
-          <div className="flex-1 flex flex-col min-h-0">
-            {/* Prompt Bar Section */}
-            <div className="p-0 border-b border-border/50 flex-none z-10 bg-background/50 backdrop-blur-sm">
-              <CharacterStudioPromptBarV2
-                prompt={prompt}
-                onPromptChange={setPrompt}
-                onGenerate={generatePreview}
-                isGenerating={isGenerating}
-                consistencyControls={consistencyControls}
-                onConsistencyChange={setConsistencyControls}
-                primaryAnchor={formData.character_anchors?.find(a => a.is_primary) || null}
-                mediaType={mediaType}
-                onMediaTypeChange={setMediaType}
-                isCreateMode={mode === 'create'}
-              />
-            </div>
+          {/* Anchor Reference Panel - for i2i album generation */}
+          <div className="p-4 border-b border-border/50">
+            <AnchorReferencePanel
+              anchors={anchorRefs}
+              onAnchorChange={handleAnchorChange}
+              canonPortraits={portraits.map(p => ({
+                id: p.id,
+                image_url: p.image_url,
+                signedUrl: p.signedUrl,
+                is_primary: p.is_primary,
+              }))}
+              savedReferences={[]}
+              disabled={mode === 'create'}
+              compact={true}
+            />
+          </div>
 
-            {/* History Section (Scrollable Area) */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/10">
-              <div className="sticky top-0 p-3 bg-card/95 backdrop-blur-sm border-b border-border/50 flex items-center justify-between z-10">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Generation History</h3>
-                <span className="text-[10px] text-muted-foreground/50 bg-white/5 px-1.5 py-0.5 rounded-full">
-                  {history?.length || 0}
-                </span>
-              </div>
-              <CharacterHistoryStrip
-                history={history || []}
-                isLoading={isLoadingHistory}
-                onPinAsAnchor={pinAsAnchor}
-                onUseAsMain={useAsMain}
-                onDelete={deleteFromHistory}
-              />
-            </div>
+          {/* Prompt Bar Section */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <CharacterStudioPromptBarV2
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              onGenerate={() => generatePreview(anchorRefs)}
+              isGenerating={isGenerating}
+              consistencyControls={consistencyControls}
+              onConsistencyChange={setConsistencyControls}
+              primaryAnchor={formData.character_anchors?.find(a => a.is_primary) || null}
+              anchorRefs={anchorRefs}
+              mediaType={mediaType}
+              onMediaTypeChange={setMediaType}
+              isCreateMode={mode === 'create'}
+            />
           </div>
         </div>
 
