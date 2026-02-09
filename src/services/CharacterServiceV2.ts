@@ -23,6 +23,10 @@ interface GeneratePreviewParams {
         style: AnchorReference | null;
     };
     mediaType: 'image' | 'video';
+    /** Optional seed for reproducibility */
+    seed?: string;
+    /** Optional additional negative prompt from user */
+    negativePrompt?: string;
 }
 
 export class CharacterServiceV2 {
@@ -31,7 +35,7 @@ export class CharacterServiceV2 {
      * Generates a preview image or video for a character
      */
     static async generatePreview(params: GeneratePreviewParams) {
-        const { character, prompt, consistencyControls, primaryAnchorUrl, anchorRefs, mediaType } = params;
+        const { character, prompt, consistencyControls, primaryAnchorUrl, anchorRefs, mediaType, seed, negativePrompt: userNegativePrompt } = params;
 
         // Check if we have anchor references from Column C (preferred for i2i)
         const hasAnchorRefs = anchorRefs && (anchorRefs.face || anchorRefs.body || anchorRefs.style);
@@ -43,6 +47,45 @@ export class CharacterServiceV2 {
         const characterReferenceUrl = faceRef || bodyRef || primaryAnchorUrl;
 
         try {
+            // Build style keywords from Style Tab settings
+            const styleKeywords: string[] = [];
+
+            // Add style preset (realistic, anime, cinematic, 3d, sketch)
+            if (character.style_preset) {
+                const stylePresetMap: Record<string, string> = {
+                    'realistic': 'photorealistic, hyperrealistic',
+                    'anime': 'anime style, cel shaded, japanese animation',
+                    'cinematic': 'cinematic lighting, film still, movie quality',
+                    '3d': '3D render, octane render, unreal engine',
+                    'sketch': 'pencil sketch, hand drawn, illustration'
+                };
+                if (stylePresetMap[character.style_preset]) {
+                    styleKeywords.push(stylePresetMap[character.style_preset]);
+                }
+            }
+
+            // Add lighting preset
+            if (character.lighting) {
+                const lightingMap: Record<string, string> = {
+                    'dramatic': 'dramatic lighting, high contrast, chiaroscuro',
+                    'soft': 'soft lighting, diffused light, gentle shadows',
+                    'studio': 'studio lighting, professional lighting setup',
+                    'natural': 'natural lighting, daylight',
+                    'golden_hour': 'golden hour lighting, warm sunlight, sunset tones',
+                    'neon': 'neon lighting, cyberpunk, colorful neon glow'
+                };
+                if (lightingMap[character.lighting]) {
+                    styleKeywords.push(lightingMap[character.lighting]);
+                }
+            }
+
+            // Add mood
+            if (character.mood) {
+                styleKeywords.push(`${character.mood} mood`);
+            }
+
+            const stylePromptSuffix = styleKeywords.length > 0 ? `. ${styleKeywords.join(', ')}` : '';
+
             // Build the generation prompt using canon spec when consistency mode is enabled
             let basePrompt: string;
             let negativePrompt = "blurry, low quality, distortion, disfigured";
@@ -50,15 +93,20 @@ export class CharacterServiceV2 {
             if (consistencyControls.consistency_mode) {
                 // Use structured canon spec for consistent character identity
                 const { canonSpec, negativePrompt: avoidTraits } = buildCanonSpec(character);
-                basePrompt = combinePromptWithCanon(prompt, canonSpec, { position: 'before' });
+                basePrompt = combinePromptWithCanon(prompt, canonSpec, { position: 'before' }) + stylePromptSuffix;
 
                 // Append avoid_traits to negative prompt
                 if (avoidTraits) {
                     negativePrompt = `${negativePrompt}, ${avoidTraits}`;
                 }
             } else {
-                // Fallback to basic prompt construction
-                basePrompt = `(character: ${character.name}), ${character.description}. ${prompt}`;
+                // Fallback to basic prompt construction with style
+                basePrompt = `(character: ${character.name}), ${character.description}. ${prompt}${stylePromptSuffix}`;
+            }
+
+            // Append user's custom negative prompt if provided
+            if (userNegativePrompt) {
+                negativePrompt = `${negativePrompt}, ${userNegativePrompt}`;
             }
 
             // 1. Create a placeholder record in character_scenes to track this generation
@@ -87,6 +135,8 @@ export class CharacterServiceV2 {
                 negative_prompt: negativePrompt,
                 quality: 'high',
                 modality: mediaType, // Explicitly set modality for fal-image function
+                // Add seed if provided (for reproducibility)
+                ...(seed && { seed: parseInt(seed, 10) || undefined }),
                 metadata: {
                     character_id: character.id,
                     character_name: character.name,
@@ -94,7 +144,13 @@ export class CharacterServiceV2 {
                     media_type: mediaType,
                     modality: mediaType,
                     destination: 'character_scene', // Tell fal-image to update this scene
-                    scene_id: sceneId
+                    scene_id: sceneId,
+                    // Style tab settings for reference/debugging
+                    style_preset: character.style_preset,
+                    lighting: character.lighting,
+                    mood: character.mood,
+                    rendering_rules: character.rendering_rules,
+                    seed: seed || undefined
                 }
             };
 

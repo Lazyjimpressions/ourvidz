@@ -15,6 +15,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
     const [prompt, setPrompt] = useState('');
     const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isGeneratingCharacter, setIsGeneratingCharacter] = useState(false);
 
     // Consistency State
     const [consistencyControls, setConsistencyControls] = useState<ConsistencyControls>({
@@ -185,6 +186,53 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         saveMutation.mutate(formData);
     }, [formData, saveMutation]);
 
+    /**
+     * Ensures the character is saved (for create mode).
+     * Returns the character ID if successful, null otherwise.
+     * Navigates to edit mode after saving.
+     */
+    const ensureCharacterSaved = useCallback(async (): Promise<string | null> => {
+        // If already in edit mode with ID, we're good
+        if (mode === 'edit' && id) {
+            return id;
+        }
+
+        // In create mode, need to save first
+        try {
+            const payload = buildCharactersPayload(formData, true);
+            const { data: userData } = await supabase.auth.getUser();
+            const userId = userData.user?.id;
+
+            const { data: newChar, error } = await supabase
+                .from('characters')
+                .insert([{ ...payload, user_id: userId }])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            // Update local state with new character data
+            setFormData(prev => ({ ...prev, ...newChar, id: newChar.id }));
+
+            // Invalidate queries
+            queryClient.invalidateQueries({ queryKey: ['character-hub-v2'] });
+
+            // Navigate to edit mode (replace URL)
+            navigate(`/character-studio-v2/${newChar.id}`, { replace: true });
+
+            console.log('✅ Character auto-saved:', newChar.id);
+            return newChar.id;
+        } catch (error: any) {
+            console.error('Auto-save failed:', error);
+            toast({
+                title: "Save Failed",
+                description: error.message || "Could not save character before generating.",
+                variant: "destructive"
+            });
+            return null;
+        }
+    }, [mode, id, formData, buildCharactersPayload, queryClient, navigate, toast]);
+
     const updateField = useCallback((field: keyof CharacterV2, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     }, []);
@@ -314,33 +362,63 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
     };
 
     // Generation Logic - accepts optional anchor refs from Column C for i2i generation
-    const generatePreview = async (anchorRefs?: {
-        face: { imageUrl: string; signedUrl?: string; source: string } | null;
-        body: { imageUrl: string; signedUrl?: string; source: string } | null;
-        style: { imageUrl: string; signedUrl?: string; source: string } | null;
-    }) => {
-        if (!id || !formData) return;
+    const generatePreview = async (
+        anchorRefs?: {
+            face: { imageUrl: string; signedUrl?: string; source: string } | null;
+            body: { imageUrl: string; signedUrl?: string; source: string } | null;
+            style: { imageUrl: string; signedUrl?: string; source: string } | null;
+        },
+        options?: {
+            batchSize?: number;
+            seed?: string;
+            negativePrompt?: string;
+        }
+    ) => {
+        if (!formData) return;
+
+        // If in create mode, auto-save first to get character ID
+        let characterId = id;
+        if (!characterId) {
+            console.log('🔄 Auto-saving character before generation...');
+            const savedId = await ensureCharacterSaved();
+            if (!savedId) {
+                // Save failed, toast already shown
+                return;
+            }
+            characterId = savedId;
+        }
+
         setIsGenerating(true);
+
+        const batchSize = options?.batchSize || 1;
+        const generateCount = Math.min(batchSize, 9); // Cap at 9
 
         try {
             const primaryAnchor = formData.character_anchors?.find(a => a.is_primary);
 
-            const result = await CharacterServiceV2.generatePreview({
-                character: formData as CharacterV2, // Cast is safe as we check id
-                prompt,
-                consistencyControls,
-                primaryAnchorUrl: primaryAnchor?.image_url,
-                anchorRefs: anchorRefs as any, // Pass anchor refs for i2i generation
-                mediaType
-            });
-
-            if (result.success) {
-                toast({
-                    title: "Generation Started",
-                    description: "Your preview is being generated..."
+            // For batch generation, we generate sequentially
+            // TODO: Check model capabilities and use native batch if supported
+            for (let i = 0; i < generateCount; i++) {
+                const result = await CharacterServiceV2.generatePreview({
+                    character: formData as CharacterV2,
+                    prompt,
+                    consistencyControls,
+                    primaryAnchorUrl: primaryAnchor?.image_url,
+                    anchorRefs: anchorRefs as any,
+                    mediaType,
+                    // Pass generation options
+                    seed: options?.seed ? `${options.seed}-${i}` : undefined, // Vary seed for batch
+                    negativePrompt: options?.negativePrompt
                 });
-                // Invalidate history to show the new "loading" item immediately
-                queryClient.invalidateQueries({ queryKey: ['character-history', id] });
+
+                if (i === 0 && result.success) {
+                    toast({
+                        title: generateCount > 1 ? `Generating ${generateCount} images...` : "Generation Started",
+                        description: "Your preview is being generated..."
+                    });
+                    // Invalidate history to show the new "loading" item immediately
+                    queryClient.invalidateQueries({ queryKey: ['character-history', characterId] });
+                }
             }
 
         } catch (error: any) {
@@ -355,28 +433,30 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
     };
 
     // Output Management Actions
-    const pinAsAnchor = async (imageUrl: string) => {
+    /**
+     * Save an image as a reusable reference (not character-specific).
+     * These are generic pose/style/look references for i2i generation.
+     */
+    const saveAsReference = async (imageUrl: string, anchorType: 'face' | 'body' | 'style') => {
         if (!id) return;
         try {
-            // Need to download and re-upload to characters bucket to make it a proper anchor?
-            // Or just link the URL? Ideally we copy it to storage to ensure it persists if scene is deleted.
-            // For now, let's just insert the URL record.
-
             const { error } = await supabase
                 .from('character_anchors')
                 .insert({
                     character_id: id,
                     image_url: imageUrl,
-                    is_primary: false
+                    is_primary: false,
+                    anchor_type: anchorType
                 });
 
             if (error) throw error;
 
             queryClient.invalidateQueries({ queryKey: ['character-studio', id] });
-            toast({ title: "Pinned as Anchor", description: "Image added to character anchors." });
+            const typeLabel = anchorType.charAt(0).toUpperCase() + anchorType.slice(1);
+            toast({ title: "Reference Saved", description: `${typeLabel} reference added to saved references.` });
         } catch (error: any) {
             toast({
-                title: "Pin Failed",
+                title: "Save Failed",
                 description: error.message,
                 variant: "destructive"
             });
@@ -430,6 +510,151 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         }
     };
 
+    /**
+     * Generate character fields from description using AI.
+     * Populates personality, appearance, style, and other fields automatically.
+     */
+    const generateCharacterFromDescription = async () => {
+        if (!formData.description?.trim()) {
+            toast({
+                title: "Description Required",
+                description: "Enter a description first to generate character details.",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        setIsGeneratingCharacter(true);
+
+        try {
+            const { data, error } = await supabase.functions.invoke('character-suggestions', {
+                body: {
+                    type: 'all',
+                    characterName: formData.name || 'Unnamed Character',
+                    existingDescription: formData.description,
+                    existingTraits: formData.appearance_tags || [],
+                    contentRating: formData.content_rating || 'sfw'
+                }
+            });
+
+            if (error) throw error;
+
+            if (data?.success && data?.suggestions) {
+                const suggestions = data.suggestions;
+
+                // Build updates object
+                const updates: Partial<CharacterV2> = {};
+
+                // Backstory/Bio
+                if (suggestions.suggestedBackstory?.length > 0) {
+                    updates.traits = suggestions.suggestedBackstory.join('\n\n');
+                }
+
+                // Voice tone
+                if (suggestions.suggestedVoiceTone) {
+                    updates.voice_tone = suggestions.suggestedVoiceTone;
+                }
+
+                // Appearance tags
+                if (suggestions.suggestedAppearance?.length > 0) {
+                    const currentTags = formData.appearance_tags || [];
+                    const newTags = [...new Set([...currentTags, ...suggestions.suggestedAppearance])];
+                    updates.appearance_tags = newTags;
+                }
+
+                // Parse physical traits from appearance suggestions
+                if (suggestions.suggestedAppearance?.length > 0) {
+                    const physicalTraits: Record<string, string> = { ...(formData.physical_traits || {}) };
+
+                    for (const trait of suggestions.suggestedAppearance) {
+                        const lowerTrait = trait.toLowerCase();
+                        // Hair detection
+                        if (lowerTrait.includes('hair') || lowerTrait.includes('blonde') || lowerTrait.includes('brunette') || lowerTrait.includes('redhead')) {
+                            if (!physicalTraits.hair) physicalTraits.hair = trait;
+                        }
+                        // Eyes detection
+                        else if (lowerTrait.includes('eyes') || lowerTrait.includes('eye')) {
+                            if (!physicalTraits.eyes) physicalTraits.eyes = trait;
+                        }
+                        // Body type detection
+                        else if (lowerTrait.includes('athletic') || lowerTrait.includes('slim') || lowerTrait.includes('muscular') || lowerTrait.includes('curvy') || lowerTrait.includes('petite')) {
+                            if (!physicalTraits.body_type) physicalTraits.body_type = trait;
+                        }
+                        // Ethnicity detection
+                        else if (lowerTrait.includes('asian') || lowerTrait.includes('caucasian') || lowerTrait.includes('african') || lowerTrait.includes('latina') || lowerTrait.includes('middle eastern')) {
+                            if (!physicalTraits.ethnicity) physicalTraits.ethnicity = trait;
+                        }
+                        // Age detection
+                        else if (lowerTrait.includes('young') || lowerTrait.includes('mature') || lowerTrait.includes('elderly') || /\d{2}s?/.test(lowerTrait)) {
+                            if (!physicalTraits.age) physicalTraits.age = trait;
+                        }
+                    }
+
+                    if (Object.keys(physicalTraits).length > 0) {
+                        updates.physical_traits = physicalTraits;
+                    }
+                }
+
+                // Personality traits (if provided as structured data)
+                if (suggestions.suggestedTraits?.length > 0) {
+                    // Try to parse personality from traits
+                    const personalityTraits: Record<string, number> = { ...(formData.personality_traits || {}) };
+                    for (const trait of suggestions.suggestedTraits) {
+                        const lowerTrait = trait.toLowerCase();
+                        if (lowerTrait.includes('confident') || lowerTrait.includes('bold')) {
+                            personalityTraits.confident = 60;
+                        }
+                        if (lowerTrait.includes('friendly') || lowerTrait.includes('warm')) {
+                            personalityTraits.friendly = 50;
+                        }
+                        if (lowerTrait.includes('mysterious') || lowerTrait.includes('reserved')) {
+                            personalityTraits.mysterious = 40;
+                        }
+                        if (lowerTrait.includes('playful') || lowerTrait.includes('witty')) {
+                            personalityTraits.playful = 50;
+                        }
+                        if (lowerTrait.includes('dominant') || lowerTrait.includes('assertive')) {
+                            personalityTraits.dominant = 40;
+                        }
+                    }
+                    if (Object.keys(personalityTraits).length > 0) {
+                        updates.personality_traits = personalityTraits;
+                    }
+                }
+
+                // Locked traits (must include)
+                if (suggestions.suggestedTraits?.length > 0 && (!formData.locked_traits || formData.locked_traits.length === 0)) {
+                    // Take first 2-3 key traits as locked
+                    updates.locked_traits = suggestions.suggestedTraits.slice(0, 3);
+                }
+
+                // Avoid traits
+                if (suggestions.suggestedForbiddenPhrases?.length > 0) {
+                    updates.avoid_traits = suggestions.suggestedForbiddenPhrases;
+                }
+
+                // Apply all updates
+                setFormData(prev => ({ ...prev, ...updates }));
+
+                toast({
+                    title: "Character Generated",
+                    description: "AI has populated personality, appearance, and traits. Review and adjust as needed."
+                });
+            } else {
+                throw new Error(data?.error || 'Failed to generate character suggestions');
+            }
+        } catch (error: any) {
+            console.error('Generate character error:', error);
+            toast({
+                title: "Generation Failed",
+                description: error.message || 'Failed to generate character details.',
+                variant: "destructive"
+            });
+        } finally {
+            setIsGeneratingCharacter(false);
+        }
+    };
+
     return {
         character,
         formData,
@@ -457,8 +682,11 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
         // History & Output actions
         history,
         isLoadingHistory,
-        pinAsAnchor,
+        saveAsReference,
         useAsMain,
-        deleteFromHistory
+        deleteFromHistory,
+        // Character generation
+        isGeneratingCharacter,
+        generateCharacterFromDescription
     };
 }

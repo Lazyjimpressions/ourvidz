@@ -206,13 +206,6 @@ export const StyleTab: React.FC<StyleTabProps> = ({ formData, updateField }) => 
                 </p>
             </div>
 
-            {/* Future: LoRA Configuration */}
-            <div className="space-y-2 pt-4 border-t border-border/30 opacity-50 pointer-events-none">
-                <Label className="text-xs">LoRA Model Weights (Coming Soon)</Label>
-                <div className="h-8 rounded border border-white/10 bg-secondary/20 flex items-center px-3 text-[10px] text-muted-foreground">
-                    No LoRAs selected
-                </div>
-            </div>
         </div>
     );
 };

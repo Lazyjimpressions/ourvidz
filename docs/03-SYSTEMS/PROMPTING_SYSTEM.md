@@ -1,16 +1,24 @@
 # Dynamic Prompting System
 
-**Last Updated:** January 3, 2026
+**Last Updated:** February 9, 2026
 **Architecture:** Pure Inference Engine - No Worker Overrides
 **Status:** ✅ PRODUCTION - Database-driven templates with enhanced logging
 
 ## Overview
 
-The Dynamic Prompting System uses 12 specialized, database-driven templates for AI interactions. This system has been **completely overhauled** to implement a **Pure Inference Engine** architecture, eliminating template override risks and providing comprehensive logging.
+The Dynamic Prompting System uses database-driven templates for AI interactions. This system has been **completely overhauled** to implement a **Pure Inference Engine** architecture, eliminating template override risks and providing comprehensive logging.
+
+### Third-Party Provider Focus (February 2026)
+
+The system now prioritizes third-party API providers:
+- **OpenRouter** - Chat/roleplay and prompt enhancement (MythoMax 13B default)
+- **fal.ai** - Image generation (Seedream v4/v4.5) and video (WAN 2.1 I2V)
+- **Replicate** - Image generation (SDXL, RV5.1)
 
 ### 🎯 NEW ARCHITECTURE: Pure Inference Engine
 
 **Key Changes (August 4, 2025):**
+
 - **Removed hardcoded prompts** from chat worker
 - **New pure inference endpoints** (`/chat`, `/enhance`, `/generate`)
 - **Enhanced logging** throughout the enhancement pipeline
@@ -18,6 +26,7 @@ The Dynamic Prompting System uses 12 specialized, database-driven templates for 
 - **Security improvements** with edge function control over all prompts
 
 **Security Implications:**
+
 - Workers can no longer override database templates
 - All prompt construction happens in edge functions
 - Complete audit trail of prompt enhancement process
@@ -50,12 +59,38 @@ The Dynamic Prompting System uses 12 specialized, database-driven templates for 
   - Scene Generation - Character Context: `qwen_instruct` → SDXL, token_limit 512, supports variables: `{{character_name}}`, `{{mood}}`, `{{character_visual_description}}`, `{{scene_context}}`
 
 **Template Selection Notes:**
+
 - Templates are selected by edge functions using: `(target_model, enhancer_model, job_type, use_case, content_mode)` with fallbacks.
 - The `target_model` field in `prompt_templates` matches `api_models.model_key` for model-specific templates (e.g., `cognitivecomputations/dolphin-mistral-24b-venice-edition:free`).
 - Universal templates have `target_model IS NULL` and are used as fallback when no model-specific template exists.
 - Template selection priority: Model-specific template → Universal template → Hardcoded fallback.
 - Character roleplay templates support variable substitution (performed server-side) and are cached per character to avoid repeated processing.
 - For third-party API models (OpenRouter, fal.ai, Replicate), templates are selected based on the model key from `api_models` table.
+
+### prompt_templates Field Semantics (Updated February 2026)
+
+| Field | Definition | Example Values |
+|-------|-----------|----------------|
+| `target_model` | The model that **consumes** the prompt | `fal-ai/bytedance/seedream/v4.5/edit`, `lucataco/sdxl` |
+| `enhancer_model` | The LLM that **writes/enhances** the prompt | `gryphe/mythomax-l2-13b` (OpenRouter), `qwen_instruct` (local) |
+| `provider` | Provider of the **enhancer LLM** (source) | `openrouter`, `local` |
+| `use_case` | Workflow type | `enhancement`, `character_roleplay`, `scene_iteration` |
+| `content_mode` | Content tier | `sfw`, `nsfw` |
+| `job_type` | Generation modality | `image`, `video`, `chat`, `roleplay` |
+
+**Key Clarification (February 2026):**
+
+- **`provider`** identifies where the **enhancer LLM** lives, NOT the target model provider
+- **`target_model`** is the image/video model that consumes the enhanced prompt
+- Target provider (fal, replicate) is inferred from `target_model` prefix (e.g., `fal-ai/...` → fal.ai)
+
+**Example:** Seedream v4.5 Edit enhancement with MythoMax:
+
+```
+provider = 'openrouter'                           # MythoMax is on OpenRouter
+enhancer_model = 'gryphe/mythomax-l2-13b'         # The LLM writing the prompt
+target_model = 'fal-ai/bytedance/seedream/v4.5/edit'  # The fal.ai image model
+```
 
 ## Model-to-Template Mapping
 
@@ -68,6 +103,7 @@ api_models.model_key → prompt_templates.target_model
 ```
 
 When a user selects a model from the UI, the system:
+
 1. Looks up the model in `api_models` table by `model_key` or `id`
 2. Uses the `model_key` to find a matching template in `prompt_templates` where `target_model = model_key`
 3. Falls back to universal template (`target_model IS NULL`) if no model-specific template exists
@@ -188,12 +224,14 @@ console.log('🎯 ENHANCED PROMPT GENERATED:', {
 ### Pure Inference Engine Integration
 
 **Edge Function Responsibility:**
+
 - Fetch database templates
 - Construct complete `messages` array
 - Send to worker for pure inference
 - Handle all prompt logic
 
 **Worker Responsibility:**
+
 - Execute exactly what's provided
 - No prompt modification
 - Return enhanced result
@@ -294,6 +332,7 @@ The prompting system integrates with three third-party API providers, each handl
 Templates are selected using the `target_model` field in `prompt_templates` table, which matches `api_models.model_key`. The system uses a three-tier fallback chain:
 
 1. **Model-Specific Template** (Priority 1):
+
    ```sql
    -- Example: Find model-specific template for OpenRouter Dolphin model
    SELECT * FROM prompt_templates
@@ -306,6 +345,7 @@ Templates are selected using the `target_model` field in `prompt_templates` tabl
    ```
 
 2. **Universal Template** (Priority 2 - Fallback):
+
    ```sql
    -- Universal template works for all models of the same use_case
    SELECT * FROM prompt_templates
@@ -323,6 +363,7 @@ Templates are selected using the `target_model` field in `prompt_templates` tabl
    - Logged for monitoring and debugging
 
 **Model Availability in UI:**
+
 - Models are only displayed in dropdowns when `api_models.is_active = true`
 - Local models are conditionally available based on health check status
 - Default model selection prioritizes non-local (API) models for reliability
@@ -330,33 +371,33 @@ Templates are selected using the `target_model` field in `prompt_templates` tabl
 
 **Edge Function Responsibilities:**
 
-- **`roleplay-chat`**: 
+- **`roleplay-chat`**:
   - Handles all chat/roleplay requests
   - Routes to OpenRouter API or local worker based on model selection and health status
   - Uses `callModelWithConfig()` for database-driven model configuration
   - Template selection via `getModelSpecificTemplate()` with fallback chain
   - Supports character variable substitution and scene context integration
 
-- **`fal-image`**: 
+- **`fal-image`**:
   - Handles fal.ai image and video generation
   - Supports Seedream v4/v4.5 (images) and WAN 2.1 I2V (video)
   - Fetches model configuration from `api_models` table
   - Validates character limits (8,000-12,000 for Seedream, 1,000-2,000 for video)
   - Supports I2I with reference images and workspace video generation
 
-- **`replicate-image`**: 
+- **`replicate-image`**:
   - Handles Replicate image generation
   - Supports RV5.1 and SDXL models
   - Requires explicit `apiModelId` from `api_models` table
   - Fetches negative prompts from `negative_prompts` table by `model_type`, `content_mode`, `generation_mode`
   - Validates CLIP token limits (77 tokens hard limit)
 
-- **`character-suggestions`**: 
+- **`character-suggestions`**:
   - Uses OpenRouter for AI-generated character suggestions
   - Fetches model config from `api_models` table
   - Calls OpenRouter API with database-driven parameters
 
-- **`enhance-prompt`**: 
+- **`enhance-prompt`**:
   - Used by all providers for prompt enhancement before generation
   - Fetches template by criteria `(target_model, enhancer_model, job_type, use_case, content_mode)`
   - Builds `messages` array and calls worker `/enhance` with pure inference payload
@@ -430,29 +471,35 @@ GROUP BY template_name;
 ### Edge Functions
 
 **Chat/Roleplay:**
+
 - **`roleplay-chat`**: Primary chat/roleplay edge function. Routes between local Qwen worker and OpenRouter API based on model selection and health status. Uses `callModelWithConfig()` to handle OpenRouter models with database-driven configuration. Template selection via `getModelSpecificTemplate()` queries by `modelKey` (from `api_models.model_key`) and `contentTier`. Supports character variable substitution and scene context integration.
 
 - **`character-suggestions`**: Uses OpenRouter for AI-generated character suggestions. Fetches model config from `api_models` table and calls OpenRouter API with database-driven parameters.
 
 **Image/Video Generation:**
+
 - **`fal-image`**: Handles fal.ai image and video generation. Supports Seedream v4/v4.5 (images) and WAN 2.1 I2V (video). Fetches model configuration from `api_models` table, validates character limits (8,000-12,000 for Seedream, 1,000-2,000 for video), and routes to fal.ai API. Supports I2I with reference images and workspace video generation.
 
 - **`replicate-image`**: Handles Replicate image generation. Supports RV5.1 and SDXL models. Requires explicit `apiModelId` from `api_models` table. Fetches negative prompts from `negative_prompts` table by `model_type`, `content_mode`, and `generation_mode`. Validates CLIP token limits (77 tokens hard limit).
 
 **Prompt Enhancement:**
+
 - **`enhance-prompt`**: Prompt enhancement used by all providers (SDXL/WAN/Replicate/fal.ai). Fetches template by criteria `(target_model, enhancer_model, job_type, use_case, content_mode)`, builds `messages` array, and calls worker `/enhance` with pure inference payload. Supports SFW/NSFW content detection and automatic template selection.
 
 **Job Management:**
+
 - **`queue-job`**: Job creation and routing. Selects enhancement templates and attaches template context to jobs for downstream processing. Routes to appropriate edge function based on provider (`replicate-image`, `fal-image`, or local workers).
 
 ### Worker System
 
 **Chat Worker:** Pure inference engine
+
 - Endpoints: `/chat`, `/enhance`
 - Model: Qwen Instruct
 - Capability: Executes provided `messages` only; no internal templates
 
 **WAN Worker:** Legacy format maintained
+
 - Endpoint: `/generate`
 - Model: Qwen Base
 - Capability: Video generation with enhanced prompts from edge functions
@@ -460,12 +507,14 @@ GROUP BY template_name;
 ### Frontend Integration
 
 Page-to-Template Mapping
+
 - `src/pages/RoleplayDashboard.tsx`: navigates to `RoleplayChat` with `?character=<id>`; no prompting.
 - `src/pages/RoleplayChat.tsx`: creates `roleplay` conversations and invokes `playground-chat` with optional `character_id`. Edge selects `character_roleplay_{sfw|nsfw}` templates, injects character variables, and calls worker `/chat`. Inline scene generation uses the Scene Generation template to produce SDXL prompts.
 - `src/pages/Playground.tsx` + `components/playground/ChatInterface.tsx`: supports `general`, `roleplay`, `admin`, `creative` conversation types → mapped to chat templates (`chat_*`, `roleplay`, `character_roleplay`, `admin`). SFW/NSFW determined by content-tier detection.
 - `src/pages/SimplifiedWorkspace.tsx`: calls `enhance-prompt` for SDXL/WAN prior to queueing jobs. Generation routes to library; workspace consumes via events.
 
 Example enhancement request
+
 ```typescript
 const res = await fetch('/functions/v1/enhance-prompt', {
   method: 'POST',
@@ -493,6 +542,7 @@ The `negative_prompts` table provides model-specific negative prompt templates f
 ### Database Structure
 
 Negative prompts are stored in the `negative_prompts` table with the following key fields:
+
 - `model_type`: Model family identifier (e.g., `sdxl`, `replicate-sdxl`, `fal-ai`, `rv51`)
 - `content_mode`: Content tier (`sfw` or `nsfw`)
 - `generation_mode`: Generation type (`txt2img` or `i2i`)
@@ -503,6 +553,7 @@ Negative prompts are stored in the `negative_prompts` table with the following k
 ### Usage in Edge Functions
 
 **Replicate Image Generation (`replicate-image`):**
+
 ```typescript
 // Fetch negative prompts by model type, content mode, and generation mode
 const { data: negativePrompts } = await supabase
@@ -521,11 +572,13 @@ const baseNegativePrompt = negativePrompts
 ```
 
 **Local SDXL Worker (`queue-job`):**
+
 - Fetches negative prompts for `model_type = 'sdxl'`
 - Supports both `txt2img` and `i2i` generation modes
 - I2I mode uses minimal negative prompts (3 terms) to prevent modification interference
 
 **fal.ai Integration:**
+
 - fal.ai models may handle negative prompts differently
 - Some models (Seedream) support negative prompts via API
 - WAN 2.1 I2V uses model-specific negative prompt handling
@@ -534,10 +587,12 @@ const baseNegativePrompt = negativePrompts
 ### Generation Mode Optimization
 
 **Txt2Img Mode:**
+
 - Full negative prompts (7-12 terms) for quality control
 - Examples: `blurry, worst quality, jpeg artifacts, distorted, deformed, bad anatomy, bad proportions`
 
 **I2I Mode:**
+
 - Minimal negative prompts (3 terms) to prevent modification interference
 - Examples: `blurry, worst quality, jpeg artifacts`
 - Prevents over-modification of reference images
@@ -632,7 +687,7 @@ supabase functions logs enhance-prompt --follow
 - Enhanced Logging throughout enhancement pipeline
 - Pure Inference Integration with new worker architecture
 - Template Override Elimination via pure inference architecture
-- Performance Monitoring with real-time metrics and fallback tracking 
+- Performance Monitoring with real-time metrics and fallback tracking
 
 ## Suggested Table Reference Docs
 

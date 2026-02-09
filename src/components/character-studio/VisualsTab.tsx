@@ -162,9 +162,14 @@ export const VisualsTab: React.FC<VisualsTabProps> = ({
                 console.log('✅ Portrait generated successfully:', data.resultUrl);
                 setGeneratedImageUrl(data.resultUrl);
                 onPortraitChange?.(data.resultUrl);
+
+                // Show different toast if this is the first portrait (sets character image)
+                const isFirstPortrait = !currentPortraitUrl;
                 toast({
-                    title: 'Image Generated',
-                    description: 'Your character portrait is ready!',
+                    title: isFirstPortrait ? 'Character Image Set' : 'Image Generated',
+                    description: isFirstPortrait
+                        ? 'Portrait generated and set as character image!'
+                        : 'Your character portrait is ready!',
                 });
             } else if (data?.status === 'queued') {
                 toast({

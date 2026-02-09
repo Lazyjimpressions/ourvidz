@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { X, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Copy, Check, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
     Select,
@@ -25,9 +25,18 @@ import { buildCanonSpec, getCanonSpecSummary } from '@/lib/utils/canonSpecBuilde
 interface IdentityTabProps {
     formData: Partial<CharacterV2>;
     updateField: (field: keyof CharacterV2, value: any) => void;
+    /** Callback to generate character fields from description using AI */
+    onGenerateCharacter?: () => Promise<void>;
+    /** Whether character generation is in progress */
+    isGeneratingCharacter?: boolean;
 }
 
-export const IdentityTab: React.FC<IdentityTabProps> = ({ formData, updateField }) => {
+export const IdentityTab: React.FC<IdentityTabProps> = ({
+    formData,
+    updateField,
+    onGenerateCharacter,
+    isGeneratingCharacter = false
+}) => {
     const [newLockedTrait, setNewLockedTrait] = useState('');
     const [newAvoidTrait, setNewAvoidTrait] = useState('');
     const [newCustomTag, setNewCustomTag] = useState('');
@@ -161,6 +170,35 @@ export const IdentityTab: React.FC<IdentityTabProps> = ({ formData, updateField 
                 />
                 <p className="text-[10px] text-muted-foreground">Appears on the character card.</p>
             </div>
+
+            {/* Generate Character Button */}
+            {onGenerateCharacter && (
+                <div className="pt-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onGenerateCharacter}
+                        disabled={isGeneratingCharacter || !formData.description?.trim()}
+                        className="w-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-500/30 hover:border-purple-500/50 hover:from-purple-500/20 hover:to-pink-500/20 text-purple-300 hover:text-purple-200"
+                    >
+                        {isGeneratingCharacter ? (
+                            <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Generating...
+                            </>
+                        ) : (
+                            <>
+                                <Sparkles className="w-4 h-4 mr-2" />
+                                ✨ Generate Character
+                            </>
+                        )}
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground mt-1.5 text-center">
+                        AI will fill in personality, appearance, and style from description.
+                    </p>
+                </div>
+            )}
 
             {/* Tags (Genre + Custom) */}
             <div className="space-y-2 pt-3 border-t border-border/30">

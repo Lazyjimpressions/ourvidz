@@ -4,7 +4,7 @@ import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { CharacterV2, VideoFraming, AspectRatio } from '@/types/character-hub-v2';
-import { Video, Mic, Smartphone, Monitor, Square, MessageSquare } from 'lucide-react';
+import { Video, Smartphone, Monitor, Square, MessageSquare } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 
@@ -102,28 +102,6 @@ export const MediaTab: React.FC<MediaTabProps> = ({ formData, updateField }) => 
                         checked={mediaDefaults.loop_safe || false}
                         onCheckedChange={(checked) => handleMediaChange('loop_safe', checked)}
                     />
-                </div>
-            </div>
-
-            {/* Voice Settings Section (Placeholder/Future) */}
-            <div className="space-y-6 pt-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-white/10">
-                    <Mic className="w-5 h-5 text-primary" />
-                    <h3 className="font-semibold text-sm">Voice Settings</h3>
-                </div>
-
-                <div className="p-4 border border-dashed border-white/10 rounded-lg bg-secondary/10 flex flex-col items-center text-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center mb-1">
-                        <Mic className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                    <h4 className="text-xs font-medium">Voice Synthesis Coming Soon</h4>
-                    <p className="text-[10px] text-muted-foreground max-w-[180px]">
-                        Custom voice training and selection will be available in the next update.
-                    </p>
-                    <div className="flex items-center gap-2 mt-2 opacity-50 cursor-not-allowed">
-                        <Label className="text-[10px]">Enable Voice</Label>
-                        <Switch disabled />
-                    </div>
                 </div>
             </div>
 

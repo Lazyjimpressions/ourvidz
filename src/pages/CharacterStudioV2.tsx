@@ -10,7 +10,7 @@ import { IdentityTab } from '@/components/character-studio/IdentityTab';
 import { VisualsTab } from '@/components/character-studio/VisualsTab';
 import { StyleTab } from '@/components/character-studio/StyleTab';
 import { MediaTab } from '@/components/character-studio/MediaTab';
-import { CharacterStudioPromptBarV2 } from '@/components/character-studio/CharacterStudioPromptBarV2';
+import { CharacterStudioPromptBarV2, GenerationOptions } from '@/components/character-studio/CharacterStudioPromptBarV2';
 import { CharacterMediaStrip, SceneItem } from '@/components/character-studio/CharacterMediaStrip';
 import { AnchorReferencePanel, AnchorReference, AnchorSlotType } from '@/components/character-studio/AnchorReferencePanel';
 import { usePortraitVersions } from '@/hooks/usePortraitVersions';
@@ -78,9 +78,12 @@ export default function CharacterStudioV2() {
     // History
     history,
     isLoadingHistory,
-    pinAsAnchor,
+    saveAsReference,
     useAsMain,
-    deleteFromHistory
+    deleteFromHistory,
+    // Character generation
+    isGeneratingCharacter,
+    generateCharacterFromDescription
   } = useCharacterStudioV2(id, mode);
 
   const { toast } = useToast();
@@ -143,15 +146,83 @@ export default function CharacterStudioV2() {
   };
 
   // Anchor references state (session-based, for Column C i2i generation)
+  // Persisted to localStorage to survive page refresh
+  const ANCHOR_STORAGE_KEY = `character-studio-anchors-${id}`;
+
   const [anchorRefs, setAnchorRefs] = useState<{
     face: AnchorReference | null;
     body: AnchorReference | null;
     style: AnchorReference | null;
-  }>({
-    face: null,
-    body: null,
-    style: null,
+  }>(() => {
+    // Initialize from localStorage if available
+    if (id) {
+      try {
+        const stored = localStorage.getItem(`character-studio-anchors-${id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          console.log('📦 Loaded anchor refs from localStorage:', parsed);
+          return parsed;
+        }
+      } catch (err) {
+        console.warn('Failed to load anchor refs from localStorage:', err);
+      }
+    }
+    return { face: null, body: null, style: null };
   });
+
+  // Persist anchor refs to localStorage when they change
+  useEffect(() => {
+    if (!id) return;
+    try {
+      localStorage.setItem(ANCHOR_STORAGE_KEY, JSON.stringify(anchorRefs));
+      console.log('💾 Saved anchor refs to localStorage');
+    } catch (err) {
+      console.warn('Failed to save anchor refs to localStorage:', err);
+    }
+  }, [anchorRefs, id, ANCHOR_STORAGE_KEY]);
+
+  // Load anchor refs from localStorage when character ID changes
+  useEffect(() => {
+    if (!id) {
+      setAnchorRefs({ face: null, body: null, style: null });
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(ANCHOR_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setAnchorRefs(parsed);
+        console.log('📦 Reloaded anchor refs for character:', id);
+      }
+    } catch (err) {
+      console.warn('Failed to reload anchor refs from localStorage:', err);
+    }
+  }, [id, ANCHOR_STORAGE_KEY]);
+
+  // Auto-populate face anchor from Canon primary portrait in edit mode
+  // This runs once when portraits load, only if face anchor is not already set
+  useEffect(() => {
+    if (mode !== 'edit' || !id || isLoadingPortraits) return;
+
+    // Only auto-populate if face anchor is not already set
+    if (anchorRefs.face) return;
+
+    // Find the primary portrait in Canon
+    const primaryPortrait = portraits.find(p => p.is_primary);
+    if (!primaryPortrait) return;
+
+    console.log('🎯 Auto-populating face anchor from Canon primary');
+    setAnchorRefs(prev => ({
+      ...prev,
+      face: {
+        imageUrl: primaryPortrait.image_url,
+        signedUrl: primaryPortrait.signedUrl || primaryPortrait.image_url,
+        source: 'canon',
+        sourceId: primaryPortrait.id,
+        sourceName: 'Canon Primary',
+      },
+    }));
+  }, [mode, id, portraits, isLoadingPortraits, anchorRefs.face]);
 
   // Handler for anchor reference changes
   const handleAnchorChange = (slot: AnchorSlotType, anchor: AnchorReference | null) => {
@@ -332,7 +403,14 @@ export default function CharacterStudioV2() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6">
-            {activeTab === 'identity' && <IdentityTab formData={formData} updateField={updateField} />}
+            {activeTab === 'identity' && (
+              <IdentityTab
+                formData={formData}
+                updateField={updateField}
+                onGenerateCharacter={generateCharacterFromDescription}
+                isGeneratingCharacter={isGeneratingCharacter}
+              />
+            )}
             {activeTab === 'appearance' && (
               <VisualsTab
                 formData={formData}
@@ -354,7 +432,7 @@ export default function CharacterStudioV2() {
           <div className="flex-1 flex flex-col items-center p-4 lg:p-6 min-h-0">
             {/* View Mode Tabs */}
             <div className="flex gap-1 mb-3 flex-wrap justify-center flex-none">
-              {(['Single', 'Grid', 'Compare', 'Image', 'Video', 'Avatar'] as const).map((mode) => (
+              {(['Single', 'Grid', 'Compare'] as const).map((mode) => (
                 <button
                   key={mode}
                   className={cn(
@@ -363,12 +441,7 @@ export default function CharacterStudioV2() {
                       ? "bg-primary text-white"
                       : "bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground"
                   )}
-                  onClick={() => {
-                    if (['single', 'grid', 'compare'].includes(mode.toLowerCase())) {
-                      setPreviewMode(mode.toLowerCase() as 'single' | 'grid' | 'compare');
-                    }
-                  }}
-                  title={!['Single', 'Grid', 'Compare'].includes(mode) ? 'Coming soon' : undefined}
+                  onClick={() => setPreviewMode(mode.toLowerCase() as 'single' | 'grid' | 'compare')}
                 >
                   {mode}
                 </button>
@@ -520,8 +593,12 @@ export default function CharacterStudioV2() {
               isLoadingHistory={isLoadingHistory}
               onPinToCanon={handlePinToCanon}
               onSaveToAlbum={handleSaveToAlbum}
-              onPinAsAnchor={pinAsAnchor}
-              onUseAsMain={useAsMain}
+              onSaveAsReference={(scene, anchorType) => {
+                if (scene.image_url) saveAsReference(scene.image_url, anchorType);
+              }}
+              onUseAsMain={(scene) => {
+                if (scene.image_url) useAsMain(scene.image_url);
+              }}
               onDeleteScene={deleteFromHistory}
               // Reference action - copies image to anchor slot in Column C
               onUseAsReference={(imageUrl, signedUrl, slot, sourceName) => {
@@ -554,7 +631,6 @@ export default function CharacterStudioV2() {
                 is_primary: p.is_primary,
               }))}
               savedReferences={[]}
-              disabled={mode === 'create'}
               compact={true}
             />
           </div>
@@ -564,7 +640,7 @@ export default function CharacterStudioV2() {
             <CharacterStudioPromptBarV2
               prompt={prompt}
               onPromptChange={setPrompt}
-              onGenerate={() => generatePreview(anchorRefs)}
+              onGenerate={(options) => generatePreview(anchorRefs, options)}
               isGenerating={isGenerating}
               consistencyControls={consistencyControls}
               onConsistencyChange={setConsistencyControls}

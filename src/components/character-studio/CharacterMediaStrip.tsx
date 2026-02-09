@@ -10,6 +10,10 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
+  ContextMenuSeparator,
 } from '@/components/ui/context-menu';
 import {
   Dialog,
@@ -53,7 +57,8 @@ interface CharacterMediaStripProps {
   isLoadingHistory: boolean;
   onPinToCanon?: (scene: SceneItem) => void;
   onSaveToAlbum?: (scene: SceneItem) => void;
-  onPinAsAnchor?: (scene: SceneItem) => void;
+  /** Save scene as a reusable reference (not character-specific) */
+  onSaveAsReference?: (scene: SceneItem, anchorType: AnchorSlotType) => void;
   onUseAsMain?: (scene: SceneItem) => void;
   onDeleteScene?: (sceneId: string) => void;
   // Reference actions - use image as anchor reference in Column C
@@ -102,7 +107,7 @@ export function CharacterMediaStrip({
   isLoadingHistory,
   onPinToCanon,
   onSaveToAlbum,
-  onPinAsAnchor,
+  onSaveAsReference,
   onUseAsMain,
   onDeleteScene,
   onUseAsReference,
@@ -447,11 +452,27 @@ export function CharacterMediaStrip({
                   </ContextMenuItem>
                 </>
               )}
-              {onPinAsAnchor && (
-                <ContextMenuItem onClick={() => onPinAsAnchor(scene)}>
-                  <Pin className="w-3 h-3 mr-2" />
-                  Pin as Anchor
-                </ContextMenuItem>
+              {onSaveAsReference && scene.image_url && (
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                    <Pin className="w-3 h-3 mr-2" />
+                    Save as Reference
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent>
+                    <ContextMenuItem onClick={() => onSaveAsReference(scene, 'face')}>
+                      <User className="w-3 h-3 mr-2" />
+                      Face Reference
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => onSaveAsReference(scene, 'body')}>
+                      <Shirt className="w-3 h-3 mr-2" />
+                      Body Reference
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => onSaveAsReference(scene, 'style')}>
+                      <Palette className="w-3 h-3 mr-2" />
+                      Style Reference
+                    </ContextMenuItem>
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
               )}
               {onUseAsMain && (
                 <ContextMenuItem onClick={() => onUseAsMain(scene)}>

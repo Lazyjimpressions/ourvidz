@@ -44,10 +44,17 @@ async function getSignedAnchorUrl(url: string): Promise<string> {
     }
 }
 
+/** Options passed when generating */
+export interface GenerationOptions {
+    batchSize?: number;
+    seed?: string;
+    negativePrompt?: string;
+}
+
 interface CharacterStudioPromptBarV2Props {
     prompt: string;
     onPromptChange: (value: string) => void;
-    onGenerate: () => void;
+    onGenerate: (options: GenerationOptions) => void;
     isGenerating: boolean;
     consistencyControls: ConsistencyControls;
     onConsistencyChange: (controls: ConsistencyControls) => void;
@@ -103,14 +110,10 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
     const hasAnchorRefs = anchorRefs && (anchorRefs.face || anchorRefs.body || anchorRefs.style);
     const anchorCount = anchorRefs ? [anchorRefs.face, anchorRefs.body, anchorRefs.style].filter(Boolean).length : 0;
 
-    // Generate is disabled if:
-    // - Already generating
-    // - In create mode (character not saved yet)
-    // For album generation (i2i), we need at least face anchor set
-    const generateDisabled = isGenerating || isCreateMode;
-    const generateDisabledReason = isCreateMode
-        ? 'Save character first to generate.'
-        : null;
+    // Generate is disabled only if already generating
+    // Note: Create mode now auto-saves before generating
+    const generateDisabled = isGenerating;
+    const generateDisabledReason: string | null = null;
     return (
         <div className="flex flex-col h-full bg-card/30 border-l border-border/50">
             {/* Header */}
@@ -353,7 +356,11 @@ export const CharacterStudioPromptBarV2: React.FC<CharacterStudioPromptBarV2Prop
                                 <Button
                                     className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 shadow-lg"
                                     size="lg"
-                                    onClick={onGenerate}
+                                    onClick={() => onGenerate({
+                                        batchSize,
+                                        seed: seed || undefined,
+                                        negativePrompt: negativePrompt || undefined
+                                    })}
                                     disabled={generateDisabled}
                                 >
                                     {isGenerating ? (

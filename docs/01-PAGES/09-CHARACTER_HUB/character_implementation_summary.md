@@ -49,11 +49,26 @@ A dedicated, professional-grade editor for character definition and generation.
   - **`useCharacterAlbum` Hook**: Manages Album queries and save-to-album action.
   - **Supabase Integration**: Seamless fetching and saving to `characters`, `character_anchors`, `character_portraits`, and `user_library` tables.
 
-### Recent Updates (2026-02-08)
+### Recent Updates (2026-02-09)
+
+#### Four-Tier Image System Architecture
+
+The system uses four distinct image types with clear purposes:
+
+| Type | Table | Purpose | Use Case |
+|------|-------|---------|----------|
+| **Canon Portraits** | `character_portraits` | Character identity lock | i2i reference in roleplay, thumbnail/tile card, "neutral poses" for scene iterations |
+| **Saved References** | `character_anchors` | Generic pose/style/look references | Reusable poses, styles, looks - NOT character-specific. Used for i2i iterations |
+| **Album** | `user_library` | User-curated iterations | Character variations directed by user, saved scenes |
+| **Scenes** | `character_scenes` | Ephemeral generation history | Generation history from roleplay, can be promoted to Album/Canon |
+
+**Key Distinction:**
+- **Canon = "This IS my character"** - Used when you want the AI to reproduce THIS EXACT character
+- **Saved References = "Use this reference"** - NOT character-specific, could be any image (pose reference, style example, lighting reference)
 
 #### Three Workflow Architecture
 
-The studio now supports three distinct workflows:
+The studio supports three distinct workflows:
 
 1. **Create New Character**: Define identity in Column A, generate portrait in Visuals Tab, pin to Canon, set as Primary.
 2. **Edit Existing Character**: Modify identity fields, manage canon images, regenerate portraits.
@@ -61,14 +76,21 @@ The studio now supports three distinct workflows:
 
 #### Column C Anchor Reference Panel
 
-- **AnchorReferencePanel Component**: New session-based anchor input panel in Column C above prompt bar.
+- **AnchorReferencePanel Component**: Session-based anchor input panel in Column C above prompt bar.
 - **Three Slots**: Face, Body, Style - each can be filled from:
   - Upload File
   - From Library
-  - From References (character_anchors)
+  - From Saved References (character_anchors)
   - From Canon (character_portraits)
-- **Session-Based**: Anchor references are ephemeral generation inputs, not persisted per-generation.
+- **localStorage Persistence**: Anchor references now persist across page refresh (keyed by character ID).
 - **Auto-i2i Mode**: Setting anchors automatically enables i2i generation - no toggle needed.
+
+#### Generation Parameter Wiring (2026-02-09)
+
+- **Style Tab Integration**: `style_preset`, `lighting`, and `mood` values are now injected into generation prompts.
+- **Batch Generation**: Batch size (1x, 4x, 9x) is wired through the full generation chain.
+- **Seed Support**: Optional seed parameter for reproducible results (varied per batch item).
+- **Negative Prompt**: User negative prompts are appended to default avoid traits.
 
 #### Visuals Tab (Replaces Appearance Tab)
 
@@ -87,8 +109,15 @@ The studio now supports three distinct workflows:
 #### Media Strip Reference Actions
 
 - **Use as Reference**: Right-click any image in Canon/Album/Scenes tabs to use as Face/Body/Style reference.
+- **Save as Reference**: Right-click scene → "Save as Reference" → choose Face/Body/Style type to persist as reusable anchor.
 - **Copies to Column C**: Selected images populate the AnchorReferencePanel slots.
 - **Quick Workflow**: Generate scene, right-click, "Use as Face Reference" to lock identity for next generation.
+
+#### UX Improvements (2026-02-09)
+
+- **Removed Non-Functional Buttons**: Image/Video/Avatar preview mode buttons removed (only Single/Grid/Compare remain).
+- **Clarified Save as Reference**: Renamed from "Pin as Anchor" with submenu to select anchor type (Face/Body/Style).
+- **Hidden Placeholder Sections**: LoRA (Style Tab) and Voice (Media Tab) placeholders removed until implemented.
 
 #### Previous Updates
 
@@ -165,6 +194,16 @@ Added column to `character_anchors` table:
 - [ ] Generation works without anchors (t2i mode)
 - [ ] Variation slider affects i2i strength
 - [ ] Results appear in Scenes tab
+- [ ] Style preset affects generation output
+- [ ] Lighting/mood affects generation output
+- [ ] Batch size generates multiple images
+- [ ] Seed produces reproducible results
+- [ ] Negative prompt excludes unwanted elements
+
+**Session Persistence**
+
+- [ ] Session anchors persist across page refresh
+- [ ] Anchors load correctly when returning to character
 
 **Full Workflow**
 
@@ -254,7 +293,8 @@ The system implements a clear **Define → Customize → Generate → Curate** w
 - `/character-studio-v2/new` - Create new character
 
 ---
-**Last Updated**: 2026-02-08
+**Last Updated**: 2026-02-09
 **Author**: Antigravity (Assistant)
 
 For detailed implementation plan, see [linear-nibbling-ladybug.md](/.claude/plans/linear-nibbling-ladybug.md).
+For audit plan, see [nested-napping-pnueli.md](/.claude/plans/nested-napping-pnueli.md).

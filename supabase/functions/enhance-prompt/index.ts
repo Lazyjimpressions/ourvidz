@@ -32,7 +32,7 @@ serve(async (req) => {
     const jobType = requestBody.jobType || requestBody.job_type
     const format = requestBody.format
     const quality = requestBody.quality
-    const selectedModel = requestBody.selectedModel || requestBody.enhancement_model || 'qwen_instruct'
+    const selectedModel = requestBody.selectedModel || requestBody.enhancement_model || 'gryphe/mythomax-l2-13b'
     const user_id = requestBody.user_id
     const regeneration = requestBody.regeneration
     const selectedPresets = requestBody.selectedPresets || []
@@ -602,7 +602,7 @@ class DynamicEnhancementOrchestrator {
       }
       try {
         const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
-        const enhancerModel = request.selectedModel || 'qwen_instruct'
+        const enhancerModel = request.selectedModel || 'gryphe/mythomax-l2-13b'
         
         console.log('🔍 Template lookup parameters:', {
           targetModel: modelType,
@@ -634,7 +634,7 @@ class DynamicEnhancementOrchestrator {
         
         try {
           const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
-          const enhancerModel = request.selectedModel || 'qwen_instruct'
+          const enhancerModel = request.selectedModel || 'gryphe/mythomax-l2-13b'
           
           const template = await getDatabaseTemplate(
             modelType,           // targetModel
