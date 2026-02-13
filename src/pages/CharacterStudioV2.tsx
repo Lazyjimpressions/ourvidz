@@ -459,7 +459,7 @@ export default function CharacterStudioV2() {
                       {signedHistoryUrls[scene.id] ? (
                         <img
                           src={signedHistoryUrls[scene.id]}
-                          alt={scene.prompt || 'Generated'}
+                          alt={scene.scene_prompt || 'Generated'}
                           className="w-full h-full object-cover"
                         />
                       ) : (
