@@ -16,6 +16,17 @@ import { Character, CharacterScene } from './roleplay';
  * Includes all fields from the base Character plus new schema additions
  */
 export interface CharacterV2 extends Character {
+    // Identity extras (from DB but not on base Character)
+    bio?: string;
+    tagline?: string;
+    backstory?: string;
+    first_message?: string;
+    alternate_greetings?: any;
+    default_presets?: any;
+    portrait_count?: number;
+    scene_count?: number;
+    canon_spec?: string;
+
     // Style and rendering
     style_preset?: StylePreset;
     lighting?: LightingPreset;

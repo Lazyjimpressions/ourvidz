@@ -15,6 +15,8 @@ export interface CharacterPortrait {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  /** Runtime-only: signed URL for display */
+  signedUrl?: string;
 }
 
 interface UsePortraitVersionsOptions {

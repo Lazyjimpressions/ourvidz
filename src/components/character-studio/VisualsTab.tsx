@@ -100,7 +100,7 @@ export const VisualsTab: React.FC<VisualsTabProps> = ({
                 physicalTraits.eyes,
                 physicalTraits.body_type,
             ].filter(Boolean) as string[],
-            gender: physicalTraits.gender || '',
+            gender: (Array.isArray(physicalTraits.gender) ? physicalTraits.gender[0] : physicalTraits.gender) || '',
         };
     }, [formData, physicalTraits]);
 

@@ -136,7 +136,7 @@ export default function CharacterHubV2() {
                 user_id: user?.id,
             };
 
-            const { error } = await supabase.from('characters').insert(newChar);
+            const { error } = await supabase.from('characters').insert(newChar as any);
             if (error) throw error;
 
             toast({ title: 'Character duplicated', description: 'Copy created successfully.' });

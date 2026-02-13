@@ -26,7 +26,7 @@ export type MediaStripTab = 'canon' | 'album' | 'scenes';
 // Scene item from character_scenes table
 export interface SceneItem {
   id: string;
-  image_url: string | null;
+  image_url?: string | null;
   scene_prompt?: string;
   prompt?: string;
   created_at?: string;

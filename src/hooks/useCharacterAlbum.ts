@@ -45,7 +45,7 @@ export function useCharacterAlbum({ characterId, enabled = true }: UseCharacterA
 
       if (fetchError) throw fetchError;
 
-      setAlbumImages(data || []);
+      setAlbumImages((data || []) as CharacterAlbumImage[]);
     } catch (err) {
       console.error('Error fetching character album:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch album'));
@@ -110,26 +110,26 @@ export function useCharacterAlbum({ characterId, enabled = true }: UseCharacterA
       const { data: libraryRecord, error: insertError } = await supabase
         .from('user_library')
         .insert({
-          user_id: user.id,
           storage_path: `user-library/${destPath}`,
           asset_type: 'image',
           mime_type: downloadData.type || 'image/png',
           original_prompt: scenePrompt,
           content_category: 'character',
+          file_size_bytes: downloadData.size || 0,
           roleplay_metadata: {
             type: 'character_portrait',
             character_id: characterId,
             character_name: characterName,
             source: 'character-studio-v2',
-          },
-        })
+          } as any,
+        } as any)
         .select()
         .single();
 
       if (insertError) throw insertError;
 
       // Update local state
-      setAlbumImages(prev => [libraryRecord, ...prev]);
+      setAlbumImages(prev => [libraryRecord as CharacterAlbumImage, ...prev]);
 
       toast({
         title: 'Saved to Album',

@@ -148,7 +148,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
                 const userId = userData.user?.id;
                 const { data: newChar, error } = await supabase
                     .from('characters')
-                    .insert([{ ...payload, user_id: userId }])
+                    .insert([{ ...payload, user_id: userId } as any])
                     .select()
                     .single();
                 if (error) throw error;
@@ -205,14 +205,14 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
 
             const { data: newChar, error } = await supabase
                 .from('characters')
-                .insert([{ ...payload, user_id: userId }])
+                .insert([{ ...payload, user_id: userId } as any])
                 .select()
                 .single();
 
             if (error) throw error;
 
             // Update local state with new character data
-            setFormData(prev => ({ ...prev, ...newChar, id: newChar.id }));
+            setFormData(prev => ({ ...prev, ...newChar, id: newChar.id } as unknown as Partial<CharacterV2>));
 
             // Invalidate queries
             queryClient.invalidateQueries({ queryKey: ['character-hub-v2'] });
@@ -564,7 +564,7 @@ export function useCharacterStudioV2(id?: string, mode: 'edit' | 'create' = 'edi
 
                 // Parse physical traits from appearance suggestions
                 if (suggestions.suggestedAppearance?.length > 0) {
-                    const physicalTraits: Record<string, string> = { ...(formData.physical_traits || {}) };
+                    const physicalTraits: Record<string, string | string[]> = { ...(formData.physical_traits || {}) };
 
                     for (const trait of suggestions.suggestedAppearance) {
                         const lowerTrait = trait.toLowerCase();
