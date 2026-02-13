@@ -302,7 +302,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             const capabilities = modelData.capabilities as any;
               // Check if model supports I2I using capabilities (no hard-coded checks)
               modelSupportsI2I = capabilities?.supports_i2i === true || 
-                                    capabilities?.reference_images === true;
+                                    capabilities?.reference_images === true ||
+                                    capabilities?.supports_i2v === true ||
+                                    capabilities?.video?.reference_mode === 'single';
               
               console.log('🔍 Model I2I support check:', {
                 modelId: newModel.id,

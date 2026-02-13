@@ -409,28 +409,31 @@ export type Database = {
       }
       character_anchors: {
         Row: {
+          anchor_type: string | null
           character_id: string
-          created_at: string | null
+          created_at: string
           id: string
           image_url: string
-          is_primary: boolean | null
-          updated_at: string | null
+          is_primary: boolean
+          updated_at: string
         }
         Insert: {
+          anchor_type?: string | null
           character_id: string
-          created_at?: string | null
+          created_at?: string
           id?: string
           image_url: string
-          is_primary?: boolean | null
-          updated_at?: string | null
+          is_primary?: boolean
+          updated_at?: string
         }
         Update: {
+          anchor_type?: string | null
           character_id?: string
-          created_at?: string | null
+          created_at?: string
           id?: string
           image_url?: string
-          is_primary?: boolean | null
-          updated_at?: string | null
+          is_primary?: boolean
+          updated_at?: string
         }
         Relationships: [
           {
@@ -445,27 +448,27 @@ export type Database = {
       character_canon: {
         Row: {
           character_id: string
-          created_at: string | null
+          created_at: string
           id: string
-          is_pinned: boolean | null
+          is_pinned: boolean
           metadata: Json | null
           output_type: string
           output_url: string
         }
         Insert: {
           character_id: string
-          created_at?: string | null
+          created_at?: string
           id?: string
-          is_pinned?: boolean | null
+          is_pinned?: boolean
           metadata?: Json | null
           output_type: string
           output_url: string
         }
         Update: {
           character_id?: string
-          created_at?: string | null
+          created_at?: string
           id?: string
-          is_pinned?: boolean | null
+          is_pinned?: boolean
           metadata?: Json | null
           output_type?: string
           output_url?: string
@@ -706,7 +709,11 @@ export type Database = {
         Row: {
           alternate_greetings: Json | null
           appearance_tags: string[] | null
+          avoid_traits: string[] | null
+          backstory: string | null
           base_prompt: string | null
+          bio: string | null
+          canon_spec: string | null
           consistency_method: string | null
           content_rating: string
           created_at: string | null
@@ -720,19 +727,29 @@ export type Database = {
           image_url: string | null
           interaction_count: number | null
           is_public: boolean | null
+          lighting: string | null
           likes_count: number | null
+          locked_traits: string[] | null
+          media_defaults: Json | null
           mood: string | null
           name: string
+          outfit_defaults: string | null
           persona: string | null
+          personality_traits: Json | null
+          physical_traits: Json | null
           portrait_count: number | null
           preview_image_url: string | null
           quick_start: boolean | null
           reference_image_url: string | null
+          rendering_rules: Json | null
           role: string | null
           scene_behavior_rules: Json | null
           scene_count: number | null
           seed_locked: number | null
+          signature_items: string | null
+          style_preset: string | null
           system_prompt: string | null
+          tagline: string | null
           traits: string | null
           updated_at: string | null
           user_id: string | null
@@ -742,7 +759,11 @@ export type Database = {
         Insert: {
           alternate_greetings?: Json | null
           appearance_tags?: string[] | null
+          avoid_traits?: string[] | null
+          backstory?: string | null
           base_prompt?: string | null
+          bio?: string | null
+          canon_spec?: string | null
           consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
@@ -756,19 +777,29 @@ export type Database = {
           image_url?: string | null
           interaction_count?: number | null
           is_public?: boolean | null
+          lighting?: string | null
           likes_count?: number | null
+          locked_traits?: string[] | null
+          media_defaults?: Json | null
           mood?: string | null
           name: string
+          outfit_defaults?: string | null
           persona?: string | null
+          personality_traits?: Json | null
+          physical_traits?: Json | null
           portrait_count?: number | null
           preview_image_url?: string | null
           quick_start?: boolean | null
           reference_image_url?: string | null
+          rendering_rules?: Json | null
           role?: string | null
           scene_behavior_rules?: Json | null
           scene_count?: number | null
           seed_locked?: number | null
+          signature_items?: string | null
+          style_preset?: string | null
           system_prompt?: string | null
+          tagline?: string | null
           traits?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -778,7 +809,11 @@ export type Database = {
         Update: {
           alternate_greetings?: Json | null
           appearance_tags?: string[] | null
+          avoid_traits?: string[] | null
+          backstory?: string | null
           base_prompt?: string | null
+          bio?: string | null
+          canon_spec?: string | null
           consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
@@ -792,19 +827,29 @@ export type Database = {
           image_url?: string | null
           interaction_count?: number | null
           is_public?: boolean | null
+          lighting?: string | null
           likes_count?: number | null
+          locked_traits?: string[] | null
+          media_defaults?: Json | null
           mood?: string | null
           name?: string
+          outfit_defaults?: string | null
           persona?: string | null
+          personality_traits?: Json | null
+          physical_traits?: Json | null
           portrait_count?: number | null
           preview_image_url?: string | null
           quick_start?: boolean | null
           reference_image_url?: string | null
+          rendering_rules?: Json | null
           role?: string | null
           scene_behavior_rules?: Json | null
           scene_count?: number | null
           seed_locked?: number | null
+          signature_items?: string | null
+          style_preset?: string | null
           system_prompt?: string | null
+          tagline?: string | null
           traits?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -1630,7 +1675,6 @@ export type Database = {
           creator_id: string | null
           description: string
           id: string
-          image_url: string | null
           is_public: boolean | null
           max_characters: number | null
           max_words: number | null
@@ -1658,7 +1702,6 @@ export type Database = {
           creator_id?: string | null
           description: string
           id?: string
-          image_url?: string | null
           is_public?: boolean | null
           max_characters?: number | null
           max_words?: number | null
@@ -1686,7 +1729,6 @@ export type Database = {
           creator_id?: string | null
           description?: string
           id?: string
-          image_url?: string | null
           is_public?: boolean | null
           max_characters?: number | null
           max_words?: number | null
