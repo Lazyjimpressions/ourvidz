@@ -1134,25 +1134,22 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // Build fal.ai-specific payload (supports both image and video)
         const isFalVideo = mode === 'video';
         
-        // Check if this is WAN 2.1 i2v model (need to fetch model_key from database)
-        let isWanI2V = false;
+        // Check if this video model requires a reference image (I2V) using capabilities from the already-loaded model data
+        let videoRequiresRefImage = false;
         if (isFalVideo && selectedModel.id) {
           try {
             const { data: modelData } = await supabase
               .from('api_models')
-              .select('model_key, capabilities')
+              .select('capabilities')
               .eq('id', selectedModel.id)
               .single();
-            
-            if (modelData) {
-              // Check capabilities for I2V support (no hard-coded model key checks)
-              const capabilities = modelData.capabilities as any;
-              isWanI2V = capabilities?.supports_i2v === true || 
-                         capabilities?.video?.reference_mode === 'single' ||
-                         (modelData as any).modality === 'video';
-            }
+            const caps = (modelData?.capabilities as any) || {};
+            videoRequiresRefImage = caps?.input_schema?.image_url?.required === true ||
+                                   caps?.supports_i2v === true ||
+                                   caps?.video?.reference_mode === 'single' ||
+                                   caps?.video?.reference_mode === 'dual';
           } catch (err) {
-            console.warn('⚠️ Could not check model type, assuming non-WAN i2v');
+            console.warn('⚠️ Could not check model capabilities');
           }
         }
         
@@ -1175,12 +1172,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           selectedModelDisplayName: selectedModel.display_name
         });
         
-        // CRITICAL: WAN 2.1 i2v ALWAYS requires a reference image (it's image-to-video, not text-to-video)
-        if (isFalVideo && isWanI2V && !startRefUrl && !effRefUrl) {
-          console.error('❌ WAN 2.1 i2v requires a reference image');
+        // Generic I2V validation: if model requires a reference image, block without one
+        if (isFalVideo && videoRequiresRefImage && !startRefUrl && !effRefUrl) {
+          console.error('❌ This video model requires a reference image');
           toast({
             title: "Reference Image Required",
-            description: "WAN 2.1 i2v is an image-to-video model and requires a reference image to generate video",
+            description: "This model requires a reference image for video generation",
             variant: "destructive",
           });
           setIsGenerating(false);
@@ -1239,30 +1236,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           }
         }
         
-        // Video-specific parameters
+        // Video-specific parameters (model-agnostic: edge function applies input_defaults and schema filtering)
         if (isFalVideo) {
-          if (isWanI2V) {
-            // WAN 2.1 i2v uses image_url (not image) and specific parameters
-            const refImageUrl = startRefUrl || effRefUrl;
-            if (refImageUrl) {
-              inputObj.image_url = refImageUrl; // WAN 2.1 i2v uses image_url
-            }
-            
-            // Map motion intensity to guide_scale (0-1 -> 1-10, default 5)
-            // WAN 2.1 i2v guide_scale range is 1-10 (not 1-20)
-            if (motionIntensity !== undefined) {
-              const guideScale = 1 + (motionIntensity * 9); // Map 0-1 to 1-10
-              inputObj.guide_scale = Math.min(Math.max(Math.round(guideScale * 10) / 10, 1), 10); // Round to 1 decimal and clamp
-            }
-            
-            // Don't set duration here - edge function will calculate num_frames and fps
-            // Don't set num_inference_steps - WAN 2.1 i2v uses its own defaults
-          } else {
-            // Other video models (non-WAN i2v)
-            inputObj.image = startRefUrl || effRefUrl || undefined;
-            inputObj.duration = videoDuration || 5;
-            inputObj.num_inference_steps = Math.round(25 + (motionIntensity || 0.5) * 25);
+          const refImageUrl = startRefUrl || effRefUrl;
+          if (refImageUrl) {
+            inputObj.image_url = refImageUrl; // Always use image_url for all video models
           }
+          inputObj.duration = videoDuration || 5; // Edge function converts to num_frames using model's frame_rate
         }
         
         // CRITICAL DEBUG: Log the payload before sending
@@ -1299,7 +1279,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             modality: isFalVideo ? 'video' : 'image',
             duration: isFalVideo ? videoDuration : undefined,
             motion_intensity: isFalVideo ? motionIntensity : undefined,
-            is_wan_i2v: isWanI2V // Flag for edge function
+            video_requires_ref: videoRequiresRefImage // Generic I2V flag
           }
         };
         
