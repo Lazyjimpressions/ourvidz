@@ -1,52 +1,75 @@
 
 
-# Fix Schema Paste and Rendering
+# Fix Schema Paste: Resolve $ref, Improve Mapping, Clarify UI
 
 ## Problem
-When pasting a fal.ai schema, parameters show "Unsupported type" with no editable controls, no defaults, and no descriptions. Three bugs cause this.
+Pasting a fal.ai schema results in only one parameter (loras) appearing because most fal.ai properties use `$ref` references that get skipped. The capabilities box shows raw `input_schema` JSON which is confusing.
 
 ## Root Causes
 
-1. **mapFalSchema is never called** -- The paste handler parses the JSON successfully in the first try block and applies the raw fal.ai schema directly (with types like `"number"`, `"array"` that the renderer doesn't understand). The mapper function only runs in the catch block, which never fires.
+1. **`$ref` properties are skipped** -- Line 630 in `mapFalSchema` skips any property with `$ref` when it lacks `type`/`allOf`/`anyOf`. fal.ai schemas use `$ref` extensively to reference `$defs` for enums, image sizes, LoRA configs, etc. Nearly every parameter gets dropped.
 
-2. **mapFalSchema misses fal.ai patterns** -- fal.ai schemas use `"number"` (not `"float"`), `"array"`, nested `allOf`/`anyOf`/`$ref` for enums, and properties with `title`/`description` but no explicit `type`. The mapper doesn't handle these.
+2. **`$defs`/`definitions` never resolved** -- The mapper doesn't pass the top-level schema's `$defs` block down to look up what `$ref` points to. Without resolving references, most properties are unrecognizable.
 
-3. **No fallback for unknown types** -- `ParamControl` renders "Unsupported type: X" instead of falling back to a text input.
+3. **Capabilities raw JSON includes `input_schema`** -- When the user toggles "Raw JSON" on the Capabilities editor, they see the full capabilities JSONB including `input_schema` nested inside. This makes it look like the paste populated the wrong box.
 
-## Changes
+## Changes (all in `src/components/admin/SchemaEditor.tsx`)
 
-### File: `src/components/admin/SchemaEditor.tsx`
+### 1. Resolve `$ref` references in `mapFalSchema`
 
-**1. Fix `PasteSchemaDialog.handleApply`**
-- Detect fal.ai format (has `properties` key, or nested objects with `type`/`title`/`description`) and always run `mapFalSchema` when detected.
-- Only apply raw JSON directly if it already matches our internal `ParamSchema` format (has types like `"integer"`, `"float"`, `"boolean"`, `"enum"`).
+- Pass the top-level `$defs` (or `definitions`) object into `mapFalSchema` and `mapFalProperty`.
+- When a property has `$ref`, look up the referenced definition and merge/use it.
+- Common fal.ai `$ref` patterns: `"$ref": "#/$defs/ImageSize"`, `"$ref": "#/$defs/LoraWeight"`.
+- Resolution logic: extract the key from the `$ref` path (last segment after `/`), look it up in `$defs`, then map that definition.
 
-**2. Expand `mapFalSchema` to handle all fal.ai patterns**
-- `"number"` maps to `"float"`
-- `"integer"` maps to `"integer"`
-- `"boolean"` maps to `"boolean"`
-- `"string"` with `enum` maps to `"enum"` with `options`
-- `"string"` without `enum` maps to `"string"`
-- `"array"` maps to `"string"` (comma-separated fallback, with a note in description)
-- `"object"` with `properties` maps to `"object"` with recursively mapped sub-properties
-- `allOf`/`anyOf` containing `enum` values extracts them into an `"enum"` type
-- `$ref` patterns: skip or map to `"string"` fallback
-- Extract `minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum` for range constraints
-- Extract `default`, `title` (to `label`), `description`
+### 2. Handle properties with both `$ref` and other keys
 
-**3. Add fallback in `ParamControl`**
-- The `default` case in the switch statement renders a text `Input` instead of the static "Unsupported type" message, so any unmapped type is still editable.
+- Some fal.ai properties combine `$ref` with `default`, `description`, or `title` at the property level. Merge the resolved `$ref` definition with the property-level overrides.
 
-**4. Show defaults and descriptions after paste**
-- After mapping, pre-populate `inputDefaults` from schema defaults for all active params (params with a `default` value get auto-activated).
-- Ensure `description` from fal.ai schema flows through to the tooltip icon on each parameter row.
+### 3. Improve `mapFalProperty` for resolved types
+
+- After resolving `$ref`, the definitions often have `enum`, `properties`, or standard types that the existing mapper already handles.
+- For unresolvable `$ref` (no matching definition found), fall back to `type: "string"` instead of skipping entirely.
+
+### 4. Fix CapabilitiesEditor raw JSON
+
+- In raw JSON mode, exclude `input_schema` from the displayed/edited JSON (same as structured mode already does with `const { input_schema, ...otherCaps }`).
+- When saving from raw JSON mode, preserve `input_schema` by merging it back in.
+
+### 5. Add section descriptions
+
+- Add a small helper line under each section header:
+  - Input Parameters: "Default values sent to the API for each generation"
+  - Capabilities: "Feature flags and metadata (not sent to API)"
+
+## Technical Detail
+
+```text
+// Current (skips $ref):
+if (def.$ref && !def.type && !def.allOf && !def.anyOf) continue;
+
+// Fixed: resolve $ref from $defs
+const defs = falSchema.$defs || falSchema.definitions || {};
+
+function resolveRef(def, defs) {
+  if (def.$ref) {
+    const refKey = def.$ref.split('/').pop();
+    const resolved = defs[refKey];
+    if (resolved) {
+      // Merge: property-level fields override resolved definition
+      return { ...resolved, ...def, $ref: undefined };
+    }
+  }
+  return def;
+}
+```
 
 ## Result After Fix
-Pasting a fal.ai schema will show each parameter with:
-- Toggle switch (active/inactive)
-- Proper label (from `title` or key name)
-- Correct control (slider for numbers with range, dropdown for enums, switch for booleans, text input for strings)
-- Default value pre-filled
-- Info icon with description tooltip
-- Range indicator for numeric params
+
+Pasting a fal.ai schema (e.g., ltx-video, flux-lora) will:
+- Resolve all `$ref` references and show every parameter with proper controls
+- Show enum dropdowns for referenced types (like image sizes, aspect ratios)
+- Show nested object editors for complex types (like LoRA configs)
+- Keep the capabilities box clean (no leaked `input_schema` in raw view)
+- Clearly label what each section does
 
