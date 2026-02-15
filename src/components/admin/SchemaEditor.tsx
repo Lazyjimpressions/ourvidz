@@ -136,7 +136,10 @@ export function SchemaEditor({ schema, inputDefaults, onInputDefaultsChange, onS
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label className="text-[10px] text-muted-foreground">Input Parameters</Label>
+        <div>
+          <Label className="text-[10px] text-muted-foreground">Input Parameters</Label>
+          <p className="text-[9px] text-muted-foreground/60">Default values sent to the API for each generation</p>
+        </div>
         <div className="flex gap-1">
           <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => setShowPasteSchema(true)}>
             <Clipboard className="h-3 w-3 mr-1" /> Paste Schema
@@ -572,7 +575,20 @@ function extractEnumFromComposite(def: any): string[] | null {
   return null;
 }
 
-function mapFalProperty(def: any): ParamSchema {
+function resolveRef(def: any, defs: Record<string, any>): any {
+  if (!def || !def.$ref) return def;
+  const refKey = def.$ref.split('/').pop();
+  const resolved = defs[refKey];
+  if (!resolved) return def; // unresolvable, keep as-is
+  // Merge: property-level fields (title, description, default) override resolved definition
+  const { $ref, ...rest } = def;
+  return { ...resolved, ...rest };
+}
+
+function mapFalProperty(def: any, defs: Record<string, any> = {}): ParamSchema {
+  // Resolve $ref first
+  def = resolveRef(def, defs);
+
   const param: ParamSchema = { type: 'string' };
 
   // Handle allOf/anyOf/oneOf with enums
@@ -598,10 +614,9 @@ function mapFalProperty(def: any): ParamSchema {
     param.type = 'object';
     param.properties = {};
     for (const [subKey, subDef] of Object.entries(def.properties) as [string, any][]) {
-      param.properties[subKey] = mapFalProperty(subDef);
+      param.properties[subKey] = mapFalProperty(subDef, defs);
     }
   } else if (def.enum) {
-    // No type but has enum
     param.type = 'enum';
     param.options = def.enum.map(String);
   }
@@ -622,13 +637,14 @@ function mapFalProperty(def: any): ParamSchema {
 
 function mapFalSchema(falSchema: any): InputSchema {
   const result: InputSchema = {};
+  const defs = falSchema.$defs || falSchema.definitions || {};
   const props = falSchema.properties || falSchema;
 
-  for (const [key, def] of Object.entries(props) as [string, any][]) {
-    if (!def || typeof def !== 'object') continue;
-    // Skip $ref-only entries
-    if (def.$ref && !def.type && !def.allOf && !def.anyOf) continue;
-    result[key] = mapFalProperty(def);
+  for (const [key, rawDef] of Object.entries(props) as [string, any][]) {
+    if (!rawDef || typeof rawDef !== 'object') continue;
+    // Skip meta keys
+    if (key === '$defs' || key === 'definitions') continue;
+    result[key] = mapFalProperty(rawDef, defs);
   }
 
   return result;
@@ -669,8 +685,8 @@ export function CapabilitiesEditor({ capabilities, onChange }: {
         </div>
         <Textarea
           className="text-xs min-h-[80px] font-mono"
-          value={JSON.stringify(capabilities, null, 2)}
-          onChange={(e) => { try { onChange(JSON.parse(e.target.value)); } catch {} }}
+          value={JSON.stringify(otherCaps, null, 2)}
+          onChange={(e) => { try { onChange({ ...JSON.parse(e.target.value), ...(input_schema ? { input_schema } : {}) }); } catch {} }}
         />
       </div>
     );
@@ -698,7 +714,10 @@ export function CapabilitiesEditor({ capabilities, onChange }: {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label className="text-[10px] text-muted-foreground">Capabilities</Label>
+        <div>
+          <Label className="text-[10px] text-muted-foreground">Capabilities</Label>
+          <p className="text-[9px] text-muted-foreground/60">Feature flags and metadata (not sent to API)</p>
+        </div>
         <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => setRawMode(true)}>
           <Code className="h-3 w-3 mr-1" /> Raw JSON
         </Button>
