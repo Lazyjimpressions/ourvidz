@@ -1,110 +1,208 @@
 
 
-# API Models Tab Redesign -- Compact, Function-First Admin UX
+# Schema-Driven Model Configuration
 
-## Problem
-The current API Models page renders each model as a full-width Card with verbose labels and large padding, wasting vertical space. Editing requires a separate form Card that pushes content off-screen. There is no grouping, no filtering, no quick toggles, and no way to scan 13+ models efficiently.
+## Overview
 
-## Design Approach
+Replace the raw JSON textarea for `input_defaults` and `capabilities` with a structured, schema-driven admin form. Each model's full input schema is stored in `capabilities.input_schema`, and the admin UI renders proper controls (sliders, dropdowns, toggles, text fields) for each parameter. The admin can set defaults, mark params as active/hidden, and define valid ranges -- all without editing raw JSON.
 
-Replace the card-per-model layout with a **dense, grouped data table** that supports **inline editing**, **quick-action toggles**, and **collapsible sections by modality**.
+## Architecture
+
+### 1. Store Input Schema in `capabilities`
+
+Add a structured `input_schema` key inside the existing `capabilities` JSONB column. No DB migration needed -- it's already JSONB.
 
 ```text
-+-------------------------------------------------------------------+
-| API Models                            [Filter: All v]  [+ Add]    |
-+-------------------------------------------------------------------+
-| > IMAGE (5 models)                                                |
-|-------------------------------------------------------------------|
-| Name         | Provider | Task       | Key (trunc) | Pr | Df | On |
-| Seedream 4.5 | fal.ai   | generation | fal-ai/by.. | 50 | .  | Y  |
-| Seedream 4   | fal.ai   | generation | fal-ai/by.. | 10 | *  | Y  |
-| ...          |          |            |             |    |    |    |
-|-------------------------------------------------------------------|
-| > ROLEPLAY (5 models)                                             |
-|-------------------------------------------------------------------|
-| Name         | Provider | Task       | Key (trunc) | Pr | Df | On |
-| MythoMax 13B | OpenRtr  | roleplay   | gryphe/my.. |  0 | *  | Y  |
-| ...          |          |            |             |    |    |    |
-|-------------------------------------------------------------------|
-| > VIDEO (1 model)                                                 |
-|-------------------------------------------------------------------|
-| WAN 2.1 I2V  | fal.ai   | generation | fal-ai/wa.. | 13 | *  | Y  |
-+-------------------------------------------------------------------+
+capabilities: {
+  // Existing fields (char_limit, nsfw_status, etc.) remain
+  ...existing,
+  
+  input_schema: {
+    prompt: { type: "string", required: true, hidden: true },
+    negative_prompt: { type: "string", default: "" },
+    image_size: {
+      type: "object",
+      properties: {
+        width: { type: "integer", min: 256, max: 4096, step: 8, default: 1024 },
+        height: { type: "integer", min: 256, max: 4096, step: 8, default: 1024 }
+      }
+    },
+    num_inference_steps: { type: "integer", min: 1, max: 50, default: 30 },
+    guidance_scale: { type: "float", min: 1, max: 20, step: 0.5, default: 7.5 },
+    seed: { type: "integer", min: 0, max: 2147483647, default: null },
+    enable_safety_checker: { type: "boolean", default: false },
+    // Video-specific (LTX example):
+    image_url: { type: "string", label: "Start Frame Image", description: "First frame reference" },
+    image_url_end: { type: "string", label: "End Frame Image", description: "Last frame reference" },
+    frame_rate: { type: "integer", min: 1, max: 60, default: 25 },
+    num_frames: { type: "integer", min: 1, max: 257, default: 97 },
+    aspect_ratio: { type: "enum", options: ["16:9","9:16","1:1","4:3","3:4","21:9","9:21"], default: "16:9" },
+    resolution: { type: "enum", options: ["480p","720p","1080p"], default: "720p" },
+    expand_prompt: { type: "boolean", default: true, description: "Let model expand prompt for quality" }
+  }
+}
 ```
 
-## Key UX Features
+Each parameter definition supports:
+- `type`: string, integer, float, boolean, enum, object
+- `min`, `max`, `step`: numeric range constraints
+- `options`: enum values (for dropdowns)
+- `default`: the default value (goes into `input_defaults` on save)
+- `label`: human-readable name (falls back to param key)
+- `description`: tooltip help text
+- `required`: if true, must have a value
+- `hidden`: if true, not shown to end users (system-managed like `prompt`)
+- `active`: if false, param exists in schema but won't be sent (admin can toggle)
 
-1. **Grouped by modality** -- Collapsible sections (image, video, roleplay, chat, etc.) using the existing Collapsible component. Each header shows model count and can be expanded/collapsed.
+### 2. LTX Video 13B Example Configuration
 
-2. **Dense table rows** -- Each model is a single table row (~32px tall) with columns: Display Name, Provider, Task, Model Key (truncated with tooltip), Family, Priority, Default (star icon toggle), Active (switch toggle), Actions (edit/delete icon buttons).
+Based on the fal.ai `fal-ai/ltx-video-13b-distilled` endpoint schema:
 
-3. **Inline toggle switches** -- "Active" and "Default" columns use clickable Switch/star icon that immediately fire update mutations. No form needed for these common operations.
+**input_defaults** (what gets spread into API payload):
+```json
+{
+  "num_frames": 97,
+  "frame_rate": 25,
+  "resolution": "720p",
+  "aspect_ratio": "16:9",
+  "expand_prompt": true,
+  "enable_safety_checker": false
+}
+```
 
-4. **Inline cell editing** -- Clicking the Display Name, Priority, or Model Key cells opens the existing `EditableCell` component for immediate inline edits with Enter to save, Escape to cancel.
+**capabilities** (drives UI and validation):
+```json
+{
+  "supports_i2v": true,
+  "supports_t2v": true,
+  "supports_start_end_frames": true,
+  "char_limit": 2000,
+  "safety_checker_param": "enable_safety_checker",
+  "video": {
+    "duration_range": { "min": 2, "max": 10, "default": 4 },
+    "num_frames_range": { "min": 33, "max": 257, "default": 97 },
+    "fps_range": { "min": 1, "max": 60, "default": 25 },
+    "resolutions": ["480p", "720p", "1080p"],
+    "aspect_ratios": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21"],
+    "reference_mode": "dual"
+  },
+  "input_schema": {
+    "prompt": { "type": "string", "required": true, "hidden": true },
+    "negative_prompt": { "type": "string", "default": "" },
+    "image_url": { "type": "string", "label": "Start Frame", "description": "Reference image for first frame" },
+    "image_url_end": { "type": "string", "label": "End Frame", "description": "Reference image for last frame (optional)" },
+    "num_frames": { "type": "integer", "min": 33, "max": 257, "default": 97, "description": "Total frames to generate" },
+    "frame_rate": { "type": "integer", "min": 1, "max": 60, "default": 25 },
+    "resolution": { "type": "enum", "options": ["480p", "720p", "1080p"], "default": "720p" },
+    "aspect_ratio": { "type": "enum", "options": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "9:21"], "default": "16:9" },
+    "expand_prompt": { "type": "boolean", "default": true, "description": "LLM-based prompt expansion for quality" },
+    "seed": { "type": "integer", "min": 0, "max": 2147483647, "default": null },
+    "enable_safety_checker": { "type": "boolean", "default": false, "hidden": true }
+  }
+}
+```
 
-5. **Slide-out or collapsible add/edit form** -- Instead of a full-width Card form, the "Add Model" and row-level "Edit" button open a compact collapsible panel above the table (or a Sheet/drawer). The form uses a tighter 3-column grid layout.
+### 3. Admin UI Changes
 
-6. **Filter bar** -- A small filter row with: modality dropdown, task dropdown, provider dropdown, and active/inactive toggle. Filters the visible rows client-side.
+**File: `src/components/admin/ApiModelsTab.tsx`**
 
-7. **Bulk count badges** -- Section headers show counts like "IMAGE (5)" and a colored dot for how many are active vs inactive.
+Replace the raw JSON `Textarea` for `input_defaults` with a new `SchemaEditor` component that renders inside the ModelForm.
 
-8. **Delete confirmation** -- Replace `window.confirm` with an AlertDialog component for a polished experience.
+#### SchemaEditor Component
 
-## Technical Details
+A new inline component (inside `ApiModelsTab.tsx` or a small helper file) that:
 
-### File: `src/components/admin/ApiModelsTab.tsx` (full rewrite)
+1. **Reads `capabilities.input_schema`** -- if present, renders structured controls
+2. **Falls back to raw JSON textarea** -- if no schema defined, keeps current behavior
+3. **Renders each parameter** as the appropriate control:
+   - `integer`/`float` with min/max: Slider + number input
+   - `boolean`: Switch toggle
+   - `enum`: Select dropdown
+   - `string`: Text input
+   - `object`: Nested group (e.g., image_size with width/height)
+4. **Each parameter row** shows:
+   - Active toggle (switch) -- if inactive, param won't be included in defaults
+   - Label + tooltip (from schema description)
+   - Control (slider/select/switch/input)
+   - Current value or "API default" placeholder when empty
+5. **On save**, the component builds the `input_defaults` object from all active params with values
 
-**State additions:**
-- `filterModality`, `filterTask`, `filterProvider` -- string filter states
-- `expandedSections` -- `Set<string>` tracking which modality groups are open (all open by default)
-- `editingCellId` -- string tracking which cell is being inline-edited
-- `showAddForm` -- boolean for the add form panel
+Layout: compact 2-column grid of parameter rows, each ~28px tall.
 
-**Grouping logic:**
 ```text
-const grouped = models grouped by model.modality
-  -> sorted within each group by priority DESC, then display_name ASC
++------------------------------------------------------------------+
+| Input Parameters                              [Raw JSON toggle]   |
+|------------------------------------------------------------------|
+| [x] num_frames      [===|====97====|===]  97    (33-257)         |
+| [x] frame_rate      [===|===25=====|===]  25    (1-60)           |
+| [x] resolution      [ 720p          v ]                          |
+| [x] aspect_ratio    [ 16:9          v ]                          |
+| [x] expand_prompt   [ON]                                         |
+| [ ] negative_prompt  ___________________________                 |
+| [ ] seed             ___________________________  (API default)  |
++------------------------------------------------------------------+
 ```
 
-**Table columns:**
-| Column | Width | Behavior |
-|--------|-------|----------|
-| Display Name | flex | Inline editable via EditableCell |
-| Provider | 100px | Read-only badge |
-| Task | 90px | Inline editable select |
-| Model Key | 180px | Truncated, tooltip, inline editable |
-| Family | 80px | Inline editable text |
-| Priority | 50px | Inline editable number |
-| Default | 40px | Star icon toggle, instant mutation |
-| Active | 50px | Switch toggle, instant mutation |
-| Actions | 60px | Edit (pencil opens full form), Delete (trash with AlertDialog) |
+#### Schema Builder (for new models)
 
-**Inline mutations:**
-- Toggling Active/Default fires `updateModelMutation` immediately with just `{ id, is_active }` or `{ id, is_default }`
-- EditableCell onSave fires `updateModelMutation` with the single changed field
+When adding a model that has no `input_schema` yet, provide a small "Add Parameter" button that lets the admin define params one at a time:
+- Parameter name (key)
+- Type (dropdown: string, integer, float, boolean, enum)
+- Default value
+- Min/max/step (for numeric)
+- Options (for enum, comma-separated)
+- Description (optional)
 
-**Add/Edit form (compact):**
-- Rendered as a collapsible section at top of page (reuse Collapsible)
-- 3-column grid for core fields (provider, display name, model key)
-- 3-column grid for type fields (modality, task, priority)
-- Single row for version, family, output format, endpoint path
-- JSON textarea for input_defaults only (capabilities and pricing rarely edited)
-- Active + Default toggles on same row
-- Save / Cancel buttons
+This builds the schema incrementally. Alternatively, the admin can paste the full schema JSON (a "Paste Schema" button that accepts the fal.ai format and auto-maps it).
 
-**Components used (all existing):**
-- `Table, TableHead, TableRow, TableCell` from ui/table
-- `Switch` for active toggle
-- `EditableCell` for inline text/number/select editing
-- `Collapsible, CollapsibleTrigger, CollapsibleContent` for modality sections
-- `Badge` for provider names and status
-- `AlertDialog` for delete confirmation
-- `Select` for filter dropdowns
-- `Tooltip` for truncated model keys
+### 4. Capabilities Editor
 
-**No new dependencies required.**
+Add a second section in ModelForm for non-input capabilities (the existing fields like `char_limit`, `supports_i2i`, `reference_mode`, `video.duration_range`, etc.). This is a simpler key-value editor:
 
-### Other files unchanged
-- Mutations, query keys, and Supabase calls remain the same -- only the rendering layer changes
-- `useAdminApiProviders` hook reused as-is for the provider dropdown
+```text
++------------------------------------------------------------------+
+| Capabilities                                  [Raw JSON toggle]   |
+|------------------------------------------------------------------|
+| supports_i2v          [ON]                                        |
+| supports_t2v          [ON]                                        |
+| supports_start_end    [ON]                                        |
+| char_limit            [ 2000        ]                             |
+| reference_mode        [ dual    v   ]                             |
++------------------------------------------------------------------+
+```
+
+Known capability keys get appropriate controls (boolean = switch, numeric = input, enum = select). Unknown keys show as raw text inputs. This is simpler than the input schema editor since capabilities are less standardized.
+
+### 5. Edge Function Impact
+
+**No edge function changes needed for this phase.** The edge function already does `...apiModel.input_defaults` into the payload. As long as the admin UI correctly populates `input_defaults` from the schema editor, it works.
+
+However, for LTX Video 13B specifically, the edge function's video parameter handling (lines 796-946) currently has WAN-specific branching. The "else" branch (line 935-946) handles "other video models" but only maps `num_frames`, `resolution`, and `fps`. LTX uses `frame_rate` (not `fps`), `aspect_ratio`, and `expand_prompt`. Since these come from `input_defaults` via the spread, they'll be included automatically -- the only risk is the else branch overwriting them with `body.input.fps` mapped to `modelInput.fps` (wrong key for LTX).
+
+**Recommendation**: Add a small guard in the edge function else branch: if the model's `input_defaults` already has `frame_rate`, don't map `fps` to `fps`. This is a 2-line fix but not strictly required for the admin UI work.
+
+### 6. How Empty Settings Work
+
+- Parameters with `active: false` or no default: **not included** in `input_defaults`
+- fal.ai uses its own server-side defaults for missing params
+- In the user-facing UI (`useVideoModelSettings`), only params present in `capabilities.video` or `input_defaults` appear as selectable options
+- Empty/null values: the admin sees "(API default)" placeholder -- the param row exists in the schema but has no override value
+
+### 7. Files to Change
+
+| File | Change |
+|------|--------|
+| `src/components/admin/ApiModelsTab.tsx` | Replace JSON textarea with SchemaEditor; add CapabilitiesEditor; add "Paste Schema" button |
+| `src/components/admin/SchemaEditor.tsx` | New component -- renders structured param controls from `input_schema` |
+| No new dependencies | Uses existing Slider, Switch, Select, Input, Tooltip components |
+| No DB migration | `capabilities` is already JSONB |
+
+### 8. Implementation Order
+
+1. Build `SchemaEditor` component (renders params from schema, outputs `input_defaults` object)
+2. Update `ModelForm` to use SchemaEditor when `input_schema` exists, raw JSON fallback otherwise
+3. Add "Paste Schema" / "Add Parameter" UI for building schemas for new models
+4. Add simple CapabilitiesEditor for the non-input capability fields
+5. Populate LTX Video 13B with proper `input_defaults` and `capabilities` via the new UI (or a one-time DB update)
+6. Optional: 2-line edge function guard for `frame_rate` vs `fps` key mapping
 
