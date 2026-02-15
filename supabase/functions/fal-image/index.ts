@@ -497,6 +497,15 @@ serve(async (req) => {
     
     // Validate reference image for I2V models (table-driven: check if model has image_url in schema)
     const modelSupportsI2V = !!inputSchema?.image_url || capabilities?.supports_i2v === true;
+    // Check if model ONLY supports I2V (model_key contains "image-to-video") and no image was provided
+    const isI2VOnly = modelKey.includes('image-to-video') || modelKey.includes('i2v');
+    if (isVideo && isI2VOnly && !hasReferenceImage) {
+      console.error(`❌ ${modelDisplayName} is an I2V-only model but no reference image was provided`);
+      return new Response(JSON.stringify({
+        error: `${modelDisplayName} requires a reference image for image-to-video generation. Please provide a reference image.`,
+        code: 'REFERENCE_IMAGE_REQUIRED'
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
     if (isVideo && modelSupportsI2V && !hasReferenceImage) {
       console.warn(`⚠️ ${modelDisplayName} supports I2V but no reference image provided, proceeding as text-to-video`);
     }
