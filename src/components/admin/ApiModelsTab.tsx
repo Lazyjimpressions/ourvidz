@@ -18,6 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { EditableCell } from './EditableCell';
+import { SchemaEditor, CapabilitiesEditor, type InputSchema } from './SchemaEditor';
 import { Plus, Pencil, Trash2, ChevronRight, Star, X, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -558,18 +559,21 @@ function ModelForm({ model, providers, onSubmit, onCancel }: {
           </div>
         </div>
 
-        {/* Row 4: JSON defaults */}
-        <div>
-          <Label className="text-[10px] text-muted-foreground">Input Defaults (JSON)</Label>
-          <Textarea
-            className="text-xs min-h-[50px] font-mono"
-            value={JSON.stringify(formData.input_defaults, null, 2)}
-            onChange={(e) => { try { set('input_defaults', JSON.parse(e.target.value)); } catch {} }}
-            placeholder='{"width": 1024}'
-          />
-        </div>
+        {/* Row 4: Schema-driven input defaults */}
+        <SchemaEditor
+          schema={(formData.capabilities as any)?.input_schema || null}
+          inputDefaults={formData.input_defaults || {}}
+          onInputDefaultsChange={(defaults) => set('input_defaults', defaults)}
+          onSchemaChange={(schema) => set('capabilities', { ...formData.capabilities, input_schema: schema })}
+        />
 
-        {/* Row 5: Toggles + actions */}
+        {/* Row 5: Capabilities editor */}
+        <CapabilitiesEditor
+          capabilities={formData.capabilities || {}}
+          onChange={(caps) => set('capabilities', caps)}
+        />
+
+        {/* Row 6: Toggles + actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
