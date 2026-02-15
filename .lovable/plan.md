@@ -1,215 +1,110 @@
 
 
-# Fix Admin Prompt Builder: Proper Edge Function Integration
+# API Models Tab Redesign -- Compact, Function-First Admin UX
 
-## Problem Summary
+## Problem
+The current API Models page renders each model as a full-width Card with verbose labels and large padding, wasting vertical space. Editing requires a separate form Card that pushes content off-screen. There is no grouping, no filtering, no quick toggles, and no way to scan 13+ models efficiently.
 
-The Admin Prompt Builder fails because `PlaygroundContext` calls `roleplay-chat` which **requires** `character_id` as a mandatory field. Admin tools have no character, so the request fails with a 400 error.
+## Design Approach
 
----
+Replace the card-per-model layout with a **dense, grouped data table** that supports **inline editing**, **quick-action toggles**, and **collapsible sections by modality**.
 
-## Solution: Route Admin Chat Through `playground-chat`
-
-The `playground-chat` edge function already handles general conversations without requiring a character. We need to:
-1. Add OpenRouter model routing to `playground-chat` (it currently only supports local Qwen worker)
-2. Update `PlaygroundContext.sendMessage` to route based on context (use `playground-chat` for admin/general, keep `roleplay-chat` for character-based roleplay)
-
----
-
-## Implementation Steps
-
-### Phase 1: Upgrade `playground-chat` Edge Function
-
-**File**: `supabase/functions/playground-chat/index.ts`
-
-Add OpenRouter API integration:
-1. Accept `model_provider` and `model_variant` parameters
-2. Add OpenRouter API call function (similar to `roleplay-chat`)
-3. Load API model config from `api_models` table
-4. Use `prompt_template_id` for template selection
-
-Key changes:
-- Add `callOpenRouterWithConfig()` function
-- Add model config lookup from `api_models` table
-- Support `model_provider: 'openrouter'` in request body
-- Return model metadata in response (for admin debugging)
-
-### Phase 2: Update PlaygroundContext Routing
-
-**File**: `src/contexts/PlaygroundContext.tsx`
-
-Change `sendMessage` to:
-1. Use `playground-chat` for admin/general/creative conversations
-2. Use `roleplay-chat` only when `selectedCharacter` is set (roleplay mode)
-
-```typescript
-const edgeFunction = state.selectedCharacter?.id 
-  ? 'roleplay-chat' 
-  : 'playground-chat';
-
-const { data, error } = await supabase.functions.invoke(edgeFunction, {
-  body: {
-    message: messageText,
-    conversation_id: conversationId,
-    // Different params based on function
-    ...(state.selectedCharacter?.id 
-      ? { character_id: state.selectedCharacter.id, model_provider: 'openrouter' }
-      : { model_provider: 'openrouter', model_variant: settings.chatModel }
-    ),
-    content_tier: settings.contentMode,
-    prompt_template_id: settings.promptTemplateId || undefined,
-  },
-});
+```text
++-------------------------------------------------------------------+
+| API Models                            [Filter: All v]  [+ Add]    |
++-------------------------------------------------------------------+
+| > IMAGE (5 models)                                                |
+|-------------------------------------------------------------------|
+| Name         | Provider | Task       | Key (trunc) | Pr | Df | On |
+| Seedream 4.5 | fal.ai   | generation | fal-ai/by.. | 50 | .  | Y  |
+| Seedream 4   | fal.ai   | generation | fal-ai/by.. | 10 | *  | Y  |
+| ...          |          |            |             |    |    |    |
+|-------------------------------------------------------------------|
+| > ROLEPLAY (5 models)                                             |
+|-------------------------------------------------------------------|
+| Name         | Provider | Task       | Key (trunc) | Pr | Df | On |
+| MythoMax 13B | OpenRtr  | roleplay   | gryphe/my.. |  0 | *  | Y  |
+| ...          |          |            |             |    |    |    |
+|-------------------------------------------------------------------|
+| > VIDEO (1 model)                                                 |
+|-------------------------------------------------------------------|
+| WAN 2.1 I2V  | fal.ai   | generation | fal-ai/wa.. | 13 | *  | Y  |
++-------------------------------------------------------------------+
 ```
 
-### Phase 3: Update ChatInterface Admin Handler
+## Key UX Features
 
-**File**: `src/components/playground/ChatInterface.tsx`
+1. **Grouped by modality** -- Collapsible sections (image, video, roleplay, chat, etc.) using the existing Collapsible component. Each header shows model count and can be expanded/collapsed.
 
-Ensure `handleStartAdminTool` properly sets up the conversation context:
-1. Create conversation with type `admin`
-2. Send structured system message
-3. Store tool context for reference
+2. **Dense table rows** -- Each model is a single table row (~32px tall) with columns: Display Name, Provider, Task, Model Key (truncated with tooltip), Family, Priority, Default (star icon toggle), Active (switch toggle), Actions (edit/delete icon buttons).
 
----
+3. **Inline toggle switches** -- "Active" and "Default" columns use clickable Switch/star icon that immediately fire update mutations. No form needed for these common operations.
 
-## Files to Modify
+4. **Inline cell editing** -- Clicking the Display Name, Priority, or Model Key cells opens the existing `EditableCell` component for immediate inline edits with Enter to save, Escape to cancel.
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/playground-chat/index.ts` | Add OpenRouter integration, model config lookup |
-| `src/contexts/PlaygroundContext.tsx` | Route to correct edge function based on context |
-| `src/components/playground/ChatInterface.tsx` | Minor cleanup of admin tool handler |
+5. **Slide-out or collapsible add/edit form** -- Instead of a full-width Card form, the "Add Model" and row-level "Edit" button open a compact collapsible panel above the table (or a Sheet/drawer). The form uses a tighter 3-column grid layout.
 
----
+6. **Filter bar** -- A small filter row with: modality dropdown, task dropdown, provider dropdown, and active/inactive toggle. Filters the visible rows client-side.
+
+7. **Bulk count badges** -- Section headers show counts like "IMAGE (5)" and a colored dot for how many are active vs inactive.
+
+8. **Delete confirmation** -- Replace `window.confirm` with an AlertDialog component for a polished experience.
 
 ## Technical Details
 
-### OpenRouter Integration in playground-chat
+### File: `src/components/admin/ApiModelsTab.tsx` (full rewrite)
 
-Add function to call OpenRouter:
+**State additions:**
+- `filterModality`, `filterTask`, `filterProvider` -- string filter states
+- `expandedSections` -- `Set<string>` tracking which modality groups are open (all open by default)
+- `editingCellId` -- string tracking which cell is being inline-edited
+- `showAddForm` -- boolean for the add form panel
 
-```typescript
-async function callOpenRouter(
-  systemPrompt: string,
-  userMessage: string,
-  modelKey: string,
-  contentTier: string,
-  supabase: any,
-  userId?: string
-): Promise<string> {
-  const apiKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
-  if (!apiKey) throw new Error('OpenRouter API key not configured');
-
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://ourvidz.lovable.app',
-    },
-    body: JSON.stringify({
-      model: modelKey,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      max_tokens: 2048,
-      temperature: 0.7,
-    }),
-  });
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
-}
-```
-
-### Request Body Schema for playground-chat
-
-```typescript
-interface PlaygroundChatRequest {
-  conversation_id: string;
-  message: string;
-  model_provider?: 'openrouter' | 'chat_worker';  // Default: 'openrouter'
-  model_variant?: string;                         // e.g., 'gryphe/mythomax-l2-13b'
-  content_tier?: 'sfw' | 'nsfw';                  // Default: 'nsfw'
-  prompt_template_id?: string;                    // Optional template override
-  character_id?: string;                          // Optional, for character context
-  context_type?: string;                          // 'admin' | 'general' | 'creative'
-}
-```
-
----
-
-## Validation Criteria
-
-After implementation, the admin should be able to:
-
-1. Go to `/playground` → Admin tab
-2. Click "Admin Tools" → Select "Prompt Builder"
-3. Choose target model (e.g., Seedream v4 from `api_models`)
-4. Choose template (e.g., "Admin Assistant" from `prompt_templates`)
-5. Enter purpose: "Help me create an NSFW scene prompt"
-6. Click "Start Prompt Builder"
-7. **Conversation starts successfully** (no 400 error)
-8. AI responds with prompt-building guidance
-9. Admin can continue chatting to refine prompts
-
----
-
-## Edge Function Flow Diagram
-
+**Grouping logic:**
 ```text
-User clicks "Start Prompt Builder"
-          │
-          ▼
-ChatInterface.handleStartAdminTool()
-          │
-          ├─► createConversation('Admin: Prompt Builder', null, 'admin')
-          │
-          ▼
-sendMessage(systemMessage, { conversationId })
-          │
-          ├─► No character selected
-          │
-          ▼
-PlaygroundContext.sendMessage()
-          │
-          ├─► Detects: no selectedCharacter
-          │
-          ▼
-supabase.functions.invoke('playground-chat', {
-  body: {
-    message: "[System: Prompt Builder Mode]...",
-    conversation_id: "uuid",
-    model_provider: 'openrouter',
-    model_variant: 'gryphe/mythomax-l2-13b',
-    content_tier: 'nsfw',
-    context_type: 'admin'
-  }
-})
-          │
-          ▼
-playground-chat edge function
-          │
-          ├─► Load model config from api_models
-          ├─► Build system prompt for admin context
-          ├─► Call OpenRouter API
-          ├─► Save messages to database
-          │
-          ▼
-Return response to frontend
-          │
-          ▼
-UI displays AI response
+const grouped = models grouped by model.modality
+  -> sorted within each group by priority DESC, then display_name ASC
 ```
 
----
+**Table columns:**
+| Column | Width | Behavior |
+|--------|-------|----------|
+| Display Name | flex | Inline editable via EditableCell |
+| Provider | 100px | Read-only badge |
+| Task | 90px | Inline editable select |
+| Model Key | 180px | Truncated, tooltip, inline editable |
+| Family | 80px | Inline editable text |
+| Priority | 50px | Inline editable number |
+| Default | 40px | Star icon toggle, instant mutation |
+| Active | 50px | Switch toggle, instant mutation |
+| Actions | 60px | Edit (pencil opens full form), Delete (trash with AlertDialog) |
 
-## Dependencies
+**Inline mutations:**
+- Toggling Active/Default fires `updateModelMutation` immediately with just `{ id, is_active }` or `{ id, is_default }`
+- EditableCell onSave fires `updateModelMutation` with the single changed field
 
-- Existing `OpenRouter_Roleplay_API_KEY` secret (already configured)
-- `api_models` table with OpenRouter models
-- `prompt_templates` table with admin templates
-- RLS policies allow authenticated users to read models/templates
+**Add/Edit form (compact):**
+- Rendered as a collapsible section at top of page (reuse Collapsible)
+- 3-column grid for core fields (provider, display name, model key)
+- 3-column grid for type fields (modality, task, priority)
+- Single row for version, family, output format, endpoint path
+- JSON textarea for input_defaults only (capabilities and pricing rarely edited)
+- Active + Default toggles on same row
+- Save / Cancel buttons
+
+**Components used (all existing):**
+- `Table, TableHead, TableRow, TableCell` from ui/table
+- `Switch` for active toggle
+- `EditableCell` for inline text/number/select editing
+- `Collapsible, CollapsibleTrigger, CollapsibleContent` for modality sections
+- `Badge` for provider names and status
+- `AlertDialog` for delete confirmation
+- `Select` for filter dropdowns
+- `Tooltip` for truncated model keys
+
+**No new dependencies required.**
+
+### Other files unchanged
+- Mutations, query keys, and Supabase calls remain the same -- only the rendering layer changes
+- `useAdminApiProviders` hook reused as-is for the provider dropdown
 
