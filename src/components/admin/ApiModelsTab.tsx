@@ -18,7 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { EditableCell } from './EditableCell';
-import { Plus, Pencil, Trash2, ChevronRight, Star, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronRight, Star, X, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SafeApiProvider {
@@ -58,6 +58,17 @@ export const ApiModelsTab = () => {
   const [filterModality, setFilterModality] = useState<string>('all');
   const [filterProvider, setFilterProvider] = useState<string>('all');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<string>('priority');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'priority' ? 'desc' : 'asc');
+    }
+  };
 
   const { data: providers } = useAdminApiProviders();
 
@@ -98,12 +109,26 @@ export const ApiModelsTab = () => {
       if (!groups[key]) groups[key] = [];
       groups[key].push(m);
     });
-    // Sort within each group by priority DESC then display_name ASC
+    const dir = sortDir === 'asc' ? 1 : -1;
     Object.values(groups).forEach(arr =>
-      arr.sort((a, b) => b.priority - a.priority || a.display_name.localeCompare(b.display_name))
+      arr.sort((a, b) => {
+        let cmp = 0;
+        switch (sortKey) {
+          case 'display_name': cmp = a.display_name.localeCompare(b.display_name); break;
+          case 'provider': cmp = a.api_providers.display_name.localeCompare(b.api_providers.display_name); break;
+          case 'task': cmp = a.task.localeCompare(b.task); break;
+          case 'model_key': cmp = a.model_key.localeCompare(b.model_key); break;
+          case 'model_family': cmp = (a.model_family || '').localeCompare(b.model_family || ''); break;
+          case 'priority': cmp = a.priority - b.priority; break;
+          case 'is_default': cmp = (a.is_default ? 1 : 0) - (b.is_default ? 1 : 0); break;
+          case 'is_active': cmp = (a.is_active ? 1 : 0) - (b.is_active ? 1 : 0); break;
+          default: cmp = 0;
+        }
+        return cmp * dir || a.display_name.localeCompare(b.display_name);
+      })
     );
     return groups;
-  }, [filteredModels]);
+  }, [filteredModels, sortKey, sortDir]);
 
   const updateModelMutation = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<ApiModel> & { id: string }) => {
@@ -231,14 +256,14 @@ export const ApiModelsTab = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="text-[10px]">
-                      <TableHead className="h-7 px-2 text-[10px]">Name</TableHead>
-                      <TableHead className="h-7 px-2 text-[10px] w-[90px]">Provider</TableHead>
-                      <TableHead className="h-7 px-2 text-[10px] w-[80px]">Task</TableHead>
-                      <TableHead className="h-7 px-2 text-[10px] w-[160px]">Model Key</TableHead>
-                      <TableHead className="h-7 px-2 text-[10px] w-[70px]">Family</TableHead>
-                      <TableHead className="h-7 px-2 text-[10px] w-[45px]">Pri</TableHead>
-                      <TableHead className="h-7 px-2 text-[10px] w-[35px]">Def</TableHead>
-                      <TableHead className="h-7 px-2 text-[10px] w-[45px]">On</TableHead>
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="display_name" label="Name" onClick={handleSort} />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="provider" label="Provider" onClick={handleSort} className="w-[90px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="task" label="Task" onClick={handleSort} className="w-[80px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="model_key" label="Model Key" onClick={handleSort} className="w-[160px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="model_family" label="Family" onClick={handleSort} className="w-[70px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="priority" label="Pri" onClick={handleSort} className="w-[45px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_default" label="Def" onClick={handleSort} className="w-[35px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_active" label="On" onClick={handleSort} className="w-[45px]" />
                       <TableHead className="h-7 px-2 text-[10px] w-[55px]">Acts</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -268,6 +293,31 @@ export const ApiModelsTab = () => {
     </TooltipProvider>
   );
 };
+
+/* ─── Sortable Header ─── */
+
+function SortableHead({ sortKey, sortDir, column, label, onClick, className }: {
+  sortKey: string;
+  sortDir: 'asc' | 'desc';
+  column: string;
+  label: string;
+  onClick: (key: string) => void;
+  className?: string;
+}) {
+  const isActive = sortKey === column;
+  const Icon = isActive ? (sortDir === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <TableHead
+      className={`h-7 px-2 text-[10px] cursor-pointer select-none hover:text-foreground transition-colors ${className || ''}`}
+      onClick={() => onClick(column)}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        {label}
+        <Icon className={`h-2.5 w-2.5 ${isActive ? 'text-foreground' : 'text-muted-foreground/40'}`} />
+      </span>
+    </TableHead>
+  );
+}
 
 /* ─── Model Row ─── */
 
