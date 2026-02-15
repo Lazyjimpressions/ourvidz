@@ -141,6 +141,8 @@ interface RoleplayChatRequest {
   user_id?: string;
   scene_context?: string;
   scene_system_prompt?: string;
+  /** Scene template's preview_image_url - used for first-scene I2I (kick off from template image, not T2I) */
+  scene_preview_image_url?: string;
   kickoff?: boolean; // New field for scene kickoff
   prompt_template_id?: string; // Prompt template ID for enhanced prompts
   prompt_template_name?: string; // Prompt template name for logging
@@ -323,6 +325,7 @@ serve(async (req) => {
       user_id,
       scene_context,
       scene_system_prompt,
+      scene_preview_image_url,
       kickoff,
       prompt_template_id,
       prompt_template_name,
@@ -371,6 +374,7 @@ serve(async (req) => {
       kickoff, 
       has_scene_context: !!scene_context, 
       has_scene_system_prompt: !!scene_system_prompt,
+      has_scene_preview_image_url: !!scene_preview_image_url,
       character_id,
       content_tier,
       scene_context_preview: scene_context ? scene_context.substring(0, 50) + '...' : 'none',
@@ -679,6 +683,8 @@ serve(async (req) => {
         conversation.current_location || undefined, // ✅ FIX #3: Pass current location for scene grounding
         // ✅ CRITICAL FIX: Pass scene_context (template's scene_prompt) for image generation
         scene_context || undefined, // Template's scene_prompt from scenes table
+        // ✅ First-scene I2I: template's preview image as reference (kick off with I2I, not T2I)
+        scene_preview_image_url || undefined,
         // Scene continuity (I2I iteration) parameters
         previous_scene_id,
         previous_scene_image_url,
@@ -2417,6 +2423,8 @@ async function generateScene(
   currentLocation?: string, // ✅ FIX #3: Current location from conversation for scene grounding
   // ✅ CRITICAL FIX: Template's scene_prompt from scenes table (for first scene generation)
   sceneTemplatePrompt?: string, // scene_prompt from scenes table template
+  /** Template's preview_image_url - when set, first scene uses I2I from this image (not T2I) */
+  templatePreviewImageUrl?: string,
   // Scene continuity (I2I iteration) parameters
   previousSceneId?: string, // ID of previous scene for linking
   previousSceneImageUrl?: string, // URL of previous scene for I2I iteration
@@ -2552,13 +2560,22 @@ async function generateScene(
         previous_scene_id: previousSceneId,
         has_verified_image: !!verifiedPreviousSceneImageUrl
       });
+    } else if (isFirstScene && templatePreviewImageUrl) {
+      // ✅ First scene from template: I2I using template's preview image (not T2I)
+      // Ensures kickoff scene reflects template setting and obeys scene style (character_only, pov, both_characters)
+      useI2IIteration = true;
+      generationMode = 'i2i';
+      effectiveReferenceImageUrl = templatePreviewImageUrl;
+      console.log('🎬 First scene from template: I2I from template preview image', {
+        template_preview_preview: templatePreviewImageUrl.substring(0, 80) + '...'
+      });
     } else {
-      // First scene or T2I: Use character reference (resolved later)
+      // First scene without template image, or T2I fallback
       useI2IIteration = false;
       generationMode = 't2i';
       effectiveReferenceImageUrl = undefined; // Will use character reference
       console.log('🎬 First scene mode: T2I initial generation', {
-        reason: isFirstScene ? 'no_previous_scene' : 'continuity_disabled_or_no_image'
+        reason: isFirstScene ? 'no_previous_scene_or_template_image' : 'continuity_disabled_or_no_image'
       });
     }
 
@@ -2567,6 +2584,7 @@ async function generateScene(
       // Request info
       requestedPreviousSceneId: previousSceneId || null,
       requestedPreviousSceneImageUrl: previousSceneImageUrl ? previousSceneImageUrl.substring(0, 80) + '...' : null,
+      templatePreviewImageUrl: templatePreviewImageUrl ? templatePreviewImageUrl.substring(0, 80) + '...' : null,
       sceneContinuityEnabled,
       // Verification results
       isFirstScene,
@@ -3832,13 +3850,14 @@ COMPOSITION RULES:
           if (canUseMultiReference && userCharacter?.reference_image_url && character.reference_image_url) {
             const imageUrlsArray: string[] = [];
 
-            // Figure 1: Scene environment (previous scene for continuity, or use character reference as fallback)
-            // Priority: previous scene image > character reference (since we may not have scene template image here)
-            if (verifiedPreviousSceneImageUrl) {
+            // Figure 1: Scene environment. Priority: template preview (first scene) > previous chat scene > character ref fallback
+            if (templatePreviewImageUrl && isFirstScene) {
+              imageUrlsArray.push(templatePreviewImageUrl);
+              console.log('📸 Multi-ref Figure 1 (Scene): Using template preview image (first scene I2I)');
+            } else if (verifiedPreviousSceneImageUrl) {
               imageUrlsArray.push(verifiedPreviousSceneImageUrl);
               console.log('📸 Multi-ref Figure 1 (Scene): Using previous scene image');
             } else if (character.reference_image_url) {
-              // For first scene without previous, use character reference as environment base
               imageUrlsArray.push(character.reference_image_url);
               console.log('📸 Multi-ref Figure 1 (Scene): Using character reference as base');
             }

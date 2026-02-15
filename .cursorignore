@@ -17,7 +17,7 @@ package-lock.json
 .cursor/mcp.json
 
 # Large documentation (speeds up ripgrep searches)
-docs/
+
 
 # Claude session files (if symlinked or present)
 .claude/

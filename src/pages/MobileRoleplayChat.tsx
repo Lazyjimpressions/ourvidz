@@ -879,6 +879,17 @@ const MobileRoleplayChat: React.FC = () => {
         // Extract user role from location state
         const userRole = (locationState as any)?.userRole || locationState?.sceneConfig?.userRole;
 
+        // Sign template preview image for first-scene I2I (kick off from template image, not T2I)
+        let signedScenePreviewUrl: string | null = null;
+        if (loadedScene?.preview_image_url) {
+          if (loadedScene.preview_image_url.startsWith('http://') || loadedScene.preview_image_url.startsWith('https://')) {
+            signedScenePreviewUrl = loadedScene.preview_image_url;
+          } else {
+            const bucket = loadedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+            signedScenePreviewUrl = await getSignedUrl(loadedScene.preview_image_url, bucket);
+          }
+        }
+
         const { data, error} = await supabase.functions.invoke('roleplay-chat', {
           body: {
             kickoff: true,
@@ -892,6 +903,7 @@ const MobileRoleplayChat: React.FC = () => {
             scene_name: loadedScene?.name || null,
             scene_description: loadedScene?.description || null,
             scene_starters: loadedScene?.scene_starters || null,
+            scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
             user_id: user.id,
             // ✅ FIX: Pass user role and character for scene immersion
             user_role: userRole || null,
@@ -1344,6 +1356,17 @@ const MobileRoleplayChat: React.FC = () => {
         }
       }
 
+      // Sign template preview image for first-scene I2I when starting from a scene template
+      let signedScenePreviewUrl: string | null = null;
+      if (selectedScene?.preview_image_url) {
+        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.preview_image_url;
+        } else {
+          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
+        }
+      }
+
       // Call the roleplay-chat edge function with prompt template
       // ✅ Determine if scene should be generated based on mode
       const shouldGenerateScene = imageGenerationMode === 'auto' && !!validImageModel;
@@ -1361,6 +1384,7 @@ const MobileRoleplayChat: React.FC = () => {
           // ✅ ADD SCENE CONTEXT:
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.scene_prompt || null,
+          scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           // NOTE: Template selection is handled server-side based on model_provider
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
           selected_image_model: validImageModel,
@@ -1693,6 +1717,17 @@ const MobileRoleplayChat: React.FC = () => {
           signedPreviousSceneImageUrl = await getSignedUrl(previousSceneImageUrl, bucket);
         }
       }
+
+      // Sign template preview for first-scene I2I when applicable
+      let signedScenePreviewUrl: string | null = null;
+      if (selectedScene?.preview_image_url) {
+        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.preview_image_url;
+        } else {
+          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
+        }
+      }
       
       // Use the message content as context for scene generation
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
@@ -1707,6 +1742,7 @@ const MobileRoleplayChat: React.FC = () => {
           scene_only: true, // Flag to indicate we only want scene, no chat response
           user_id: user.id,
           scene_context: selectedScene?.scene_prompt || null,
+          scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           selected_image_model: validImageModel,
           scene_style: sceneStyle,
           user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
@@ -1939,6 +1975,28 @@ const MobileRoleplayChat: React.FC = () => {
       }]);
 
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
+
+      // Sign template preview for first-scene I2I when retrying with a scene template
+      let signedScenePreviewUrl: string | null = null;
+      if (selectedScene?.preview_image_url) {
+        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.preview_image_url;
+        } else {
+          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
+        }
+      }
+
+      // Sign previous scene image for I2I continuity when retrying with existing conversation
+      let signedPreviousForRetry: string | null = null;
+      if (previousSceneImageUrl) {
+        if (previousSceneImageUrl.startsWith('http://') || previousSceneImageUrl.startsWith('https://')) {
+          signedPreviousForRetry = previousSceneImageUrl;
+        } else {
+          const bucket = previousSceneImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          signedPreviousForRetry = await getSignedUrl(previousSceneImageUrl, bucket);
+        }
+      }
       
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
@@ -1951,6 +2009,7 @@ const MobileRoleplayChat: React.FC = () => {
           scene_generation: true, // ✅ Enable auto scene generation on kickoff retry
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
+          scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           user_id: user.id,
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
@@ -1961,7 +2020,7 @@ const MobileRoleplayChat: React.FC = () => {
           // 🔄 Scene continuity (kickoff retry - use existing previous scene if any)
           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: previousSceneId || null,
-          previous_scene_image_url: previousSceneImageUrl || null
+          previous_scene_image_url: signedPreviousForRetry || previousSceneImageUrl || null
         }
       });
 
