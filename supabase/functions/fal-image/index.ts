@@ -472,7 +472,7 @@ serve(async (req) => {
     
     // Check capabilities from database (no hard-coded checks)
     const capabilities = apiModel.capabilities || {};
-    const isWanI2V = capabilities?.supports_i2v === true || modelModality === 'video' || body.metadata?.is_wan_i2v === true;
+    const inputSchema = capabilities?.input_schema || {};
     const supportsI2I = capabilities?.supports_i2i === true || capabilities?.reference_images === true;
     
     // Determine if model requires image_urls array (defined at top level for use in final check)
@@ -495,16 +495,10 @@ serve(async (req) => {
                                (supportsI2I && modelKey.includes('edit'));
     }
     
-    // Validate reference image for WAN 2.1 i2v
-    if (isVideo && isWanI2V && !hasReferenceImage) {
-      console.error('❌ WAN 2.1 i2v requires a reference image');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Reference image required',
-          details: 'WAN 2.1 i2v requires a reference image to generate video. Please provide an image_url in input or reference_image_url in metadata.'
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+    // Validate reference image for I2V models (table-driven: check if model has image_url in schema)
+    const modelSupportsI2V = !!inputSchema?.image_url || capabilities?.supports_i2v === true;
+    if (isVideo && modelSupportsI2V && !hasReferenceImage) {
+      console.warn(`⚠️ ${modelDisplayName} supports I2V but no reference image provided, proceeding as text-to-video`);
     }
 
     console.log('🎯 Job parameters:', {
@@ -733,14 +727,16 @@ serve(async (req) => {
         }
 
         // Strength for i2i (default to 0.5 if not provided for modify mode)
-        // Skip strength for WAN 2.1 i2v - it doesn't use this parameter
         // ✅ CRITICAL: Skip strength for Seedream Edit models - they don't support it!
         // Seedream edit models use prompt-based control, not strength parameter
         const isSeedreamEdit = modelKey.includes('seedream') && modelKey.includes('edit');
         const modelCapabilities = apiModel.capabilities as Record<string, any> || {};
         const usesStrengthParam = modelCapabilities?.uses_strength_param !== false;
         
-        if (!isWanI2V && usesStrengthParam && !isSeedreamEdit) {
+        // Table-driven: skip strength if input_schema exists and doesn't include 'strength'
+        const schemaAllowsStrength = !Object.keys(inputSchema).length || !!inputSchema.strength;
+        
+        if (schemaAllowsStrength && usesStrengthParam && !isSeedreamEdit) {
           if (body.input?.strength !== undefined) {
             modelInput.strength = Math.min(Math.max(body.input.strength, 0.1), 1.0);
           } else {
@@ -748,18 +744,17 @@ serve(async (req) => {
             modelInput.strength = 0.5;
             console.log('📊 Using default I2I strength: 0.5');
           }
-        } else if (isSeedreamEdit || !usesStrengthParam) {
+        } else if (isSeedreamEdit || !usesStrengthParam || !schemaAllowsStrength) {
           // Remove strength if model doesn't support it
           delete modelInput.strength;
-          console.log('🎯 Model does not support strength parameter (Seedream Edit or capability flag), skipped');
+          console.log('🎯 Model does not support strength parameter, skipped');
         }
       }
 
     // Apply user input overrides
     if (body.input) {
-      // Image size (skip for WAN 2.1 i2v - it uses aspect_ratio instead)
-      // Use capabilities check (already computed above)
-      if (!isWanI2V) {
+      // Image size (only for non-video models)
+      if (!isVideo) {
         if (body.input.image_size) {
           modelInput.image_size = body.input.image_size;
         } else if (body.input.width && body.input.height) {
@@ -767,18 +762,13 @@ serve(async (req) => {
         }
       }
 
-      // Steps / inference steps (only set for non-WAN i2v or if explicitly provided for WAN)
+      // Steps / inference steps (pass through if provided)
       if (body.input.num_inference_steps !== undefined) {
-        if (isWanI2V) {
-          // For WAN 2.1 i2v, only set if explicitly provided (default is 30)
-          modelInput.num_inference_steps = Math.min(Math.max(body.input.num_inference_steps, 1), 50);
-        } else {
-          modelInput.num_inference_steps = Math.min(Math.max(body.input.num_inference_steps, 1), 50);
-        }
+        modelInput.num_inference_steps = Math.min(Math.max(body.input.num_inference_steps, 1), 50);
       }
 
-      // Guidance scale (skip for WAN 2.1 i2v - it uses guide_scale instead)
-      if (!isWanI2V && body.input.guidance_scale !== undefined) {
+      // Guidance scale (pass through if provided)
+      if (body.input.guidance_scale !== undefined) {
         modelInput.guidance_scale = Math.min(Math.max(body.input.guidance_scale, 1), 20);
       }
 
@@ -792,158 +782,112 @@ serve(async (req) => {
         modelInput.seed = body.input.seed;
       }
 
-      // Video-specific params
+      // Guide scale (pass through if provided, clamp using schema if available)
+      if (body.input.guide_scale !== undefined) {
+        const gsMin = inputSchema?.guide_scale?.min ?? 1;
+        const gsMax = inputSchema?.guide_scale?.max ?? 20;
+        modelInput.guide_scale = Math.min(Math.max(body.input.guide_scale, gsMin), gsMax);
+      }
+
+      // Video-specific params (generic, table-driven)
       if (isVideo) {
-        // Use isWanI2V already computed from capabilities above (no duplicate check)
-        if (isWanI2V) {
-          // WAN 2.1 i2v uses specific parameter names
-          // Map duration to num_frames and frames_per_second
-          if (body.metadata?.duration) {
-            const targetDuration = body.metadata.duration;
-            // Default: 81 frames at 16 fps = 5 seconds
-            // Calculate optimal num_frames and fps to match target duration
-            const defaultFps = 16;
-            const defaultNumFrames = 81;
-            const calculatedNumFrames = Math.round(targetDuration * defaultFps);
-            // Clamp to valid range: 81-100
-            const numFrames = Math.max(81, Math.min(100, calculatedNumFrames));
-            modelInput.num_frames = numFrames;
-            modelInput.frames_per_second = defaultFps;
-            console.log(`🎬 WAN I2V: Mapped duration ${targetDuration}s to num_frames=${numFrames}, fps=${defaultFps}`);
-          } else {
-            // Use defaults from input_defaults
-            modelInput.num_frames = modelInput.num_frames || 81;
-            modelInput.frames_per_second = modelInput.frames_per_second || 16;
+        // Duration to num_frames conversion using model's own frame_rate
+        const frameRate = modelInput.frame_rate || modelInput.frames_per_second || 16;
+        
+        if (body.metadata?.duration) {
+          const targetDuration = body.metadata.duration;
+          let numFrames = Math.round(targetDuration * frameRate);
+          
+          // Clamp using input_schema if available
+          if (inputSchema?.num_frames) {
+            const minFrames = inputSchema.num_frames.min || 1;
+            const maxFrames = inputSchema.num_frames.max || 999;
+            numFrames = Math.max(minFrames, Math.min(maxFrames, numFrames));
           }
           
-          // Map quality to resolution
-          if (body.quality === 'fast') {
-            modelInput.resolution = '480p';
-          } else if (body.quality === 'high') {
-            modelInput.resolution = '720p';
-          } else if (body.input?.resolution) {
-            modelInput.resolution = body.input.resolution;
-          } else {
-            modelInput.resolution = modelInput.resolution || '720p';
-          }
+          modelInput.num_frames = numFrames;
+          console.log(`🎬 Video: duration ${targetDuration}s × ${frameRate}fps = ${numFrames} frames`);
+        }
+
+        // User overrides for video params (pass through directly)
+        if (body.input.resolution) modelInput.resolution = body.input.resolution;
+        if (body.input.aspect_ratio) modelInput.aspect_ratio = body.input.aspect_ratio;
+        if (body.input.num_frames !== undefined) modelInput.num_frames = body.input.num_frames;
+        if (body.input.frame_rate !== undefined) modelInput.frame_rate = body.input.frame_rate;
+        if (body.input.fps !== undefined) modelInput.fps = body.input.fps;
+
+        // Quality-based resolution override
+        if (body.quality === 'fast' && !body.input?.resolution) {
+          modelInput.resolution = '480p';
+        } else if (body.quality === 'high' && !body.input?.resolution) {
+          modelInput.resolution = modelInput.resolution || '720p';
+        }
+
+        // Aspect ratio from metadata
+        if (body.metadata?.aspectRatio) {
+          modelInput.aspect_ratio = body.metadata.aspectRatio;
+        }
+
+        // Generic I2V reference image handling (works for any video model with image_url)
+        if (hasReferenceImage) {
+          const imageUrl = body.input?.image_url || body.input?.image || 
+                          body.metadata?.referenceImage || body.metadata?.reference_image_url || 
+                          body.metadata?.start_reference_url;
           
-          // Set aspect_ratio from metadata or input
-          if (body.metadata?.aspectRatio) {
-            modelInput.aspect_ratio = body.metadata.aspectRatio === 'auto' ? 'auto' : body.metadata.aspectRatio;
-          } else if (body.input?.aspect_ratio) {
-            modelInput.aspect_ratio = body.input.aspect_ratio;
-          }
-          
-          // Guide scale (motion intensity can map to this)
-          // WAN 2.1 i2v guide_scale range is 1-10 (not 1-20)
-          if (body.input?.guide_scale !== undefined) {
-            // Clamp to valid range 1-10
-            modelInput.guide_scale = Math.min(Math.max(body.input.guide_scale, 1), 10);
-          } else if (body.metadata?.motion_intensity !== undefined) {
-            // Map motion intensity to guide_scale (0-1 -> 1-10, default 5)
-            const motionIntensity = body.metadata.motion_intensity;
-            const guideScale = 1 + (motionIntensity * 9); // Map 0-1 to 1-10
-            modelInput.guide_scale = Math.min(Math.max(Math.round(guideScale * 10) / 10, 1), 10); // Round to 1 decimal and clamp
-          } else {
-            // Use default from input_defaults or fallback to 5
-            modelInput.guide_scale = Math.min(Math.max(modelInput.guide_scale || 5, 1), 10);
-          }
-          
-          // WAN 2.1 i2v uses image_url (not image) for reference - REQUIRED
-          let wanImageUrl: string | undefined;
-          if (body.input?.image) {
-            wanImageUrl = body.input.image;
-            delete modelInput.image; // Remove 'image' if it exists
-          } else if (body.input?.image_url) {
-            wanImageUrl = body.input.image_url;
-          } else if (body.metadata?.reference_image_url || body.metadata?.start_reference_url) {
-            wanImageUrl = body.metadata.reference_image_url || body.metadata.start_reference_url;
-          }
-          
-          // CRITICAL: WAN 2.1 i2v REQUIRES image_url - validate before proceeding
-          if (!wanImageUrl || (typeof wanImageUrl === 'string' && wanImageUrl.trim() === '')) {
-            console.error('❌ WAN 2.1 i2v requires image_url but it is missing!');
-            return new Response(
-              JSON.stringify({ 
-                error: 'Reference image required for WAN 2.1 i2v',
-                details: 'WAN 2.1 i2v is an image-to-video model and requires a reference image. Please provide image_url in input or reference_image_url/start_reference_url in metadata.'
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
-          }
-          
-          // Sign URL if it's a Supabase storage path
-          let finalWanImageUrl = wanImageUrl;
-          if (typeof wanImageUrl === 'string' && !wanImageUrl.startsWith('http') && !wanImageUrl.startsWith('data:')) {
-            const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
-            const parts = wanImageUrl.split('/');
-            let bucket = '';
-            let path = '';
-            if (knownBuckets.includes(parts[0])) {
-              bucket = parts[0];
-              path = parts.slice(1).join('/');
-            } else {
-              bucket = 'user-library';
-              path = wanImageUrl;
+          if (imageUrl && typeof imageUrl === 'string' && imageUrl.trim() !== '') {
+            let finalImageUrl = imageUrl;
+            
+            // Sign URL if it's a Supabase storage path
+            if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
+              const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+              const parts = imageUrl.split('/');
+              let bucket = '';
+              let path = '';
+              if (knownBuckets.includes(parts[0])) {
+                bucket = parts[0];
+                path = parts.slice(1).join('/');
+              } else {
+                bucket = 'user-library';
+                path = imageUrl;
+              }
+              const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+              if (!signError && signed?.signedUrl) {
+                finalImageUrl = signed.signedUrl;
+                console.log(`🔏 Signed video reference image URL for bucket "${bucket}"`);
+              }
             }
-            const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-            if (!signError && signed?.signedUrl) {
-              finalWanImageUrl = signed.signedUrl;
-              console.log(`🔏 Signed WAN i2v image URL for bucket "${bucket}"`);
+            
+            // Validate URL format
+            if (finalImageUrl.startsWith('http://') || finalImageUrl.startsWith('https://') || finalImageUrl.startsWith('data:')) {
+              modelInput.image_url = finalImageUrl;
+              delete modelInput.image; // Normalize to image_url
+              console.log(`✅ Video I2V: Set image_url: ${finalImageUrl.substring(0, 60)}...`);
             } else {
-              console.warn(`⚠️ Failed to sign WAN i2v image URL for bucket "${bucket}":`, signError);
+              console.warn(`⚠️ Invalid video reference image URL format, skipping`);
             }
-          }
-          
-          // Validate final image URL format
-          if (!finalWanImageUrl || (!finalWanImageUrl.startsWith('http://') && !finalWanImageUrl.startsWith('https://') && !finalWanImageUrl.startsWith('data:'))) {
-            console.error('❌ Invalid WAN i2v image URL format:', finalWanImageUrl?.substring(0, 100));
-            return new Response(
-              JSON.stringify({ 
-                error: 'Invalid reference image URL for WAN 2.1 i2v',
-                details: 'Image URL must be a valid HTTP/HTTPS URL or data URI'
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-            );
-          }
-          
-          modelInput.image_url = finalWanImageUrl;
-          console.log(`✅ WAN I2V: Set image_url: ${finalWanImageUrl.substring(0, 60)}...`);
-          
-          // CRITICAL: Remove invalid parameters that WAN 2.1 i2v doesn't accept
-          // These parameters are set in general processing but WAN 2.1 i2v doesn't use them
-          if (modelInput.strength !== undefined) {
-            delete modelInput.strength;
-            console.log('🗑️ WAN I2V: Removed invalid parameter: strength');
-          }
-          if (modelInput.image_size !== undefined) {
-            delete modelInput.image_size;
-            console.log('🗑️ WAN I2V: Removed invalid parameter: image_size (uses aspect_ratio instead)');
-          }
-          if (modelInput.guidance_scale !== undefined) {
-            delete modelInput.guidance_scale;
-            console.log('🗑️ WAN I2V: Removed invalid parameter: guidance_scale (uses guide_scale instead)');
-          }
-          // num_inference_steps is valid but only set if explicitly provided (default is 30)
-          if (modelInput.num_inference_steps === undefined && apiModel.input_defaults?.num_inference_steps) {
-            // Keep default from input_defaults
-          } else if (modelInput.num_inference_steps !== undefined && !body.input?.num_inference_steps) {
-            // Only keep if explicitly set in input, otherwise remove to use API default
-            delete modelInput.num_inference_steps;
-            console.log('🗑️ WAN I2V: Removed num_inference_steps to use API default (30)');
-          }
-        } else {
-          // Other video models (non-WAN i2v)
-          if (body.input.num_frames !== undefined) {
-            modelInput.num_frames = body.input.num_frames;
-          }
-          if (body.input.resolution) {
-            modelInput.resolution = body.input.resolution;
-          }
-          if (body.input.fps !== undefined) {
-            modelInput.fps = body.input.fps;
           }
         }
+      }
+    }
+
+    // ─── Table-driven parameter cleanup (input_schema allow-list) ───
+    // If input_schema exists, remove any modelInput keys not in the schema
+    // This automatically strips params that don't belong to this model
+    const schemaKeys = Object.keys(inputSchema);
+    if (schemaKeys.length > 0) {
+      // Always-allowed keys (not in schema but always valid)
+      const alwaysAllowed = new Set(['prompt', 'enable_safety_checker', 'image_url', 'image_urls']);
+      const removedParams: string[] = [];
+      
+      for (const key of Object.keys(modelInput)) {
+        if (!inputSchema[key] && !alwaysAllowed.has(key)) {
+          removedParams.push(key);
+          delete modelInput[key];
+        }
+      }
+      
+      if (removedParams.length > 0) {
+        console.log(`🧹 Schema cleanup: removed params not in input_schema: ${removedParams.join(', ')}`);
       }
     }
 
@@ -1065,52 +1009,16 @@ serve(async (req) => {
       }
     });
 
-    // FINAL VALIDATION: WAN 2.1 i2v parameter validation
-    // Use already computed isWanI2V from capabilities (no need to recompute)
-    const finalIsWanI2V = isWanI2V;
-    if (isVideo && finalIsWanI2V) {
-      // Validate required image_url
-      if (!modelInput.image_url) {
-        console.error('❌ FINAL VALIDATION: WAN 2.1 i2v requires image_url but it is missing!');
-        return new Response(
-          JSON.stringify({ 
-            error: 'Reference image required for WAN 2.1 i2v',
-            details: 'WAN 2.1 i2v is an image-to-video model and requires a reference image. Please provide image_url in input or reference_image_url/start_reference_url in metadata.'
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
-      }
-      
-      // Validate and clamp guide_scale to 1-10 range
-      if (modelInput.guide_scale !== undefined) {
-        const originalGuideScale = modelInput.guide_scale;
-        modelInput.guide_scale = Math.min(Math.max(modelInput.guide_scale, 1), 10);
-        if (originalGuideScale !== modelInput.guide_scale) {
-          console.warn(`⚠️ FINAL VALIDATION: guide_scale clamped from ${originalGuideScale} to ${modelInput.guide_scale} (valid range: 1-10)`);
-        }
-      }
-      
-      // Final check for invalid parameters (should already be removed, but double-check)
-      const invalidParams: string[] = [];
-      if (modelInput.strength !== undefined) invalidParams.push('strength');
-      if (modelInput.image_size !== undefined) invalidParams.push('image_size');
-      if (modelInput.guidance_scale !== undefined) invalidParams.push('guidance_scale');
-      
-      if (invalidParams.length > 0) {
-        console.warn(`⚠️ FINAL VALIDATION: Invalid parameters detected for WAN 2.1 i2v: ${invalidParams.join(', ')}. Removing...`);
-        invalidParams.forEach(param => delete modelInput[param]);
-      }
-    }
-    
+    // Final log before sending to fal.ai
     console.log('🔧 fal.ai input configuration (FINAL):', {
       model_key: modelKey,
       is_overridden: isModelOverridden,
-      requires_image_urls_array: !isVideo ? requiresImageUrlsArray : false, // Only relevant for non-video
-      is_wan_i2v: finalIsWanI2V,
+      requires_image_urls_array: !isVideo ? requiresImageUrlsArray : false,
+      is_video: isVideo,
       has_reference_image: hasReferenceImage,
-      // Mask sensitive URLs in logs
+      param_count: Object.keys(modelInput).length,
+      params: Object.keys(modelInput).join(', '),
       image_url: modelInput.image_url ? `${modelInput.image_url.substring(0, 60)}...` : (modelInput.image_urls ? 'present (array)' : 'missing'),
-      image_urls: modelInput.image_urls ? `[${modelInput.image_urls.length} URL(s)]` : 'missing',
       prompt_preview: modelInput.prompt ? `${modelInput.prompt.substring(0, 100)}...` : 'missing'
     });
 

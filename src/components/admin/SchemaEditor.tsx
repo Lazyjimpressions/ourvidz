@@ -595,8 +595,13 @@ function parseLlmsTxt(markdown: string): { schema: InputSchema; defaults: Record
         defaultValue = parseFloat(rawDefault);
       } else if (param.type === 'boolean') {
         defaultValue = rawDefault === 'true';
-      } else if (rawDefault === '[]') {
-        defaultValue = '[]';
+      } else if (rawDefault.startsWith('[') || rawDefault.startsWith('{')) {
+        // Parse JSON arrays/objects (e.g. "[]" -> [], "{}" -> {})
+        try {
+          defaultValue = JSON.parse(rawDefault);
+        } catch {
+          defaultValue = rawDefault;
+        }
       } else {
         // Strip surrounding quotes if present
         defaultValue = rawDefault.replace(/^"|"$/g, '');
