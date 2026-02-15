@@ -138,6 +138,9 @@ export function SchemaEditor({ schema, inputDefaults, onInputDefaultsChange, onS
       <div className="flex items-center justify-between">
         <Label className="text-[10px] text-muted-foreground">Input Parameters</Label>
         <div className="flex gap-1">
+          <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => setShowPasteSchema(true)}>
+            <Clipboard className="h-3 w-3 mr-1" /> Paste Schema
+          </Button>
           <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5" onClick={() => setShowAddParam(true)}>
             <Plus className="h-3 w-3 mr-1" /> Add Param
           </Button>
@@ -178,6 +181,24 @@ export function SchemaEditor({ schema, inputDefaults, onInputDefaultsChange, onS
             setShowAddParam(false);
           }}
           onCancel={() => setShowAddParam(false)}
+        />
+      )}
+
+      {showPasteSchema && (
+        <PasteSchemaDialog
+          onApply={(s, defaults) => {
+            onSchemaChange(s);
+            if (Object.keys(defaults).length > 0) {
+              onInputDefaultsChange({ ...inputDefaults, ...defaults });
+            }
+            const newActive: Record<string, boolean> = {};
+            for (const [key, def] of Object.entries(s)) {
+              if (!def.hidden) newActive[key] = def.default !== undefined && def.default !== null;
+            }
+            setActiveParams(prev => ({ ...prev, ...newActive }));
+            setShowPasteSchema(false);
+          }}
+          onCancel={() => setShowPasteSchema(false)}
         />
       )}
     </div>
