@@ -86,7 +86,19 @@ export function SchemaEditor({ schema, inputDefaults, onInputDefaultsChange, onS
         />
         {showPasteSchema && (
           <PasteSchemaDialog
-            onApply={(s) => { onSchemaChange(s); setShowPasteSchema(false); }}
+            onApply={(s, defaults) => {
+              onSchemaChange(s);
+              if (Object.keys(defaults).length > 0) {
+                onInputDefaultsChange({ ...inputDefaults, ...defaults });
+              }
+              // Auto-activate params with defaults
+              const newActive: Record<string, boolean> = {};
+              for (const [key, def] of Object.entries(s)) {
+                if (!def.hidden) newActive[key] = def.default !== undefined && def.default !== null;
+              }
+              setActiveParams(prev => ({ ...prev, ...newActive }));
+              setShowPasteSchema(false);
+            }}
             onCancel={() => setShowPasteSchema(false)}
           />
         )}
@@ -359,7 +371,14 @@ function ParamControl({ schema, value, active, onChange }: {
       return <span className="text-[10px] text-muted-foreground">Complex object</span>;
 
     default:
-      return <span className="text-[10px] text-muted-foreground">Unsupported type: {schema.type}</span>;
+      return (
+        <Input
+          className="h-5 text-[10px]"
+          value={value ?? ''}
+          placeholder={schema.default?.toString() || 'API default'}
+          onChange={(e) => onChange(e.target.value || null)}
+        />
+      );
   }
 }
 
@@ -461,7 +480,7 @@ function AddParamDialog({ onAdd, onCancel }: {
 /* ─── Paste Schema Dialog ─── */
 
 function PasteSchemaDialog({ onApply, onCancel }: {
-  onApply: (schema: InputSchema) => void;
+  onApply: (schema: InputSchema, defaults: Record<string, any>) => void;
   onCancel: () => void;
 }) {
   const [text, setText] = useState('');
@@ -469,18 +488,38 @@ function PasteSchemaDialog({ onApply, onCancel }: {
   const handleApply = () => {
     try {
       const parsed = JSON.parse(text);
-      // Accept either { input_schema: {...} } or direct schema object
-      const schema = parsed.input_schema || parsed;
-      onApply(schema as InputSchema);
-    } catch {
-      // Try to auto-map from fal.ai format
-      try {
-        const parsed = JSON.parse(text);
-        const mapped = mapFalSchema(parsed);
-        onApply(mapped);
-      } catch {
-        // Invalid JSON
+      const raw = parsed.input_schema || parsed;
+
+      // Detect fal.ai / OpenAPI format: has "properties" key or nested objects with "type"
+      const isFalFormat = raw.properties ||
+        Object.values(raw).some((v: any) => v && typeof v === 'object' && ('type' in v || 'title' in v || 'allOf' in v || 'anyOf' in v));
+
+      // Detect our internal format: values already have our known types
+      const isInternalFormat = !raw.properties &&
+        Object.values(raw).every((v: any) => v && typeof v === 'object' && 
+          ['string', 'integer', 'float', 'boolean', 'enum', 'object'].includes(v.type));
+
+      let schema: InputSchema;
+      if (isInternalFormat) {
+        schema = raw as InputSchema;
+      } else if (isFalFormat) {
+        schema = mapFalSchema(raw);
+      } else {
+        schema = mapFalSchema(raw); // fallback: try mapping anyway
       }
+
+      // Extract defaults from schema and auto-activate params that have defaults
+      const defaults: Record<string, any> = {};
+      for (const [key, def] of Object.entries(schema)) {
+        if (def.default !== undefined && def.default !== null) {
+          defaults[key] = def.default;
+          def.active = true;
+        }
+      }
+
+      onApply(schema, defaults);
+    } catch {
+      // Invalid JSON
     }
   };
 
@@ -503,31 +542,72 @@ function PasteSchemaDialog({ onApply, onCancel }: {
 
 /* ─── fal.ai Schema Mapper ─── */
 
+function extractEnumFromComposite(def: any): string[] | null {
+  const candidates = def.allOf || def.anyOf || def.oneOf || [];
+  for (const item of candidates) {
+    if (item.enum) return item.enum;
+    if (item.type === 'string' && item.enum) return item.enum;
+  }
+  return null;
+}
+
+function mapFalProperty(def: any): ParamSchema {
+  const param: ParamSchema = { type: 'string' };
+
+  // Handle allOf/anyOf/oneOf with enums
+  const compositeEnum = extractEnumFromComposite(def);
+  if (compositeEnum) {
+    param.type = 'enum';
+    param.options = compositeEnum.map(String);
+  } else if (def.type === 'integer') {
+    param.type = 'integer';
+  } else if (def.type === 'number') {
+    param.type = 'float';
+  } else if (def.type === 'boolean') {
+    param.type = 'boolean';
+  } else if (def.type === 'string' && def.enum) {
+    param.type = 'enum';
+    param.options = def.enum;
+  } else if (def.type === 'string') {
+    param.type = 'string';
+  } else if (def.type === 'array') {
+    param.type = 'string';
+    param.description = (def.description || '') + ' (comma-separated list)';
+  } else if (def.type === 'object' && def.properties) {
+    param.type = 'object';
+    param.properties = {};
+    for (const [subKey, subDef] of Object.entries(def.properties) as [string, any][]) {
+      param.properties[subKey] = mapFalProperty(subDef);
+    }
+  } else if (def.enum) {
+    // No type but has enum
+    param.type = 'enum';
+    param.options = def.enum.map(String);
+  }
+
+  // Range constraints
+  if (def.minimum !== undefined) param.min = def.minimum;
+  if (def.maximum !== undefined) param.max = def.maximum;
+  if (def.exclusiveMinimum !== undefined) param.min = def.exclusiveMinimum + (param.type === 'integer' ? 1 : 0.01);
+  if (def.exclusiveMaximum !== undefined) param.max = def.exclusiveMaximum - (param.type === 'integer' ? 1 : 0.01);
+
+  // Metadata
+  if (def.default !== undefined) param.default = def.default;
+  if (def.description) param.description = def.description.slice(0, 200);
+  if (def.title) param.label = def.title;
+
+  return param;
+}
+
 function mapFalSchema(falSchema: any): InputSchema {
   const result: InputSchema = {};
   const props = falSchema.properties || falSchema;
 
   for (const [key, def] of Object.entries(props) as [string, any][]) {
-    const param: ParamSchema = { type: 'string' };
-
-    if (def.type === 'integer' || def.type === 'number') {
-      param.type = def.type === 'number' ? 'float' : 'integer';
-      if (def.minimum !== undefined) param.min = def.minimum;
-      if (def.maximum !== undefined) param.max = def.maximum;
-    } else if (def.type === 'boolean') {
-      param.type = 'boolean';
-    } else if (def.type === 'string' && def.enum) {
-      param.type = 'enum';
-      param.options = def.enum;
-    } else if (def.type === 'object') {
-      param.type = 'object';
-    }
-
-    if (def.default !== undefined) param.default = def.default;
-    if (def.description) param.description = def.description;
-    if (def.title) param.label = def.title;
-
-    result[key] = param;
+    if (!def || typeof def !== 'object') continue;
+    // Skip $ref-only entries
+    if (def.$ref && !def.type && !def.allOf && !def.anyOf) continue;
+    result[key] = mapFalProperty(def);
   }
 
   return result;
