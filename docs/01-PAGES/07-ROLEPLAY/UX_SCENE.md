@@ -274,18 +274,38 @@ Bottom sheet for configuring scene template before starting chat. This is where 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| Primary Character | Select | Yes | Character from user's library or public |
-| Your Role | Text | No | User's role in the scene |
+| AI Companion (Primary Character) | Select | Yes | Character from user's library or public |
+| Your Profile | Select | Yes | User persona (name, pronouns, context for dialogue). **Always required**—roleplay is two-way. |
+| Your Role | Text | No | User's role in the scene (optional text) |
+| Options (collapsible) | Block | No | Image model, Chat model, Scene style, Image gen mode (Auto/Manual). Same as Dashboard Settings; settable before Start. |
 
-### Start Flow
+**Validation:** Start is disabled until both **AI Companion** and **Your Profile** are set. Scene style only controls whether the user appears in the generated image; the user profile is always used for dialogue and context.
+
+### Scene style meanings
+
+| Style | Who appears in image | Notes |
+|-------|----------------------|--------|
+| **character_only** | Only the AI character | User profile used for dialogue; user's image is not in frame. |
+| **pov** | Scene from user's perspective | Camera/view is the user's; the system draws the **character** as seen by the user (first-person). User profile for dialogue; user's image not in frame. |
+| **both_characters** | Both user and AI character | User reference image required. |
+
+### Launch flow (full)
+
+1. User opens `/roleplay` (Dashboard).
+2. Optionally: open **Dashboard Settings** to set image model, chat model, content filter, memory tier, scene style, image generation mode (these persist in localStorage).
+3. User taps a **scene card** in the gallery → `SceneSetupSheet` opens with that scene.
+4. User sets **AI Companion**, **Your Profile**, and optionally **Your Role**; optionally expands **Options** to set image model, chat model, scene style, and image gen mode for this session.
+5. User taps **Start Roleplay**.
+6. Navigate to `/roleplay/chat/:characterId?scene=:sceneId` with state: sceneConfig, userCharacterId, sceneStyle, selectedImageModel, selectedChatModel, imageGenerationMode, etc. Chat uses these for the session when present; otherwise falls back to localStorage/Dashboard Settings.
+7. First scene in chat: when starting from a template, the **first scene image** uses **I2I from the template's preview image** (when present), not T2I. Later scenes use Scene Narrative / Scene Iteration prompts.
+
+### Start Flow (concise)
 
 1. User taps scene card in gallery
 2. `SceneSetupSheet` opens with scene details
-3. User selects character(s)
-4. Optionally defines their role
-5. Taps "Start Roleplay"
-6. Navigate to `/roleplay/chat/:characterId?scene=:sceneId`
-7. Scene prompt and starters passed to chat context
+3. User selects AI Companion and Your Profile (required); optionally Your Role and Options (models, scene style, image mode)
+4. Taps "Start Roleplay"
+5. Navigate to chat with scene context and optional pre-launch options in state
 
 ---
 
@@ -303,16 +323,15 @@ Bottom sheet for configuring scene template before starting chat. This is where 
 ### Use Scene Template
 1. User taps scene card in Scene Gallery
 2. `SceneSetupSheet` opens with scene details
-3. User selects character(s) from dropdown
-4. Optionally sets their role
-5. Click "Start Roleplay"
-6. `scenes.usage_count` incremented
-7. Navigate to `/roleplay/chat/:characterId?scene=:sceneId`
-8. Scene context (prompt, starters) passed to chat
+3. User selects AI Companion and Your Profile (required), optionally Your Role and Options (image/chat model, scene style, image mode)
+4. Click "Start Roleplay"
+5. `scenes.usage_count` incremented
+6. Navigate to `/roleplay/chat/:characterId?scene=:sceneId` with state (sceneConfig, userCharacterId, sceneStyle, selectedImageModel, selectedChatModel, imageGenerationMode, etc.)
+7. Scene context (prompt, starters) and pre-launch options passed to chat; first scene image uses I2I from template preview when present
 
 ### Scene in Conversation
-1. Scene template context passed to `roleplay-chat` edge function
-2. Scene prompt used for image generation
+1. Scene template context (e.g. `scene_prompt` as `scene_context`) passed to `roleplay-chat` edge function. For scene **templates** (from `scenes` table), only `scene_context` (template's `scene_prompt`) is used—there is no `scene_system_prompt` on templates.
+2. **First scene** when starting from a template: uses **I2I from the template's preview image** when present; otherwise T2I. Later scenes use Scene Narrative / Scene Iteration prompts.
 3. Conversation starters offered as suggestions
 4. Generated images stored in `character_scenes` table (artifacts)
 

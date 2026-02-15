@@ -193,6 +193,8 @@ Full-screen chat interface for roleplay conversations with AI characters. Suppor
 | User Character | `roleplay-settings.userCharacterId` | Profile default |
 | Consistency | `roleplay-settings.consistencySettings` | Hybrid method |
 
+**Where settings come from:** When the user starts from **SceneSetupSheet** (tap scene card → Start Roleplay), the chat page receives `location.state` with `selectedImageModel`, `selectedChatModel`, `sceneStyle`, `imageGenerationMode`, etc. Those values take priority for that session. Otherwise the chat uses Dashboard Settings (localStorage). Recommend setting model and image options in Dashboard Settings or in the Sheet's Options block before starting a scene.
+
 ---
 
 ## Loading States
@@ -245,8 +247,8 @@ When enabled, maintains visual consistency across scenes using the `useSceneCont
 
 ### I2I Iteration Flow
 
-1. **First scene**: T2I (text-to-image) using character `reference_image_url`
-2. **Subsequent scenes**: I2I (image-to-image) using previous scene as reference
+1. **First scene when starting from a scene template**: Uses **I2I from the template's preview image** when the template has `preview_image_url`; otherwise T2I from character reference.
+2. **First scene (no template)** or **subsequent scenes**: T2I from character reference, or I2I using previous scene as reference
 3. **Reference tracking**: `useSceneContinuity` hook with localStorage + DB + realtime updates
 4. **Strength control**: Configurable 0.2-0.8 range (default: 0.45)
 5. **Cleanup**: Max 25 conversation histories stored before automatic cleanup
@@ -275,13 +277,13 @@ const {
 
 ### Multi-Reference Scene Generation
 
-For `both_characters` scene style, combines multiple reference images:
+Scene style controls who appears in the generated image and perspective:
 
 | Style | References | Description |
 |-------|------------|-------------|
-| `character_only` | 2 | Previous scene + AI character reference |
-| `pov` | 2 | Previous scene + AI character (first-person view) |
-| `both_characters` | 3 | Previous scene + AI character + User character |
+| `character_only` | 2 | Previous scene + AI character reference; only AI character in image. |
+| `pov` | 2 | Previous scene + AI character; scene drawn from **user's perspective** (first-person view—character as seen by user). |
+| `both_characters` | 3 | Previous scene + AI character + User character; both in image. |
 
 **Requirements for `both_characters`:**
 - AI character must have `reference_image_url`

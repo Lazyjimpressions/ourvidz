@@ -176,6 +176,35 @@ ORDER BY ap.name, am.display_name;
 - **Replicate Models**: Templates matched by model key or model family (e.g., `replicate-sdxl`)
 - **Local Models**: Templates matched by model family (e.g., `qwen`, `sdxl`, `wan`)
 
+## Scene Prompt Source and Conventions (Roleplay)
+
+Scene image prompts in roleplay come from different sources depending on when the scene is generated.
+
+### First scene from a template
+
+When the user starts a roleplay from a **scene template** (Dashboard → scene card → SceneSetupSheet → Start Roleplay):
+
+- **Text source:** The template’s `scene_prompt` from the `scenes` table is sent as `scene_context` to the edge function. For template-based flow, **only `scene_context` (the template’s `scene_prompt`) is used**; the `scenes` table has no `system_prompt` column, so do not rely on `scene_system_prompt` for templates.
+- **First image:** The first scene image uses **I2I from the template’s preview image** when `scenes.preview_image_url` is present; otherwise T2I. No `prompt_templates` row is used for that first-scene text.
+
+### Later scenes (no template or subsequent turns)
+
+For narrative and iteration after the first scene:
+
+- **Scene narrative / iteration** is generated via OpenRouter using rows in `prompt_templates` selected by **template_name**:
+  - `"Scene Narrative - NSFW"` / `"Scene Narrative - SFW"`
+  - `"Scene Iteration - NSFW"` / `"Scene Iteration - SFW"`
+- Seedream-specific iteration templates (e.g. `"Scene Iteration - Seedream v4.5 Edit (NSFW)"`) may use `target_model` for lookup when the image model is Seedream.
+- These templates define instructions (e.g. third-person, no dialogue, visual focus, length). Keep `use_case` and `template_name` conventions consistent when adding new scene-generation templates.
+
+### POV (point of view) in image prompts
+
+When scene style is **pov** (user’s perspective):
+
+- The **scene is drawn from the user’s perspective** (camera/view).
+- The system renders the **AI character** as seen by the user (first-person view).
+- The user’s own image is not in the frame; the user profile is still used for dialogue and context. Document this in any prompt instructions that reference POV so image prompts explicitly request “from user’s perspective” or “first-person view of character.”
+
 ## Technical Implementation
 
 ### Enhanced Logging System

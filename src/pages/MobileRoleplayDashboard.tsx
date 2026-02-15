@@ -156,15 +156,18 @@ const MobileRoleplayDashboard = () => {
     const cacheKey = `conversation_${config.primaryCharacterId}_scene_${config.scene.id}`;
     localStorage.removeItem(cacheKey);
 
-    // Navigate with sceneId and fresh flag in URL
+    // Navigate with sceneId and fresh flag in URL; pass pre-launch options so chat uses them for this session
     navigate(`/roleplay/chat/${config.primaryCharacterId}?scene=${config.scene.id}&fresh=true`, {
       state: {
         sceneConfig: config,
         userCharacterId: config.userCharacterId,
-        sceneStyle: sceneStyle,  // Pass sceneStyle to chat page
+        sceneStyle: sceneStyle,
+        selectedImageModel: selectedImageModel || undefined,
+        selectedChatModel: selectedChatModel || undefined,
+        imageGenerationMode: imageGenerationMode,
         secondaryCharacterId: config.secondaryCharacterId,
         userRole: config.userRole,
-        forceNewConversation: true,  // Explicit flag for chat component
+        forceNewConversation: true,
         scenarioPayload: {
           sceneId: config.scene.id,
           sceneName: config.scene.name,
@@ -196,7 +199,7 @@ const MobileRoleplayDashboard = () => {
         } as ScenarioSessionPayload
       }
     });
-  }, [navigate, incrementSceneUsage]);
+  }, [navigate, incrementSceneUsage, sceneStyle, selectedImageModel, selectedChatModel, imageGenerationMode]);
 
   // Subscribe to character image updates
   useCharacterImageUpdates();
@@ -1003,6 +1006,14 @@ const MobileRoleplayDashboard = () => {
             // Scene will be cleared by useEffect after animation completes
           }}
           onStart={handleSceneStart}
+          selectedImageModel={selectedImageModel}
+          onImageModelChange={setSelectedImageModel}
+          selectedChatModel={selectedChatModel}
+          onChatModelChange={setSelectedChatModel}
+          sceneStyle={sceneStyle}
+          onSceneStyleChange={setSceneStyle}
+          imageGenerationMode={imageGenerationMode}
+          onImageGenerationModeChange={setImageGenerationMode}
         />
 
         {/* Scene Creation Modal */}

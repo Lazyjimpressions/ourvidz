@@ -603,9 +603,13 @@ export interface SceneAtmosphere {
 }
 
 /**
- * Scene template for the Scene Gallery
- * Global templates that can be populated with any character(s)
- * Different from CharacterScene which is tied to a specific character
+ * Scene template for the Scene Gallery (scenes table).
+ * Global templates that can be populated with any character(s).
+ * Different from CharacterScene which is tied to a specific character.
+ *
+ * For template-based flow: only scene_prompt is used; it is sent as scene_context
+ * to the edge function. The scenes table has no system_prompt column—do not rely
+ * on scene_system_prompt for scene templates.
  */
 export interface SceneTemplate {
   id: string;

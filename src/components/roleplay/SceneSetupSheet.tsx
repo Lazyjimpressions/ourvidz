@@ -29,14 +29,27 @@ import {
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SceneTemplate, ContentRating } from '@/types/roleplay';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useImageModels } from '@/hooks/useImageModels';
+import { useRoleplayModels } from '@/hooks/useRoleplayModels';
+import { SceneTemplate, ContentRating, SceneStyle, ImageGenerationMode } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
+import { Loader2, Settings2 } from 'lucide-react';
 
 interface SceneSetupSheetProps {
   scene: SceneTemplate | null;
   isOpen: boolean;
   onClose: () => void;
   onStart: (config: SceneSetupConfig) => void;
+  /** Optional pre-launch options (compact in-sheet). When provided, user can set before Start. */
+  selectedImageModel?: string;
+  onImageModelChange?: (id: string) => void;
+  selectedChatModel?: string;
+  onChatModelChange?: (key: string) => void;
+  sceneStyle?: SceneStyle;
+  onSceneStyleChange?: (style: SceneStyle) => void;
+  imageGenerationMode?: ImageGenerationMode;
+  onImageGenerationModeChange?: (mode: ImageGenerationMode) => void;
 }
 
 export interface SceneSetupConfig {
@@ -66,11 +79,21 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
   scene,
   isOpen,
   onClose,
-  onStart
+  onStart,
+  selectedImageModel = '',
+  onImageModelChange,
+  selectedChatModel = '',
+  onChatModelChange,
+  sceneStyle = 'character_only',
+  onSceneStyleChange,
+  imageGenerationMode = 'auto',
+  onImageGenerationModeChange
 }) => {
   const { characters: publicCharacters, isLoading: isLoadingPublicCharacters } = usePublicCharacters();
-  // Get all user-created characters for AI companion selection AND user personas for profile selection
   const { characters: userCreatedCharacters, userPersonas, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
+  const { modelOptions: imageModelOptions, isLoading: imageModelsLoading, defaultModel: defaultImageModel } = useImageModels();
+  const { allModelOptions: chatModelOptions, isLoading: chatModelsLoading, defaultModel: defaultChatModel } = useRoleplayModels();
+  const hasOptions = Boolean(onImageModelChange || onChatModelChange || onSceneStyleChange || onImageGenerationModeChange);
 
   // Selection state
   const [primaryCharacterId, setPrimaryCharacterId] = useState<string | null>(null);
@@ -80,6 +103,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [showSecondCharacter, setShowSecondCharacter] = useState(false);
   const [expandedSection, setExpandedSection] = useState<'primary' | 'secondary' | null>('primary');
+  const [optionsOpen, setOptionsOpen] = useState(false);
 
   // Combine public and user-created characters for AI companion selection, removing duplicates
   const allCharacters = useMemo(() => {
@@ -404,6 +428,80 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
                 This helps set the context for the conversation
               </p>
             </div>
+
+            {/* Compact pre-launch options (function over form, single surface) */}
+            {hasOptions && (
+              <Collapsible open={optionsOpen} onOpenChange={setOptionsOpen} className="space-y-1">
+                <CollapsibleTrigger className="flex items-center gap-2 w-full py-1.5 text-left">
+                  <Settings2 className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground">Options</span>
+                  {optionsOpen ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground ml-auto" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-auto" />}
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-1">
+                    {onImageModelChange && (
+                      <div className="space-y-0.5">
+                        <Label className="text-[10px] text-muted-foreground">Image</Label>
+                        {imageModelsLoading ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Select value={selectedImageModel || defaultImageModel?.value || ''} onValueChange={onImageModelChange}>
+                            <SelectTrigger className="h-8 text-xs bg-muted/50"><SelectValue placeholder="Model" /></SelectTrigger>
+                            <SelectContent>
+                              {imageModelOptions.map((m) => (
+                                <SelectItem key={m.value} value={m.value} disabled={!m.isAvailable}>{m.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    )}
+                    {onChatModelChange && (
+                      <div className="space-y-0.5">
+                        <Label className="text-[10px] text-muted-foreground">Chat</Label>
+                        {chatModelsLoading ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Select value={selectedChatModel || defaultChatModel?.value || ''} onValueChange={onChatModelChange}>
+                            <SelectTrigger className="h-8 text-xs bg-muted/50"><SelectValue placeholder="Model" /></SelectTrigger>
+                            <SelectContent>
+                              {chatModelOptions.map((m) => (
+                                <SelectItem key={m.value} value={m.value} disabled={!m.isAvailable}><span className="truncate max-w-[120px]">{m.label}</span></SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    )}
+                    {onSceneStyleChange && (
+                      <div className="space-y-0.5">
+                        <Label className="text-[10px] text-muted-foreground">Scene style</Label>
+                        <Select value={sceneStyle} onValueChange={(v: SceneStyle) => onSceneStyleChange(v)}>
+                          <SelectTrigger className="h-8 text-xs bg-muted/50"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="character_only"><span className="text-xs">Character only</span></SelectItem>
+                            <SelectItem value="pov"><span className="text-xs">POV</span></SelectItem>
+                            <SelectItem value="both_characters"><span className="text-xs">Both</span></SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    {onImageGenerationModeChange && (
+                      <div className="space-y-0.5">
+                        <Label className="text-[10px] text-muted-foreground">Images</Label>
+                        <Select value={imageGenerationMode} onValueChange={(v: ImageGenerationMode) => onImageGenerationModeChange(v)}>
+                          <SelectTrigger className="h-8 text-xs bg-muted/50"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto"><span className="text-xs">Auto</span></SelectItem>
+                            <SelectItem value="manual"><span className="text-xs">Manual</span></SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
             {/* Scene Starters Preview */}
             {scene.scene_starters && scene.scene_starters.length > 0 && (

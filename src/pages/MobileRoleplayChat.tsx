@@ -212,8 +212,11 @@ const MobileRoleplayChat: React.FC = () => {
   useEffect(() => {
     if (!roleplayModelsLoading && !imageModelsLoading && !hasInitializedModelDefaults.current && roleplayModelOptions.length > 0 && imageModelOptions.length > 0) {
       const settings = initializeSettings();
-      setModelProvider(settings.modelProvider);
-      setSelectedImageModel(settings.selectedImageModel);
+      // Apply DB/localStorage defaults first; then override from navigation state when starting from SceneSetupSheet
+      const effectiveChatModel = selectedChatModelFromNavigation ?? settings.modelProvider;
+      const effectiveImageModel = selectedImageModelFromNavigation ?? settings.selectedImageModel;
+      setModelProvider(effectiveChatModel);
+      setSelectedImageModel(effectiveImageModel);
       setConsistencySettings(settings.consistencySettings);
 
       // ✅ FIX: Priority order for user character selection: navigationState → localStorage → profileDefault
@@ -221,11 +224,15 @@ const MobileRoleplayChat: React.FC = () => {
         userCharacterId?: string | null;
         sceneStyle?: 'character_only' | 'pov' | 'both_characters';
         imageGenerationMode?: ImageGenerationMode;
+        selectedImageModel?: string | null;
+        selectedChatModel?: string | null;
       } | null;
 
       const userCharacterIdFromNavigation = locationState?.userCharacterId;
       const sceneStyleFromNavigation = locationState?.sceneStyle;
       const imageGenerationModeFromNavigation = locationState?.imageGenerationMode;
+      const selectedImageModelFromNavigation = locationState?.selectedImageModel;
+      const selectedChatModelFromNavigation = locationState?.selectedChatModel;
       let effectiveUserCharacterId: string | null = null;
       let userCharacterSource = '';
 
@@ -259,15 +266,17 @@ const MobileRoleplayChat: React.FC = () => {
       
       hasInitializedModelDefaults.current = true;
       console.log('✅ Initialized model defaults from database:', {
-        chatModel: settings.modelProvider,
-        imageModel: settings.selectedImageModel,
+        chatModel: effectiveChatModel,
+        imageModel: effectiveImageModel,
+        chatModelSource: selectedChatModelFromNavigation != null ? 'navigation state' : 'localStorage',
+        imageModelSource: selectedImageModelFromNavigation != null ? 'navigation state' : 'localStorage',
         userCharacterId: effectiveUserCharacterId,
-        userCharacterSource,  // ✅ FIX: Log which source was used
+        userCharacterSource,
         sceneStyle: effectiveSceneStyle,
         sceneStyleSource: sceneStyleFromNavigation ? 'navigation state' : 'localStorage',
         imageGenerationMode: effectiveImageGenerationMode,
-        chatModelType: roleplayModelOptions.find(m => m.value === settings.modelProvider)?.isLocal ? 'local' : 'api',
-        imageModelType: imageModelOptions.find(m => m.value === settings.selectedImageModel)?.type || 'unknown'
+        chatModelType: roleplayModelOptions.find(m => m.value === effectiveChatModel)?.isLocal ? 'local' : 'api',
+        imageModelType: imageModelOptions.find(m => m.value === effectiveImageModel)?.type || 'unknown'
       });
     }
   }, [roleplayModelsLoading, imageModelsLoading, roleplayModelOptions, imageModelOptions, defaultCharacterId]);
@@ -1381,9 +1390,9 @@ const MobileRoleplayChat: React.FC = () => {
           content_tier: contentTier, // ✅ DYNAMIC CONTENT TIER
           scene_generation: shouldGenerateScene, // ✅ Respects imageGenerationMode
           user_id: user.id,
-          // ✅ ADD SCENE CONTEXT:
+          // For scene templates (scenes table), only scene_context (scene_prompt) is used; scenes have no system_prompt.
           scene_context: selectedScene?.scene_prompt || null,
-          scene_system_prompt: selectedScene?.scene_prompt || null,
+          scene_system_prompt: selectedScene?.system_prompt ?? null,
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           // NOTE: Template selection is handled server-side based on model_provider
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
