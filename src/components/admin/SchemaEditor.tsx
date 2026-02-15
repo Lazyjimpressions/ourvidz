@@ -501,6 +501,126 @@ function AddParamDialog({ onAdd, onCancel }: {
   );
 }
 
+/* ─── llms.txt Parser ─── */
+
+function parseLlmsTxt(markdown: string): { schema: InputSchema; defaults: Record<string, any> } {
+  const schema: InputSchema = {};
+  const defaults: Record<string, any> = {};
+
+  // Extract only the Input Schema section
+  const inputSectionMatch = markdown.match(/### Input Schema\s*\n([\s\S]*?)(?=###\s|\n## |\*\*Required Parameters Example\*\*|$)/);
+  const section = inputSectionMatch ? inputSectionMatch[1] : markdown;
+
+  // Split into parameter blocks: each starts with `- **\`param_name\`**`
+  const paramBlocks = section.split(/(?=^- \*\*`)/m).filter(b => b.startsWith('- **`'));
+
+  for (const block of paramBlocks) {
+    // Extract key name
+    const keyMatch = block.match(/^- \*\*`([^`]+)`\*\*/);
+    if (!keyMatch) continue;
+    const key = keyMatch[1];
+
+    // Extract type and required/optional from parentheses after the key
+    const headerMatch = block.match(/\*\*\s*\(([^)]+)\)/);
+    let rawType = 'string';
+    let required = false;
+    if (headerMatch) {
+      const parts = headerMatch[1];
+      // Type is the first part before comma
+      rawType = parts.split(',')[0].trim().replace(/^`|`$/g, '');
+      required = /_(required)_/.test(parts);
+    }
+
+    // Extract description: first non-empty line after the header that isn't a sub-item
+    const lines = block.split('\n').slice(1);
+    let description = '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith('- ') && !trimmed.startsWith('*')) {
+        description = trimmed;
+        break;
+      }
+    }
+
+    // Extract default value
+    const defaultMatch = block.match(/- Default:\s*`([^`]*)`/);
+    let defaultValue: any = undefined;
+
+    // Extract options (enum values)
+    const optionsMatch = block.match(/- Options:\s*(.+)/);
+    let options: string[] | undefined;
+    if (optionsMatch) {
+      options = [...optionsMatch[1].matchAll(/`"?([^"`]+)"?`/g)].map(m => m[1]);
+    }
+
+    // Extract range
+    const rangeMatch = block.match(/- Range:\s*`(\d+)`\s*to\s*`(\d+)`/);
+    let min: number | undefined;
+    let max: number | undefined;
+    if (rangeMatch) {
+      min = parseInt(rangeMatch[1]);
+      max = parseInt(rangeMatch[2]);
+    }
+
+    // Determine ParamSchema type
+    const param: ParamSchema = { type: 'string' };
+
+    if (options && options.length > 0 || rawType.endsWith('Enum')) {
+      param.type = 'enum';
+      if (options) param.options = options;
+    } else if (rawType === 'integer') {
+      param.type = 'integer';
+    } else if (rawType === 'number' || rawType === 'float') {
+      param.type = 'float';
+    } else if (rawType === 'boolean') {
+      param.type = 'boolean';
+    } else if (rawType.startsWith('list<')) {
+      param.type = 'string';
+      description = (description ? description + ' ' : '') + '(JSON array)';
+    }
+    // else: string (default)
+
+    // Apply extracted metadata
+    if (description) param.description = description.slice(0, 200);
+    if (required) param.required = true;
+    if (min !== undefined) param.min = min;
+    if (max !== undefined) param.max = max;
+
+    // Parse default value based on type
+    if (defaultMatch) {
+      const rawDefault = defaultMatch[1];
+      if (param.type === 'integer') {
+        defaultValue = parseInt(rawDefault);
+      } else if (param.type === 'float') {
+        defaultValue = parseFloat(rawDefault);
+      } else if (param.type === 'boolean') {
+        defaultValue = rawDefault === 'true';
+      } else if (rawDefault === '[]') {
+        defaultValue = '[]';
+      } else {
+        // Strip surrounding quotes if present
+        defaultValue = rawDefault.replace(/^"|"$/g, '');
+      }
+      param.default = defaultValue;
+    }
+
+    // Auto-activate all parsed params
+    param.active = true;
+
+    schema[key] = param;
+    if (defaultValue !== undefined) {
+      defaults[key] = defaultValue;
+    }
+  }
+
+  return { schema, defaults };
+}
+
+function isLlmsTxtFormat(text: string): boolean {
+  const trimmed = text.trimStart();
+  return trimmed.startsWith('#') || trimmed.includes('## Input Schema') || /^- \*\*`/m.test(trimmed);
+}
+
 /* ─── Paste Schema Dialog ─── */
 
 function PasteSchemaDialog({ onApply, onCancel }: {
@@ -510,15 +630,26 @@ function PasteSchemaDialog({ onApply, onCancel }: {
   const [text, setText] = useState('');
 
   const handleApply = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    // Detect llms.txt markdown format
+    if (isLlmsTxtFormat(trimmed)) {
+      const { schema, defaults } = parseLlmsTxt(trimmed);
+      if (Object.keys(schema).length > 0) {
+        onApply(schema, defaults);
+        return;
+      }
+      // Fall through to JSON if no params found
+    }
+
     try {
-      const parsed = JSON.parse(text);
+      const parsed = JSON.parse(trimmed);
       const raw = parsed.input_schema || parsed;
 
-      // Detect fal.ai / OpenAPI format: has "properties" key or nested objects with "type"
       const isFalFormat = raw.properties ||
         Object.values(raw).some((v: any) => v && typeof v === 'object' && ('type' in v || 'title' in v || 'allOf' in v || 'anyOf' in v));
 
-      // Detect our internal format: values already have our known types
       const isInternalFormat = !raw.properties &&
         Object.values(raw).every((v: any) => v && typeof v === 'object' && 
           ['string', 'integer', 'float', 'boolean', 'enum', 'object'].includes(v.type));
@@ -529,10 +660,9 @@ function PasteSchemaDialog({ onApply, onCancel }: {
       } else if (isFalFormat) {
         schema = mapFalSchema(raw);
       } else {
-        schema = mapFalSchema(raw); // fallback: try mapping anyway
+        schema = mapFalSchema(raw);
       }
 
-      // Extract defaults from schema and auto-activate params that have defaults
       const defaults: Record<string, any> = {};
       for (const [key, def] of Object.entries(schema)) {
         if (def.default !== undefined && def.default !== null) {
@@ -543,18 +673,18 @@ function PasteSchemaDialog({ onApply, onCancel }: {
 
       onApply(schema, defaults);
     } catch {
-      // Invalid JSON
+      // Invalid JSON and not valid llms.txt
     }
   };
 
   return (
     <div className="border rounded-md p-2 space-y-2 bg-muted/30">
-      <div className="text-[10px] font-semibold text-muted-foreground uppercase">Paste Input Schema JSON</div>
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase">Paste llms.txt or JSON Schema</div>
       <Textarea
         className="text-xs min-h-[80px] font-mono"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder='Paste input_schema JSON or fal.ai schema...'
+        placeholder='Paste llms.txt content or JSON schema...'
       />
       <div className="flex justify-end gap-1">
         <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={onCancel}>Cancel</Button>
