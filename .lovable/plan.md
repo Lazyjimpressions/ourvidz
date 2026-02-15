@@ -1,74 +1,116 @@
 
 
-# Wire Model Schema Data to Frontend UI
+# Make Edge Function Model-Agnostic (Table-Driven Video)
 
-## Confirmed Findings
+## The Problem
 
-### The real data situation
+The `fal-image/index.ts` edge function has ~200 lines of WAN-specific hardcoded logic:
 
-Two active video models exist with **different** capabilities structures:
+- Hardcoded `fps = 16`, `num_frames` clamped to 81-100
+- Hardcoded `guide_scale` range 1-10
+- Hardcoded parameter name mappings (`frames_per_second` vs `frame_rate`)
+- WAN-specific reference image handling duplicated from the generic I2I path
+- WAN-specific parameter cleanup (`delete strength`, `delete image_size`, `delete guidance_scale`)
+- Error messages that say "WAN 2.1" instead of being generic
+
+Meanwhile, line 584 already does the right thing: `...apiModel.input_defaults` spreads the table-configured defaults. The WAN block then overwrites them with hardcoded values, defeating the purpose.
+
+## The Fix
+
+Replace the entire WAN-specific video block (lines 796-946) with generic, table-driven logic.
+
+### Core Principle
+
+The payload is built in 3 steps, all table-driven:
 
 ```text
-WAN 2.1 I2V:     capabilities.video.duration_range, .fps_range, .resolutions, etc. (legacy)
-LTX Video 13B:   capabilities.input_schema.num_frames, .frame_rate, .resolution, etc. (new, from llms.txt)
+1. Start with input_defaults from the model row (already done at line 584)
+2. Apply user overrides from UI (duration, aspect ratio, resolution)
+3. Clean up invalid params using input_schema as the allow-list
 ```
 
-Both formats are valid -- they just represent different configuration approaches. The fix must support both, not replace one with the other. Future models set up via llms.txt will use `input_schema`; existing manually-configured models use the `video` sub-object.
+### File: `supabase/functions/fal-image/index.ts`
 
-### What's actually broken
+**Remove:**
+- The `isWanI2V` variable and all code branching on it (~lines 475, 498-508, 743, 760-768, 770-778, 780-783, 796-946)
+- All WAN-specific error messages, parameter name mappings, and hardcoded ranges
 
-1. **`useApiModels` doesn't fetch `capabilities` or `input_defaults`** -- the SELECT query omits them entirely. The hook returns `undefined` for both fields, so `useVideoModelSettings` casts to `any` and gets empty objects, then every setting falls back to hardcoded defaults.
+**Replace with generic video handling (inside `if (isVideo)` block):**
 
-2. **`useVideoModelSettings` only reads the legacy `video` format** -- it works for WAN 2.1 but returns all-fallbacks for LTX because there's no `capabilities.video` on that model.
+1. **Duration to num_frames conversion** (table-driven):
+   - Read `frame_rate` from `input_defaults` (30 for LTX, 16 for WAN -- already in the table)
+   - If `body.metadata?.duration` exists, calculate `num_frames = duration * frame_rate`
+   - Clamp using `input_schema.num_frames.min/max` if available
+   - No hardcoded fps or frame counts
 
-3. **The UI already consumes `videoModelSettings` correctly** -- `SimplePromptInput` and `MobileSimplePromptInput` use `videoModelSettings?.settings?.durationOptions`, `aspectRatioOptions`, `referenceMode` with proper fallbacks. Once the hook returns real data, the UI will work.
+2. **User overrides** (pass through from `body.input` or `body.metadata`):
+   - `resolution`, `aspect_ratio`, `num_frames`, `frame_rate` -- just set them if provided
+   - No parameter name remapping -- each model's `input_defaults` already uses the correct param names for its API
 
-## Changes
+3. **Reference image for I2V** (generic, not WAN-specific):
+   - If `hasReferenceImage` and `isVideo`, resolve and sign the image URL (reuse existing signing logic)
+   - Set `modelInput.image_url` (the standard param name used by both WAN and LTX)
+   - No model-specific branching needed -- both models use `image_url`
 
-### File 1: `src/hooks/useApiModels.ts`
+4. **Parameter cleanup** (table-driven allow-list):
+   - After all overrides, get the list of valid param keys from `capabilities.input_schema`
+   - If `input_schema` exists, remove any `modelInput` keys not in the schema (plus `prompt` which is always valid)
+   - This automatically removes `strength`, `image_size`, `guidance_scale`, `frames_per_second`, or any other param that doesn't belong -- without hardcoding which params to delete per model
+   - If no `input_schema` exists (legacy models), skip cleanup (pass everything through as before)
 
-Add `capabilities` and `input_defaults` to the SELECT query and the `ApiModel` interface.
+**Also remove:**
+- The `isWanI2V` guard on `image_size` override (line 762) -- the allow-list cleanup handles this
+- The `isWanI2V` guard on `guidance_scale` (line 781) -- same
+- The `isWanI2V` guard on `strength` (line 743) -- same
+- The WAN-specific reference image validation (lines 498-508, 863-908) -- replaced by generic I2V reference handling
 
-- Add to interface: `capabilities: Record<string, any>; input_defaults: Record<string, any>;`
-- Add to select string: `capabilities, input_defaults`
+**Keep unchanged:**
+- Line 584: `...apiModel.input_defaults` (the foundation of table-driven payloads)
+- Lines 587-594: Safety checker based on content mode (universal)
+- Lines 599-733: I2I image handling for image models (not video, untouched)
+- Lines 950-963: Aspect ratio to dimensions mapping for image models (not video, untouched)
 
-This is the single fix that unblocks all downstream data flow. No other query changes needed.
+### File: `src/components/admin/SchemaEditor.tsx`
 
-### File 2: `src/hooks/useVideoModelSettings.ts`
+Fix the `parseLlmsTxt` function to parse JSON defaults correctly:
+- If a default value starts with `[` or `{`, run `JSON.parse()` on it
+- This fixes `loras: "[]"` becoming `loras: []` (real array)
 
-Update the `useMemo` to read from **either** format:
+### Database Fix (manual, one-time)
 
-1. First, check for `capabilities.input_schema` (new format from llms.txt)
-2. If found, derive settings from it:
-   - `durationOptions`: Calculate from `input_schema.num_frames` (min/max) divided by `input_schema.frame_rate` (default). For LTX: 9/30=0.3s to 161/30=5.4s. Generate rounded step options: [1, 2, 3, 4, 5].
-   - `resolutionOptions`: From `input_schema.resolution.options` (e.g., ["480p", "720p"])
-   - `aspectRatioOptions`: From `input_schema.aspect_ratio.options` (e.g., ["9:16", "1:1", "16:9", "auto"])
-   - `fpsOptions`: From `input_schema.frame_rate.min/max`
-   - `referenceMode`: `'single'` if `input_schema.image_url` exists, `'none'` otherwise
-   - `guideScaleRange`: From `input_schema.guide_scale` if present, else fallback
-   - Defaults: From `input_defaults.*` directly
-3. If not found, fall back to existing `capabilities.video.*` logic (keeps WAN 2.1 working)
+Update the LTX model's `input_defaults.loras` from string `"[]"` to actual array `[]`. This can be done via the admin UI or a direct SQL update.
 
-### No other files change
+## What This Achieves
 
-- The UI components (`SimplePromptInput`, `MobileSimplePromptInput`) already consume `videoModelSettings` with `?.` and `||` fallbacks -- they'll automatically show model-specific options once the hook returns real data.
-- The edge functions already fetch full model rows from the DB with all columns -- no changes needed there.
-- The admin `SchemaEditor` already writes to `capabilities.input_schema` correctly -- confirmed by the DB query.
+- Adding a new video model requires only database configuration (model key, input_defaults, capabilities.input_schema) -- zero edge function changes
+- The allow-list cleanup means models only receive params they understand, eliminating "invalid parameter" errors
+- Reference image handling works for any video model that has `image_url` in its schema
+- Duration calculation uses each model's own `frame_rate` from the table, not a hardcoded value
+- WAN 2.1 continues working because its `input_defaults` already has the correct param names and values
 
-### Also fix: pre-existing build errors
+## Before/After Example
 
-The `MobileRoleplayChat.tsx` file has 18 TypeScript errors referencing `preview_image_url` on `CharacterScene` type. These are unrelated to this change but block the build. Fix by using the correct property name from the `character_scenes` table (likely `image_url`).
+**LTX Video 13B payload (after fix):**
+```text
+{
+  "prompt": "...",
+  "loras": [],                     -- from input_defaults (fixed to real array)
+  "frame_rate": 30,                -- from input_defaults
+  "num_frames": 81,                -- calculated: duration * frame_rate, clamped by schema
+  "resolution": "720p",            -- from input_defaults, overridable by UI
+  "aspect_ratio": "1:1",           -- from UI
+  "negative_prompt": "...",        -- from input_defaults
+  "constant_rate_factor": 35,      -- from input_defaults
+  "enable_safety_checker": false,  -- from content mode
+  "first_pass_num_inference_steps": 8,
+  "second_pass_num_inference_steps": 8,
+  "first_pass_skip_final_steps": 1,
+  "second_pass_skip_initial_steps": 5,
+  "expand_prompt": false,
+  "reverse_video": false,
+  "image_url": "https://..."      -- signed reference image
+}
+```
 
-## Design Validation
+No `frames_per_second`, no `guide_scale`, no `num_inference_steps` -- those aren't in LTX's schema so they get cleaned up automatically.
 
-**Q: Is the approach table-driven?**
-Yes. Both duration options, aspect ratios, resolutions, and reference mode are derived entirely from what's stored in the `api_models.capabilities` column. Nothing is hardcoded per model -- the hook reads whatever the table contains.
-
-**Q: Does it work for non-fal providers?**
-Yes. Any provider's model can use either format:
-- Manually configure `capabilities.video` with duration/fps/resolution ranges
-- Or paste llms.txt to populate `capabilities.input_schema`
-- The hook checks both, preferring `input_schema` if present
-
-**Q: What about user-facing controls like video length?**
-The duration dropdown in the UI is already wired to `videoModelSettings.settings.durationOptions`. Once the hook calculates these from the model's `num_frames` range and `frame_rate`, the user sees only the durations that model supports. For LTX at 30fps: [1s, 2s, 3s, 4s, 5s]. For WAN at 16fps: [3s, 5s, 8s, 10s, ...20s].
