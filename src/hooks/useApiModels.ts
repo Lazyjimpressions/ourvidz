@@ -12,6 +12,8 @@ interface ApiModel {
   model_family: string | null;
   is_default: boolean;
   priority: number;
+  capabilities: Record<string, any>;
+  input_defaults: Record<string, any>;
   api_providers: {
     name: string;
     display_name: string;
@@ -34,6 +36,8 @@ export const useApiModels = (modality?: string, task?: string) => {
           model_family,
           is_default,
           priority,
+          capabilities,
+          input_defaults,
           api_providers!inner(name, display_name)
         `)
         .eq('is_active', true);

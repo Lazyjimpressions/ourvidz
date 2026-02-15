@@ -1358,12 +1358,12 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Sign template preview image for first-scene I2I when starting from a scene template
       let signedScenePreviewUrl: string | null = null;
-      if (selectedScene?.preview_image_url) {
-        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
-          signedScenePreviewUrl = selectedScene.preview_image_url;
+      if (selectedScene?.image_url) {
+        if (selectedScene.image_url.startsWith('http://') || selectedScene.image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.image_url;
         } else {
-          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
-          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
+          const bucket = selectedScene.image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.image_url, bucket);
         }
       }
 
@@ -1720,12 +1720,12 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Sign template preview for first-scene I2I when applicable
       let signedScenePreviewUrl: string | null = null;
-      if (selectedScene?.preview_image_url) {
-        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
-          signedScenePreviewUrl = selectedScene.preview_image_url;
+      if (selectedScene?.image_url) {
+        if (selectedScene.image_url.startsWith('http://') || selectedScene.image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.image_url;
         } else {
-          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
-          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
+          const bucket = selectedScene.image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.image_url, bucket);
         }
       }
       
@@ -1978,12 +1978,12 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Sign template preview for first-scene I2I when retrying with a scene template
       let signedScenePreviewUrl: string | null = null;
-      if (selectedScene?.preview_image_url) {
-        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
-          signedScenePreviewUrl = selectedScene.preview_image_url;
+      if (selectedScene?.image_url) {
+        if (selectedScene.image_url.startsWith('http://') || selectedScene.image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.image_url;
         } else {
-          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
-          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
+          const bucket = selectedScene.image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.image_url, bucket);
         }
       }
 
