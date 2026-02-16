@@ -10,6 +10,7 @@ import { GenerationFormat } from '@/types/generation';
 import { ReferenceMetadata } from '@/types/workspace';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
+import { useVideoModelSettings } from './useVideoModelSettings';
 
 // STAGING-FIRST: Simplified workspace state using staging assets
 export interface LibraryFirstWorkspaceState {
@@ -247,6 +248,17 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [videoDuration, setVideoDuration] = useState(5);
   const [motionIntensity, setMotionIntensity] = useState(0.5);
   const [soundEnabled, setSoundEnabled] = useState(false);
+  
+  // Sync videoDuration with model's default when model changes
+  const { settings: videoSettings } = useVideoModelSettings(
+    mode === 'video' ? selectedModel?.id || null : null
+  );
+  
+  useEffect(() => {
+    if (videoSettings?.defaultDuration) {
+      setVideoDuration(videoSettings.defaultDuration);
+    }
+  }, [videoSettings?.defaultDuration]);
   
   // Control Parameters
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '1:1' | '9:16'>('1:1');
