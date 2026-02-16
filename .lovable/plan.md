@@ -1,121 +1,138 @@
 
 
-# Plan: Delete Orphaned Scene Images on Conversation Deletion
+# Fix Library Page Runaway Loading
 
-## Problem
+## Problem Summary
 
-When a conversation is deleted, scene images persist as orphans in both the `user_library` table and the `user-library` storage bucket. There are **3 separate delete code paths**, and none fully clean up all related data:
+The library page (396 assets, growing) suffers from cascading performance issues:
 
-| Delete Path | Deletes Conversation | Deletes Messages | Cleans `user_library` Records | Cleans Storage Files |
-|---|---|---|---|---|
-| `useConversations.ts` (character page) | Yes | Auto (CASCADE) | No | No |
-| `PlaygroundContext.tsx` (playground) | Yes | Auto (CASCADE) | No | No |
-| `useUserConversations.ts` (dashboard) | Yes | Manually (redundant) | No | Partially (thumbnails only) |
-
-**DB cascades already handle**: `messages` and `character_scenes` rows are auto-deleted via `ON DELETE CASCADE` foreign keys. No manual deletion of those is needed.
-
-**What is NOT cleaned up**: `user_library` rows where `roleplay_metadata->>'conversation_id'` matches the deleted conversation, and their corresponding files in the `user-library` storage bucket.
+1. **No pagination** -- fetches all assets in one query
+2. **Upfront thumbnail signing** -- `useSignedAssets` tries to sign all 396 assets before anything renders
+3. **Loading gate** -- `if (isLoading || isSigning)` blocks the entire UI until every URL is signed
+4. **Missing thumbnails** -- only 37 of 396 assets have stored `thumbnail_path`, so the grid falls back to signing full originals for each card
+5. **Dependency loop** -- `signedUrls` state feeds back into `pathsToSign` memo, causing redundant re-renders
+6. **`toSharedFromLibrary` missing metadata** -- `roleplay_metadata` and `content_category` from the DB are not mapped into `metadata`, so tab filtering uses incomplete data
 
 ## Solution
 
-### 1. Create a shared utility: `src/lib/deleteConversation.ts`
+### 1. Server-side pagination in `LibraryAssetService`
 
-A single function that all 3 delete paths call:
+Add `limit`/`offset` parameters to `getUserLibraryAssets()`. Default page size: 40 assets.
 
 ```
-deleteConversationFull(conversationId, userId)
+getUserLibraryAssets(limit = 40, offset = 0)
+  -> SELECT * FROM user_library ORDER BY created_at DESC LIMIT $limit OFFSET $offset
 ```
 
-Steps executed in order:
-1. Query `user_library` for all records where `roleplay_metadata->>'conversation_id' = conversationId` -- gets storage paths
-2. Delete those storage files from the `user-library` bucket (batch `supabase.storage.from('user-library').remove(paths)`)
-3. Also clean up scene-thumbnail folder: `{userId}/scene-thumbnails/{conversationId}/`
-4. Delete the `user_library` rows for this conversation
-5. Delete the `conversations` row (CASCADE auto-removes `messages` and `character_scenes`)
-6. Clear any localStorage keys referencing this conversation
+### 2. Paginated hook: update `useLibraryAssets`
 
-### 2. Replace all 3 delete paths
+Convert from a simple `useQuery` to an `useInfiniteQuery` pattern:
+- First page loads immediately (40 assets)
+- `fetchNextPage()` triggered by the existing `IntersectionObserver` sentinel
+- Remove the manual `visibleCount` slicing -- let pagination control the batch size
+
+### 3. Remove `isSigning` loading gate
+
+In `UpdatedOptimizedLibrary.tsx`, change:
+
+```
+// BEFORE (blocks everything)
+if (isLoading || isSigning) { return <loading skeleton> }
+
+// AFTER (only block on initial data fetch, not signing)
+if (isLoading) { return <loading skeleton> }
+```
+
+Assets render immediately with placeholder thumbnails; signed URLs fill in progressively as they arrive.
+
+### 4. Fix `useSignedAssets` dependency loop
+
+The root cause: `signedUrls` is in the dependency array of `pathsToSign` memo. When signing completes and updates `signedUrls`, `pathsToSign` recomputes, triggering the effect again.
+
+Fix: Track which asset IDs have been queued for signing in a `Set` ref (not state), removing `signedUrls` from the `pathsToSign` dependency.
+
+### 5. Fix `toSharedFromLibrary` mapper
+
+Add `roleplay_metadata` and `content_category` to the `metadata` output so tab filtering works correctly:
+
+```typescript
+metadata: {
+  ...existing fields,
+  roleplay_metadata: row.roleplay_metadata,
+  content_category: row.content_category
+}
+```
+
+### 6. Remove `visibleCount` state and manual infinite scroll
+
+With server-side pagination, the sentinel triggers `fetchNextPage()` instead of incrementing a local counter. This eliminates the dual-layer pagination (fetch all + slice visible).
+
+## Files Changed
 
 | File | Change |
 |---|---|
-| `src/lib/deleteConversation.ts` | New file with shared cleanup logic |
-| `src/hooks/useConversations.ts` | Replace inline delete with call to shared utility |
-| `src/contexts/PlaygroundContext.tsx` | Replace inline delete with call to shared utility |
-| `src/hooks/useUserConversations.ts` | Replace existing `deleteConversation` with call to shared utility (remove redundant manual message deletion) |
-
-### 3. One-time cleanup of existing orphans
-
-After the fix is in place, run a one-time query to identify and delete existing orphaned `user_library` scene images whose conversations no longer exist. This will be a SQL script to run manually:
-
-```sql
--- Find orphaned scene images in user_library
-DELETE FROM user_library
-WHERE content_category = 'scene'
-  AND roleplay_metadata->>'conversation_id' IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM conversations 
-    WHERE id = (roleplay_metadata->>'conversation_id')::uuid
-  );
-```
-
-Storage file cleanup for existing orphans would need a separate edge function or manual process since we need the storage paths before deleting the rows.
+| `src/lib/services/LibraryAssetService.ts` | Add `limit`/`offset` params to `getUserLibraryAssets`, return `{ assets, total }` |
+| `src/hooks/useLibraryAssets.ts` | Convert to `useInfiniteQuery` with `fetchNextPage` |
+| `src/lib/hooks/useSignedAssets.ts` | Fix dependency loop: use `queuedIds` ref instead of `signedUrls` in `pathsToSign` memo |
+| `src/lib/services/AssetMappers.ts` | Add `roleplay_metadata` and `content_category` to `toSharedFromLibrary` metadata |
+| `src/components/library/UpdatedOptimizedLibrary.tsx` | Remove `isSigning` gate, remove `visibleCount`, wire sentinel to `fetchNextPage()`, flatten paginated data |
 
 ## Technical Details
 
-**Shared utility pseudocode:**
+### `useInfiniteQuery` integration
 
 ```typescript
-export async function deleteConversationFull(
-  conversationId: string, 
-  userId: string
-): Promise<void> {
-  // 1. Get all library scene images for this conversation
-  const { data: sceneAssets } = await supabase
-    .from('user_library')
-    .select('id, storage_path')
-    .eq('user_id', userId)
-    .eq('content_category', 'scene')
-    .contains('roleplay_metadata', { conversation_id: conversationId });
-
-  // 2. Delete storage files (scenes + thumbnails)
-  const storagePaths = (sceneAssets || [])
-    .map(a => a.storage_path)
-    .filter(Boolean);
-
-  // Also list and include scene-thumbnails folder
-  const thumbFolder = `${userId}/scene-thumbnails/${conversationId}`;
-  const { data: thumbFiles } = await supabase.storage
-    .from('user-library')
-    .list(thumbFolder);
-  if (thumbFiles?.length) {
-    storagePaths.push(...thumbFiles.map(f => `${thumbFolder}/${f.name}`));
-  }
-
-  if (storagePaths.length > 0) {
-    await supabase.storage.from('user-library').remove(storagePaths);
-  }
-
-  // 3. Delete user_library records
-  if (sceneAssets?.length) {
-    await supabase
-      .from('user_library')
-      .delete()
-      .in('id', sceneAssets.map(a => a.id));
-  }
-
-  // 4. Delete conversation (CASCADE handles messages + character_scenes)
-  const { error } = await supabase
-    .from('conversations')
-    .delete()
-    .eq('id', conversationId)
-    .eq('user_id', userId);
-  if (error) throw error;
-
-  // 5. Clear localStorage
-  Object.keys(localStorage).forEach(key => {
-    if (key.includes(conversationId)) localStorage.removeItem(key);
+export function useLibraryAssets() {
+  return useInfiniteQuery({
+    queryKey: ['library-assets'],
+    queryFn: ({ pageParam = 0 }) =>
+      LibraryAssetService.getUserLibraryAssets(40, pageParam),
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, p) => n + p.assets.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+    initialPageParam: 0,
   });
 }
 ```
 
-**No database migration needed** -- existing CASCADE rules already cover `messages` and `character_scenes`. The fix is purely in application code to also clean up `user_library` and storage.
+### Dependency loop fix in `useSignedAssets`
+
+```typescript
+// Track queued IDs in a ref (not state) to avoid re-render cycles
+const queuedIdsRef = useRef<Set<string>>(new Set());
+
+const pathsToSign = useMemo(() => {
+  const thumbPaths: string[] = [];
+  for (const asset of assets) {
+    if (queuedIdsRef.current.has(asset.id)) continue; // already queued
+    const p = asset.type === 'image'
+      ? (asset.thumbPath || asset.originalPath)
+      : asset.thumbPath;
+    if (p && !p.startsWith('.') && p.includes('/')) {
+      thumbPaths.push(p);
+      queuedIdsRef.current.add(asset.id);
+    }
+  }
+  return { thumbPaths };
+}, [assets, refreshKey]); // signedUrls removed from deps
+```
+
+### Updated library component flow
+
+```
+1. useLibraryAssets() fetches page 1 (40 assets)
+2. Map to SharedAsset via toSharedFromLibrary (now includes roleplay_metadata)
+3. useSignedAssets signs only those 40 thumbnails (no dependency loop)
+4. Render grid immediately (no isSigning gate)
+5. Sentinel triggers fetchNextPage() -> page 2 loads -> 40 more signed
+```
+
+## Expected Impact
+
+- **Initial load**: ~40 signing requests instead of ~396
+- **Time to first paint**: Under 2 seconds (was potentially 30+ seconds)
+- **No more runaway re-renders** from dependency loop
+- **Tab filtering works correctly** with proper metadata mapping
+- **Progressive loading** -- users see content immediately, more loads on scroll
+
