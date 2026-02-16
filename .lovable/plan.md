@@ -1,119 +1,92 @@
 
 
-# Prompt Template Testing with Character Data Hydration
+# Compare View: Persistent Multi-Turn Conversations
 
 ## Problem
-The `prompt_templates` table contains system prompts with `{{placeholders}}` (e.g., `{{character_name}}`, `{{character_personality}}`). Testing these in the Playground currently requires manually replacing every placeholder each time. There are ~10 roleplay templates with 10+ placeholders each, making manual testing impractical.
+The Compare view creates a new ephemeral conversation for every message, discarding history. Roleplay testing requires multi-turn back-and-forth where the LLM remembers prior context -- exactly what the `playground-chat` edge function already supports via `conversation_id` (it loads prior messages from the DB).
 
-## Solution: Template Picker + Character Loader in System Prompt Editor
+## Solution
+Give each panel its own persistent conversation that is created once and reused for all subsequent messages. Display the full message history (user + assistant) in each panel instead of just the last response.
 
-Upgrade `SystemPromptEditor.tsx` with two dropdowns that auto-hydrate placeholders:
+## Changes to CompareView.tsx
 
-1. **Template dropdown** -- select from `prompt_templates` to load the raw system prompt into the textarea
-2. **Character dropdown** -- select from `characters` table to fill all `{{character_*}}` placeholders automatically
+### 1. Add message history to PanelState
 
-When both are selected, the component replaces all known placeholders with real character data and puts the resolved prompt in the textarea for further editing before sending.
-
-## Placeholder Mapping
-
-The mapping from template placeholders to `characters` table columns:
+Replace the single `response` string with an array of messages and a persistent `conversationId`:
 
 ```text
-{{character_name}}            -> characters.name
-{{character_description}}     -> characters.description
-{{character_personality}}     -> characters.persona (fallback: characters.traits)
-{{character_background}}      -> characters.backstory (fallback: parsed from description)
-{{character_speaking_style}}  -> characters.voice_tone
-{{character_goals}}           -> parsed from characters.traits ("Goals: ...")
-{{character_quirks}}          -> parsed from characters.traits ("Quirks: ...")
-{{character_relationships}}   -> parsed from characters.traits ("Relationships: ...")
-{{mood}}                      -> characters.mood
-{{voice_tone}}                -> characters.voice_tone
-{{user_name}}                 -> "User" (or from profile username)
-{{user_gender}}               -> "unspecified" (or from profile)
-{{user_appearance}}           -> "" (left blank)
-{{scene_context}}             -> "" (left blank, editable)
+interface PanelMessage {
+  id: string;
+  content: string;
+  sender: 'user' | 'assistant';
+  created_at: string;
+}
+
+interface PanelState {
+  model: string;
+  systemPrompt: string;
+  messages: PanelMessage[];       // was: response: string
+  conversationId: string | null;  // new: persistent per panel
+  isLoading: boolean;
+  responseTime: number | null;
+  selectedTemplateId: string;
+  selectedCharacterId: string;
+}
 ```
 
-Any remaining `{{unmatched}}` placeholders stay visible in the textarea so the user can fill them manually.
+### 2. Create conversation once, reuse it
 
-## UI Changes to SystemPromptEditor.tsx
+Move `createEphemeralConversation` logic into `sendToPanel` with a guard: only create a new conversation if `panel.conversationId` is null. Store the resulting ID back into panel state so subsequent sends reuse it.
 
-The expanded state gains two compact dropdowns above the textarea:
+### 3. Pass character_id for roleplay routing
+
+When a character is selected in the panel, include `character_id` in the edge function payload. The `playground-chat` function already routes to `roleplay-chat` logic when a character is present, or alternatively send directly to `roleplay-chat` when `selectedCharacterId` is set.
+
+### 4. Accumulate messages in the response area
+
+- On send: append the user message to `panel.messages` immediately
+- On response: append the assistant message to `panel.messages`
+- Render all messages in a scrollable list (user messages right-aligned or labeled, assistant messages left-aligned with markdown)
+- Auto-scroll to bottom on new messages
+
+### 5. Add a "New Session" button per panel
+
+A small button in each panel header that clears `conversationId` and `messages`, starting a fresh conversation on the next send. This avoids leftover context when switching models or templates.
+
+### 6. Character ID on conversation creation
+
+When creating the conversation record, pass `character_id` from the panel's selected character so the edge function's ownership/access checks and context loading work correctly.
+
+## UI Layout (per panel)
 
 ```text
-+-------------------------------------------------------+
-| System Prompt  (1240 chars)                     [v]    |
-+-------------------------------------------------------+
-| Template: [Select template...          v]              |
-| Character: [Select character...        v]              |
-| +---------------------------------------------------+ |
-| | You are Scarlett, a character described as:        | |
-| | Confident, sophisticated, and direct...            | |
-| | ...                                                | |
-| +---------------------------------------------------+ |
-+-------------------------------------------------------+
++------------------------------------------+
+| A  [Model dropdown v]  [New Session btn] |
+| [Template dropdown v]                    |
+| [Character dropdown v]                   |
+| [System prompt textarea]                 |
++------------------------------------------+
+| User: Tell me about yourself             |
+| Assistant: I am Scarlett, a...           |
+| User: What do you think of...            |
+| Assistant: Well, considering my...       |
+|                              [auto-scroll]|
++------------------------------------------+
 ```
 
-- Template dropdown: grouped by `use_case` (character_roleplay, enhancement, scene_generation, etc.)
-- Character dropdown: flat list sorted by name, showing `name (gender)` 
-- Both dropdowns use `text-xs`, `h-7` sizing
-- Selecting a template loads the raw prompt; selecting a character runs the hydration; editing the textarea is always allowed after hydration
-
-## Hydration Logic
-
-A pure function `hydrateTemplate(template: string, character: CharacterData, profile?: ProfileData): string` that does simple string replacement:
-
-```typescript
-const hydrateTemplate = (template: string, char: CharacterRow): string => {
-  const traits = parseTraits(char.traits || '');
-  const replacements: Record<string, string> = {
-    '{{character_name}}': char.name,
-    '{{character_description}}': char.description || '',
-    '{{character_personality}}': char.persona || char.traits || '',
-    '{{character_background}}': char.backstory || '',
-    '{{character_speaking_style}}': traits.speakingStyle || char.voice_tone || '',
-    '{{character_goals}}': traits.goals || '',
-    '{{character_quirks}}': traits.quirks || '',
-    '{{character_relationships}}': traits.relationships || '',
-    '{{mood}}': char.mood || 'neutral',
-    '{{voice_tone}}': char.voice_tone || '',
-  };
-  let result = template;
-  for (const [key, value] of Object.entries(replacements)) {
-    result = result.replaceAll(key, value);
-  }
-  return result;
-};
-```
-
-The existing `parseTraits` helper from `useCharacterDatabase.ts` is reused for extracting goals/quirks/relationships from the traits string.
-
-## Data Fetching
-
-- **Templates**: Query `prompt_templates` where `is_active = true`, select `id, template_name, use_case, system_prompt, target_model`. Fetched once on mount via a small hook or inline `useEffect`.
-- **Characters**: Query `characters` selecting the fields needed for hydration. User sees their own characters plus public ones. Fetched once on mount.
-- Both queries are lightweight (just text fields, no joins).
-
-## Compare View Integration
-
-The same template + character dropdowns are added to each panel's system prompt section in `CompareView.tsx`. This enables the key use case: same character, same template, two different `target_model` LLMs side by side.
+The shared prompt input at the bottom stays as-is. "Send" appends the user message to both panels and fires both requests in parallel.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/playground/SystemPromptEditor.tsx` | Add template dropdown, character dropdown, hydration logic, reuse parseTraits |
-| `src/components/playground/CompareView.tsx` | Add the same template + character selectors to each panel's system prompt area |
-| `src/utils/hydrateTemplate.ts` | New: pure hydration function + parseTraits (extracted from useCharacterDatabase for reuse) |
+| `src/components/playground/CompareView.tsx` | Refactor PanelState to hold messages array + conversationId. Update sendToPanel to create-once/reuse. Render message history. Add "New Session" button. Pass character_id in payload. |
 
-## Implementation Details
+No other files need changes -- the edge function already handles multi-turn context via conversation_id and character_id routing.
 
-- Template dropdown items are grouped by `use_case` using `SelectGroup` with `SelectLabel`
-- Character dropdown shows name and gender in compact format: "Scarlett (F)" 
-- When user selects a template, the raw text loads into the textarea
-- When user then selects a character, placeholders are replaced in-place
-- User can re-select a different character to re-hydrate from the original template (component tracks the raw template separately from the hydrated text)
-- Remaining unfilled placeholders (like `{{user_name}}`) are left as-is for manual editing
-- All styling follows compact rules: `text-xs`, `h-7` controls, `gap-1.5` spacing
+## Style Rules
+- Message list: `text-xs`, user messages with `bg-muted/50 rounded p-2`, assistant with `prose-sm`
+- "New Session" button: `h-7 text-xs` ghost variant
+- Sender labels: `text-[11px] text-muted-foreground`
+- No new icons beyond what's already imported
 
