@@ -175,11 +175,9 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
 
   const deleteConversation = async (id: string) => {
      try {
-       const { error } = await supabase
-         .from('conversations')
-         .delete()
-         .eq('id', id);
-       if (error) throw error;
+       const { data: { user } } = await supabase.auth.getUser();
+       if (!user?.id) throw new Error('Not authenticated');
+       await (await import('@/lib/deleteConversation')).deleteConversationFull(id, user.id);
        setConversations(prev => prev.filter(c => c.id !== id));
        if (state.activeConversationId === id) {
          setState(prev => ({ ...prev, activeConversation: null, activeConversationId: null }));
