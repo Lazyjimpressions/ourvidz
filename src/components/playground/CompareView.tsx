@@ -39,6 +39,22 @@ export const CompareView: React.FC = () => {
   );
   const [prompt, setPrompt] = useState('');
 
+  const createEphemeralConversation = async (): Promise<string> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+    const { data, error } = await supabase
+      .from('conversations')
+      .insert({
+        user_id: user.id,
+        title: 'Compare Session',
+        conversation_type: 'general',
+      } as any)
+      .select('id')
+      .single();
+    if (error || !data) throw new Error('Failed to create conversation');
+    return data.id;
+  };
+
   const sendToPanel = async (
     panel: PanelState,
     setPanel: React.Dispatch<React.SetStateAction<PanelState>>,
@@ -47,10 +63,11 @@ export const CompareView: React.FC = () => {
     setPanel(prev => ({ ...prev, isLoading: true, response: '', responseTime: null }));
     const start = Date.now();
     try {
+      const conversationId = await createEphemeralConversation();
       const { data, error } = await supabase.functions.invoke('playground-chat', {
         body: {
           message,
-          conversation_id: `compare-${Date.now()}`,
+          conversation_id: conversationId,
           model_provider: 'openrouter',
           model_variant: panel.model,
           content_tier: settings.contentMode,
