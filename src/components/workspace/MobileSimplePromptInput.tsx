@@ -4,6 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
+import { supabase } from '@/integrations/supabase/client';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useVideoModels } from '@/hooks/useApiModels';
 import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
@@ -91,6 +92,34 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   
   // Settings sheet state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+
+  const handleEnhance = async () => {
+    if (!prompt.trim() || !selectedModel?.id) return;
+    setIsEnhancing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+        body: {
+          prompt: prompt.trim(),
+          model_id: selectedModel.id,
+          job_type: currentMode === 'video' ? 'video' : 'image',
+          contentType: contentType || 'sfw',
+        }
+      });
+      if (error) throw error;
+      if (data?.enhanced_prompt) {
+        onPromptChange(data.enhanced_prompt);
+        toast.success(`Prompt enhanced for ${selectedModel.display_name}`);
+      } else {
+        toast.error('No enhancement template found for this model');
+      }
+    } catch (err) {
+      console.error('❌ Enhancement failed:', err);
+      toast.error('Enhancement failed');
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
   
   // File input refs for reference images
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -306,16 +335,26 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       
       {/* Prompt Input + Generate Button */}
       <form onSubmit={handleSubmit} className="px-3 pb-3 space-y-2">
-        <Textarea
-          value={prompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          placeholder={exactCopyMode && hasDisplayReference 
-            ? "Optional: Describe modifications (or leave blank for exact copy)" 
-            : "Describe what you want to create..."
-          }
-          className="min-h-[60px] max-h-[120px] resize-none text-base"
-          disabled={isGenerating}
-        />
+        <div className="relative">
+          <Textarea
+            value={prompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            placeholder={exactCopyMode && hasDisplayReference 
+              ? "Optional: Describe modifications (or leave blank for exact copy)" 
+              : "Describe what you want to create..."
+            }
+            className="min-h-[60px] max-h-[120px] resize-none text-base pr-10"
+            disabled={isGenerating}
+          />
+          <button
+            type="button"
+            onClick={handleEnhance}
+            disabled={!prompt.trim() || isEnhancing || isGenerating}
+            className="absolute right-2 top-2 text-muted-foreground hover:text-primary p-1 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            {isEnhancing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          </button>
+        </div>
         
         <Button
           type="submit"

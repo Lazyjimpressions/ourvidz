@@ -212,14 +212,8 @@ const MobileRoleplayChat: React.FC = () => {
   useEffect(() => {
     if (!roleplayModelsLoading && !imageModelsLoading && !hasInitializedModelDefaults.current && roleplayModelOptions.length > 0 && imageModelOptions.length > 0) {
       const settings = initializeSettings();
-      // Apply DB/localStorage defaults first; then override from navigation state when starting from SceneSetupSheet
-      const effectiveChatModel = selectedChatModelFromNavigation ?? settings.modelProvider;
-      const effectiveImageModel = selectedImageModelFromNavigation ?? settings.selectedImageModel;
-      setModelProvider(effectiveChatModel);
-      setSelectedImageModel(effectiveImageModel);
-      setConsistencySettings(settings.consistencySettings);
 
-      // ✅ FIX: Priority order for user character selection: navigationState → localStorage → profileDefault
+      // ✅ FIX: Parse location state BEFORE using navigation variables
       const locationState = location.state as {
         userCharacterId?: string | null;
         sceneStyle?: 'character_only' | 'pov' | 'both_characters';
@@ -233,6 +227,10 @@ const MobileRoleplayChat: React.FC = () => {
       const imageGenerationModeFromNavigation = locationState?.imageGenerationMode;
       const selectedImageModelFromNavigation = locationState?.selectedImageModel;
       const selectedChatModelFromNavigation = locationState?.selectedChatModel;
+
+      // Apply DB/localStorage defaults first; then override from navigation state when starting from SceneSetupSheet
+      const effectiveChatModel = selectedChatModelFromNavigation ?? settings.modelProvider;
+      const effectiveImageModel = selectedImageModelFromNavigation ?? settings.selectedImageModel;
       let effectiveUserCharacterId: string | null = null;
       let userCharacterSource = '';
 
