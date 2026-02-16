@@ -30,8 +30,13 @@ export const ChatInterface = () => {
 
   const [inputMessage, setInputMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentMode, setCurrentMode] = useState<PlaygroundMode>('chat');
-  const [systemPrompt, setSystemPrompt] = useState('');
+  const [currentMode, setCurrentMode] = useState<PlaygroundMode>(() => {
+    const stored = localStorage.getItem('playground-mode');
+    return (stored === 'chat' || stored === 'compare' || stored === 'admin') ? stored : 'chat';
+  });
+  const [systemPrompt, setSystemPrompt] = useState(() => {
+    return localStorage.getItem('playground-system-prompt') || '';
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -99,6 +104,7 @@ export const ChatInterface = () => {
 
   const handleModeChange = (newMode: PlaygroundMode) => {
     setCurrentMode(newMode);
+    localStorage.setItem('playground-mode', newMode);
   };
 
   const handleClearChat = async () => {
@@ -217,7 +223,10 @@ export const ChatInterface = () => {
       {/* System Prompt Editor */}
       <SystemPromptEditor
         conversationId={state.activeConversationId}
-        onSystemPromptChange={setSystemPrompt}
+        onSystemPromptChange={(prompt) => {
+          setSystemPrompt(prompt);
+          localStorage.setItem('playground-system-prompt', prompt);
+        }}
       />
 
       {/* Admin tools when no messages yet */}

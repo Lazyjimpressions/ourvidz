@@ -55,7 +55,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     updateSettings({ contentMode: mode ? 'sfw' : 'nsfw' });
   };
 
-  // Load conversations on mount
+  // Load conversations on mount + restore persisted conversation
   useEffect(() => {
     const loadConversations = async () => {
       try {
@@ -73,6 +73,22 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
 
         if (!error && data) {
           setConversations(data);
+
+          // Restore persisted active conversation
+          const storedConvId = localStorage.getItem('playground-active-conversation');
+          if (storedConvId) {
+            const conv = data.find(c => c.id === storedConvId);
+            if (conv) {
+              setState(prev => ({
+                ...prev,
+                activeConversation: conv,
+                activeConversationId: conv.id,
+              }));
+              loadMessages(conv.id);
+            } else {
+              localStorage.removeItem('playground-active-conversation');
+            }
+          }
         }
       } catch (err) {
         console.error('Failed to load conversations:', err);
@@ -147,6 +163,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
           content: data.response,
           sender: 'assistant',
           created_at: new Date().toISOString(),
+          response_time_ms: data.generation_time ? Math.round(data.generation_time * 1000) : undefined,
         };
         setMessages(prev => [...prev, assistantMessage]);
         setState(prev => ({
@@ -156,6 +173,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
             content_tier: settings.contentMode,
             template_meta: { origin: data.prompt_template_name || 'auto' },
             model_provider: data.model_provider,
+            generation_time: data.generation_time,
           },
         }));
       } else if (data?.error) {
@@ -227,6 +245,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
       if (state.activeConversationId === id) {
         setState(prev => ({ ...prev, activeConversation: null, activeConversationId: null }));
         setMessages([]);
+        localStorage.removeItem('playground-active-conversation');
       }
     } catch (error) {
       console.error('Failed to delete conversation:', error);
@@ -258,8 +277,12 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
       activeConversationId: convId || null,
     }));
 
+    // Persist to localStorage
     if (convId) {
+      localStorage.setItem('playground-active-conversation', convId);
       loadMessages(convId);
+    } else {
+      localStorage.removeItem('playground-active-conversation');
     }
   };
 
