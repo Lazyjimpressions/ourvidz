@@ -1,10 +1,8 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { usePlayground } from '@/contexts/PlaygroundContext';
+import { useAuth } from '@/contexts/AuthContext';
 
-export type PlaygroundMode = 'chat' | 'roleplay' | 'admin' | 'creative';
+export type PlaygroundMode = 'chat' | 'compare' | 'admin';
 
 interface PlaygroundModeSelectorProps {
   currentMode: PlaygroundMode;
@@ -15,17 +13,17 @@ export const PlaygroundModeSelector: React.FC<PlaygroundModeSelectorProps> = ({
   currentMode,
   onModeChange,
 }) => {
-  const { sfwMode, setSfwMode } = usePlayground();
+  const { isAdmin } = useAuth();
+
   const modes = [
-    { id: 'chat' as const, label: 'Chat', description: 'General conversation' },
-    { id: 'roleplay' as const, label: 'Roleplay', description: 'Character scenarios' },
-    { id: 'creative' as const, label: 'Creative', description: 'Story development' },
-    { id: 'admin' as const, label: 'Admin', description: 'System tools' },
+    { id: 'chat' as const, label: 'Chat' },
+    { id: 'compare' as const, label: 'Compare' },
+    ...(isAdmin ? [{ id: 'admin' as const, label: 'Admin' }] : []),
   ];
 
   return (
-    <div className="border-b border-border p-2">
-      <div className="flex gap-1 max-w-4xl mx-auto">
+    <div className="border-b border-border px-3 py-1.5">
+      <div className="flex gap-1">
         {modes.map((mode) => {
           const isActive = currentMode === mode.id;
           return (
@@ -34,10 +32,9 @@ export const PlaygroundModeSelector: React.FC<PlaygroundModeSelectorProps> = ({
               variant={isActive ? 'default' : 'ghost'}
               size="sm"
               onClick={() => onModeChange(mode.id)}
-              className={`h-8 px-3 text-xs ${
+              className={`h-7 px-3 text-xs ${
                 isActive ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
-              title={mode.description}
             >
               {mode.label}
             </Button>

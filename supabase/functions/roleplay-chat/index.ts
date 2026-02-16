@@ -342,7 +342,7 @@ serve(async (req) => {
       // Scene regeneration/modification fields
       scene_prompt_override,
       current_scene_image_url
-    } = requestBody;
+    } = requestBody!;
 
     // Detect regeneration/modification mode
     const isSceneRegeneration = !!scene_prompt_override;
@@ -3051,7 +3051,7 @@ const sceneContext = analyzeSceneContent(response);
           throw new Error('OpenRouter model configuration not found');
         }
       } catch (narrativeError) {
-        console.log('🎬 Fallback to enhanced scene extraction:', narrativeError.message);
+        console.log('🎬 Fallback to enhanced scene extraction:', narrativeError instanceof Error ? narrativeError.message : String(narrativeError));
         // Fallback to enhanced scene extraction with storyline context
         const extractedScene = extractSceneFromResponse(response);
         const fallbackStoryline = extractStorylineContext(conversationHistory);

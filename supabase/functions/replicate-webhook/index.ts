@@ -133,7 +133,7 @@ serve(async (req) => {
         }
       } else if (typeof webhookPayload.output === 'object' && webhookPayload.output?.url) {
         imageUrl = webhookPayload.output.url
-        console.log('✅ Using object URL output:', imageUrl.substring(0, 100))
+        console.log('✅ Using object URL output:', imageUrl?.substring(0, 100))
       }
 
       if (!imageUrl || !imageUrl.startsWith('http')) {
@@ -562,7 +562,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('❌ Webhook processing error:', error)
     return new Response(JSON.stringify({ 
-      error: error.message 
+      error: error instanceof Error ? error.message : String(error) 
     }), { 
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
