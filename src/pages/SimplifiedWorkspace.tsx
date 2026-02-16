@@ -149,6 +149,11 @@ export const SimplifiedWorkspace: React.FC = () => {
     setOriginalClothingColor,
     targetGarments,
     setTargetGarments,
+    // Video Extend settings
+    extendStrength,
+    setExtendStrength,
+    extendReverseVideo,
+    setExtendReverseVideo,
     // URL Management
     registerAssetRef,
     signedUrls,
@@ -599,6 +604,10 @@ export const SimplifiedWorkspace: React.FC = () => {
           onOriginalClothingColorChange={setOriginalClothingColor}
           targetGarments={targetGarments}
           onTargetGarmentsChange={setTargetGarments}
+          extendStrength={extendStrength}
+          onExtendStrengthChange={setExtendStrength}
+          extendReverseVideo={extendReverseVideo}
+          onExtendReverseVideoChange={setExtendReverseVideo}
         />
       </div>
       
