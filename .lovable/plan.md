@@ -1,138 +1,125 @@
 
+# Playground Refactor: Tabs, Edge Function Fixes, and Core Improvements
 
-# Fix Library Page Runaway Loading
+## Phase 1: Fix Edge Function Build Errors (unblocks everything)
 
-## Problem Summary
+All errors are pre-existing TypeScript strictness issues across 5 edge functions. Fixes are mechanical type casts and guards:
 
-The library page (396 assets, growing) suffers from cascading performance issues:
+| File | Error | Fix |
+|---|---|---|
+| `playground-chat/index.ts` | `conversation` typed as `never` due to missing DB generic | Add `as any` cast on the `.single()` result, or use the local `Database` interface with `createClient<Database>` |
+| `playground-chat/index.ts` | `.insert({...})` on `messages` typed as `never` | Cast insert payload `as any` |
+| `playground-chat/index.ts` | `systemConfig?.config` on `never` | Cast `systemConfig as any` |
+| `playground-chat/index.ts` | `req.body?.content_tier` | Parse body via `await req.json()` instead of accessing `req.body` directly (Deno Request has no `.body` property shortcut) |
+| `roleplay-chat/index.ts` | Destructuring from `RoleplayChatRequest \| null` | Add `!` non-null assertion after `requestBody = await req.json()` or add a null guard before destructuring |
+| `refresh-prompt-cache/index.ts` | `word` implicitly `any` | Add `: string` type annotation to the `.forEach(word` callback |
+| `refresh-prompt-cache/index.ts` | `error` is `unknown` | Add `(error instanceof Error ? error.message : String(error))` |
+| `register-chat-worker/index.ts` | `error` is `unknown` | Same pattern |
+| `replicate-image/index.ts` | `error` is `unknown` | Same pattern |
+| `replicate-webhook/index.ts` | `imageUrl` possibly null | Add null guards (`imageUrl?.substring(0, 100)`) |
+| `replicate-webhook/index.ts` | `error` is `unknown` | Same pattern |
 
-1. **No pagination** -- fetches all assets in one query
-2. **Upfront thumbnail signing** -- `useSignedAssets` tries to sign all 396 assets before anything renders
-3. **Loading gate** -- `if (isLoading || isSigning)` blocks the entire UI until every URL is signed
-4. **Missing thumbnails** -- only 37 of 396 assets have stored `thumbnail_path`, so the grid falls back to signing full originals for each card
-5. **Dependency loop** -- `signedUrls` state feeds back into `pathsToSign` memo, causing redundant re-renders
-6. **`toSharedFromLibrary` missing metadata** -- `roleplay_metadata` and `content_category` from the DB are not mapped into `metadata`, so tab filtering uses incomplete data
+Estimated: ~25 one-line fixes across 5 files. No logic changes.
 
-## Solution
+## Phase 2: Simplify Tabs to Chat + Compare + Admin
 
-### 1. Server-side pagination in `LibraryAssetService`
+### New tab structure
 
-Add `limit`/`offset` parameters to `getUserLibraryAssets()`. Default page size: 40 assets.
+| Tab | Purpose | Who sees it |
+|---|---|---|
+| **Chat** | Unified general-purpose chat with system prompt editor. Replaces Chat, Creative, and Roleplay tabs. | Everyone |
+| **Compare** | Side-by-side: same prompt to 2 models, OR same model with 2 system prompts. Text-only (chat LLMs). | Everyone |
+| **Admin** | Prompt Builder shortcut (pre-fills system prompt and opens Chat). Template browser. | Admin only |
 
-```
-getUserLibraryAssets(limit = 40, offset = 0)
-  -> SELECT * FROM user_library ORDER BY created_at DESC LIMIT $limit OFFSET $offset
-```
+### Why NOT image/video comparison in the Playground
 
-### 2. Paginated hook: update `useLibraryAssets`
+The Workspace already provides the full generation pipeline (model selection, reference images, aspect ratios, parameter controls, preview). Duplicating that UI in Playground would be redundant. Instead:
 
-Convert from a simple `useQuery` to an `useInfiniteQuery` pattern:
-- First page loads immediately (40 assets)
-- `fetchNextPage()` triggered by the existing `IntersectionObserver` sentinel
-- Remove the manual `visibleCount` slicing -- let pagination control the batch size
+- **Prompt enhancement comparison** lives in Compare tab -- send a raw prompt through two different enhancement templates and see the resulting enhanced prompts side by side. This tests the *text quality* of your prompt strategies without needing to actually generate images/videos.
+- **Actual image/video generation** stays in Workspace where the full tooling already exists.
 
-### 3. Remove `isSigning` loading gate
+This keeps the Playground focused on **text/prompt testing** and avoids building a second generation UI.
 
-In `UpdatedOptimizedLibrary.tsx`, change:
+### Files removed from Playground imports
 
-```
-// BEFORE (blocks everything)
-if (isLoading || isSigning) { return <loading skeleton> }
-
-// AFTER (only block on initial data fetch, not signing)
-if (isLoading) { return <loading skeleton> }
-```
-
-Assets render immediately with placeholder thumbnails; signed URLs fill in progressively as they arrive.
-
-### 4. Fix `useSignedAssets` dependency loop
-
-The root cause: `signedUrls` is in the dependency array of `pathsToSign` memo. When signing completes and updates `signedUrls`, `pathsToSign` recomputes, triggering the effect again.
-
-Fix: Track which asset IDs have been queued for signing in a `Set` ref (not state), removing `signedUrls` from the `pathsToSign` dependency.
-
-### 5. Fix `toSharedFromLibrary` mapper
-
-Add `roleplay_metadata` and `content_category` to the `metadata` output so tab filtering works correctly:
-
-```typescript
-metadata: {
-  ...existing fields,
-  roleplay_metadata: row.roleplay_metadata,
-  content_category: row.content_category
-}
-```
-
-### 6. Remove `visibleCount` state and manual infinite scroll
-
-With server-side pagination, the sentinel triggers `fetchNextPage()` instead of incrementing a local counter. This eliminates the dual-layer pagination (fetch all + slice visible).
-
-## Files Changed
-
-| File | Change |
+| File | Action |
 |---|---|
-| `src/lib/services/LibraryAssetService.ts` | Add `limit`/`offset` params to `getUserLibraryAssets`, return `{ assets, total }` |
-| `src/hooks/useLibraryAssets.ts` | Convert to `useInfiniteQuery` with `fetchNextPage` |
-| `src/lib/hooks/useSignedAssets.ts` | Fix dependency loop: use `queuedIds` ref instead of `signedUrls` in `pathsToSign` memo |
-| `src/lib/services/AssetMappers.ts` | Add `roleplay_metadata` and `content_category` to `toSharedFromLibrary` metadata |
-| `src/components/library/UpdatedOptimizedLibrary.tsx` | Remove `isSigning` gate, remove `visibleCount`, wire sentinel to `fetchNextPage()`, flatten paginated data |
+| `RoleplaySetup.tsx` (587 lines) | Stop importing in ChatInterface. Keep file (used elsewhere or future reference). |
+| `CreativeTools.tsx` | Stop importing. |
+| `CharacterDetailsPanel.tsx` | Stop importing. |
+| `SceneImageGenerator.tsx` | Stop importing from MessageBubble. |
+| `SceneImageButton.tsx` | Stop importing. |
 
-## Technical Details
+### Files modified
 
-### `useInfiniteQuery` integration
+| File | Changes |
+|---|---|
+| `PlaygroundModeSelector.tsx` | 3 tabs: Chat, Compare, Admin (admin-only). Remove `creative` and `roleplay` modes. |
+| `ChatInterface.tsx` | Remove roleplay/creative setup panels. Wire new tabs. Defer conversation creation to first message. |
+| `MessageBubble.tsx` | Remove Camera button and scene generation imports. Keep Copy and Regenerate. |
 
-```typescript
-export function useLibraryAssets() {
-  return useInfiniteQuery({
-    queryKey: ['library-assets'],
-    queryFn: ({ pageParam = 0 }) =>
-      LibraryAssetService.getUserLibraryAssets(40, pageParam),
-    getNextPageParam: (lastPage, allPages) => {
-      const loaded = allPages.reduce((n, p) => n + p.assets.length, 0);
-      return loaded < lastPage.total ? loaded : undefined;
-    },
-    initialPageParam: 0,
-  });
-}
-```
+## Phase 3: System Prompt Editor
 
-### Dependency loop fix in `useSignedAssets`
+New component: `SystemPromptEditor.tsx`
 
-```typescript
-// Track queued IDs in a ref (not state) to avoid re-render cycles
-const queuedIdsRef = useRef<Set<string>>(new Set());
+- Collapsible textarea above the chat input area (collapsed by default, expands on click)
+- Persisted per-conversation in localStorage keyed by conversation ID
+- Sent as an additional `system_prompt` field in the `playground-chat` edge function payload
+- Compact: collapsed state shows a single-line label "System Prompt" with character count; expanded shows a textarea
+- Follows design system: `text-xs`, `h-7` toggle button, `text-[11px]` label
 
-const pathsToSign = useMemo(() => {
-  const thumbPaths: string[] = [];
-  for (const asset of assets) {
-    if (queuedIdsRef.current.has(asset.id)) continue; // already queued
-    const p = asset.type === 'image'
-      ? (asset.thumbPath || asset.originalPath)
-      : asset.thumbPath;
-    if (p && !p.startsWith('.') && p.includes('/')) {
-      thumbPaths.push(p);
-      queuedIdsRef.current.add(asset.id);
-    }
-  }
-  return { thumbPaths };
-}, [assets, refreshKey]); // signedUrls removed from deps
-```
+## Phase 4: Compare View
 
-### Updated library component flow
+New component: `CompareView.tsx`
 
-```
-1. useLibraryAssets() fetches page 1 (40 assets)
-2. Map to SharedAsset via toSharedFromLibrary (now includes roleplay_metadata)
-3. useSignedAssets signs only those 40 thumbnails (no dependency loop)
-4. Render grid immediately (no isSigning gate)
-5. Sentinel triggers fetchNextPage() -> page 2 loads -> 40 more signed
-```
+- Split-pane layout (two columns on desktop, stacked on mobile)
+- Each pane has its own model selector dropdown (from `api_models` chat models)
+- Optional: each pane has its own system prompt field
+- Shared prompt input at the bottom
+- "Send" fires the same message to `playground-chat` twice with different `model_variant` values
+- Responses render side-by-side with markdown
+- Compact header per pane showing model name and response time
+- No conversation persistence needed -- this is ephemeral comparison
 
-## Expected Impact
+## Phase 5: Conversation Persistence and Markdown
 
-- **Initial load**: ~40 signing requests instead of ~396
-- **Time to first paint**: Under 2 seconds (was potentially 30+ seconds)
-- **No more runaway re-renders** from dependency loop
-- **Tab filtering works correctly** with proper metadata mapping
-- **Progressive loading** -- users see content immediately, more loads on scroll
+### Load conversations on mount (`PlaygroundContext.tsx`)
+- Add `useEffect` that queries `conversations` table filtered by current user, `conversation_type IN ('general', 'admin')`, ordered by `updated_at DESC`, limit 50
+- Populate `conversations` state
 
+### Load messages on conversation select (`PlaygroundContext.tsx`)
+- When `setActiveConversation` is called, query `messages` for that `conversation_id` ordered by `created_at ASC`
+- Populate `messages` state
+
+### Markdown rendering (`ResponseTruncation.tsx`)
+- Add `react-markdown` with `remark-gfm` for tables/strikethrough
+- Replace plain text `div` with `<ReactMarkdown>` component
+- Style code blocks with `bg-muted` background, inline code with `bg-muted/50 rounded px-1`
+
+### Implement regenerate (`PlaygroundContext.tsx`)
+- Delete last assistant message from DB
+- Re-send the preceding user message to edge function
+- Replace in local state
+
+## Phase 6: Remove Duplicate SFW Toggle
+
+The SFW/NSFW toggle exists in both the header `Switch` and the Settings popover `Content` dropdown. Remove the header `Switch` and keep it only in the Settings popover to reduce visual clutter.
+
+## Style Compliance
+
+All new components follow the design system:
+- `text-xs` for body text, `text-[11px]` for labels
+- `h-7` or `h-8` for interactive elements
+- Minimal icons (only where functional: Settings gear, Copy, Regenerate)
+- `gap-2` for internal spacing, `p-2` or `p-3` for section padding
+- No decorative elements or large hero sections
+
+## Implementation Order
+
+1. Edge function type fixes (5 files, ~25 one-line changes) -- unblocks deployment
+2. Tab restructure: `PlaygroundModeSelector` + `ChatInterface` cleanup
+3. `SystemPromptEditor.tsx` (new)
+4. `CompareView.tsx` (new)
+5. Conversation persistence + markdown rendering
+6. Remove duplicate SFW toggle
+7. Clean up unused imports in `MessageBubble`
