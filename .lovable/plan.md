@@ -1,121 +1,76 @@
 
 
-# Add Sparkle Enhance Button to Workspace Prompt Input
+# Fix: Video Extend Duration Settings
 
-## Overview
+## Problem
 
-Add an inline "enhance" sparkle button next to the prompt textarea in the workspace. When clicked, it calls the `enhance-prompt` edge function with the currently selected model's `model_key`, allowing the backend to automatically select the correct LTX (or WAN, or Seedream) prompt template. The enhanced prompt replaces the original in the textarea, and the user can then review/edit before generating.
+The generated video from LTX Extend is the same length as the source because the duration math doesn't account for extension. Two issues:
 
-This is a **manual-first** approach: user types naturally, clicks the sparkle to enhance, reviews the result, then generates.
+1. **The `num_frames` cap is too low**: The model's `input_schema` has `num_frames.max = 161` at 30fps, which is only ~5.3 seconds total output. If your source video is already 5 seconds, the output can never be meaningfully longer.
 
-## What Already Works
+2. **Duration represents total output, not extension length**: The UI duration slider sets total `num_frames` (source + extension combined). Users expect to set how much *additional* time to add, but the model treats it as the total output length.
 
-- The `enhance-prompt` edge function already resolves `model_key` and performs a 5-tuple template lookup against `prompt_templates`
-- 4 LTX-specific enhancement templates are already in the database, each with specialized system prompts (T2V, I2V, Extend, Multi)
-- The function returns `enhanced_prompt` and metadata
+## Root Cause
 
-## Implementation
+The `num_frames` constraint in the database (`max: 161`) appears too restrictive. LTX Video 13B Extend on fal.ai likely supports higher frame counts. The current value may have been copied from the non-extend model.
 
-### 1. Desktop: `SimplePromptInput.tsx`
+## Proposed Fix
 
-Add a small sparkle icon button inside the prompt textarea area (positioned absolute, bottom-left or next to the settings gear):
+### 1. Verify and update `num_frames.max` in the database
 
-- **Position**: Inside the textarea container, bottom-right corner next to the existing Settings gear (or left of it)
-- **Icon**: `Sparkles` from lucide-react, size 12, matching the existing gear icon style
-- **State**: `isEnhancing` boolean, managed locally
-- **Behavior on click**:
-  1. Call `supabase.functions.invoke('enhance-prompt', { body: { prompt, model_key: selectedModel.model_key, job_type: mode === 'video' ? 'video' : 'image', content_mode: contentType } })`
-  2. Replace the prompt textarea value with the enhanced result
-  3. Show a brief toast: "Prompt enhanced for [model display name]"
-- **Disabled when**: prompt is empty, already enhancing, or currently generating
-- **Loading state**: Replace sparkle icon with a small spinning loader during enhancement
+Run a query to update the extend model's `num_frames.max` to a more reasonable value. Based on fal.ai docs for LTX 13B Extend, the model should support longer outputs (e.g., 257 or higher frames). This is a database-only change:
 
-To pass `model_key`, the component needs it from the parent. Currently `selectedModel` only has `{ id, type, display_name }`. Two options:
-  - **Option A (simpler)**: Pass just `model_id` to `enhance-prompt` -- the edge function already supports resolving `model_key` from `model_id` (lines 572-586)
-  - **Option B**: Extend `selectedModel` to include `model_key`
+```sql
+-- Check current value and update num_frames max for the extend model
+UPDATE api_models
+SET capabilities = jsonb_set(
+  capabilities,
+  '{input_schema,num_frames,max}',
+  '257'  -- ~8.5s at 30fps, verify against fal.ai docs
+)
+WHERE model_key = 'fal-ai/ltx-video-13b-distilled/extend';
+```
 
-**Recommendation**: Option A -- pass `selectedModel.id` as `model_id`. No prop changes needed.
+The exact max should be verified against fal.ai's documentation for this endpoint.
 
-### 2. Mobile: `MobileSimplePromptInput.tsx`
+### 2. Adjust duration logic for extend models in the frontend
 
-Same sparkle button, positioned next to the prompt textarea. Same logic, same edge function call.
+**File: `src/hooks/useLibraryFirstWorkspace.ts`** (~line 1272)
 
-### 3. Edge Function: No Changes Needed
+For extend models, the UI duration should represent the **desired total output length**, and the UI should make this clear. Alternatively, add the source video duration to the user's requested extension duration. Since we don't know the source video's exact length from the frontend, the simplest fix is:
 
-The `enhance-prompt` function already:
-- Accepts `model_id` and resolves `model_key` from the database
-- Looks up the matching template via 5-tuple (target_model, enhancer_model, job_type, use_case, content_mode)
-- Falls back gracefully if no template is found
+- Ensure the duration slider shows values that make sense for extension (e.g., minimum = source length + 1 second)
+- Or: set a sensible minimum `num_frames` floor for extend models (e.g., at least 200 frames / ~6.7s)
 
-### 4. Props Threading
+### 3. Set a reasonable default duration for extend
 
-Both `SimplePromptInput` and `MobileSimplePromptInput` already receive `selectedModel` with `.id` and `contentType`. No new props are needed -- the enhance call can be self-contained within each component.
+**File: `src/hooks/useVideoModelSettings.ts`**
 
-## Technical Details
+When `referenceMode === 'video'`, override the default duration to something longer (e.g., 8-10 seconds) so users get a meaningfully extended result by default instead of a near-duplicate.
 
-### Desktop Sparkle Button (SimplePromptInput.tsx)
+### 4. Update `input_defaults.num_frames` in the database
+
+The current default is `121` (4 seconds). For an extend model, this should be higher:
+
+```sql
+UPDATE api_models
+SET input_defaults = jsonb_set(
+  input_defaults,
+  '{num_frames}',
+  '241'  -- ~8s at 30fps
+)
+WHERE model_key = 'fal-ai/ltx-video-13b-distilled/extend';
+```
+
+## Summary of Changes
 
 | Location | Change |
 |---|---|
-| ~line 430 | Add `isEnhancing` state |
-| ~line 848-880 | Add sparkle button next to the Settings gear inside the textarea container |
+| Database: `api_models` | Increase `num_frames.max` and `input_defaults.num_frames` for the extend model |
+| `src/hooks/useVideoModelSettings.ts` | Override default duration for extend models to be longer |
+| `src/hooks/useLibraryFirstWorkspace.ts` | No code change needed if DB values are corrected |
 
-The button will be positioned as a sibling to the existing Settings gear button:
+## Key Insight
 
-```text
-<button onClick={handleEnhance} disabled={!prompt.trim() || isEnhancing || isGenerating}>
-  {isEnhancing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-</button>
-```
-
-The `handleEnhance` function:
-
-```text
-const handleEnhance = async () => {
-  if (!prompt.trim() || !selectedModel?.id) return;
-  setIsEnhancing(true);
-  try {
-    const { data, error } = await supabase.functions.invoke('enhance-prompt', {
-      body: {
-        prompt: prompt.trim(),
-        model_id: selectedModel.id,
-        job_type: mode === 'video' ? 'video' : 'image',
-        contentType: contentType || 'sfw',
-      }
-    });
-    if (data?.enhanced_prompt) {
-      onPromptChange(data.enhanced_prompt);
-      toast.success(`Prompt enhanced for ${selectedModel.display_name}`);
-    }
-  } catch (err) {
-    toast.error('Enhancement failed');
-  } finally {
-    setIsEnhancing(false);
-  }
-};
-```
-
-### Mobile Sparkle Button (MobileSimplePromptInput.tsx)
-
-Same pattern, placed inside the form area near the prompt textarea.
-
-## UX Flow
-
-1. User types a natural language prompt: "woman walking through a garden"
-2. User selects LTX 13b I2V model, loads a reference image
-3. User clicks the sparkle icon
-4. System calls `enhance-prompt` with `model_id` pointing to LTX I2V
-5. Edge function resolves `model_key = fal-ai/ltx-video-13b-distilled/image-to-video`, finds the "LTX 13B I2V Prompt Enhance" template
-6. Returns structured prompt: "Medium shot. Same character as reference image. Action: gentle walk through sunlit garden path. Camera: slow tracking shot. Lighting: warm golden hour. Mood: serene. Continuity: same outfit, same location, no scene cut."
-7. User sees the enhanced prompt in the textarea, can edit if needed
-8. User clicks Generate
-
-## Files Changed
-
-| File | Change |
-|---|---|
-| `src/components/workspace/SimplePromptInput.tsx` | Add sparkle enhance button + handler |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Add sparkle enhance button + handler |
-
-No edge function changes. No database changes. No new dependencies.
+This is primarily a **database configuration issue**. The `num_frames.max = 161` constraint makes it impossible to generate output longer than ~5.3 seconds. Once the DB values are corrected, the existing duration-to-frames conversion logic will work correctly.
 
