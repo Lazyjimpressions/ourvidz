@@ -1,76 +1,62 @@
 
 
-# Fix: Video Extend Duration Settings
+# Fix: Video Duration Not Synced With Model Settings
 
 ## Problem
 
-The generated video from LTX Extend is the same length as the source because the duration math doesn't account for extension. Two issues:
+The video extend output is only 5 seconds because:
 
-1. **The `num_frames` cap is too low**: The model's `input_schema` has `num_frames.max = 161` at 30fps, which is only ~5.3 seconds total output. If your source video is already 5 seconds, the output can never be meaningfully longer.
+1. `videoDuration` state in `useLibraryFirstWorkspace.ts` is initialized as `useState(5)` and **never updated** when the model changes
+2. The `useVideoModelSettings` hook (which correctly calculates `defaultDuration = 8` for extend models) is **not used** by `useLibraryFirstWorkspace`
+3. The edge function receives `duration: 5` in metadata, calculates `5 * 30 = 150 frames`, so the output matches the source length exactly
 
-2. **Duration represents total output, not extension length**: The UI duration slider sets total `num_frames` (source + extension combined). Users expect to set how much *additional* time to add, but the model treats it as the total output length.
+## Fix
 
-## Root Cause
+### 1. Wire `useVideoModelSettings` into `useLibraryFirstWorkspace.ts`
 
-The `num_frames` constraint in the database (`max: 161`) appears too restrictive. LTX Video 13B Extend on fal.ai likely supports higher frame counts. The current value may have been copied from the non-extend model.
+Import and call `useVideoModelSettings` with the currently selected video model ID. When the settings change (e.g., user switches to an extend model), update `videoDuration` to the model's `defaultDuration`.
 
-## Proposed Fix
+```typescript
+import { useVideoModelSettings } from './useVideoModelSettings';
 
-### 1. Verify and update `num_frames.max` in the database
+// Inside the hook, after selectedModel state:
+const { settings: videoSettings } = useVideoModelSettings(
+  mode === 'video' ? selectedModel?.id || null : null
+);
 
-Run a query to update the extend model's `num_frames.max` to a more reasonable value. Based on fal.ai docs for LTX 13B Extend, the model should support longer outputs (e.g., 257 or higher frames). This is a database-only change:
-
-```sql
--- Check current value and update num_frames max for the extend model
-UPDATE api_models
-SET capabilities = jsonb_set(
-  capabilities,
-  '{input_schema,num_frames,max}',
-  '257'  -- ~8.5s at 30fps, verify against fal.ai docs
-)
-WHERE model_key = 'fal-ai/ltx-video-13b-distilled/extend';
+// Sync videoDuration when model changes
+useEffect(() => {
+  if (videoSettings?.defaultDuration) {
+    setVideoDuration(videoSettings.defaultDuration);
+  }
+}, [videoSettings?.defaultDuration]);
 ```
 
-The exact max should be verified against fal.ai's documentation for this endpoint.
+### 2. Expose duration options from model settings
 
-### 2. Adjust duration logic for extend models in the frontend
+Pass `videoSettings.durationOptions` to the UI components so the duration picker shows valid options for the selected model (not a hardcoded list).
 
-**File: `src/hooks/useLibraryFirstWorkspace.ts`** (~line 1272)
-
-For extend models, the UI duration should represent the **desired total output length**, and the UI should make this clear. Alternatively, add the source video duration to the user's requested extension duration. Since we don't know the source video's exact length from the frontend, the simplest fix is:
-
-- Ensure the duration slider shows values that make sense for extension (e.g., minimum = source length + 1 second)
-- Or: set a sensible minimum `num_frames` floor for extend models (e.g., at least 200 frames / ~6.7s)
-
-### 3. Set a reasonable default duration for extend
-
-**File: `src/hooks/useVideoModelSettings.ts`**
-
-When `referenceMode === 'video'`, override the default duration to something longer (e.g., 8-10 seconds) so users get a meaningfully extended result by default instead of a near-duplicate.
-
-### 4. Update `input_defaults.num_frames` in the database
-
-The current default is `121` (4 seconds). For an extend model, this should be higher:
-
-```sql
-UPDATE api_models
-SET input_defaults = jsonb_set(
-  input_defaults,
-  '{num_frames}',
-  '241'  -- ~8s at 30fps
-)
-WHERE model_key = 'fal-ai/ltx-video-13b-distilled/extend';
+In `useLibraryFirstWorkspace.ts`, add to the return object:
+```typescript
+videoDurationOptions: videoSettings?.durationOptions || [3, 5, 8],
 ```
 
-## Summary of Changes
+### 3. Update UI components to use dynamic duration options
 
-| Location | Change |
+**`SimplePromptInput.tsx`** and **`MobileSettingsSheet.tsx`**: Accept `videoDurationOptions` prop and render those values in the duration picker instead of any hardcoded list.
+
+## Technical Details
+
+| File | Change |
 |---|---|
-| Database: `api_models` | Increase `num_frames.max` and `input_defaults.num_frames` for the extend model |
-| `src/hooks/useVideoModelSettings.ts` | Override default duration for extend models to be longer |
-| `src/hooks/useLibraryFirstWorkspace.ts` | No code change needed if DB values are corrected |
+| `src/hooks/useLibraryFirstWorkspace.ts` | Import `useVideoModelSettings`, add `useEffect` to sync `videoDuration` with model default, expose `videoDurationOptions` |
+| `src/pages/SimplifiedWorkspace.tsx` | Pass `videoDurationOptions` to `SimplePromptInput` |
+| `src/components/workspace/SimplePromptInput.tsx` | Accept and use `videoDurationOptions` prop for duration picker |
+| `src/pages/MobileSimplifiedWorkspace.tsx` | Pass `videoDurationOptions` to mobile settings |
+| `src/components/workspace/MobileSettingsSheet.tsx` | Accept and use `videoDurationOptions` prop |
 
-## Key Insight
+## Result
 
-This is primarily a **database configuration issue**. The `num_frames.max = 161` constraint makes it impossible to generate output longer than ~5.3 seconds. Once the DB values are corrected, the existing duration-to-frames conversion logic will work correctly.
-
+- Switching to an extend model auto-sets duration to 8s (241 frames at 30fps)
+- Duration picker shows model-valid options (e.g., 1-8s for extend)
+- Edge function receives correct duration, producing meaningfully longer output
