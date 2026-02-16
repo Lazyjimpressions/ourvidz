@@ -77,12 +77,12 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
       </div>
 
       <div className="space-y-2 text-xs">
-        {/* ✅ ADMIN: Prompt Template Info (ID + Name) */}
-        {(metadata.template_id || metadata.template_name || metadata.scene_template_id || metadata.scene_template_name) && (
+        {/* ✅ ADMIN: Prompt Template Info (ID + Name). Show when we have template info or first-scene template prompt. */}
+        {(metadata.template_id || metadata.template_name || metadata.scene_template_id || metadata.scene_template_name || metadata.scene_template_prompt) && (
           <div>
             <Label className="text-xs text-gray-400 mb-1 flex items-center gap-1">
               <FileText className="w-3 h-3" />
-              Prompt Template
+              Prompt / Scene Template
             </Label>
             <div className="space-y-0.5">
               {metadata.template_id && (
@@ -124,6 +124,10 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
               )}
               {metadata.scene_template_name && (
                 <p className="text-gray-200 text-xs font-mono">{metadata.scene_template_name}</p>
+              )}
+              {/* First scene from template: backend may set scene_template_name; if not, show label when template prompt was used */}
+              {!metadata.scene_template_name && metadata.scene_template_prompt && (
+                <p className="text-gray-200 text-xs font-mono">Scene template (first scene)</p>
               )}
             </div>
           </div>
@@ -205,14 +209,13 @@ export const SceneDebugPanel: React.FC<SceneDebugPanelProps> = ({
 
         {/* Template & Model Info */}
         <div className="grid grid-cols-2 gap-2">
-          
-          {metadata.model_display_name && (
+          {(metadata.model_display_name || metadata.effective_image_model) && (
             <div>
               <Label className="text-xs text-gray-400 mb-1 flex items-center gap-1">
                 <Database className="w-3 h-3" />
                 Image Model
               </Label>
-              <p className="text-gray-200 font-mono text-xs">{metadata.model_display_name}</p>
+              <p className="text-gray-200 font-mono text-xs">{metadata.model_display_name || (metadata.effective_image_model ? `ID: ${String(metadata.effective_image_model).slice(0, 8)}…` : '—')}</p>
               {metadata.model_used && metadata.model_used !== metadata.model_display_name && (
                 <p className="text-gray-400 text-[10px] mt-0.5">({metadata.model_used})</p>
               )}

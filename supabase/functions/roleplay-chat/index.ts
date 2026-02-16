@@ -3009,6 +3009,8 @@ const sceneContext = analyzeSceneContent(response);
         .replace(/\s+/g, ' ') // Normalize whitespace
         .trim();
       
+      // ✅ ADMIN: Set template label so debug panel shows "Scene template (first scene)"
+      sceneTemplateName = sceneTemplateName ?? 'Scene template (first scene)';
       console.log('✅ Using template scene prompt (first scene) with character visual description:', scenePrompt.substring(0, 150) + '...');
     } else {
       // Generate AI-powered scene narrative using OpenRouter
@@ -3080,11 +3082,12 @@ const sceneContext = analyzeSceneContent(response);
     if (!effectiveImageModel || effectiveImageModel.trim() === '') {
       console.log('📸 No image model specified, fetching default image model from database...');
 
-      // ✅ FIX: Determine required task type based on whether this is first scene
-      // First scene: Use T2I model (task='generation', e.g., Seedream v4)
-      // I2I iterations: Use I2I model (task='style_transfer', e.g., Seedream v4.5 Edit)
-      const requiredTask = isFirstScene ? 'generation' : 'style_transfer';
-      console.log(`🎯 Looking for default ${isFirstScene ? 'T2I' : 'I2I'} model with task='${requiredTask}'`);
+      // ✅ FIX: First scene with template preview uses I2I → default to I2I model (style_transfer).
+      // First scene without template preview uses T2I → default to T2I model (generation).
+      // Subsequent scenes use I2I → default to I2I model.
+      const useI2IForFirstScene = !!(isFirstScene && templatePreviewImageUrl);
+      const requiredTask = (isFirstScene && !templatePreviewImageUrl) ? 'generation' : 'style_transfer';
+      console.log(`🎯 Looking for default ${requiredTask === 'style_transfer' ? 'I2I' : 'T2I'} model (task='${requiredTask}')`, useI2IForFirstScene ? '(first scene I2I from template preview)' : '');
 
       // First, look for the default model (is_default = true)
       const { data: defaultModels } = await supabase
@@ -3176,8 +3179,9 @@ const sceneContext = analyzeSceneContent(response);
           generation_mode: generationMode, // 't2i' or 'i2i'
           generation_metadata: {
             model_used: selectedImageModel ? 'api_model' : 'sdxl',
-            selected_image_model: selectedImageModel || null, // Track what was requested
-            effective_image_model: effectiveImageModel || null, // Track what was actually used
+            model_display_name: imageModelConfig?.display_name ?? null, // ✅ ADMIN: So debug panel shows image model
+            selected_image_model: selectedImageModel || null,
+            effective_image_model: effectiveImageModel || null,
             consistency_method: consistencySettings?.method || consistencyMethod,
             reference_strength: refStrength,
             denoise_strength: denoiseStrength,
@@ -3186,16 +3190,12 @@ const sceneContext = analyzeSceneContent(response);
             scene_style: sceneStyle,
             scene_context: sceneContext,
             character_visual_description: characterVisualDescription,
-            // I2I iteration tracking
             scene_continuity_enabled: sceneContinuityEnabled,
             is_first_scene: isFirstScene,
             use_i2i_iteration: useI2IIteration,
-            // ✅ ADMIN: Store scene prompt template info
             scene_template_id: sceneTemplateId,
             scene_template_name: sceneTemplateName,
-            // ✅ ADMIN: Store original scene prompt used for generation
             original_scene_prompt: cleanScenePrompt || scenePrompt,
-            // ✅ CRITICAL FIX: Store template prompt for subsequent scene reference
             scene_template_prompt: sceneTemplatePrompt || null
           },
           job_id: null, // Will be updated when job is queued

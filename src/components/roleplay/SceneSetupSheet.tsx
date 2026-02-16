@@ -91,6 +91,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
 }) => {
   const { characters: publicCharacters, isLoading: isLoadingPublicCharacters } = usePublicCharacters();
   const { characters: userCreatedCharacters, userPersonas, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
+  // No hasReferenceImage: show all image models (T2I + I2I) so user can pick e.g. Seedream v4.5 Edit for first-scene I2I
   const { modelOptions: imageModelOptions, isLoading: imageModelsLoading, defaultModel: defaultImageModel } = useImageModels();
   const { allModelOptions: chatModelOptions, isLoading: chatModelsLoading, defaultModel: defaultChatModel } = useRoleplayModels();
   const hasOptions = Boolean(onImageModelChange || onChatModelChange || onSceneStyleChange || onImageGenerationModeChange);
