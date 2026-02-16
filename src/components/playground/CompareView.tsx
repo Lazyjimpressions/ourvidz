@@ -366,11 +366,16 @@ export const CompareView: React.FC = () => {
                   {msg.sender === 'user' ? (
                     <p className="text-xs whitespace-pre-wrap">{msg.content}</p>
                   ) : (
-                    <div className="prose prose-sm dark:prose-invert max-w-none text-xs">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
+                    <>
+                      <div className="prose prose-sm dark:prose-invert max-w-none text-xs">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {msg.content}
+                        </ReactMarkdown>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground mt-1 block">
+                        {msg.content.length} chars | ~{Math.ceil(msg.content.length / 4)} tokens
+                      </span>
+                    </>
                   )}
                 </div>
               </div>

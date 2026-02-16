@@ -72,6 +72,7 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
     if (!details) return;
     
     const metadata = [
+      details.modelUsed && `Model: ${details.modelUsed}`,
       details.templateName && `Template: ${details.templateName}`,
       details.originalPrompt && `Original Prompt: ${details.originalPrompt}`,
       details.enhancedPrompt && `Enhanced Prompt: ${details.enhancedPrompt}`,
@@ -150,12 +151,22 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                 </Button>
               </div>
 
-              <Badge 
-                variant="outline" 
-                className={`w-fit text-xs ${getJobTypeBadgeVariant()}`}
-              >
-                {getJobTypeFormatted()}
-              </Badge>
+              <div className="flex flex-wrap gap-1.5">
+                <Badge 
+                  variant="outline" 
+                  className={`w-fit text-xs ${getJobTypeBadgeVariant()}`}
+                >
+                  {getJobTypeFormatted()}
+                </Badge>
+                {details?.modelUsed && (
+                  <Badge 
+                    variant="outline" 
+                    className="w-fit text-xs border-amber-500/20 text-amber-400"
+                  >
+                    Model: {details.modelUsed}
+                  </Badge>
+                )}
+              </div>
 
               {/* Template Name */}
               {(details?.templateName || details?.sceneTemplateName) && (

@@ -13,6 +13,7 @@ interface Message {
   content: string;
   message_type?: string;
   created_at: string;
+  response_time_ms?: number;
 }
 
 interface MessageBubbleProps {
@@ -66,6 +67,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           isUser ? 'flex-row-reverse' : ''
         }`}>
           <span className="text-xs text-muted-foreground mr-2">{timeAgo}</span>
+          {!isUser && (
+            <span className="text-[11px] text-muted-foreground mr-1">
+              {message.content.length} chars | ~{Math.ceil(message.content.length / 4)} tokens
+              {message.response_time_ms ? ` | ${(message.response_time_ms / 1000).toFixed(1)}s` : ''}
+            </span>
+          )}
           <Button variant="ghost" size="sm" onClick={handleCopy} className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground" title="Copy">
             <Copy className="h-3 w-3" />
           </Button>

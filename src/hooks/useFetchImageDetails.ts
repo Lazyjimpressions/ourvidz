@@ -32,6 +32,7 @@ interface ImageDetails {
   replicateActualOutput?: any;
   promptLength?: number;
   promptTruncated?: boolean;
+  modelUsed?: string;
 }
 
 export const useFetchImageDetails = () => {
@@ -148,7 +149,8 @@ export const useFetchImageDetails = () => {
           replicateActualInput,
           replicateActualOutput,
           promptLength,
-          promptTruncated
+          promptTruncated,
+          modelUsed: workspaceAsset.model_used || settings?.model_used || settings?.model,
         });
         return;
       }
