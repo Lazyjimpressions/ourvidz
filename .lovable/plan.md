@@ -1,61 +1,63 @@
 
 
-# Add "None" Option to Template and Character Selectors
+# Fix: Honor Custom System Prompts in Playground Chat
 
-## Problem
-Once a character or template is selected in the Compare View dropdowns, there is no way to deselect it. Many prompt testing scenarios (e.g., enhancement prompts, general system prompts) don't involve characters at all, but the current UI forces a selection to persist.
+## Root Cause
 
-## Solution
-Add a "None" clear option to both the **Template** and **Character** `Select` components in each panel. Selecting "None" resets the selection and restores the appropriate state.
+The Compare View sends `system_prompt_override` in the request body (line 162 of CompareView.tsx), but the `playground-chat` edge function never reads or uses this field. It always generates its own system prompt via `getSystemPromptForChat()`, which resolves to the default NSFW chat template: *"Reply as a flirtatious, modern conversational partner..."*
 
-## Changes (CompareView.tsx only)
+This is why both mimo and grok ignored your Seedream prompt engineering system prompt -- it was silently discarded by the backend.
 
-### 1. Template selector -- add "None" option
-- Add a `SelectItem` with value `"__none__"` labeled "No template" at the top of the dropdown
-- When selected: clear `selectedTemplateId`, clear `rawRef`, keep `systemPrompt` as-is (user may have typed manually)
+## Fix
 
-### 2. Character selector -- add "None" option
-- Add a `SelectItem` with value `"__none__"` labeled "No character" at the top of the dropdown
-- When selected: clear `selectedCharacterId`, restore system prompt to the raw template text (un-hydrated) if a template is loaded, or leave it as-is
+Update `playground-chat/index.ts` to:
 
-### 3. Handler updates
-- `handleTemplateSelect`: if value is `"__none__"`, reset `selectedTemplateId` to `""`, clear `rawRef`, keep current `systemPrompt`
-- `handleCharacterSelect`: if value is `"__none__"`, reset `selectedCharacterId` to `""`, restore `systemPrompt` to `rawRef.current` (the un-hydrated template) if available
+1. **Destructure** `system_prompt_override` from the request body (around line 469-482)
+2. **Skip** `getSystemPromptForChat()` when `system_prompt_override` is provided -- use the override directly as the system prompt
+3. **Still append** NSFW guidance if the content tier is NSFW (to maintain safety rails)
+4. **Log** when an override is active for diagnostics
 
-### 4. Conversation creation
-- Already handled: `character_id` is only included when `selectedCharacterId` is truthy (line 122-124), so clearing it works without backend changes
+## Technical Changes
 
-## Technical Detail
+### File: `supabase/functions/playground-chat/index.ts`
 
-```typescript
-// In handleCharacterSelect, add guard at top:
-if (characterId === '__none__') {
-  setPanel(prev => ({
-    ...prev,
-    selectedCharacterId: '',
-    systemPrompt: rawRef.current || prev.systemPrompt,
-  }));
-  return;
-}
+**Change 1 -- Destructure the new field (line ~469-482)**
 
-// In handleTemplateSelect, add guard at top:
-if (templateId === '__none__') {
-  rawRef.current = '';
-  setPanel(prev => ({ ...prev, selectedTemplateId: '' }));
-  return;
+Add `system_prompt_override` to the destructured body variables.
+
+**Change 2 -- Use override when present (line ~696-706)**
+
+Before calling `getSystemPromptForChat()`, check if `system_prompt_override` is provided. If so, use it directly instead of the template-resolved prompt. Still append NSFW guidance if applicable.
+
+```text
+// Pseudo-logic:
+let systemPrompt;
+if (system_prompt_override && system_prompt_override.trim()) {
+  systemPrompt = system_prompt_override;
+  // Still append NSFW guidance for safety
+  if (finalTier === 'nsfw' && !systemPrompt.includes(NSFW_GUIDANCE_MARK)) {
+    systemPrompt += '\n\n' + NSFW_ROLEPLAY_GUIDANCE;
+  }
+  console.log('Using system_prompt_override from client');
+} else {
+  systemPrompt = await getSystemPromptForChat(...);
 }
 ```
 
-In both Select components, add before existing items:
-```tsx
-<SelectItem value="__none__" className="text-xs text-muted-foreground">
-  No character
-</SelectItem>
+**Change 3 -- Diagnostic logging**
+
+Log the override usage so future debugging is clear:
+```text
+console.log('System prompt source:', system_prompt_override ? 'client_override' : 'template_resolved');
 ```
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/playground/CompareView.tsx` | Add "None" options to template and character selectors, update handlers to support clearing |
+| `supabase/functions/playground-chat/index.ts` | Destructure `system_prompt_override` from body; use it as system prompt when present, skipping template resolution; append NSFW guidance if needed |
+
+## Expected Result
+
+After this fix, when you type a custom system prompt in the Compare View (like the Seedream prompt engineer instructions), both models will receive and follow that exact system prompt instead of the default NSFW chat template.
 
