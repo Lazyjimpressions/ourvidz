@@ -77,6 +77,9 @@ export interface LibraryFirstWorkspaceState {
   lockHair: boolean;
   originalClothingColor: string;
   targetGarments: string[];
+  // Video Extend settings
+  extendStrength: number;
+  extendReverseVideo: boolean;
 }
 
 export interface LibraryFirstWorkspaceActions {
@@ -138,6 +141,9 @@ export interface LibraryFirstWorkspaceActions {
   setLockHair: (enabled: boolean) => void;
   setOriginalClothingColor: (color: string) => void;
   setTargetGarments: (garments: string[]) => void;
+  // Video Extend settings
+  setExtendStrength: (strength: number) => void;
+  setExtendReverseVideo: (reverse: boolean) => void;
   
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
@@ -381,6 +387,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [lockHair, setLockHair] = useState(false);
   const [originalClothingColor, setOriginalClothingColor] = useState('black');
   const [targetGarments, setTargetGarments] = useState<string[]>([]);
+  // Video Extend settings
+  const [extendStrength, setExtendStrength] = useState(1.0);
+  const [extendReverseVideo, setExtendReverseVideo] = useState(false);
 
   // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -1239,8 +1248,26 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // Video-specific parameters (model-agnostic: edge function applies input_defaults and schema filtering)
         if (isFalVideo) {
           const refImageUrl = startRefUrl || effRefUrl;
-          if (refImageUrl) {
-            inputObj.image_url = refImageUrl; // Always use image_url for all video models
+          
+          // Check if this is a video extend model (requires video conditioning object)
+          const caps = await (async () => {
+            try {
+              const { data: md } = await supabase.from('api_models').select('capabilities').eq('id', selectedModel.id).single();
+              return (md?.capabilities as any) || {};
+            } catch { return {}; }
+          })();
+          const isExtendModel = caps?.input_schema?.video?.required === true;
+          
+          if (isExtendModel && refImageUrl) {
+            // Package as video conditioning object for extend endpoint
+            inputObj.video = {
+              video_url: refImageUrl,
+              strength: extendStrength,
+              reverse_video: extendReverseVideo,
+              conditioning_type: "rgb",
+            };
+          } else if (refImageUrl) {
+            inputObj.image_url = refImageUrl; // Standard I2V
           }
           inputObj.duration = videoDuration || 5; // Edge function converts to num_frames using model's frame_rate
         }
@@ -1850,6 +1877,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     lockHair,
     originalClothingColor,
     targetGarments,
+    // Video Extend settings
+    extendStrength,
+    extendReverseVideo,
     
     // Actions
     updateMode: setMode,
@@ -1930,6 +1960,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setLockHair,
     setOriginalClothingColor,
     setTargetGarments,
+    // Video Extend settings
+    setExtendStrength: (s: number) => setExtendStrength(s),
+    setExtendReverseVideo: (r: boolean) => setExtendReverseVideo(r),
     getJobStats,
     getActiveJob,
     getJobById,

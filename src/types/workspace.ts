@@ -31,6 +31,12 @@ export interface VideoReferenceImages {
   end?: ReferenceImage;
 }
 
+/** Settings for video extend (LTX Extend) workflow */
+export interface VideoExtendSettings {
+  strength: number;        // 0-1, how much the model can deviate from source
+  reverseVideo: boolean;   // Reverse input video before extending
+}
+
 export interface MediaTile {
   id: string;
   originalAssetId: string;

@@ -7,12 +7,14 @@ export interface VideoModelSettings {
   fpsOptions: number[];
   aspectRatioOptions: string[];
   guideScaleRange: { min: number; max: number; default: number };
-  referenceMode: 'single' | 'dual' | 'none';
+  referenceMode: 'single' | 'dual' | 'video' | 'none';
   defaultDuration: number;
   defaultResolution: string;
   defaultFps: number;
   defaultGuideScale: number;
   defaultAspectRatio: string;
+  /** Extend-specific: video conditioning schema properties */
+  videoConditioningSchema?: Record<string, any>;
 }
 
 /**
@@ -63,10 +65,13 @@ function deriveFromInputSchema(
     (_, i) => fpsMin + i
   );
 
-  // Reference mode: if image_url exists in schema, model supports I2V
-  const referenceMode: 'single' | 'dual' | 'none' = schema.image_url
-    ? 'single'
-    : 'none';
+  // Reference mode: detect video conditioning (extend), image_url (I2V), or none (T2V)
+  const referenceMode: 'single' | 'dual' | 'video' | 'none' = 
+    schema.video?.required === true
+      ? 'video'       // Extend model -- needs source video
+      : schema.image_url
+        ? 'single'    // I2V -- needs source image
+        : 'none';     // T2V -- no reference needed
 
   return {
     durationOptions,
@@ -79,6 +84,7 @@ function deriveFromInputSchema(
       default: guideScale.default ?? inputDefaults.guide_scale ?? 5,
     },
     referenceMode,
+    videoConditioningSchema: schema.video?.required ? schema.video : undefined,
     defaultDuration: durationOptions.includes(defaultDuration) ? defaultDuration : durationOptions[0] || 5,
     defaultResolution: inputDefaults.resolution || resolution.default || '720p',
     defaultFps: defaultFps,

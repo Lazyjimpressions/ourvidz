@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings, Info, Sparkles, Loader2 } from 'lucide-react';
+import { Image, Video, Play, Camera, Film, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings, Info, Sparkles, Loader2 } from 'lucide-react';
 
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -27,6 +27,10 @@ const ReferenceImageUpload: React.FC<{
   sizeClass?: string;
   exactCopyMode?: boolean;
   setExactCopyMode?: (mode: boolean) => void;
+  /** When true, also accept video files (for extend models) */
+  acceptVideo?: boolean;
+  /** Callback when a video file is dropped/selected (triggers auto-model-switch) */
+  onVideoFileDetected?: (file: File) => void;
 }> = ({
   file,
   onFileChange,
@@ -35,7 +39,9 @@ const ReferenceImageUpload: React.FC<{
   onImageUrlChange,
   sizeClass = "h-16 w-16",
   exactCopyMode,
-  setExactCopyMode
+  setExactCopyMode,
+  acceptVideo = false,
+  onVideoFileDetected
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null);
@@ -106,20 +112,29 @@ const ReferenceImageUpload: React.FC<{
     const uploadedFile = event.target.files?.[0];
     if (!uploadedFile) return;
     
-    // Validate file
-    if (!uploadedFile.type.startsWith('image/')) {
+    // Validate file type
+    const isImage = uploadedFile.type.startsWith('image/');
+    const isVideo = uploadedFile.type.startsWith('video/');
+    
+    if (isVideo && acceptVideo) {
+      // Video file detected - notify parent for auto-model-switch
+      onVideoFileDetected?.(uploadedFile);
+    }
+    
+    if (!isImage && !(isVideo && acceptVideo)) {
       toast({
         title: "Invalid File",
-        description: "Please select an image file",
+        description: acceptVideo ? "Please select an image or video file" : "Please select an image file",
         variant: "destructive",
       });
       return;
     }
     
-    if (uploadedFile.size > 10 * 1024 * 1024) {
+    const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (uploadedFile.size > maxSize) {
       toast({
         title: "File Too Large",
-        description: "Maximum file size is 10MB",
+        description: `Maximum file size is ${isVideo ? '50MB' : '10MB'}`,
         variant: "destructive",
       });
       return;
@@ -174,50 +189,59 @@ const ReferenceImageUpload: React.FC<{
 
     // Handle file drops - upload immediately
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0 && files[0].type.startsWith('image/')) {
+    if (files.length > 0) {
       const droppedFile = files[0];
+      const isImage = droppedFile.type.startsWith('image/');
+      const isVideo = droppedFile.type.startsWith('video/');
       
-      // Validate file
-      if (droppedFile.size > 10 * 1024 * 1024) {
-        toast({
-          title: "File Too Large",
-          description: "Maximum file size is 10MB",
-          variant: "destructive",
-        });
-        return;
+      if (isVideo && acceptVideo) {
+        // Video file detected - notify parent for auto-model-switch
+        onVideoFileDetected?.(droppedFile);
       }
       
-      // Clear previous state
-      onFileChange(null);
-      if (onImageUrlChange) {
-        onImageUrlChange(null);
-      }
-      
-      // Upload immediately
-      setIsUploading(true);
-      uploadAndSignReferenceImage(droppedFile)
-        .then((signedUrl) => {
-          if (onImageUrlChange) {
-            onImageUrlChange(signedUrl);
-          }
-          onFileChange(null);
+      if (isImage || (isVideo && acceptVideo)) {
+        const maxSize = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
+        if (droppedFile.size > maxSize) {
           toast({
-            title: "Reference Image Ready",
-            description: "Image uploaded and ready for generation",
-          });
-        })
-        .catch((error) => {
-          console.error('❌ DESKTOP: Failed to upload dropped reference image:', error);
-          toast({
-            title: "Upload Failed",
-            description: error instanceof Error ? error.message : "Failed to upload reference image",
+            title: "File Too Large",
+            description: `Maximum file size is ${isVideo ? '50MB' : '10MB'}`,
             variant: "destructive",
           });
-        })
-        .finally(() => {
-          setIsUploading(false);
-        });
-      return;
+          return;
+        }
+      
+        // Clear previous state
+        onFileChange(null);
+        if (onImageUrlChange) {
+          onImageUrlChange(null);
+        }
+      
+        // Upload immediately
+        setIsUploading(true);
+        uploadAndSignReferenceImage(droppedFile)
+          .then((signedUrl) => {
+            if (onImageUrlChange) {
+              onImageUrlChange(signedUrl);
+            }
+            onFileChange(null);
+            toast({
+              title: isVideo ? "Video Source Ready" : "Reference Image Ready",
+              description: isVideo ? "Video uploaded and ready for extend" : "Image uploaded and ready for generation",
+            });
+          })
+          .catch((error) => {
+            console.error('❌ DESKTOP: Failed to upload dropped reference:', error);
+            toast({
+              title: "Upload Failed",
+              description: error instanceof Error ? error.message : "Failed to upload reference",
+              variant: "destructive",
+            });
+          })
+          .finally(() => {
+            setIsUploading(false);
+          });
+        return;
+      }
     }
 
     // Handle URL drops
@@ -241,7 +265,16 @@ const ReferenceImageUpload: React.FC<{
           metadata: workspaceItem.metadata,
           enhancedPrompt: workspaceItem.enhancedPrompt
         });
-        if (workspaceItem.url && workspaceItem.type === 'image') {
+        if (workspaceItem.url && (workspaceItem.type === 'image' || (workspaceItem.type === 'video' && acceptVideo))) {
+          // If video type dropped, trigger auto-switch
+          if (workspaceItem.type === 'video' && acceptVideo) {
+            // Create a synthetic notification - the parent will handle model switching
+            const videoDropEvent = new CustomEvent('video-source-dropped', {
+              detail: { url: workspaceItem.url, workspaceItem }
+            });
+            window.dispatchEvent(videoDropEvent);
+          }
+          
           // Clear file first, then set URL - component will sign it if needed
           onFileChange(null);
           // Small delay to ensure file state clears
@@ -302,14 +335,25 @@ const ReferenceImageUpload: React.FC<{
       console.log('🖼️ REF IMAGE DISPLAY: No image to display', { file: !!file, signedImageUrl: !!signedImageUrl, imageUrl: !!imageUrl });
     }
   }, [displayImage, file, signedImageUrl, imageUrl]);
+  // Check if reference is a video (for display purposes)
+  const isVideoRef = acceptVideo && displayImage && (
+    displayImage.includes('/video') || displayImage.endsWith('.mp4') || displayImage.endsWith('.webm') || displayImage.endsWith('.mov')
+  );
+  
   return <div className={`border border-border/30 bg-muted/10 rounded ${sizeClass} transition-all duration-200 overflow-hidden ${isDragOver ? 'border-primary bg-primary/10' : ''} ${isUploading ? 'opacity-50 pointer-events-none' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
       {displayImage ? <div className="relative w-full h-full">
-          <img src={displayImage} alt={label} className="w-full h-full object-cover" />
+          {isVideoRef ? (
+            <div className="w-full h-full flex items-center justify-center bg-muted/40">
+              <Film className="w-5 h-5 text-primary" />
+            </div>
+          ) : (
+            <img src={displayImage} alt={label} className="w-full h-full object-cover" />
+          )}
           <button 
             onClick={clearReference} 
             type="button"
             className="absolute -top-1 -right-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold z-10 cursor-pointer"
-            title="Clear reference image"
+            title={`Clear ${acceptVideo ? 'video source' : 'reference image'}`}
             disabled={isUploading}
           >
             ×
@@ -322,11 +366,11 @@ const ReferenceImageUpload: React.FC<{
             </>
           ) : (
             <>
-              <Camera className="w-4 h-4 mb-1" />
+              {acceptVideo ? <Film className="w-4 h-4 mb-1" /> : <Camera className="w-4 h-4 mb-1" />}
               <span className="text-xs font-medium">{label}</span>
             </>
           )}
-          <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" disabled={isUploading} />
+          <input type="file" accept={acceptVideo ? "image/*,video/mp4,video/webm,video/quicktime" : "image/*"} onChange={handleFileUpload} className="hidden" disabled={isUploading} />
         </label>}
     </div>;
 };
@@ -422,6 +466,11 @@ export interface SimplePromptInputProps {
   onOriginalClothingColorChange?: (color: string) => void;
   targetGarments?: string[];
   onTargetGarmentsChange?: (garments: string[]) => void;
+  // Video Extend settings
+  extendStrength?: number;
+  onExtendStrengthChange?: (strength: number) => void;
+  extendReverseVideo?: boolean;
+  onExtendReverseVideoChange?: (reverse: boolean) => void;
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
@@ -506,7 +555,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   originalClothingColor = 'black',
   onOriginalClothingColorChange,
   targetGarments = [],
-  onTargetGarmentsChange
+  onTargetGarmentsChange,
+  extendStrength = 1.0,
+  onExtendStrengthChange,
+  extendReverseVideo = false,
+  onExtendReverseVideoChange
 }) => {
   // Fetch available image and video models from API
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(
@@ -665,7 +718,32 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // LTX-Style Control Handlers
+  // Auto-switch to extend model when a video file is uploaded/dropped
+  const handleVideoFileDetected = (file: File) => {
+    console.log('🎬 VIDEO DETECTED: Auto-switching to extend model');
+    const extendModel = videoModels.find((m: any) => {
+      const caps = m.capabilities as any;
+      return caps?.input_schema?.video?.required === true;
+    });
+    if (extendModel) {
+      if (mode !== 'video') onModeChange('video');
+      onSelectedModelChange?.({
+        id: extendModel.id,
+        type: (extendModel.api_providers as any)?.name as 'fal',
+        display_name: extendModel.display_name
+      });
+      toast({
+        title: "Model Switched",
+        description: `Switched to ${extendModel.display_name} for video extend`,
+      });
+    } else {
+      toast({
+        title: "No Extend Model",
+        description: "No video extend model available",
+        variant: "destructive",
+      });
+    }
+  };
   const handleAspectRatioToggle = () => {
     // Use model-specific aspect ratios if available, otherwise default
     const availableRatios = videoModelSettings?.settings?.aspectRatioOptions || ['16:9', '1:1', '9:16'];
@@ -847,8 +925,20 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     )}
                   </div>
                 ) : (
-                  // Video mode: Show single reference for WAN 2.1 i2v, dual for other models
-                  videoModelSettings?.settings?.referenceMode === 'single' ? (
+                  // Video mode: Show video source for extend, single ref for I2V, dual for other models
+                  videoModelSettings?.settings?.referenceMode === 'video' ? (
+                    <ReferenceImageUpload 
+                      key={beginningRefImageUrl || beginningRefImage?.name || 'ref-video-extend'}
+                      file={beginningRefImage || null} 
+                      onFileChange={onBeginningRefImageChange || (() => {})} 
+                      imageUrl={beginningRefImageUrl} 
+                      onImageUrlChange={onBeginningRefImageUrlChange} 
+                      label="VIDEO" 
+                      sizeClass="h-14 w-14"
+                      acceptVideo={true}
+                      onVideoFileDetected={handleVideoFileDetected}
+                    />
+                  ) : videoModelSettings?.settings?.referenceMode === 'single' ? (
                     <ReferenceImageUpload 
                       key={beginningRefImageUrl || beginningRefImage?.name || 'ref-video'}
                       file={beginningRefImage || null} 
@@ -857,6 +947,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       onImageUrlChange={onBeginningRefImageUrlChange} 
                       label="REF" 
                       sizeClass="h-14 w-12"
+                      acceptVideo={true}
+                      onVideoFileDetected={handleVideoFileDetected}
                     />
                   ) : (
                     <>
@@ -868,6 +960,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         onImageUrlChange={onBeginningRefImageUrlChange} 
                         label="START" 
                         sizeClass="h-14 w-12"
+                        acceptVideo={true}
+                        onVideoFileDetected={handleVideoFileDetected}
                       />
                       <ReferenceImageUpload 
                         key={`end-${endingRefImageUrl || endingRefImage?.name || 'end'}`}
@@ -943,9 +1037,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 disabled={
                   isGenerating || 
                   (mode === 'video' ? !prompt.trim() : (!prompt.trim() && !exactCopyMode)) ||
-                  // Disable if WAN 2.1 i2v is selected without a reference image
+                  // Disable if I2V or extend model is selected without a reference
                   (mode === 'video' && 
-                   videoModelSettings?.settings?.referenceMode === 'single' && 
+                   (videoModelSettings?.settings?.referenceMode === 'single' || videoModelSettings?.settings?.referenceMode === 'video') && 
                    !beginningRefImage && 
                    !beginningRefImageUrl && 
                    !referenceImage && 
@@ -954,13 +1048,17 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-14 w-14 flex items-center justify-center shrink-0"
                 title={
                   mode === 'video' && 
-                  videoModelSettings?.settings?.referenceMode === 'single' && 
+                  (videoModelSettings?.settings?.referenceMode === 'single' || videoModelSettings?.settings?.referenceMode === 'video') && 
                   !beginningRefImage && 
                   !beginningRefImageUrl && 
                   !referenceImage && 
                   !referenceImageUrl
-                    ? "Reference image required for WAN 2.1 i2v"
-                    : "Generate"
+                    ? videoModelSettings?.settings?.referenceMode === 'video' 
+                      ? "Source video required for extend"
+                      : "Reference image required"
+                    : videoModelSettings?.settings?.referenceMode === 'video' 
+                      ? "Extend Video" 
+                      : "Generate"
                 }
               >
                 <Play size={14} fill="currentColor" />
@@ -1382,6 +1480,43 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   <X size={14} />
                 </button>
               </div>
+              
+              {/* Video Extend Controls - shown when extend model is selected */}
+              {mode === 'video' && videoModelSettings?.settings?.referenceMode === 'video' && (
+                <div className="mb-4 p-2 bg-muted/20 rounded border border-border/30">
+                  <h4 className="text-xs font-medium text-foreground mb-2">Extend Settings</h4>
+                  
+                  {/* Strength slider */}
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-muted-foreground">Strength</label>
+                      <span className="text-[10px] font-mono text-muted-foreground">{extendStrength.toFixed(2)}</span>
+                    </div>
+                    <Slider
+                      value={[extendStrength]}
+                      onValueChange={([v]) => onExtendStrengthChange?.(v)}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      size="xs"
+                    />
+                    <p className="text-[9px] text-muted-foreground mt-0.5">How much the model can deviate from source video</p>
+                  </div>
+                  
+                  {/* Reverse Video toggle */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] text-muted-foreground">Reverse Video</label>
+                    <button
+                      onClick={() => onExtendReverseVideoChange?.(!extendReverseVideo)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                        extendReverseVideo ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      }`}
+                    >
+                      {extendReverseVideo ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+              )}
               
               {/* Reference Type Selection and Variation - Always show at top when reference image present */}
               {(referenceImage || referenceImageUrl) && (
