@@ -1,60 +1,97 @@
 
+# Playground Persistence, Response Metrics, and Lightbox Model/Template Display
 
-# Remove Hardcoded NSFW Guidance from playground-chat
+## 1. Maintain Playground Persistence on Navigation
 
-## Problem
+**Problem**: When a user navigates away from `/playground` and returns, all state (active conversation, messages, current mode, system prompt) is lost because it's held in React component state.
 
-The edge function contains a ~10-line hardcoded `NSFW_ROLEPLAY_GUIDANCE` constant that gets force-appended to system prompts in **4 separate code paths**, regardless of whether the template or character already defines NSFW behavior. This:
+**Solution**: Persist the active conversation ID and mode to `localStorage`. On mount, restore the last active conversation and reload its messages.
 
-- Duplicates what templates already handle dynamically
-- Corrupts non-roleplay overrides (like prompt engineering)
-- Makes the NSFW rules impossible to update without redeploying the edge function
+### Changes
 
-The dynamic system already covers this:
-- Characters have `content_rating` (sfw/nsfw)
-- Scenes define their own content tier
-- Templates are tagged with `content_mode` (sfw/nsfw)
-- The `content_tier` parameter is passed from the client
-- Prompt enhancement templates include explicit/nsfw/sfw instructions inline
+**`src/contexts/PlaygroundContext.tsx`**
+- On `setActiveConversation`, persist `activeConversationId` to `localStorage` key `playground-active-conversation`
+- On mount, read the stored conversation ID and auto-load it (call `loadMessages` and set state)
+- Clear the stored ID when a conversation is deleted
 
-## Changes
+**`src/components/playground/ChatInterface.tsx`**
+- Persist `currentMode` to `localStorage` key `playground-mode`
+- Persist `systemPrompt` to `localStorage` key `playground-system-prompt`
+- Initialize from stored values on mount
 
-### File: `supabase/functions/playground-chat/index.ts`
+---
 
-**1. Remove the hardcoded constants (lines ~131-149)**
+## 2. Token and Character Count on Prompt Results
 
-Delete `NSFW_GUIDANCE_MARK`, `NSFW_ROLEPLAY_GUIDANCE`, `NSFW_STRICT_MARK`, `ROLEPLAY_FORMAT_MARK`, and `ROLEPLAY_FORMAT_RULES` constants entirely.
+**Problem**: Assistant responses don't show token/character counts, making it hard to evaluate output length.
 
-**2. Remove all 4 append sites**
+**Solution**: Add a small stats line below each assistant message showing character count and an estimated token count (chars / 4 approximation, standard for English text).
 
-- **Line ~209-212**: Remove NSFW guidance upgrade on cached roleplay prompts
-- **Line ~288-290**: Remove NSFW guidance append on processed roleplay prompts
-- **Line ~415-418**: Remove NSFW guidance append on general chat prompts
-- **Line ~700-703**: Remove NSFW guidance append on system_prompt_override path
+### Changes
 
-**3. Remove diagnostic references**
+**`src/components/playground/MessageBubble.tsx`**
+- For assistant messages, render a stats line in the hover toolbar area:
+  `{charCount} chars | ~{tokenEstimate} tokens`
+- Use `message.content.length` for chars, `Math.ceil(content.length / 4)` for token estimate
 
-- **Line ~724-725**: Remove `has_format_mark` and `has_nsfw_mark` checks in the logging snippet (they reference the deleted markers)
+**`src/components/playground/CompareView.tsx`**
+- Add the same char/token stats below each assistant message in the panel render
 
-**4. Keep everything else**
+---
 
-- Template resolution via `getChatTemplateFromCache()` stays -- it already selects the right template by `content_tier`
-- Character `content_rating` logic stays
-- `content_tier` / `finalTier` resolution stays
-- The `system_prompt_override` path stays, but now passes the override through cleanly without appending anything
+## 3. Preserve Response Time and Log in Tables
 
-## Result
+**Problem**: Response time is tracked in CompareView locally but not in the main Chat flow, and it's never persisted to the database.
 
-NSFW behavior is governed entirely by:
-1. The selected template's `system_prompt` (tagged sfw/nsfw in the database)
-2. The character's `content_rating` field
-3. The `content_tier` parameter from the client
+**Solution**: 
+- Return `generation_time` (already in edge function response) to the PlaygroundContext
+- Store it on each assistant message in local state
+- Display it in MessageBubble for assistant messages
 
-No hardcoded rules are injected at the edge function level. Templates can be updated in the database without redeployment.
+### Changes
 
-## Files Changed
+**`src/contexts/PlaygroundContext.tsx`**
+- After receiving a successful response, store `data.generation_time` on the assistant message object as `response_time_ms`
+- Include `generation_time` in `lastResponseMeta`
+
+**`src/components/playground/MessageBubble.tsx`**
+- Display `message.response_time_ms` (if present) in the hover toolbar: e.g., `1.2s`
+
+**`src/components/playground/CompareView.tsx`**
+- Already tracks `responseTime` per panel -- also show per-message response time from the edge function's `generation_time` field (the worker inference time, not the full round-trip)
+
+---
+
+## 4. Lightbox Generation Details: Template and Model
+
+**Problem**: The `PromptDetailsSlider` shows template name from `generation_settings.templateName` or the `jobs` table backfill, but never shows the `model_used` column from `workspace_assets`. For library assets, neither is available.
+
+**Solution**: Read the `model_used` column and surface it in the details panel. Also add `template_name` from the `jobs` table backfill (already partially done, just needs display).
+
+### Changes
+
+**`src/hooks/useFetchImageDetails.ts`**
+- Add `modelUsed?: string` to the `ImageDetails` interface
+- Set `modelUsed: workspaceAsset.model_used` when reading workspace assets
+- For library assets, check `user_library.model_used` if available, or extract from tags
+
+**`src/components/lightbox/PromptDetailsSlider.tsx`**
+- In the "Generation Summary" section, render the model used:
+  ```
+  Model: fal-ai/seedream-v4
+  ```
+- Display as a Badge below the job type badge
+- Include `modelUsed` in the "Copy All" metadata output
+
+---
+
+## Technical Summary
 
 | File | Change |
 |---|---|
-| `supabase/functions/playground-chat/index.ts` | Remove hardcoded NSFW/format constants and all 4 append sites; rely on dynamic template system |
-
+| `src/contexts/PlaygroundContext.tsx` | Persist/restore active conversation ID via localStorage; include `generation_time` in response metadata |
+| `src/components/playground/ChatInterface.tsx` | Persist/restore `currentMode` and `systemPrompt` via localStorage |
+| `src/components/playground/MessageBubble.tsx` | Show char/token counts and response time for assistant messages |
+| `src/components/playground/CompareView.tsx` | Show char/token counts per assistant message |
+| `src/hooks/useFetchImageDetails.ts` | Extract `model_used` from workspace_assets column |
+| `src/components/lightbox/PromptDetailsSlider.tsx` | Display model used badge in Generation Summary section |
