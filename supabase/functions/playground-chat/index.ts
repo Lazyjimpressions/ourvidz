@@ -698,11 +698,8 @@ You say: ...`;
     if (system_prompt_override && system_prompt_override.trim()) {
       systemPrompt = system_prompt_override.trim();
       // Still append NSFW guidance for safety if applicable
-      if (finalTier === 'nsfw' && !/\[\[NSFW_ROLEPLAY_GUIDANCE_/i.test(systemPrompt)) {
-        const nsfwTemplates = cache.templates.filter((t: any) => t.use_case === 'nsfw_guidance');
-        if (nsfwTemplates.length > 0) {
-          systemPrompt += '\n\n' + nsfwTemplates[0].system_prompt;
-        }
+      if (finalTier === 'nsfw' && !systemPrompt.includes(NSFW_GUIDANCE_MARK)) {
+        systemPrompt += '\n\n' + NSFW_ROLEPLAY_GUIDANCE;
       }
       console.log('📝 System prompt source: client_override');
     } else {
