@@ -1,92 +1,61 @@
 
 
-# Compare View: Persistent Multi-Turn Conversations
+# Add "None" Option to Template and Character Selectors
 
 ## Problem
-The Compare view creates a new ephemeral conversation for every message, discarding history. Roleplay testing requires multi-turn back-and-forth where the LLM remembers prior context -- exactly what the `playground-chat` edge function already supports via `conversation_id` (it loads prior messages from the DB).
+Once a character or template is selected in the Compare View dropdowns, there is no way to deselect it. Many prompt testing scenarios (e.g., enhancement prompts, general system prompts) don't involve characters at all, but the current UI forces a selection to persist.
 
 ## Solution
-Give each panel its own persistent conversation that is created once and reused for all subsequent messages. Display the full message history (user + assistant) in each panel instead of just the last response.
+Add a "None" clear option to both the **Template** and **Character** `Select` components in each panel. Selecting "None" resets the selection and restores the appropriate state.
 
-## Changes to CompareView.tsx
+## Changes (CompareView.tsx only)
 
-### 1. Add message history to PanelState
+### 1. Template selector -- add "None" option
+- Add a `SelectItem` with value `"__none__"` labeled "No template" at the top of the dropdown
+- When selected: clear `selectedTemplateId`, clear `rawRef`, keep `systemPrompt` as-is (user may have typed manually)
 
-Replace the single `response` string with an array of messages and a persistent `conversationId`:
+### 2. Character selector -- add "None" option
+- Add a `SelectItem` with value `"__none__"` labeled "No character" at the top of the dropdown
+- When selected: clear `selectedCharacterId`, restore system prompt to the raw template text (un-hydrated) if a template is loaded, or leave it as-is
 
-```text
-interface PanelMessage {
-  id: string;
-  content: string;
-  sender: 'user' | 'assistant';
-  created_at: string;
+### 3. Handler updates
+- `handleTemplateSelect`: if value is `"__none__"`, reset `selectedTemplateId` to `""`, clear `rawRef`, keep current `systemPrompt`
+- `handleCharacterSelect`: if value is `"__none__"`, reset `selectedCharacterId` to `""`, restore `systemPrompt` to `rawRef.current` (the un-hydrated template) if available
+
+### 4. Conversation creation
+- Already handled: `character_id` is only included when `selectedCharacterId` is truthy (line 122-124), so clearing it works without backend changes
+
+## Technical Detail
+
+```typescript
+// In handleCharacterSelect, add guard at top:
+if (characterId === '__none__') {
+  setPanel(prev => ({
+    ...prev,
+    selectedCharacterId: '',
+    systemPrompt: rawRef.current || prev.systemPrompt,
+  }));
+  return;
 }
 
-interface PanelState {
-  model: string;
-  systemPrompt: string;
-  messages: PanelMessage[];       // was: response: string
-  conversationId: string | null;  // new: persistent per panel
-  isLoading: boolean;
-  responseTime: number | null;
-  selectedTemplateId: string;
-  selectedCharacterId: string;
+// In handleTemplateSelect, add guard at top:
+if (templateId === '__none__') {
+  rawRef.current = '';
+  setPanel(prev => ({ ...prev, selectedTemplateId: '' }));
+  return;
 }
 ```
 
-### 2. Create conversation once, reuse it
-
-Move `createEphemeralConversation` logic into `sendToPanel` with a guard: only create a new conversation if `panel.conversationId` is null. Store the resulting ID back into panel state so subsequent sends reuse it.
-
-### 3. Pass character_id for roleplay routing
-
-When a character is selected in the panel, include `character_id` in the edge function payload. The `playground-chat` function already routes to `roleplay-chat` logic when a character is present, or alternatively send directly to `roleplay-chat` when `selectedCharacterId` is set.
-
-### 4. Accumulate messages in the response area
-
-- On send: append the user message to `panel.messages` immediately
-- On response: append the assistant message to `panel.messages`
-- Render all messages in a scrollable list (user messages right-aligned or labeled, assistant messages left-aligned with markdown)
-- Auto-scroll to bottom on new messages
-
-### 5. Add a "New Session" button per panel
-
-A small button in each panel header that clears `conversationId` and `messages`, starting a fresh conversation on the next send. This avoids leftover context when switching models or templates.
-
-### 6. Character ID on conversation creation
-
-When creating the conversation record, pass `character_id` from the panel's selected character so the edge function's ownership/access checks and context loading work correctly.
-
-## UI Layout (per panel)
-
-```text
-+------------------------------------------+
-| A  [Model dropdown v]  [New Session btn] |
-| [Template dropdown v]                    |
-| [Character dropdown v]                   |
-| [System prompt textarea]                 |
-+------------------------------------------+
-| User: Tell me about yourself             |
-| Assistant: I am Scarlett, a...           |
-| User: What do you think of...            |
-| Assistant: Well, considering my...       |
-|                              [auto-scroll]|
-+------------------------------------------+
+In both Select components, add before existing items:
+```tsx
+<SelectItem value="__none__" className="text-xs text-muted-foreground">
+  No character
+</SelectItem>
 ```
-
-The shared prompt input at the bottom stays as-is. "Send" appends the user message to both panels and fires both requests in parallel.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/playground/CompareView.tsx` | Refactor PanelState to hold messages array + conversationId. Update sendToPanel to create-once/reuse. Render message history. Add "New Session" button. Pass character_id in payload. |
-
-No other files need changes -- the edge function already handles multi-turn context via conversation_id and character_id routing.
-
-## Style Rules
-- Message list: `text-xs`, user messages with `bg-muted/50 rounded p-2`, assistant with `prose-sm`
-- "New Session" button: `h-7 text-xs` ghost variant
-- Sender labels: `text-[11px] text-muted-foreground`
-- No new icons beyond what's already imported
+| `src/components/playground/CompareView.tsx` | Add "None" options to template and character selectors, update handlers to support clearing |
 
