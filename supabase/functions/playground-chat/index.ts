@@ -671,7 +671,7 @@ You say: ...`;
     // The explicitTier is passed directly in the destructured body
     
     // Check for explicit frontend override (user deliberately chose SFW)
-    const explicitTier = req.body?.content_tier as 'sfw' | 'nsfw' | undefined;
+    const explicitTier = content_tier as 'sfw' | 'nsfw' | undefined;
     
     if (explicitTier === 'sfw') {
       // User explicitly requested SFW mode

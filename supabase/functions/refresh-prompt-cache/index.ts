@@ -186,7 +186,7 @@ serve(async (req) => {
     for (const template of promptTemplates || []) {
       if (template.content_mode === 'nsfw' && template.system_prompt) {
         const words = template.system_prompt.toLowerCase().match(/\b\w+\b/g) || []
-        words.forEach(word => {
+        words.forEach((word: string) => {
           if (word.length > 3 && (
             word.includes('sex') || word.includes('adult') || 
             word.includes('explicit') || word.includes('intimate')
@@ -287,7 +287,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       error: 'Failed to refresh cache',
       success: false,
-      details: error.message
+      details: error instanceof Error ? error.message : String(error)
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500

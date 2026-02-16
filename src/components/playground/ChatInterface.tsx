@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, MessageSquare, RotateCcw, Sparkles } from 'lucide-react';
+import { Send, Bot, MessageSquare, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -9,14 +9,11 @@ import { MessageBubble } from './MessageBubble';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { ConversationList } from './ConversationList';
 import { PlaygroundModeSelector, type PlaygroundMode } from './PlaygroundModeSelector';
-import { RoleplaySetup, type RoleplayTemplate } from './RoleplaySetup';
 import { AdminTools } from './AdminTools';
-import { CreativeTools } from './CreativeTools';
 import { PromptCounter } from './PromptCounter';
-import { CharacterDetailsPanel } from './CharacterDetailsPanel';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
- import { PlaygroundSettingsPopover } from './PlaygroundSettingsPopover';
+import { PlaygroundSettingsPopover } from './PlaygroundSettingsPopover';
+import { SystemPromptEditor } from './SystemPromptEditor';
+import { CompareView } from './CompareView';
 
 export const ChatInterface = () => {
   const {
@@ -25,11 +22,8 @@ export const ChatInterface = () => {
     isLoadingMessages,
     sendMessage,
     createConversation,
-    refreshPromptCache,
-    sfwMode,
-    setSfwMode,
-     settings,
-     updateSettings,
+    settings,
+    updateSettings,
   } = usePlayground();
 
   const { isAdmin } = useAuth();
@@ -37,7 +31,7 @@ export const ChatInterface = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentMode, setCurrentMode] = useState<PlaygroundMode>('chat');
-  const [currentRoleplayTemplate, setCurrentRoleplayTemplate] = useState<RoleplayTemplate | null>(null);
+  const [systemPrompt, setSystemPrompt] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -55,7 +49,7 @@ export const ChatInterface = () => {
 
     let conversationId = state.activeConversationId;
 
-    // Create new conversation if none is active
+    // Create conversation on first message (deferred creation)
     if (!conversationId) {
       try {
         conversationId = await createConversation();
@@ -70,7 +64,7 @@ export const ChatInterface = () => {
     setIsSubmitting(true);
 
     try {
-      await sendMessage(message, { conversationId });
+      await sendMessage(message, { conversationId, systemPromptOverride: systemPrompt || undefined });
     } catch (error) {
       console.error('Failed to send message:', error);
     } finally {
@@ -85,98 +79,16 @@ export const ChatInterface = () => {
     }
   };
 
-  // Handle roleplay setup
-  const handleStartRoleplay = async (template: RoleplayTemplate) => {
-    let conversationId = state.activeConversationId;
-    
-    if (!conversationId) {
-      conversationId = await createConversation(`Roleplay: ${template.name}`, undefined, 'roleplay');
-    }
-
-    setCurrentRoleplayTemplate(template);
-
-    // Build comprehensive character descriptions using ALL character data
-    const characterDescriptions = template.characters
-      .map(char => {
-        const parts = [
-          `${char.name} (${char.role})`,
-          `Personality: ${char.personality}`,
-          char.background && `Background: ${char.background}`,
-          char.speakingStyle && `Speaking Style: ${char.speakingStyle}`,
-          char.visualDescription && `Appearance: ${char.visualDescription}`,
-          char.relationships && `Relationships: ${char.relationships}`,
-          char.goals && `Goals: ${char.goals}`,
-          char.quirks && `Quirks: ${char.quirks}`,
-        ].filter(Boolean);
-        return parts.join('\n');
-      })
-      .join('\n\n');
-
-    // Pass comprehensive character data and scenario
-    const message = `[System: Starting roleplay session]
-
-SCENARIO: ${template.scenario}
-
-CHARACTERS:
-${characterDescriptions}
-
-Begin the roleplay naturally, embodying the character fully with all their traits, speaking style, and background.`;
-    
-    await sendMessage(message, { conversationId });
-  };
-
   // Handle admin tool start
   const handleStartAdminTool = async (tool: any, context: any) => {
     try {
       const convId = await createConversation(`Admin: ${tool.name}`, undefined, 'admin');
 
       let userMessage = '';
-
       if (tool.id === 'prompt-builder') {
-        userMessage = `[System: Prompt Builder Mode]
-
-I need help creating optimized prompts for the following:
-
-TARGET MODEL: ${context.targetModelName || context.targetModel} (${context.targetModelCategory || 'Unknown category'})
-${context.targetModelFamily ? `MODEL FAMILY: ${context.targetModelFamily}` : ''}
-${context.selectedTemplateName ? `TEMPLATE: ${context.selectedTemplateName}` : ''}
-
-PURPOSE/GOAL:
-${context.purpose || 'General prompt optimization'}
-
-Please help me create effective, optimized prompts for this model. Consider:
-1. The model's specific capabilities and syntax requirements
-2. Best practices for the model type (${context.targetModelCategory})
-3. How to structure prompts for maximum quality output`;
-      } else if (tool.id === 'prompt-tester') {
-        userMessage = `[System: Prompt Tester Mode]
-
-I want to test and analyze prompt effectiveness.
-
-TARGET MODEL: ${context.targetModelName || context.targetModel}
-${context.purpose ? `TESTING GOAL: ${context.purpose}` : ''}
-
-Help me evaluate prompts for this model and suggest improvements.`;
-      } else if (tool.id === 'system-monitor') {
-        userMessage = `[System: System Monitor Mode]
-
-I want to monitor system performance and health.
-${context.purpose ? `FOCUS AREA: ${context.purpose}` : ''}
-
-Please provide system status and performance metrics.`;
-      } else if (tool.id === 'model-config') {
-        userMessage = `[System: Model Config Mode]
-
-I want to configure model parameters for: ${context.targetModelName || context.targetModel}
-${context.purpose ? `GOAL: ${context.purpose}` : ''}
-
-Help me understand and optimize the configuration options for this model.`;
+        userMessage = `[System: Prompt Builder Mode]\n\nTARGET MODEL: ${context.targetModelName || context.targetModel} (${context.targetModelCategory || 'Unknown'})\n${context.targetModelFamily ? `MODEL FAMILY: ${context.targetModelFamily}` : ''}\n${context.selectedTemplateName ? `TEMPLATE: ${context.selectedTemplateName}` : ''}\n\nPURPOSE:\n${context.purpose || 'General prompt optimization'}\n\nHelp me create effective, optimized prompts for this model.`;
       } else {
-        userMessage = `I want to use the ${tool.name} tool.
-Target Model: ${context.targetModel || 'Not specified'}
-Purpose: ${context.purpose || 'Not specified'}
-
-Please help me with this admin task.`;
+        userMessage = `I want to use the ${tool.name} tool.\nTarget Model: ${context.targetModel || 'Not specified'}\nPurpose: ${context.purpose || 'Not specified'}`;
       }
 
       await sendMessage(userMessage, { conversationId: convId });
@@ -185,263 +97,137 @@ Please help me with this admin task.`;
     }
   };
 
-  // Handle creative tool start
-  const handleStartCreativeTool = async (tool: any, context: any) => {
-    try {
-      const convId = await createConversation(`Creative: ${tool.name}`, undefined, 'creative');
-
-      const userMessage = `I want to use the ${tool.name} tool for creative development.
-Project Type: ${context.projectType || 'Not specified'}
-Goal: ${context.goal || 'Not specified'}
-
-Please help me with this creative project.`;
-
-      await sendMessage(userMessage, { conversationId: convId });
-    } catch (error) {
-      console.error('Error starting creative tool:', error);
-    }
-  };
-
-  // Handle mode switching - create new conversation
-  const handleModeChange = async (newMode: PlaygroundMode) => {
+  const handleModeChange = (newMode: PlaygroundMode) => {
     setCurrentMode(newMode);
-    
-    // Only create new conversation if we're switching from a different mode
-    if (state.activeConversationId && newMode !== currentMode) {
-      try {
-        const conversationTypes = {
-          chat: 'general',
-          roleplay: 'roleplay',
-          admin: 'admin',
-          creative: 'creative'
-        };
-        
-        await createConversation(
-          `${newMode.charAt(0).toUpperCase() + newMode.slice(1)} Chat`,
-          undefined,
-          conversationTypes[newMode]
-        );
-      } catch (error) {
-        console.error('Error creating new conversation:', error);
-      }
-    }
   };
 
-  // Clear current chat
   const handleClearChat = async () => {
-    if (state.activeConversationId) {
-      try {
-        const conversationTypes = {
-          chat: 'general',
-          roleplay: 'roleplay', 
-          admin: 'admin',
-          creative: 'creative'
-        };
-        
-        await createConversation(
-          `${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)} Chat`,
-          undefined,
-          conversationTypes[currentMode]
-        );
-      } catch (error) {
-        console.error('Error clearing chat:', error);
-      }
+    try {
+      await createConversation();
+    } catch (error) {
+      console.error('Error clearing chat:', error);
     }
   };
 
-  // Auto-resize textarea with max-height constraint
+  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       const textarea = textareaRef.current;
-      const maxHeight = window.innerWidth < 768 ? 200 : 240; // 200px mobile, 240px desktop
-      
+      const maxHeight = window.innerWidth < 768 ? 200 : 240;
       textarea.style.height = 'auto';
       const newHeight = Math.min(textarea.scrollHeight, maxHeight);
       textarea.style.height = `${newHeight}px`;
-      
-      // Enable scrolling if content exceeds max height
       textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
   }, [inputMessage]);
 
-  // Empty state when no conversation is selected
-  if (!state.activeConversationId) {
+  // Compare mode renders its own view
+  if (currentMode === 'compare') {
     return (
       <div className="h-full flex flex-col">
-        {/* Header */}
         <div className="border-b border-border p-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-medium">AI Playground</h1>
-          </div>
-          
-          {/* Controls: SFW toggle + Conversation History */}
-          <div className="flex items-center gap-2">
-             <PlaygroundSettingsPopover settings={settings} onSettingsChange={updateSettings} />
-             <div className="flex items-center gap-1 ml-1">
-              <Label htmlFor="sfw-toggle-empty" className="text-xs text-muted-foreground">SFW</Label>
-              <Switch id="sfw-toggle-empty" checked={sfwMode} onCheckedChange={setSfwMode} />
-            </div>
-            {/* Conversation History Panel */}
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                >
-                  <MessageSquare className="h-3 w-3" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-64 bg-background border-border p-0">
-                <SheetHeader className="p-3 border-b border-border">
-                  <SheetTitle className="text-left text-sm">Conversations</SheetTitle>
-                </SheetHeader>
-                <ConversationList />
-              </SheetContent>
-            </Sheet>
-          </div>
+          <h1 className="text-sm font-medium">AI Playground</h1>
+          <PlaygroundSettingsPopover settings={settings} onSettingsChange={updateSettings} />
         </div>
+        <PlaygroundModeSelector currentMode={currentMode} onModeChange={handleModeChange} />
+        <div className="flex-1 overflow-hidden">
+          <CompareView />
+        </div>
+      </div>
+    );
+  }
 
-        {/* Mode Selector */}
+  // Header controls shared between empty and active states
+  const headerControls = (
+    <div className="flex items-center gap-1">
+      <PlaygroundSettingsPopover settings={settings} onSettingsChange={updateSettings} />
+      {isAdmin && state.lastResponseMeta?.content_tier && (
+        <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
+          {String(state.lastResponseMeta.content_tier).toUpperCase()}
+        </span>
+      )}
+      {state.activeConversationId && (
+        <Button variant="ghost" size="sm" onClick={handleClearChat} className="h-7 w-7 p-0" title="New chat">
+          <RotateCcw className="h-3 w-3" />
+        </Button>
+      )}
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="History">
+            <MessageSquare className="h-3 w-3" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-64 bg-background border-border p-0">
+          <SheetHeader className="p-3 border-b border-border">
+            <SheetTitle className="text-left text-sm">Conversations</SheetTitle>
+          </SheetHeader>
+          <ConversationList />
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+
+  // Empty state
+  if (!state.activeConversationId && messages.length === 0) {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="border-b border-border p-2 flex items-center justify-between">
+          <h1 className="text-sm font-medium">AI Playground</h1>
+          {headerControls}
+        </div>
         <PlaygroundModeSelector currentMode={currentMode} onModeChange={handleModeChange} />
 
-      {/* Mode-specific Setup Panels - Only show when not in an active conversation */}
-      {!state.activeConversationId && (
-        <div className="p-3 space-y-2">
-          {currentMode === 'roleplay' && (
-            <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
-          )}
-          {currentMode === 'admin' && (
+        {currentMode === 'admin' && (
+          <div className="p-3">
             <AdminTools onStartTool={handleStartAdminTool} />
-          )}
-          {currentMode === 'creative' && (
-            <CreativeTools onStartTool={handleStartCreativeTool} />
-          )}
-        </div>
-      )}
-
-        {/* Empty state content */}
-        <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-          <div className="bg-gradient-to-br from-primary/20 to-secondary/20 p-6 rounded-lg border border-border max-w-sm">
-            <h2 className="text-lg font-medium mb-2">Welcome to Playground</h2>
-            <p className="text-muted-foreground mb-4 text-sm">
-              Select a mode above and configure your session, or start a general conversation.
-            </p>
-            <Button
-              onClick={() => createConversation()}
-              size="sm"
-              className="h-8"
-            >
-              Start Conversation
-            </Button>
           </div>
-        </div>
+        )}
+
+        {currentMode === 'chat' && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+            <div className="max-w-sm space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Start a conversation or use the System Prompt editor to customize AI behavior.
+              </p>
+              <Button onClick={() => createConversation()} size="sm" className="h-8">
+                Start Conversation
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="h-full flex flex-col">
-      {/* Chat Header */}
+      {/* Header */}
       <div className="border-b border-border p-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-sm font-medium">AI Playground</h1>
-          <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
+          <span className="text-[11px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">
             {currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}
           </span>
         </div>
-        
-<div className="flex items-center gap-1">
-   <PlaygroundSettingsPopover settings={settings} onSettingsChange={updateSettings} />
-  <div className="flex items-center gap-1 mr-2">
-    <Label htmlFor="sfw-toggle" className="text-xs text-muted-foreground">SFW</Label>
-    <Switch id="sfw-toggle" checked={sfwMode} onCheckedChange={setSfwMode} />
-  </div>
-  {/* Admin: Refresh Templates */}
-  {isAdmin && (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={refreshPromptCache}
-      className="h-7 w-7 p-0"
-      title="Refresh templates"
-    >
-      <Sparkles className="h-3 w-3" />
-    </Button>
-  )}
-
-          {/* Admin: Template/Tier Badges */}
-          {isAdmin && state.lastResponseMeta?.content_tier && (
-            <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
-              Tier: {String(state.lastResponseMeta.content_tier).toUpperCase()}
-            </span>
-          )}
-          {isAdmin && state.lastResponseMeta?.template_meta?.origin && (
-            <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
-              Origin: {state.lastResponseMeta.template_meta.origin}
-            </span>
-          )}
-
-          {/* Character Details Button - only show in roleplay mode with active template */}
-          {currentMode === 'roleplay' && currentRoleplayTemplate && (
-            <CharacterDetailsPanel 
-              template={currentRoleplayTemplate}
-              onUpdateTemplate={setCurrentRoleplayTemplate}
-            />
-          )}
-          
-          {/* Clear Chat Button */}
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={handleClearChat}
-            className="h-7 w-7 p-0"
-            title="Clear chat"
-          >
-            <RotateCcw className="h-3 w-3" />
-          </Button>
-          
-          {/* Conversation History Panel */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="h-7 w-7 p-0"
-                title="Conversation history"
-              >
-                <MessageSquare className="h-3 w-3" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 bg-background border-border p-0">
-              <SheetHeader className="p-3 border-b border-border">
-                <SheetTitle className="text-left text-sm">Conversations</SheetTitle>
-              </SheetHeader>
-              <ConversationList />
-            </SheetContent>
-          </Sheet>
-        </div>
+        {headerControls}
       </div>
 
-      {/* Mode Selector */}
       <PlaygroundModeSelector currentMode={currentMode} onModeChange={handleModeChange} />
 
-      {/* Mode-specific Setup Panels - Hide when actively chatting */}
-      {messages.length === 0 && (
-        <div className="p-3 space-y-2 border-b border-border">
-          {currentMode === 'roleplay' && (
-            <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
-          )}
-          {currentMode === 'admin' && (
-            <AdminTools onStartTool={handleStartAdminTool} />
-          )}
-          {currentMode === 'creative' && (
-            <CreativeTools onStartTool={handleStartCreativeTool} />
-          )}
+      {/* System Prompt Editor */}
+      <SystemPromptEditor
+        conversationId={state.activeConversationId}
+        onSystemPromptChange={setSystemPrompt}
+      />
+
+      {/* Admin tools when no messages yet */}
+      {currentMode === 'admin' && messages.length === 0 && (
+        <div className="p-3 border-b border-border">
+          <AdminTools onStartTool={handleStartAdminTool} />
         </div>
       )}
 
-      {/* Messages Area */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
         {isLoadingMessages ? (
           <div className="flex items-center justify-center h-32">
@@ -450,20 +236,13 @@ Please help me with this creative project.`;
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <p className="text-sm mb-1">Ready to chat!</p>
-            <p className="text-muted-foreground text-xs">Send a message to start the conversation.</p>
+            <p className="text-muted-foreground text-xs">Send a message to start.</p>
           </div>
         ) : (
           <>
             {messages.map((message) => (
-              <MessageBubble 
-                key={message.id} 
-                message={message} 
-                mode={currentMode}
-                roleplayTemplate={currentRoleplayTemplate}
-              />
+              <MessageBubble key={message.id} message={message} mode={currentMode} />
             ))}
-            
-            {/* Loading indicator for AI response */}
             {state.isLoadingMessage && (
               <div className="flex items-start gap-2">
                 <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
@@ -471,19 +250,18 @@ Please help me with this creative project.`;
                 </div>
                 <div className="bg-muted rounded-lg rounded-tl-md p-3 max-w-xs">
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-primary border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-primary border-t-transparent" />
                     <span className="text-xs">AI is thinking...</span>
                   </div>
                 </div>
               </div>
             )}
-            
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
-      {/* Floating Message Input */}
+      {/* Input */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border p-3 z-50">
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
           <div className="flex flex-col gap-2">
@@ -494,17 +272,12 @@ Please help me with this creative project.`;
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder={`Type your ${currentMode} message... (Enter to send, Shift+Enter for new line)`}
+                  placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
                   className="min-h-[40px] max-h-60 resize-none text-sm"
                   disabled={isSubmitting || state.isLoadingMessage}
                 />
               </div>
-              <Button
-                type="submit"
-                disabled={!inputMessage.trim() || isSubmitting || state.isLoadingMessage}
-                size="sm"
-                className="h-8 w-8 p-0"
-              >
+              <Button type="submit" disabled={!inputMessage.trim() || isSubmitting || state.isLoadingMessage} size="sm" className="h-8 w-8 p-0">
                 {isSubmitting ? (
                   <div className="animate-spin rounded-full h-3 w-3 border-2 border-primary-foreground border-t-transparent" />
                 ) : (
@@ -512,16 +285,9 @@ Please help me with this creative project.`;
                 )}
               </Button>
             </div>
-            {inputMessage && (
-              <PromptCounter 
-                text={inputMessage} 
-                mode={currentMode} 
-                className="px-1"
-              />
-            )}
+            {inputMessage && <PromptCounter text={inputMessage} mode={currentMode} className="px-1" />}
           </div>
         </form>
-        
         {state.error && (
           <div className="mt-2 text-xs text-destructive bg-destructive/10 p-2 rounded max-w-4xl mx-auto">
             {state.error}

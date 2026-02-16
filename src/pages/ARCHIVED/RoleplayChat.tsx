@@ -587,7 +587,6 @@ useEffect(() => {
                         key={message.id}
                         message={message}
                         mode="roleplay"
-                        roleplayTemplate={true}
                       />
                     ))}
 
