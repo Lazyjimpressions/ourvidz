@@ -1,14 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
 import { useGroupedModels } from '@/hooks/usePlaygroundModels';
 import { usePlayground } from '@/contexts/PlaygroundContext';
+import { hydrateTemplate } from '@/utils/hydrateTemplate';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+interface PromptTemplate {
+  id: string;
+  template_name: string;
+  use_case: string;
+  system_prompt: string;
+  target_model: string | null;
+}
+
+interface CharacterOption {
+  id: string;
+  name: string;
+  gender: string | null;
+  description: string;
+  persona: string | null;
+  traits: string | null;
+  backstory: string | null;
+  voice_tone: string | null;
+  mood: string | null;
+}
 
 interface PanelState {
   model: string;
@@ -16,6 +37,8 @@ interface PanelState {
   response: string;
   isLoading: boolean;
   responseTime: number | null;
+  selectedTemplateId: string;
+  selectedCharacterId: string;
 }
 
 const defaultPanel = (model: string): PanelState => ({
@@ -24,6 +47,8 @@ const defaultPanel = (model: string): PanelState => ({
   response: '',
   isLoading: false,
   responseTime: null,
+  selectedTemplateId: '',
+  selectedCharacterId: '',
 });
 
 export const CompareView: React.FC = () => {
@@ -38,6 +63,31 @@ export const CompareView: React.FC = () => {
     defaultPanel(chatModels[1]?.model_key || chatModels[0]?.model_key || '')
   );
   const [prompt, setPrompt] = useState('');
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [characters, setCharacters] = useState<CharacterOption[]>([]);
+  const rawTemplateRefA = useRef<string>('');
+  const rawTemplateRefB = useRef<string>('');
+
+  // Fetch templates and characters once
+  useEffect(() => {
+    const fetchData = async () => {
+      const [tRes, cRes] = await Promise.all([
+        supabase
+          .from('prompt_templates')
+          .select('id, template_name, use_case, system_prompt, target_model')
+          .eq('is_active', true)
+          .order('use_case')
+          .order('template_name'),
+        supabase
+          .from('characters')
+          .select('id, name, gender, description, persona, traits, backstory, voice_tone, mood')
+          .order('name'),
+      ]);
+      if (tRes.data) setTemplates(tRes.data);
+      if (cRes.data) setCharacters(cRes.data);
+    };
+    fetchData();
+  }, []);
 
   const createEphemeralConversation = async (): Promise<string> => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -101,13 +151,54 @@ export const CompareView: React.FC = () => {
     sendToPanel(panelB, setPanelB, prompt.trim());
   };
 
+  // Group templates by use_case
+  const groupedTemplates = templates.reduce<Record<string, PromptTemplate[]>>((acc, t) => {
+    (acc[t.use_case] = acc[t.use_case] || []).push(t);
+    return acc;
+  }, {});
+
+  const genderLabel = (g: string | null) => {
+    if (!g || g === 'unspecified') return '';
+    return ` (${g.charAt(0).toUpperCase()})`;
+  };
+
+  const handleTemplateSelect = (
+    templateId: string,
+    setPanel: React.Dispatch<React.SetStateAction<PanelState>>,
+    rawRef: React.MutableRefObject<string>,
+    currentPanel: PanelState
+  ) => {
+    const tpl = templates.find(t => t.id === templateId);
+    if (!tpl) return;
+    rawRef.current = tpl.system_prompt;
+
+    let resolved = tpl.system_prompt;
+    if (currentPanel.selectedCharacterId) {
+      const char = characters.find(c => c.id === currentPanel.selectedCharacterId);
+      if (char) resolved = hydrateTemplate(tpl.system_prompt, char);
+    }
+    setPanel(prev => ({ ...prev, selectedTemplateId: templateId, systemPrompt: resolved }));
+  };
+
+  const handleCharacterSelect = (
+    characterId: string,
+    setPanel: React.Dispatch<React.SetStateAction<PanelState>>,
+    rawRef: React.MutableRefObject<string>,
+    currentPanel: PanelState
+  ) => {
+    const char = characters.find(c => c.id === characterId);
+    if (!char) return;
+    const source = rawRef.current || currentPanel.systemPrompt;
+    setPanel(prev => ({ ...prev, selectedCharacterId: characterId, systemPrompt: hydrateTemplate(source, char) }));
+  };
+
   const renderPanel = (
     panel: PanelState,
     setPanel: React.Dispatch<React.SetStateAction<PanelState>>,
-    label: string
+    label: string,
+    rawRef: React.MutableRefObject<string>
   ) => (
     <div className="flex-1 flex flex-col min-w-0 border-border">
-      {/* Panel header */}
       <div className="p-2 border-b border-border space-y-1.5">
         <div className="flex items-center gap-2">
           <Label className="text-[11px] text-muted-foreground shrink-0">{label}</Label>
@@ -127,6 +218,40 @@ export const CompareView: React.FC = () => {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Template selector */}
+        <Select value={panel.selectedTemplateId} onValueChange={(v) => handleTemplateSelect(v, setPanel, rawRef, panel)}>
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue placeholder="Load template..." />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(groupedTemplates).map(([useCase, tpls]) => (
+              <SelectGroup key={useCase}>
+                <SelectLabel className="text-[11px] text-muted-foreground">{useCase}</SelectLabel>
+                {tpls.map(t => (
+                  <SelectItem key={t.id} value={t.id} className="text-xs">
+                    {t.template_name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Character selector */}
+        <Select value={panel.selectedCharacterId} onValueChange={(v) => handleCharacterSelect(v, setPanel, rawRef, panel)}>
+          <SelectTrigger className="h-7 text-xs">
+            <SelectValue placeholder="Hydrate with character..." />
+          </SelectTrigger>
+          <SelectContent>
+            {characters.map(c => (
+              <SelectItem key={c.id} value={c.id} className="text-xs">
+                {c.name}{genderLabel(c.gender)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Textarea
           value={panel.systemPrompt}
           onChange={(e) => setPanel(prev => ({ ...prev, systemPrompt: e.target.value }))}
@@ -165,13 +290,11 @@ export const CompareView: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Split panels */}
       <div className="flex-1 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border overflow-hidden">
-        {renderPanel(panelA, setPanelA, 'A')}
-        {renderPanel(panelB, setPanelB, 'B')}
+        {renderPanel(panelA, setPanelA, 'A', rawTemplateRefA)}
+        {renderPanel(panelB, setPanelB, 'B', rawTemplateRefB)}
       </div>
 
-      {/* Shared input */}
       <div className="border-t border-border p-3">
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex items-end gap-2">
           <Textarea
