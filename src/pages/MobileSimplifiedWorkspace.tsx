@@ -69,6 +69,11 @@ const MobileSimplifiedWorkspace = () => {
     clearWorkspace,
     deleteAllWorkspace,
     setLightboxIndex: setWorkspaceLightboxIndex,
+    // Video Extend settings
+    extendStrength,
+    setExtendStrength,
+    extendReverseVideo,
+    setExtendReverseVideo,
     // URL Management (not used - we use useSignedAssets instead for immediate signing)
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
@@ -578,6 +583,10 @@ const MobileSimplifiedWorkspace = () => {
           onReferenceStrengthChange={setReferenceStrength}
           onClearWorkspace={clearWorkspace}
           onDeleteAllWorkspace={deleteAllWorkspace}
+          extendStrength={extendStrength}
+          onExtendStrengthChange={setExtendStrength}
+          extendReverseVideo={extendReverseVideo}
+          onExtendReverseVideoChange={setExtendReverseVideo}
         />
 
         {/* Lightbox */}
