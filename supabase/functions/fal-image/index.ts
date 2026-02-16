@@ -800,6 +800,13 @@ serve(async (req) => {
 
       // Video-specific params (generic, table-driven)
       if (isVideo) {
+        // Video conditioning object (for extend models like LTX extend)
+        let hasVideoConditioning = false;
+        if (body.input?.video && typeof body.input.video === 'object') {
+          modelInput.video = body.input.video;
+          hasVideoConditioning = true;
+          console.log('🎬 Video conditioning object set for extend model:', JSON.stringify(body.input.video));
+        }
         // Duration to num_frames conversion using model's own frame_rate
         const frameRate = modelInput.frame_rate || modelInput.frames_per_second || 16;
         
@@ -838,7 +845,8 @@ serve(async (req) => {
         }
 
         // Generic I2V reference image handling (works for any video model with image_url)
-        if (hasReferenceImage) {
+        // Skip for extend models that use video conditioning object
+        if (hasReferenceImage && !hasVideoConditioning) {
           const imageUrl = body.input?.image_url || body.input?.image || 
                           body.metadata?.referenceImage || body.metadata?.reference_image_url || 
                           body.metadata?.start_reference_url;
@@ -885,7 +893,7 @@ serve(async (req) => {
     const schemaKeys = Object.keys(inputSchema);
     if (schemaKeys.length > 0) {
       // Always-allowed keys (not in schema but always valid)
-      const alwaysAllowed = new Set(['prompt', 'enable_safety_checker', 'image_url', 'image_urls']);
+      const alwaysAllowed = new Set(['prompt', 'enable_safety_checker', 'image_url', 'image_urls', 'video']);
       const removedParams: string[] = [];
       
       for (const key of Object.keys(modelInput)) {
@@ -901,7 +909,9 @@ serve(async (req) => {
     }
 
     // Map aspect ratio to dimensions if not explicitly provided
-    if (!modelInput.image_size && body.metadata?.aspectRatio) {
+    // Skip for extend models using video conditioning (they don't need image_size)
+    const hasVideoConditioningFinal = !!(modelInput.video && typeof modelInput.video === 'object');
+    if (!modelInput.image_size && body.metadata?.aspectRatio && !hasVideoConditioningFinal) {
       const aspectRatio = body.metadata.aspectRatio;
       const aspectRatioMap: Record<string, { width: number; height: number }> = {
         '1:1': { width: 1024, height: 1024 },
