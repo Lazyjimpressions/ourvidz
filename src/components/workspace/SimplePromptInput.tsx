@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings, Info } from 'lucide-react';
+import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings, Info, Sparkles, Loader2 } from 'lucide-react';
 
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -541,8 +541,47 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showVideoModelPopup, setShowVideoModelPopup] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showDurationPopup, setShowDurationPopup] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
 
   const { toast } = useToast();
+
+  const handleEnhance = async () => {
+    if (!prompt.trim() || !selectedModel?.id) return;
+    setIsEnhancing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+        body: {
+          prompt: prompt.trim(),
+          model_id: selectedModel.id,
+          job_type: mode === 'video' ? 'video' : 'image',
+          contentType: contentType || 'sfw',
+        }
+      });
+      if (error) throw error;
+      if (data?.enhanced_prompt) {
+        onPromptChange(data.enhanced_prompt);
+        toast({
+          title: "Prompt enhanced",
+          description: `Optimized for ${selectedModel.display_name}`,
+        });
+      } else {
+        toast({
+          title: "No enhancement available",
+          description: "No template found for this model",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error('❌ Enhancement failed:', err);
+      toast({
+        title: "Enhancement failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -861,22 +900,41 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     }
                   }} 
                 />
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button 
-                        type="button" 
-                        onClick={() => setShowAdvancedSettings(!showAdvancedSettings)} 
-                        className="absolute right-0.5 top-0.5 text-muted-foreground hover:text-foreground p-0.5 rounded"
-                      >
-                        <Settings size={12} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      Controls
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <div className="absolute right-0.5 top-0.5 flex items-center gap-0.5">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handleEnhance}
+                          disabled={!prompt.trim() || isEnhancing || isGenerating}
+                          className="text-muted-foreground hover:text-primary p-0.5 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {isEnhancing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        Enhance prompt for {selectedModel?.display_name || 'selected model'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button 
+                          type="button" 
+                          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)} 
+                          className="text-muted-foreground hover:text-foreground p-0.5 rounded"
+                        >
+                          <Settings size={12} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        Controls
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
               </div>
 
               {/* Generate button - Compact size */}
