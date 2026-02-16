@@ -1,125 +1,119 @@
 
-# Playground Refactor: Tabs, Edge Function Fixes, and Core Improvements
 
-## Phase 1: Fix Edge Function Build Errors (unblocks everything)
+# Prompt Template Testing with Character Data Hydration
 
-All errors are pre-existing TypeScript strictness issues across 5 edge functions. Fixes are mechanical type casts and guards:
+## Problem
+The `prompt_templates` table contains system prompts with `{{placeholders}}` (e.g., `{{character_name}}`, `{{character_personality}}`). Testing these in the Playground currently requires manually replacing every placeholder each time. There are ~10 roleplay templates with 10+ placeholders each, making manual testing impractical.
 
-| File | Error | Fix |
-|---|---|---|
-| `playground-chat/index.ts` | `conversation` typed as `never` due to missing DB generic | Add `as any` cast on the `.single()` result, or use the local `Database` interface with `createClient<Database>` |
-| `playground-chat/index.ts` | `.insert({...})` on `messages` typed as `never` | Cast insert payload `as any` |
-| `playground-chat/index.ts` | `systemConfig?.config` on `never` | Cast `systemConfig as any` |
-| `playground-chat/index.ts` | `req.body?.content_tier` | Parse body via `await req.json()` instead of accessing `req.body` directly (Deno Request has no `.body` property shortcut) |
-| `roleplay-chat/index.ts` | Destructuring from `RoleplayChatRequest \| null` | Add `!` non-null assertion after `requestBody = await req.json()` or add a null guard before destructuring |
-| `refresh-prompt-cache/index.ts` | `word` implicitly `any` | Add `: string` type annotation to the `.forEach(word` callback |
-| `refresh-prompt-cache/index.ts` | `error` is `unknown` | Add `(error instanceof Error ? error.message : String(error))` |
-| `register-chat-worker/index.ts` | `error` is `unknown` | Same pattern |
-| `replicate-image/index.ts` | `error` is `unknown` | Same pattern |
-| `replicate-webhook/index.ts` | `imageUrl` possibly null | Add null guards (`imageUrl?.substring(0, 100)`) |
-| `replicate-webhook/index.ts` | `error` is `unknown` | Same pattern |
+## Solution: Template Picker + Character Loader in System Prompt Editor
 
-Estimated: ~25 one-line fixes across 5 files. No logic changes.
+Upgrade `SystemPromptEditor.tsx` with two dropdowns that auto-hydrate placeholders:
 
-## Phase 2: Simplify Tabs to Chat + Compare + Admin
+1. **Template dropdown** -- select from `prompt_templates` to load the raw system prompt into the textarea
+2. **Character dropdown** -- select from `characters` table to fill all `{{character_*}}` placeholders automatically
 
-### New tab structure
+When both are selected, the component replaces all known placeholders with real character data and puts the resolved prompt in the textarea for further editing before sending.
 
-| Tab | Purpose | Who sees it |
-|---|---|---|
-| **Chat** | Unified general-purpose chat with system prompt editor. Replaces Chat, Creative, and Roleplay tabs. | Everyone |
-| **Compare** | Side-by-side: same prompt to 2 models, OR same model with 2 system prompts. Text-only (chat LLMs). | Everyone |
-| **Admin** | Prompt Builder shortcut (pre-fills system prompt and opens Chat). Template browser. | Admin only |
+## Placeholder Mapping
 
-### Why NOT image/video comparison in the Playground
+The mapping from template placeholders to `characters` table columns:
 
-The Workspace already provides the full generation pipeline (model selection, reference images, aspect ratios, parameter controls, preview). Duplicating that UI in Playground would be redundant. Instead:
+```text
+{{character_name}}            -> characters.name
+{{character_description}}     -> characters.description
+{{character_personality}}     -> characters.persona (fallback: characters.traits)
+{{character_background}}      -> characters.backstory (fallback: parsed from description)
+{{character_speaking_style}}  -> characters.voice_tone
+{{character_goals}}           -> parsed from characters.traits ("Goals: ...")
+{{character_quirks}}          -> parsed from characters.traits ("Quirks: ...")
+{{character_relationships}}   -> parsed from characters.traits ("Relationships: ...")
+{{mood}}                      -> characters.mood
+{{voice_tone}}                -> characters.voice_tone
+{{user_name}}                 -> "User" (or from profile username)
+{{user_gender}}               -> "unspecified" (or from profile)
+{{user_appearance}}           -> "" (left blank)
+{{scene_context}}             -> "" (left blank, editable)
+```
 
-- **Prompt enhancement comparison** lives in Compare tab -- send a raw prompt through two different enhancement templates and see the resulting enhanced prompts side by side. This tests the *text quality* of your prompt strategies without needing to actually generate images/videos.
-- **Actual image/video generation** stays in Workspace where the full tooling already exists.
+Any remaining `{{unmatched}}` placeholders stay visible in the textarea so the user can fill them manually.
 
-This keeps the Playground focused on **text/prompt testing** and avoids building a second generation UI.
+## UI Changes to SystemPromptEditor.tsx
 
-### Files removed from Playground imports
+The expanded state gains two compact dropdowns above the textarea:
 
-| File | Action |
+```text
++-------------------------------------------------------+
+| System Prompt  (1240 chars)                     [v]    |
++-------------------------------------------------------+
+| Template: [Select template...          v]              |
+| Character: [Select character...        v]              |
+| +---------------------------------------------------+ |
+| | You are Scarlett, a character described as:        | |
+| | Confident, sophisticated, and direct...            | |
+| | ...                                                | |
+| +---------------------------------------------------+ |
++-------------------------------------------------------+
+```
+
+- Template dropdown: grouped by `use_case` (character_roleplay, enhancement, scene_generation, etc.)
+- Character dropdown: flat list sorted by name, showing `name (gender)` 
+- Both dropdowns use `text-xs`, `h-7` sizing
+- Selecting a template loads the raw prompt; selecting a character runs the hydration; editing the textarea is always allowed after hydration
+
+## Hydration Logic
+
+A pure function `hydrateTemplate(template: string, character: CharacterData, profile?: ProfileData): string` that does simple string replacement:
+
+```typescript
+const hydrateTemplate = (template: string, char: CharacterRow): string => {
+  const traits = parseTraits(char.traits || '');
+  const replacements: Record<string, string> = {
+    '{{character_name}}': char.name,
+    '{{character_description}}': char.description || '',
+    '{{character_personality}}': char.persona || char.traits || '',
+    '{{character_background}}': char.backstory || '',
+    '{{character_speaking_style}}': traits.speakingStyle || char.voice_tone || '',
+    '{{character_goals}}': traits.goals || '',
+    '{{character_quirks}}': traits.quirks || '',
+    '{{character_relationships}}': traits.relationships || '',
+    '{{mood}}': char.mood || 'neutral',
+    '{{voice_tone}}': char.voice_tone || '',
+  };
+  let result = template;
+  for (const [key, value] of Object.entries(replacements)) {
+    result = result.replaceAll(key, value);
+  }
+  return result;
+};
+```
+
+The existing `parseTraits` helper from `useCharacterDatabase.ts` is reused for extracting goals/quirks/relationships from the traits string.
+
+## Data Fetching
+
+- **Templates**: Query `prompt_templates` where `is_active = true`, select `id, template_name, use_case, system_prompt, target_model`. Fetched once on mount via a small hook or inline `useEffect`.
+- **Characters**: Query `characters` selecting the fields needed for hydration. User sees their own characters plus public ones. Fetched once on mount.
+- Both queries are lightweight (just text fields, no joins).
+
+## Compare View Integration
+
+The same template + character dropdowns are added to each panel's system prompt section in `CompareView.tsx`. This enables the key use case: same character, same template, two different `target_model` LLMs side by side.
+
+## Files Changed
+
+| File | Change |
 |---|---|
-| `RoleplaySetup.tsx` (587 lines) | Stop importing in ChatInterface. Keep file (used elsewhere or future reference). |
-| `CreativeTools.tsx` | Stop importing. |
-| `CharacterDetailsPanel.tsx` | Stop importing. |
-| `SceneImageGenerator.tsx` | Stop importing from MessageBubble. |
-| `SceneImageButton.tsx` | Stop importing. |
+| `src/components/playground/SystemPromptEditor.tsx` | Add template dropdown, character dropdown, hydration logic, reuse parseTraits |
+| `src/components/playground/CompareView.tsx` | Add the same template + character selectors to each panel's system prompt area |
+| `src/utils/hydrateTemplate.ts` | New: pure hydration function + parseTraits (extracted from useCharacterDatabase for reuse) |
 
-### Files modified
+## Implementation Details
 
-| File | Changes |
-|---|---|
-| `PlaygroundModeSelector.tsx` | 3 tabs: Chat, Compare, Admin (admin-only). Remove `creative` and `roleplay` modes. |
-| `ChatInterface.tsx` | Remove roleplay/creative setup panels. Wire new tabs. Defer conversation creation to first message. |
-| `MessageBubble.tsx` | Remove Camera button and scene generation imports. Keep Copy and Regenerate. |
+- Template dropdown items are grouped by `use_case` using `SelectGroup` with `SelectLabel`
+- Character dropdown shows name and gender in compact format: "Scarlett (F)" 
+- When user selects a template, the raw text loads into the textarea
+- When user then selects a character, placeholders are replaced in-place
+- User can re-select a different character to re-hydrate from the original template (component tracks the raw template separately from the hydrated text)
+- Remaining unfilled placeholders (like `{{user_name}}`) are left as-is for manual editing
+- All styling follows compact rules: `text-xs`, `h-7` controls, `gap-1.5` spacing
 
-## Phase 3: System Prompt Editor
-
-New component: `SystemPromptEditor.tsx`
-
-- Collapsible textarea above the chat input area (collapsed by default, expands on click)
-- Persisted per-conversation in localStorage keyed by conversation ID
-- Sent as an additional `system_prompt` field in the `playground-chat` edge function payload
-- Compact: collapsed state shows a single-line label "System Prompt" with character count; expanded shows a textarea
-- Follows design system: `text-xs`, `h-7` toggle button, `text-[11px]` label
-
-## Phase 4: Compare View
-
-New component: `CompareView.tsx`
-
-- Split-pane layout (two columns on desktop, stacked on mobile)
-- Each pane has its own model selector dropdown (from `api_models` chat models)
-- Optional: each pane has its own system prompt field
-- Shared prompt input at the bottom
-- "Send" fires the same message to `playground-chat` twice with different `model_variant` values
-- Responses render side-by-side with markdown
-- Compact header per pane showing model name and response time
-- No conversation persistence needed -- this is ephemeral comparison
-
-## Phase 5: Conversation Persistence and Markdown
-
-### Load conversations on mount (`PlaygroundContext.tsx`)
-- Add `useEffect` that queries `conversations` table filtered by current user, `conversation_type IN ('general', 'admin')`, ordered by `updated_at DESC`, limit 50
-- Populate `conversations` state
-
-### Load messages on conversation select (`PlaygroundContext.tsx`)
-- When `setActiveConversation` is called, query `messages` for that `conversation_id` ordered by `created_at ASC`
-- Populate `messages` state
-
-### Markdown rendering (`ResponseTruncation.tsx`)
-- Add `react-markdown` with `remark-gfm` for tables/strikethrough
-- Replace plain text `div` with `<ReactMarkdown>` component
-- Style code blocks with `bg-muted` background, inline code with `bg-muted/50 rounded px-1`
-
-### Implement regenerate (`PlaygroundContext.tsx`)
-- Delete last assistant message from DB
-- Re-send the preceding user message to edge function
-- Replace in local state
-
-## Phase 6: Remove Duplicate SFW Toggle
-
-The SFW/NSFW toggle exists in both the header `Switch` and the Settings popover `Content` dropdown. Remove the header `Switch` and keep it only in the Settings popover to reduce visual clutter.
-
-## Style Compliance
-
-All new components follow the design system:
-- `text-xs` for body text, `text-[11px]` for labels
-- `h-7` or `h-8` for interactive elements
-- Minimal icons (only where functional: Settings gear, Copy, Regenerate)
-- `gap-2` for internal spacing, `p-2` or `p-3` for section padding
-- No decorative elements or large hero sections
-
-## Implementation Order
-
-1. Edge function type fixes (5 files, ~25 one-line changes) -- unblocks deployment
-2. Tab restructure: `PlaygroundModeSelector` + `ChatInterface` cleanup
-3. `SystemPromptEditor.tsx` (new)
-4. `CompareView.tsx` (new)
-5. Conversation persistence + markdown rendering
-6. Remove duplicate SFW toggle
-7. Clean up unused imports in `MessageBubble`
