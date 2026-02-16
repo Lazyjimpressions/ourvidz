@@ -73,7 +73,7 @@ function deriveFromInputSchema(
         ? 'single'    // I2V -- needs source image
         : 'none';     // T2V -- no reference needed
 
-  return {
+  const settings: VideoModelSettings = {
     durationOptions,
     resolutionOptions: resolution.options || ['720p'],
     fpsOptions,
@@ -91,6 +91,19 @@ function deriveFromInputSchema(
     defaultGuideScale: inputDefaults.guide_scale || guideScale.default || 5,
     defaultAspectRatio: inputDefaults.aspect_ratio || aspectRatio.default || 'auto',
   };
+
+  // For extend models (referenceMode === 'video'), bump the default duration
+  // so the output is meaningfully longer than the source video
+  if (settings.referenceMode === 'video') {
+    const extendMinDuration = Math.min(8, durationOptions[durationOptions.length - 1] || 8);
+    if (settings.defaultDuration < extendMinDuration && durationOptions.includes(extendMinDuration)) {
+      settings.defaultDuration = extendMinDuration;
+    } else if (settings.defaultDuration < extendMinDuration) {
+      settings.defaultDuration = durationOptions[durationOptions.length - 1] || settings.defaultDuration;
+    }
+  }
+
+  return settings;
 }
 
 /**
