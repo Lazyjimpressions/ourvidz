@@ -1,63 +1,60 @@
 
 
-# Fix: Honor Custom System Prompts in Playground Chat
+# Remove Hardcoded NSFW Guidance from playground-chat
 
-## Root Cause
+## Problem
 
-The Compare View sends `system_prompt_override` in the request body (line 162 of CompareView.tsx), but the `playground-chat` edge function never reads or uses this field. It always generates its own system prompt via `getSystemPromptForChat()`, which resolves to the default NSFW chat template: *"Reply as a flirtatious, modern conversational partner..."*
+The edge function contains a ~10-line hardcoded `NSFW_ROLEPLAY_GUIDANCE` constant that gets force-appended to system prompts in **4 separate code paths**, regardless of whether the template or character already defines NSFW behavior. This:
 
-This is why both mimo and grok ignored your Seedream prompt engineering system prompt -- it was silently discarded by the backend.
+- Duplicates what templates already handle dynamically
+- Corrupts non-roleplay overrides (like prompt engineering)
+- Makes the NSFW rules impossible to update without redeploying the edge function
 
-## Fix
+The dynamic system already covers this:
+- Characters have `content_rating` (sfw/nsfw)
+- Scenes define their own content tier
+- Templates are tagged with `content_mode` (sfw/nsfw)
+- The `content_tier` parameter is passed from the client
+- Prompt enhancement templates include explicit/nsfw/sfw instructions inline
 
-Update `playground-chat/index.ts` to:
-
-1. **Destructure** `system_prompt_override` from the request body (around line 469-482)
-2. **Skip** `getSystemPromptForChat()` when `system_prompt_override` is provided -- use the override directly as the system prompt
-3. **Still append** NSFW guidance if the content tier is NSFW (to maintain safety rails)
-4. **Log** when an override is active for diagnostics
-
-## Technical Changes
+## Changes
 
 ### File: `supabase/functions/playground-chat/index.ts`
 
-**Change 1 -- Destructure the new field (line ~469-482)**
+**1. Remove the hardcoded constants (lines ~131-149)**
 
-Add `system_prompt_override` to the destructured body variables.
+Delete `NSFW_GUIDANCE_MARK`, `NSFW_ROLEPLAY_GUIDANCE`, `NSFW_STRICT_MARK`, `ROLEPLAY_FORMAT_MARK`, and `ROLEPLAY_FORMAT_RULES` constants entirely.
 
-**Change 2 -- Use override when present (line ~696-706)**
+**2. Remove all 4 append sites**
 
-Before calling `getSystemPromptForChat()`, check if `system_prompt_override` is provided. If so, use it directly instead of the template-resolved prompt. Still append NSFW guidance if applicable.
+- **Line ~209-212**: Remove NSFW guidance upgrade on cached roleplay prompts
+- **Line ~288-290**: Remove NSFW guidance append on processed roleplay prompts
+- **Line ~415-418**: Remove NSFW guidance append on general chat prompts
+- **Line ~700-703**: Remove NSFW guidance append on system_prompt_override path
 
-```text
-// Pseudo-logic:
-let systemPrompt;
-if (system_prompt_override && system_prompt_override.trim()) {
-  systemPrompt = system_prompt_override;
-  // Still append NSFW guidance for safety
-  if (finalTier === 'nsfw' && !systemPrompt.includes(NSFW_GUIDANCE_MARK)) {
-    systemPrompt += '\n\n' + NSFW_ROLEPLAY_GUIDANCE;
-  }
-  console.log('Using system_prompt_override from client');
-} else {
-  systemPrompt = await getSystemPromptForChat(...);
-}
-```
+**3. Remove diagnostic references**
 
-**Change 3 -- Diagnostic logging**
+- **Line ~724-725**: Remove `has_format_mark` and `has_nsfw_mark` checks in the logging snippet (they reference the deleted markers)
 
-Log the override usage so future debugging is clear:
-```text
-console.log('System prompt source:', system_prompt_override ? 'client_override' : 'template_resolved');
-```
+**4. Keep everything else**
+
+- Template resolution via `getChatTemplateFromCache()` stays -- it already selects the right template by `content_tier`
+- Character `content_rating` logic stays
+- `content_tier` / `finalTier` resolution stays
+- The `system_prompt_override` path stays, but now passes the override through cleanly without appending anything
+
+## Result
+
+NSFW behavior is governed entirely by:
+1. The selected template's `system_prompt` (tagged sfw/nsfw in the database)
+2. The character's `content_rating` field
+3. The `content_tier` parameter from the client
+
+No hardcoded rules are injected at the edge function level. Templates can be updated in the database without redeployment.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/playground-chat/index.ts` | Destructure `system_prompt_override` from body; use it as system prompt when present, skipping template resolution; append NSFW guidance if needed |
-
-## Expected Result
-
-After this fix, when you type a custom system prompt in the Compare View (like the Seedream prompt engineer instructions), both models will receive and follow that exact system prompt instead of the default NSFW chat template.
+| `supabase/functions/playground-chat/index.ts` | Remove hardcoded NSFW/format constants and all 4 append sites; rely on dynamic template system |
 
