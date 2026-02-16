@@ -128,25 +128,6 @@ serve(async (req) => {
     let contentTier: 'sfw' | 'nsfw' = requestedTier || 'nsfw';
 
     // Force tier by explicit character rating when available
-    // NSFW roleplay guidance constants
-    const NSFW_GUIDANCE_MARK = '[[NSFW_ROLEPLAY_GUIDANCE_V1]]';
-    const NSFW_ROLEPLAY_GUIDANCE = `${NSFW_GUIDANCE_MARK}
-- Operate in NSFW roleplay mode with consenting adults (18+).
-- Explicit sexual content and direct language are permitted when appropriate.
-- Never include minors, incest, bestiality, or non-consensual acts.
-- Maintain character voice, personality, and mood; stay immersive and descriptive.
-- Avoid meta commentary; keep responses focused on the scene.
-- Follow platform policies and applicable laws.`;
-    const NSFW_STRICT_MARK = '[[NSFW_ENFORCE_V2]]';
-
-    // Roleplay formatting rules to enforce consistent output structure
-    const ROLEPLAY_FORMAT_MARK = '[[ROLEPLAY_FORMAT_RULES_V1]]';
-    const ROLEPLAY_FORMAT_RULES = `${ROLEPLAY_FORMAT_MARK}
-- Use Markdown formatting:
-  - **CharacterName:** for character dialogue
-  - *italics* for internal thoughts
-  - Use **Narrator:** for scene description and transitions
-- Do not speak for the user's character unless they provide a line.`;
 
     // Age-gating is handled by caller tier resolution - no override here
     // For character roleplay, NSFW strict mode: bypass templates with inline directive
@@ -206,12 +187,6 @@ serve(async (req) => {
         const legacyKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
         let cached = roleplayPromptCache.get(cacheKey) || roleplayPromptCache.get(legacyKey);
         if (cached) {
-          if (contentTier === 'nsfw' && !cached.includes(NSFW_GUIDANCE_MARK)) {
-            const upgraded = `${cached}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
-            roleplayPromptCache.set(cacheKey, upgraded);
-            console.log('🔧 Upgraded cached prompt with NSFW guidance');
-            return upgraded;
-          }
           return cached;
         }
 
@@ -285,13 +260,6 @@ serve(async (req) => {
           }
         }
         
-        if (contentTier === 'nsfw' && !processedFinal.includes(NSFW_GUIDANCE_MARK)) {
-          processedFinal = `${processedFinal}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
-          console.log('🔧 Appended NSFW roleplay guidance to system prompt (character_roleplay)');
-        }
-        if (!processedFinal.includes(ROLEPLAY_FORMAT_MARK)) {
-          processedFinal = `${processedFinal}\n\n${ROLEPLAY_FORMAT_RULES}`;
-        }
         const STRICT_FORMAT_MARK = '[[ROLEPLAY_FORMAT_RULES_V2]]';
         if (!processedFinal.includes(STRICT_FORMAT_MARK)) {
           const STRICT_FORMAT_RULES = `${STRICT_FORMAT_MARK}
@@ -410,12 +378,6 @@ You say: ...`;
       conversationLength: conversationHistory.length,
       characterLoaded: !!characterData
     });
-
-    // Append NSFW roleplay guidance if applicable
-    if (contentTier === 'nsfw' && systemPrompt && !systemPrompt.includes(NSFW_GUIDANCE_MARK)) {
-      systemPrompt = `${systemPrompt}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
-      console.log('🔧 Appended NSFW roleplay guidance to system prompt (general)');
-    }
 
     return systemPrompt;
   }
@@ -697,10 +659,6 @@ You say: ...`;
     let systemPrompt: string;
     if (system_prompt_override && system_prompt_override.trim()) {
       systemPrompt = system_prompt_override.trim();
-      // Still append NSFW guidance for safety if applicable
-      if (finalTier === 'nsfw' && !systemPrompt.includes(NSFW_GUIDANCE_MARK)) {
-        systemPrompt += '\n\n' + NSFW_ROLEPLAY_GUIDANCE;
-      }
       console.log('📝 System prompt source: client_override');
     } else {
       systemPrompt = await getSystemPromptForChat(
@@ -721,8 +679,6 @@ You say: ...`;
     // Log a small system prompt snippet and markers for diagnostics
     if (systemPrompt) {
       console.log('🧱 System prompt snippet:', {
-        has_format_mark: /\[\[ROLEPLAY_FORMAT_RULES_/i.test(systemPrompt),
-        has_nsfw_mark: /\[\[NSFW_ROLEPLAY_GUIDANCE_/i.test(systemPrompt),
         snippet: systemPrompt.slice(0, 220),
       });
     }
