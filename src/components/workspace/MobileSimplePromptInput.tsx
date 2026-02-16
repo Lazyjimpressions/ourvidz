@@ -47,6 +47,11 @@ export interface MobileSimplePromptInputProps {
   onReferenceStrengthChange?: (strength: number) => void;
   onClearWorkspace?: () => void;
   onDeleteAllWorkspace?: () => void;
+  // Video Extend settings
+  extendStrength?: number;
+  onExtendStrengthChange?: (strength: number) => void;
+  extendReverseVideo?: boolean;
+  onExtendReverseVideoChange?: (reverse: boolean) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -79,7 +84,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   referenceStrength = 0.8,
   onReferenceStrengthChange,
   onClearWorkspace,
-  onDeleteAllWorkspace
+  onDeleteAllWorkspace,
+  extendStrength = 1.0,
+  onExtendStrengthChange,
+  extendReverseVideo = false,
+  onExtendReverseVideoChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -152,6 +161,53 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       isIOS
     });
 
+    // Check if file is a video - trigger auto-model-switch
+    const isVideoFile = file.type.startsWith('video/');
+    if (isVideoFile) {
+      // Validate size (50MB for video)
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error('Video file too large. Maximum size is 50MB.');
+        return;
+      }
+
+      // Find extend-capable model
+      const extendModel = (videoModels || []).find((m: any) => {
+        const caps = m.capabilities as any;
+        return caps?.input_schema?.video?.required === true;
+      });
+
+      if (extendModel) {
+        // Switch to video mode if needed
+        if (currentMode !== 'video') {
+          onModeToggle('video');
+        }
+        // Switch to the extend model
+        onModelChange({
+          id: extendModel.id,
+          type: (extendModel.api_providers?.name || 'fal') as 'fal',
+          display_name: extendModel.display_name,
+        });
+        toast.info(`Switched to ${extendModel.display_name}`);
+      } else {
+        toast.error('No video extend model available');
+        return;
+      }
+
+      // Upload the video as a reference
+      try {
+        const { uploadAndSignReferenceImage: uploadRef } = await import('@/lib/storage');
+        const signedUrl = await uploadRef(file);
+        if (onReferenceImageUrlSet) {
+          onReferenceImageUrlSet(signedUrl, type);
+        }
+        toast.success('Video source uploaded');
+      } catch (uploadError) {
+        const errorMessage = uploadError instanceof Error ? uploadError.message : 'Unknown error';
+        toast.error(`Upload failed: ${errorMessage}`);
+      }
+      return;
+    }
+
     // Magic byte detection for MIME type
     let detectedMime: string | null = null;
     let arrayBuffer: ArrayBuffer;
@@ -179,7 +235,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     }
 
     if (!effectiveMime.startsWith('image/') && !looksLikeImage(file)) {
-      toast.error('Selected file is not a supported image');
+      toast.error('Selected file is not a supported image or video');
       return;
     }
 
@@ -315,7 +371,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,image/heic,image/heif"
+        accept="image/*,image/heic,image/heif,video/mp4,video/webm,video/quicktime"
         onChange={handleFileInputChange}
         className="hidden"
         aria-hidden="true"
@@ -413,7 +469,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onEndFrameSelect={() => handleFileSelect('end')}
         onStartFrameRemove={() => removeReferenceImage('start')}
         onEndFrameRemove={() => removeReferenceImage('end')}
-        videoReferenceMode={(videoModelSettings?.settings?.referenceMode === 'dual' ? 'dual' : 'single')}
+        videoReferenceMode={(videoModelSettings?.settings?.referenceMode === 'dual' ? 'dual' : videoModelSettings?.settings?.referenceMode === 'video' ? 'video' : 'single')}
+        extendStrength={extendStrength}
+        onExtendStrengthChange={onExtendStrengthChange}
+        extendReverseVideo={extendReverseVideo}
+        onExtendReverseVideoChange={onExtendReverseVideoChange}
         onClearWorkspace={onClearWorkspace}
         onDeleteAllWorkspace={onDeleteAllWorkspace}
       />

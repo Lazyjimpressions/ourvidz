@@ -71,7 +71,13 @@ export interface MobileSettingsSheetProps {
   onEndFrameRemove?: () => void;
   
   // Video model settings
-  videoReferenceMode?: 'single' | 'dual';
+  videoReferenceMode?: 'single' | 'dual' | 'video';
+  
+  // Video Extend settings
+  extendStrength?: number;
+  onExtendStrengthChange?: (strength: number) => void;
+  extendReverseVideo?: boolean;
+  onExtendReverseVideoChange?: (reverse: boolean) => void;
   
   // Workspace Actions
   onClearWorkspace?: () => void;
@@ -115,6 +121,10 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   videoReferenceMode = 'single',
   onClearWorkspace,
   onDeleteAllWorkspace,
+  extendStrength = 1.0,
+  onExtendStrengthChange,
+  extendReverseVideo = false,
+  onExtendReverseVideoChange,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [showWorkspaceActions, setShowWorkspaceActions] = React.useState(false);
@@ -367,10 +377,67 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
           {currentMode === 'video' && (
             <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                {videoReferenceMode === 'single' ? 'Reference Image' : 'Reference Frames'}
+                {videoReferenceMode === 'video' ? 'Video Source' : videoReferenceMode === 'single' ? 'Reference Image' : 'Reference Frames'}
               </label>
               
-              {videoReferenceMode === 'single' ? (
+              {videoReferenceMode === 'video' ? (
+                // Video extend mode - show video source + extend controls
+                <div className="space-y-3">
+                  {hasStartFrame ? (
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded bg-muted flex items-center justify-center text-muted-foreground">
+                        <Image className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">Video source set</div>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={onStartFrameRemove} className="text-xs text-destructive">
+                        Remove
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onStartFrameSelect}
+                      className="w-full min-h-[44px] gap-2"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Add Video Source
+                    </Button>
+                  )}
+                  
+                  {/* Extend Strength */}
+                  {onExtendStrengthChange && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Strength</span>
+                        <span className="font-mono">{(extendStrength ?? 1.0).toFixed(2)}</span>
+                      </div>
+                      <Slider
+                        value={[extendStrength ?? 1.0]}
+                        onValueChange={(v) => onExtendStrengthChange(v[0])}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Reverse Video */}
+                  {onExtendReverseVideoChange && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Reverse Video</span>
+                      <Switch
+                        checked={extendReverseVideo}
+                        onCheckedChange={onExtendReverseVideoChange}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : videoReferenceMode === 'single' ? (
                 // Single reference (WAN 2.1 i2v)
                 <div className="space-y-2">
                   {hasStartFrame ? (
