@@ -228,6 +228,11 @@ export const CompareView: React.FC = () => {
     rawRef: React.MutableRefObject<string>,
     currentPanel: PanelState
   ) => {
+    if (templateId === '__none__') {
+      rawRef.current = '';
+      setPanel(prev => ({ ...prev, selectedTemplateId: '' }));
+      return;
+    }
     const tpl = templates.find(t => t.id === templateId);
     if (!tpl) return;
     rawRef.current = tpl.system_prompt;
@@ -246,6 +251,14 @@ export const CompareView: React.FC = () => {
     rawRef: React.MutableRefObject<string>,
     currentPanel: PanelState
   ) => {
+    if (characterId === '__none__') {
+      setPanel(prev => ({
+        ...prev,
+        selectedCharacterId: '',
+        systemPrompt: rawRef.current || prev.systemPrompt,
+      }));
+      return;
+    }
     const char = characters.find(c => c.id === characterId);
     if (!char) return;
     const source = rawRef.current || currentPanel.systemPrompt;
@@ -296,6 +309,7 @@ export const CompareView: React.FC = () => {
             <SelectValue placeholder="Load template..." />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="__none__" className="text-xs text-muted-foreground">No template</SelectItem>
             {Object.entries(groupedTemplates).map(([useCase, tpls]) => (
               <SelectGroup key={useCase}>
                 <SelectLabel className="text-[11px] text-muted-foreground">{useCase}</SelectLabel>
@@ -315,6 +329,7 @@ export const CompareView: React.FC = () => {
             <SelectValue placeholder="Hydrate with character..." />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="__none__" className="text-xs text-muted-foreground">No character</SelectItem>
             {characters.map(c => (
               <SelectItem key={c.id} value={c.id} className="text-xs">
                 {c.name}{genderLabel(c.gender)}
