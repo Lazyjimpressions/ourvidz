@@ -5,7 +5,7 @@
  * Used in storyboard for selecting reference images for video clip generation.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -39,10 +39,15 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
 
-  const { data: libraryAssets, isLoading } = useLibraryAssets();
+  const { data: paginatedData, isLoading } = useLibraryAssets();
 
-  // Filter to only show images (not videos)
-  const imageAssets = (libraryAssets || []).filter(
+  // Flatten paginated data and filter to only show images (not videos)
+  const libraryAssets = useMemo(() => {
+    if (!paginatedData?.pages) return [];
+    return paginatedData.pages.flatMap(page => page.assets);
+  }, [paginatedData]);
+
+  const imageAssets = libraryAssets.filter(
     (asset) => asset.type === 'image' && asset.status === 'completed'
   );
 

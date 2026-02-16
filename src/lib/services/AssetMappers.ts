@@ -195,7 +195,7 @@ export function toSharedFromLibrary(row: any): SharedAsset {
     format: type,
     modelType: modelUsed,
     metadata: {
-      source: 'library',
+    source: 'library',
       bucket: 'user-library',
       storage_path: originalPath,
       mime_type: mimeType,
@@ -203,7 +203,9 @@ export function toSharedFromLibrary(row: any): SharedAsset {
       tags: tags,
       is_favorite: isFavorite,
       collection_id: collectionId,
-      visibility: visibility
+      visibility: visibility,
+      roleplay_metadata: row.roleplay_metadata,
+      content_category: row.content_category
     },
     width: row.width,
     height: row.height,

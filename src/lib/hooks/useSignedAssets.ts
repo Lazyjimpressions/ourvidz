@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 
@@ -24,43 +24,44 @@ export function useSignedAssets(
   refresh: () => void;
 } {
   const {
-    thumbTtlSec = bucket === 'user-library' ? 24 * 60 * 60 : 15 * 60, // 24h for library, 15min for workspace
-    originalTtlSec = bucket === 'user-library' ? 72 * 60 * 60 : 60 * 60, // 72h for library, 1h for workspace
+    thumbTtlSec = bucket === 'user-library' ? 24 * 60 * 60 : 15 * 60,
+    originalTtlSec = bucket === 'user-library' ? 72 * 60 * 60 : 60 * 60,
     enabled = true
   } = opts;
 
   const [signedUrls, setSignedUrls] = useState<Record<string, { thumbUrl?: string; url?: string }>>({});
   const [isSigning, setIsSigning] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Track which asset IDs have been queued for signing to prevent dependency loops
+  const queuedIdsRef = useRef<Set<string>>(new Set());
 
-  // Extract unique paths that need signing
+  // Extract unique paths that need signing - NO signedUrls dependency
   const pathsToSign = useMemo(() => {
-    if (!enabled) return { thumbPaths: [], originalPaths: [] };
+    if (!enabled) return { thumbPaths: [] as string[], pathToAssetMap: new Map<string, string>() };
     
     const thumbPaths: string[] = [];
-    const originalPaths: string[] = [];
+    const pathToAssetMap = new Map<string, string>();
     
     for (const asset of assets) {
-      // For images, use originalPath as thumbnail if no thumbPath exists
-      // For videos, only use thumbPath if it exists
+      if (queuedIdsRef.current.has(asset.id)) continue; // already queued
+      
+      let thumbPath: string | null = null;
       if (asset.type === 'image') {
-        // Images: use thumbPath if available, otherwise use originalPath as thumbnail
-        const thumbPath = asset.thumbPath || asset.originalPath;
-        if (thumbPath && !thumbPath.startsWith('.') && thumbPath.includes('/') && !signedUrls[asset.id]?.thumbUrl) {
-          thumbPaths.push(thumbPath);
-        }
+        thumbPath = asset.thumbPath || asset.originalPath;
       } else {
-        // Videos: only use thumbPath if explicitly provided
-        const p = asset.thumbPath;
-        if (p && !p.startsWith('.') && p.includes('/') && !signedUrls[asset.id]?.thumbUrl) {
-          thumbPaths.push(p);
-        }
+        thumbPath = asset.thumbPath;
       }
-      // Don't pre-sign originals - they're signed on-demand in lightbox
+      
+      if (thumbPath && !thumbPath.startsWith('.') && thumbPath.includes('/')) {
+        thumbPaths.push(thumbPath);
+        pathToAssetMap.set(thumbPath, asset.id);
+        queuedIdsRef.current.add(asset.id);
+      }
     }
     
-    return { thumbPaths, originalPaths };
-  }, [assets, enabled, signedUrls, refreshKey]);
+    return { thumbPaths, pathToAssetMap };
+  }, [assets, enabled, refreshKey]); // signedUrls removed from deps
 
   // Sign thumbnails in batches
   useEffect(() => {
@@ -71,25 +72,6 @@ export function useSignedAssets(
 
     const signThumbnails = async () => {
       try {
-        const pathToAssetMap = new Map<string, string>();
-        
-        // Map paths to asset IDs
-        for (const asset of assets) {
-          if (asset.type === 'image') {
-            // Images: use thumbPath if available, otherwise use originalPath
-            const thumbPath = asset.thumbPath || asset.originalPath;
-            if (thumbPath && !thumbPath.startsWith('.') && thumbPath.includes('/')) {
-              pathToAssetMap.set(thumbPath, asset.id);
-            }
-          } else {
-            // Videos: only use thumbPath if explicitly provided
-            const p = asset.thumbPath;
-            if (p && !p.startsWith('.') && p.includes('/')) {
-              pathToAssetMap.set(p, asset.id);
-            }
-          }
-        }
-
         const signedThumbs = await urlSigningService.getSignedUrls(
           pathsToSign.thumbPaths,
           bucket,
@@ -98,17 +80,14 @@ export function useSignedAssets(
 
         if (cancelled) return;
 
-        // Update state with signed thumbnails
         setSignedUrls(prev => {
           const next = { ...prev };
-          
           for (const [path, url] of Object.entries(signedThumbs)) {
-            const assetId = pathToAssetMap.get(path);
+            const assetId = pathsToSign.pathToAssetMap.get(path);
             if (assetId) {
               next[assetId] = { ...next[assetId], thumbUrl: url };
             }
           }
-          
           return next;
         });
       } catch (error) {
@@ -125,7 +104,7 @@ export function useSignedAssets(
     return () => {
       cancelled = true;
     };
-  }, [assets, bucket, enabled, pathsToSign.thumbPaths, thumbTtlSec]);
+  }, [bucket, enabled, pathsToSign, thumbTtlSec]);
 
   // Function to sign original on-demand (for lightbox)
   const signOriginal = useCallback(async (asset: SharedAsset): Promise<string> => {
@@ -133,11 +112,8 @@ export function useSignedAssets(
       throw new Error('No original path available');
     }
 
-    // Check if already signed
     const existing = signedUrls[asset.id]?.url;
-    if (existing) {
-      return existing;
-    }
+    if (existing) return existing;
 
     try {
       const signedUrl = await urlSigningService.getSignedUrl(
@@ -146,7 +122,6 @@ export function useSignedAssets(
         { ttlSec: originalTtlSec }
       );
 
-      // Update state
       setSignedUrls(prev => ({
         ...prev,
         [asset.id]: { ...prev[asset.id], url: signedUrl }
@@ -163,12 +138,12 @@ export function useSignedAssets(
   const refresh = useCallback(() => {
     setRefreshKey(prev => prev + 1);
     setSignedUrls({});
+    queuedIdsRef.current.clear();
   }, []);
 
   // Combine assets with signed URLs
   const signedAssets = useMemo((): SignedAsset[] => {
     return assets.map(asset => {
-      // For videos without thumbnails, use placeholder
       let thumbUrl = signedUrls[asset.id]?.thumbUrl || null;
       if (asset.type === 'video' && !thumbUrl && !asset.thumbPath) {
         thumbUrl = '/video-thumbnail-placeholder.svg';
@@ -178,7 +153,6 @@ export function useSignedAssets(
         ...asset,
         thumbUrl,
         url: signedUrls[asset.id]?.url || null,
-        // Add the signOriginal function to metadata for lightbox use
         signOriginal: () => signOriginal(asset)
       };
     });
