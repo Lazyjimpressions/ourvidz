@@ -571,9 +571,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                       </div>
                     </SelectItem>
                     {userCharactersLoading ? (
-                      <SelectItem value="" disabled>Loading characters...</SelectItem>
+                      <SelectItem value="__loading__" disabled>Loading characters...</SelectItem>
                     ) : userCharacters.length === 0 ? (
-                      <SelectItem value="" disabled>No characters created yet</SelectItem>
+                      <SelectItem value="__empty__" disabled>No characters created yet</SelectItem>
                     ) : (
                       userCharacters.map((char) => (
                         <SelectItem key={char.id} value={char.id}>
@@ -1045,9 +1045,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                   </SelectTrigger>
                   <SelectContent>
                     {modelsLoading ? (
-                      <SelectItem value="" disabled>Loading models...</SelectItem>
+                      <SelectItem value="__loading__" disabled>Loading models...</SelectItem>
                     ) : allModelOptions.length === 0 ? (
-                      <SelectItem value="" disabled>No roleplay models available</SelectItem>
+                      <SelectItem value="__empty__" disabled>No roleplay models available</SelectItem>
                     ) : (
                       allModelOptions.map((model) => {
                         return (
