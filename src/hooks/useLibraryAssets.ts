@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { LibraryAssetService, type UnifiedLibraryAsset, type UserCollection } from '@/lib/services/LibraryAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -6,15 +6,23 @@ import { toast } from 'sonner';
 const LIBRARY_ASSETS_QUERY_KEY = ['library-assets'];
 const COLLECTIONS_QUERY_KEY = ['user-collections'];
 
+const PAGE_SIZE = 40;
+
 /**
- * Hook for fetching library assets
+ * Hook for fetching library assets with infinite scroll pagination
  */
 export function useLibraryAssets() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: LIBRARY_ASSETS_QUERY_KEY,
-    queryFn: () => LibraryAssetService.getUserLibraryAssets(),
-    staleTime: 60000, // 1 minute
-    gcTime: 600000, // 10 minutes
+    queryFn: ({ pageParam = 0 }) =>
+      LibraryAssetService.getUserLibraryAssets(PAGE_SIZE, pageParam),
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, p) => n + p.assets.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+    initialPageParam: 0,
+    staleTime: 60000,
+    gcTime: 600000,
     refetchOnWindowFocus: false,
     retry: 2
   });
@@ -29,7 +37,6 @@ export function useLibraryAssetUrl(asset: UnifiedLibraryAsset | null) {
     queryFn: async () => {
       if (!asset) return null;
       
-      // Get the raw library asset data
       const { data: libraryAsset } = await supabase
         .from('user_library')
         .select('*')
@@ -41,8 +48,8 @@ export function useLibraryAssetUrl(asset: UnifiedLibraryAsset | null) {
       return LibraryAssetService.generateSignedUrl(libraryAsset);
     },
     enabled: !!asset,
-    staleTime: 300000, // 5 minutes
-    gcTime: 600000 // 10 minutes
+    staleTime: 300000,
+    gcTime: 600000
   });
 }
 
@@ -102,8 +109,8 @@ export function useUserCollections() {
   return useQuery({
     queryKey: COLLECTIONS_QUERY_KEY,
     queryFn: LibraryAssetService.getUserCollections,
-    staleTime: 300000, // 5 minutes
-    gcTime: 600000, // 10 minutes
+    staleTime: 300000,
+    gcTime: 600000,
     refetchOnWindowFocus: false
   });
 }

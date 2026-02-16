@@ -14,7 +14,7 @@ import { LibraryAssetService } from '@/lib/services/LibraryAssetService';
 import { toast } from 'sonner';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useNavigate } from 'react-router-dom';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export const UpdatedOptimizedLibrary: React.FC = () => {
   const navigate = useNavigate();
@@ -25,20 +25,30 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(isMobile ? 8 : 12);
   const [lastLightboxClose, setLastLightboxClose] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'all' | 'characters' | 'scenes'>('all');
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Fetch library assets
+  // Fetch library assets with pagination
   const {
-    data: rawAssets = [],
+    data: paginatedData,
     isLoading,
     error,
-    refetch
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
   } = useLibraryAssets();
+
+  // Flatten paginated data
+  const rawAssets = useMemo(() => {
+    if (!paginatedData?.pages) return [];
+    return paginatedData.pages.flatMap(page => page.assets);
+  }, [paginatedData]);
+
+  const totalAssets = paginatedData?.pages?.[0]?.total ?? 0;
 
   // Convert to shared asset format and filter by tab
   const sharedAssets = useMemo(() => {
@@ -63,17 +73,11 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     return allAssets;
   }, [rawAssets, activeTab]);
 
-  // Get signed URLs for thumbnails
-  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'user-library', {
-    thumbTtlSec: 24 * 60 * 60, // 24 hours for library
+  // Get signed URLs for thumbnails - no loading gate
+  const { signedAssets } = useSignedAssets(sharedAssets, 'user-library', {
+    thumbTtlSec: 24 * 60 * 60,
     enabled: true
   });
-
-  // Debug: Log signed assets
-  console.log('📚 Library: signedAssets count:', signedAssets.length);
-  if (signedAssets.length > 0) {
-    console.log('📚 Library: First signed asset:', signedAssets[0]);
-  }
 
   // Search and filtering
   const {
@@ -90,7 +94,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     return sharedAssets.reduce((counts, asset) => {
       if (asset.type === 'image') counts.images++;
       if (asset.type === 'video') counts.videos++;
-      counts.completed++; // Library assets are always completed
+      counts.completed++;
       return counts;
     }, {
       images: 0,
@@ -101,14 +105,14 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     });
   }, [sharedAssets]);
 
-  // Infinite scroll
+  // Infinite scroll triggers fetchNextPage
   React.useEffect(() => {
     if (!sentinelRef.current) return;
     
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && visibleCount < filteredAssets.length) {
-          setVisibleCount(prev => Math.min(prev + (isMobile ? 8 : 12), filteredAssets.length));
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
         }
       },
       { rootMargin: '600px' }
@@ -116,7 +120,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [filteredAssets.length, isMobile, visibleCount]);
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Selection handlers
   const handleToggleSelection = useCallback((assetId: string) => {
@@ -141,21 +145,15 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
 
   // Asset actions
   const handlePreview = useCallback((asset: any) => {
-    // Ghost-click protection: ignore clicks for 200ms after lightbox closes
     const now = Date.now();
-    if (now - lastLightboxClose < 200) {
-      return;
-    }
+    if (now - lastLightboxClose < 200) return;
     
     const index = filteredAssets.findIndex(a => a.id === asset.id);
-    if (index !== -1) {
-      setLightboxIndex(index);
-    }
+    if (index !== -1) setLightboxIndex(index);
   }, [filteredAssets, lastLightboxClose]);
 
   const handleDownload = useCallback(async (asset: any) => {
     try {
-      // Get original URL if available, or request it
       let downloadUrl = asset.url;
       if (!downloadUrl && (asset as any).signOriginal) {
         downloadUrl = await (asset as any).signOriginal();
@@ -201,31 +199,22 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
 
   const handleUseAsReference = useCallback(async (asset: any) => {
     try {
-      console.log('🖼️ Use as Reference clicked for asset:', asset);
-      
-      // The asset should be a SignedAsset with signOriginal function
       let referenceUrl: string | null = asset.url || null;
-      console.log('🖼️ Initial referenceUrl:', referenceUrl);
       
       if (!referenceUrl && typeof asset.signOriginal === 'function') {
-        console.log('🖼️ Calling signOriginal function...');
         referenceUrl = await asset.signOriginal();
-        console.log('🖼️ After signOriginal, referenceUrl:', referenceUrl);
       }
       
       if (!referenceUrl) {
-        console.error('🖼️ No reference URL available for asset:', asset);
         toast.error('Could not get a URL for this asset');
         return;
       }
 
-      // Navigate to the workspace with proper route and carry the signed URL
       navigate(`/workspace?mode=${asset.type === 'video' ? 'video' : 'image'}`,
         {
           state: {
             referenceUrl,
             prompt: asset.prompt,
-            // extra context if needed later
             referenceAsset: {
               id: asset.id,
               storagePath: asset.originalPath,
@@ -259,16 +248,15 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     }
   }, [filteredAssets, selectedAssets, handleClearSelection, refetch]);
 
-  // Sign original URL on demand for lightbox
   const handleRequireOriginalUrl = useCallback(async (asset: any) => {
-    // Use the signOriginal function added by useSignedAssets
     if ((asset as any).signOriginal) {
       return (asset as any).signOriginal();
     }
     throw new Error('Original URL signing not available');
   }, []);
 
-  if (isLoading || isSigning) {
+  // Only gate on initial data fetch, NOT on signing
+  if (isLoading) {
     return (
       <OurVidzDashboardLayout>
         <div className="max-w-7xl mx-auto px-4 pb-6 space-y-3">
@@ -305,7 +293,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
               onSearchChange={updateQuery}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
-              totalAssets={sharedAssets.length}
+              totalAssets={totalAssets}
               filteredCount={filteredAssets.length}
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearSearch}
@@ -392,7 +380,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
             ) : viewMode === 'grid' ? (
               <>
                 <SharedGrid
-                  assets={filteredAssets.slice(0, visibleCount) as any}
+                  assets={filteredAssets as any}
                   onPreview={handlePreview}
                   selection={{
                     enabled: true,
@@ -405,7 +393,6 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                     onUseAsReference: handleUseAsReference,
                     onAddToWorkspace: async (asset) => {
                       try {
-                        console.log('📋 Adding asset to workspace:', asset);
                         await LibraryAssetService.addToWorkspace(asset.id);
                         toast.success('Asset added to workspace');
                       } catch (error) {
@@ -417,7 +404,12 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                   }}
                 />
                 {/* Infinite scroll sentinel */}
-                <div ref={sentinelRef} />
+                <div ref={sentinelRef} className="h-4" />
+                {isFetchingNextPage && (
+                  <div className="flex justify-center py-4">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  </div>
+                )}
               </>
             ) : (
               <AssetListView

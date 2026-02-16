@@ -58,18 +58,25 @@ export class LibraryAssetService {
   /**
    * Fetch all library assets for the current user
    */
-  static async getUserLibraryAssets(): Promise<UnifiedLibraryAsset[]> {
-    const { data, error } = await supabase
+  static async getUserLibraryAssets(
+    limit = 40,
+    offset = 0
+  ): Promise<{ assets: UnifiedLibraryAsset[]; total: number }> {
+    const { data, error, count } = await supabase
       .from('user_library')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error('Error fetching library assets:', error);
       throw error;
     }
 
-    return (data || []).map(asset => LibraryAssetService.transformLibraryAsset(asset as any));
+    return {
+      assets: (data || []).map(asset => LibraryAssetService.transformLibraryAsset(asset as any)),
+      total: count ?? 0
+    };
   }
 
   /**
