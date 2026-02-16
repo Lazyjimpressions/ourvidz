@@ -478,7 +478,8 @@ You say: ...`;
     model_provider = 'chat_worker',
     model_variant,
     context_type: requestedContextType,
-    prompt_template_id
+    prompt_template_id,
+    system_prompt_override
     } = body;
 
     if (!conversation_id || !message) {
@@ -690,20 +691,34 @@ You say: ...`;
     
     console.log(`🎯 Content tier resolved: ${finalTier} (reason: ${tierReason}, admin: ${isAdmin}, ageVerified: ${ageVerified})`);
     
-    // Get system prompt using cached templates (roleplay or general)
+    // Get system prompt -- use client override if provided, otherwise resolve from templates
     dbReadTime = Date.now() - dbStart;
     const promptStart = Date.now();
-    const systemPrompt = await getSystemPromptForChat(
-      message,
-      conversationHistory,
-      contextType,
-      cache,
-      characterData,
-      ageVerified || allowNSFWOverride,
-      finalTier,
-      roleplay_settings,
-      participants
-    );
+    let systemPrompt: string;
+    if (system_prompt_override && system_prompt_override.trim()) {
+      systemPrompt = system_prompt_override.trim();
+      // Still append NSFW guidance for safety if applicable
+      if (finalTier === 'nsfw' && !/\[\[NSFW_ROLEPLAY_GUIDANCE_/i.test(systemPrompt)) {
+        const nsfwTemplates = cache.templates.filter((t: any) => t.use_case === 'nsfw_guidance');
+        if (nsfwTemplates.length > 0) {
+          systemPrompt += '\n\n' + nsfwTemplates[0].system_prompt;
+        }
+      }
+      console.log('📝 System prompt source: client_override');
+    } else {
+      systemPrompt = await getSystemPromptForChat(
+        message,
+        conversationHistory,
+        contextType,
+        cache,
+        characterData,
+        ageVerified || allowNSFWOverride,
+        finalTier,
+        roleplay_settings,
+        participants
+      );
+      console.log('📝 System prompt source: template_resolved');
+    }
     promptTime = Date.now() - promptStart;
 
     // Log a small system prompt snippet and markers for diagnostics
