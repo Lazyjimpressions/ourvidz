@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { deleteConversationFull } from '@/lib/deleteConversation';
 
 export interface ConversationUserCharacter {
   id: string;
@@ -80,15 +81,9 @@ export const useConversations = (characterId?: string) => {
   };
 
   const deleteConversation = async (conversationId: string) => {
+    if (!user?.id) return;
     try {
-      const { error } = await supabase
-        .from('conversations')
-        .delete()
-        .eq('id', conversationId)
-        .eq('user_id', user?.id);
-
-      if (error) throw error;
-      
+      await deleteConversationFull(conversationId, user.id);
       setConversations(prev => prev.filter(conv => conv.id !== conversationId));
     } catch (err) {
       console.error('Error deleting conversation:', err);

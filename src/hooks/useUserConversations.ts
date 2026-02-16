@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/contexts/AuthContext';
 import { normalizeSignedUrl } from '@/lib/utils/normalizeSignedUrl';
+import { deleteConversationFull } from '@/lib/deleteConversation';
 
 /**
  * Character info included with conversation for display
@@ -287,47 +288,9 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
    */
   const deleteConversation = async (conversationId: string) => {
     if (!user?.id) return;
-
     try {
-      // Delete messages first (foreign key constraint)
-      await supabase
-        .from('messages')
-        .delete()
-        .eq('conversation_id', conversationId);
-
-      // Delete the conversation
-      const { error } = await supabase
-        .from('conversations')
-        .delete()
-        .eq('id', conversationId)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      // Remove from local state
+      await deleteConversationFull(conversationId, user.id);
       setConversations(prev => prev.filter(conv => conv.id !== conversationId));
-
-      // Clear localStorage cache for this conversation
-      const keys = Object.keys(localStorage);
-      keys.forEach(key => {
-        if (key.startsWith('conversation_') && localStorage.getItem(key) === conversationId) {
-          localStorage.removeItem(key);
-        }
-      });
-
-      // Clean up persisted scene thumbnails from user-library storage
-      const thumbnailFolder = `${user.id}/scene-thumbnails/${conversationId}`;
-      const { data: files } = await supabase.storage
-        .from('user-library')
-        .list(thumbnailFolder);
-
-      if (files && files.length > 0) {
-        const filePaths = files.map(f => `${thumbnailFolder}/${f.name}`);
-        await supabase.storage
-          .from('user-library')
-          .remove(filePaths);
-        console.log('🗑️ Cleaned up scene thumbnails:', filePaths.length, 'files');
-      }
     } catch (err) {
       console.error('Error deleting conversation:', err);
       throw err;
