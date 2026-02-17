@@ -51,6 +51,21 @@ interface ApiModel {
 const MODALITIES = ['image', 'video', 'chat', 'prompt', 'audio', 'embedding', 'roleplay'] as const;
 const TASKS = ['generation', 'enhancement', 'moderation', 'style_transfer', 'upscale', 'roleplay', 'tts', 'stt', 'chat', 'embedding'] as const;
 
+const formatResponseTime = (ms: number | null | undefined) => {
+  if (ms === null || ms === undefined || ms === 0) return '--';
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const mins = Math.floor(ms / 60000);
+  const secs = Math.round((ms % 60000) / 1000);
+  return `${mins}m ${secs}s`;
+};
+
+const formatAvgCost = (cost: number | null | undefined) => {
+  if (cost === null || cost === undefined || cost === 0) return '--';
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(3)}`;
+};
+
 export const ApiModelsTab = () => {
   const queryClient = useQueryClient();
   const [editingModel, setEditingModel] = useState<(ApiModel & { api_providers: SafeApiProvider }) | null>(null);
@@ -86,6 +101,41 @@ export const ApiModelsTab = () => {
     }
   });
 
+  // Fetch success-only usage stats from raw logs for accurate per-model averages
+  const { data: modelUsageStats } = useQuery({
+    queryKey: ['api-model-usage-stats'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('api_usage_logs')
+        .select('model_id, cost_usd, response_time_ms')
+        .eq('response_status', 200)
+        .not('model_id', 'is', null);
+      if (error) throw error;
+      
+      // Aggregate in JS
+      const statsMap = new Map<string, { requests: number; totalCost: number; totalTime: number }>();
+      for (const row of data || []) {
+        if (!row.model_id) continue;
+        const existing = statsMap.get(row.model_id) || { requests: 0, totalCost: 0, totalTime: 0 };
+        existing.requests++;
+        existing.totalCost += Number(row.cost_usd) || 0;
+        existing.totalTime += Number(row.response_time_ms) || 0;
+        statsMap.set(row.model_id, existing);
+      }
+      
+      const result = new Map<string, { avgCost: number; avgTime: number; requests: number }>();
+      statsMap.forEach((stats, id) => {
+        result.set(id, {
+          avgCost: stats.requests > 0 ? stats.totalCost / stats.requests : 0,
+          avgTime: stats.requests > 0 ? stats.totalTime / stats.requests : 0,
+          requests: stats.requests
+        });
+      });
+      return result;
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+
   // Initialize expanded sections when models load
   React.useEffect(() => {
     if (models && expandedSections.size === 0) {
@@ -114,12 +164,16 @@ export const ApiModelsTab = () => {
     Object.values(groups).forEach(arr =>
       arr.sort((a, b) => {
         let cmp = 0;
+        const statsA = modelUsageStats?.get(a.id);
+        const statsB = modelUsageStats?.get(b.id);
         switch (sortKey) {
           case 'display_name': cmp = a.display_name.localeCompare(b.display_name); break;
           case 'provider': cmp = a.api_providers.display_name.localeCompare(b.api_providers.display_name); break;
           case 'task': cmp = a.task.localeCompare(b.task); break;
           case 'model_key': cmp = a.model_key.localeCompare(b.model_key); break;
           case 'model_family': cmp = (a.model_family || '').localeCompare(b.model_family || ''); break;
+          case 'avg_cost': cmp = (statsA?.avgCost || 0) - (statsB?.avgCost || 0); break;
+          case 'avg_time': cmp = (statsA?.avgTime || 0) - (statsB?.avgTime || 0); break;
           case 'priority': cmp = a.priority - b.priority; break;
           case 'is_default': cmp = (a.is_default ? 1 : 0) - (b.is_default ? 1 : 0); break;
           case 'is_active': cmp = (a.is_active ? 1 : 0) - (b.is_active ? 1 : 0); break;
@@ -129,7 +183,7 @@ export const ApiModelsTab = () => {
       })
     );
     return groups;
-  }, [filteredModels, sortKey, sortDir]);
+  }, [filteredModels, sortKey, sortDir, modelUsageStats]);
 
   const updateModelMutation = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<ApiModel> & { id: string }) => {
@@ -262,6 +316,8 @@ export const ApiModelsTab = () => {
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="task" label="Task" onClick={handleSort} className="w-[80px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="model_key" label="Model Key" onClick={handleSort} className="w-[160px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="model_family" label="Family" onClick={handleSort} className="w-[70px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="avg_cost" label="Avg Cost" onClick={handleSort} className="w-[70px] text-right" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="avg_time" label="Avg Time" onClick={handleSort} className="w-[70px] text-right" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="priority" label="Pri" onClick={handleSort} className="w-[45px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_default" label="Def" onClick={handleSort} className="w-[35px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_active" label="On" onClick={handleSort} className="w-[45px]" />
@@ -269,17 +325,22 @@ export const ApiModelsTab = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {group.map(model => (
+                    {group.map(model => {
+                      const stats = modelUsageStats?.get(model.id);
+                      return (
                       <ModelRow
                         key={model.id}
                         model={model}
+                        avgCost={stats?.avgCost}
+                        avgTime={stats?.avgTime}
                         editingCellId={editingCellId}
                         setEditingCellId={setEditingCellId}
                         onUpdate={(updates) => updateModelMutation.mutate({ id: model.id, ...updates })}
                         onEdit={() => { setEditingModel(model); setShowAddForm(false); }}
                         onDelete={() => deleteModelMutation.mutate(model.id)}
                       />
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </CollapsibleContent>
@@ -322,8 +383,10 @@ function SortableHead({ sortKey, sortDir, column, label, onClick, className }: {
 
 /* ─── Model Row ─── */
 
-function ModelRow({ model, editingCellId, setEditingCellId, onUpdate, onEdit, onDelete }: {
+function ModelRow({ model, avgCost, avgTime, editingCellId, setEditingCellId, onUpdate, onEdit, onDelete }: {
   model: ApiModel & { api_providers: SafeApiProvider };
+  avgCost?: number;
+  avgTime?: number;
   editingCellId: string | null;
   setEditingCellId: (id: string | null) => void;
   onUpdate: (updates: Partial<ApiModel>) => void;
@@ -391,6 +454,16 @@ function ModelRow({ model, editingCellId, setEditingCellId, onUpdate, onEdit, on
           truncateAt={10}
           placeholder="—"
         />
+      </TableCell>
+
+      {/* Avg Cost */}
+      <TableCell className="p-1 text-right font-mono text-[10px] text-muted-foreground">
+        {formatAvgCost(avgCost)}
+      </TableCell>
+
+      {/* Avg Time */}
+      <TableCell className="p-1 text-right font-mono text-[10px] text-muted-foreground">
+        {formatResponseTime(avgTime)}
       </TableCell>
 
       {/* Priority */}
