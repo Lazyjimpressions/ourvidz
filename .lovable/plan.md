@@ -1,29 +1,75 @@
 
-# Fix First Scene I2I + Efficiency Improvements
 
-## Problem 1: First Scene Not Using Multi-Reference I2I
+# Fix: Wire UI Scene Settings Into Edge Function Call
 
-**Root cause:** For the first scene (`isFirstScene: true`), the `sceneStyle` was `character_only` but even when it's `both_characters`, the `canUseMultiReference` logic at line 3807 only builds `image_urls` for `both_characters`. For `character_only` and `pov` styles on the first scene, the code falls to the single-reference branch (line 3869) which sends `image_url: templatePreviewImage` as a single string -- NOT an `image_urls` array.
+## Root Cause
+
+There's a race condition in `MobileRoleplayChat.tsx`. The kickoff function already reads `selectedChatModel` and `selectedImageModel` from `location.state` (lines 913-916) to bypass stale React state -- but it does NOT do the same for `scene_style`. Instead, line 945 reads `sceneStyle` from React state, which is still the default `'character_only'` (initialized on line 220) because the state update from `setSceneStyle(effectiveSceneStyle)` (line 272) hasn't flushed yet.
 
 This means:
-- The prompt references "Figure 1" and "Figure 2" (scene + character)
-- But only 1 image (template preview) is sent to fal.ai
-- The character reference image is **never included** for first-scene `character_only`/`pov`
+- You select "both" in the scene modal
+- The dashboard navigates with `state.sceneStyle = 'both_characters'`
+- The chat page initializes `sceneStyle` state as `'character_only'`
+- The model defaults effect calls `setSceneStyle('both_characters')` -- but this is async
+- The kickoff fires and reads `sceneStyle` from state = still `'character_only'`
+- Edge function receives `scene_style: 'character_only'` instead of `'both_characters'`
 
-**Fix:** Add a first-scene I2I branch for `character_only`/`pov` styles that builds an `image_urls` array with [template_preview, character_reference], similar to the multi-reference block but with 2 images instead of 3.
+The same pattern applies to `imageGenerationMode`.
 
-In `supabase/functions/roleplay-chat/index.ts` around line 3807, after the existing `canUseMultiReference` block, add:
+## Fix
+
+**File:** `src/pages/MobileRoleplayChat.tsx`
+
+In the kickoff function (around lines 912-945), apply the same `location.state` bypass pattern already used for chat/image models:
+
+1. Read `sceneStyle` from `location.state` (already typed at line 232 but never used in kickoff)
+2. Read `imageGenerationMode` from `location.state` similarly
+3. Use these values in the edge function call body instead of React state
 
 ```
-// FIRST-SCENE I2I for character_only/pov: 
-// Build image_urls with [template_preview, character_ref]
+// Around line 913, extend the existing location.state read:
+const modelState = location.state as { 
+  selectedChatModel?: string; 
+  selectedImageModel?: string;
+  sceneStyle?: 'character_only' | 'pov' | 'both_characters';
+  imageGenerationMode?: string;
+} | null;
+
+const effectiveChatModel = modelState?.selectedChatModel || modelProvider || ModelRoutingService.getDefaultChatModelKey();
+const effectiveImageModel = modelState?.selectedImageModel || getValidImageModel();
+const effectiveSceneStyle = modelState?.sceneStyle || sceneStyle;
+const effectiveImageGenMode = modelState?.imageGenerationMode || imageGenerationMode;
+
+// Also sync state for subsequent messages
+if (modelState?.sceneStyle && modelState.sceneStyle !== sceneStyle) {
+  setSceneStyle(modelState.sceneStyle);
+}
+```
+
+Then on line 945, change:
+```
+scene_style: effectiveSceneStyle,
+```
+
+And update the `scene_generation` field to respect the mode:
+```
+scene_generation: effectiveImageGenMode !== 'manual',
+```
+
+## Fix 2: First-Scene I2I Array for character_only/pov
+
+**File:** `supabase/functions/roleplay-chat/index.ts`
+
+After the existing `canUseMultiReference` block (around line 3848), add a fallback block for first scenes with `character_only` or `pov` styles that builds a 2-element `image_urls` array:
+
+```
 if (!useMultiReference && isFirstScene && templatePreviewImageUrl 
     && (character.reference_image_url || character.image_url)) {
-  const imageUrlsArray = [
-    templatePreviewImageUrl,  // Figure 1: Scene
-    (character.reference_image_url || character.image_url)!  // Figure 2: Character
+  const firstSceneImageUrls = [
+    templatePreviewImageUrl,
+    (character.reference_image_url || character.image_url)!
   ];
-  multiReferenceImageUrls = imageUrlsArray;
+  multiReferenceImageUrls = firstSceneImageUrls;
   useMultiReference = true;
   if (!effectiveI2IModelOverride) {
     effectiveI2IModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
@@ -31,37 +77,28 @@ if (!useMultiReference && isFirstScene && templatePreviewImageUrl
 }
 ```
 
-## Problem 2: Sequence Efficiency
+## Fix 3: Skip Redundant Narrative LLM Call
 
-**Current flow (sequential, ~76-82s total):**
-1. Chat LLM call (OpenRouter) -- 8-13s
-2. Scene narrative LLM call (OpenRouter/MythoMax) -- 7s  
-3. fal.ai image generation -- 58s
+**File:** `supabase/functions/roleplay-chat/index.ts`
 
-Steps 1 and 2 are fully sequential. The narrative call adds ~7s before image generation even starts.
+When `sceneContext.actions` already has content, use those actions directly as the scene prompt instead of calling `generateSceneNarrativeWithOpenRouter` (saves ~7s):
 
-**Fix: Parallelize chat response + scene narrative generation**
+```
+if (sceneContext?.actions?.length > 0) {
+  const actionsSummary = sceneContext.actions.slice(0, 3).join('. ');
+  const setting = sceneContext.setting || 'the scene';
+  const mood = sceneContext.mood || 'engaging';
+  scenePrompt = `${setting}. ${actionsSummary}. The mood is ${mood}.`;
+} else {
+  // Existing narrative LLM call as fallback
+}
+```
 
-The scene narrative generation only needs the chat response text + scene context. However, the current code generates the chat text first, then passes it to `generateSceneNarrativeWithOpenRouter`. 
+## Summary of Changes
 
-We can parallelize by firing the narrative generation concurrently with the chat response streaming, using the scene template context (which is available before the chat response). The narrative prompt already uses the scene template description + character actions. For the first scene (kickoff), the character's first_message is already known, so the narrative can be generated in parallel.
+| File | Change | Impact |
+|------|--------|--------|
+| `src/pages/MobileRoleplayChat.tsx` | Read `sceneStyle` and `imageGenerationMode` from `location.state` in kickoff | UI selections respected by edge function |
+| `supabase/functions/roleplay-chat/index.ts` | Add 2-image array for first-scene character_only/pov | Proper I2I with scene + character reference |
+| `supabase/functions/roleplay-chat/index.ts` | Skip narrative LLM when actions available | ~7s faster scene generation |
 
-For subsequent scenes, we can start the narrative generation as soon as the chat response is available, but the main optimization is to **fire the fal.ai request as early as possible**.
-
-**Specific optimization:** Move the scene narrative generation to run concurrently with the OpenRouter chat call when possible (kickoff scenes where the first_message is known). For subsequent scenes, consider using the scene template context directly without the extra LLM narrative call, since the action is already extracted from `sceneContext.actions`.
-
-## Technical Changes
-
-### File: `supabase/functions/roleplay-chat/index.ts`
-
-1. **First-scene I2I array fix** (~line 3848): Add block to build 2-element `image_urls` array for `character_only`/`pov` first scenes
-
-2. **Efficiency: Skip redundant narrative LLM call when actions are available** (~line 2850-2880): When `sceneContext.actions` already contains extracted actions from the chat response, use those directly as the scene narrative instead of making a second LLM call to rephrase them. The extra call to `gryphe/mythomax-l2-13b` just reformulates what's already in the response -- saving ~7s per scene.
-
-   Before: chat response -> extract actions -> call MythoMax to "narrate" -> build prompt -> call fal.ai
-   After: chat response -> extract actions -> build prompt directly -> call fal.ai
-
-   The narrative LLM call would only be used as fallback when no actions are extracted.
-
-### Deployment
-- Deploy `roleplay-chat` edge function after changes
