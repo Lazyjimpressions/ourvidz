@@ -1,97 +1,95 @@
 
-# Playground Persistence, Response Metrics, and Lightbox Model/Template Display
+# Remove Hardcoded `chat_worker` Defaults and Fix Dashboard Filtering
 
-## 1. Maintain Playground Persistence on Navigation
+## Problem Summary
 
-**Problem**: When a user navigates away from `/playground` and returns, all state (active conversation, messages, current mode, system prompt) is lost because it's held in React component state.
+`chat_worker` (the local Qwen model identifier) is hardcoded as the default model in **5 locations** across the frontend and edge functions. This means:
+- If the user selects a model in the scene setup modal, it gets overwritten by the `chat_worker` default due to a React state race condition
+- The edge function defaults to local Qwen if no model is sent, instead of a reliable API model
+- Playground conversations appear in the roleplay "Continue" section
 
-**Solution**: Persist the active conversation ID and mode to `localStorage`. On mount, restore the last active conversation and reload its messages.
+## Changes
 
-### Changes
+### 1. Filter Dashboard Conversations (one-line fix)
 
-**`src/contexts/PlaygroundContext.tsx`**
-- On `setActiveConversation`, persist `activeConversationId` to `localStorage` key `playground-active-conversation`
-- On mount, read the stored conversation ID and auto-load it (call `loadMessages` and set state)
-- Clear the stored ID when a conversation is deleted
+**File: `src/hooks/useUserConversations.ts`**
 
-**`src/components/playground/ChatInterface.tsx`**
-- Persist `currentMode` to `localStorage` key `playground-mode`
-- Persist `systemPrompt` to `localStorage` key `playground-system-prompt`
-- Initialize from stored values on mount
+Add `.in('conversation_type', ['character_roleplay', 'scene_roleplay', 'roleplay'])` to the query (after line 78's `.eq('status', 'active')`).
 
----
-
-## 2. Token and Character Count on Prompt Results
-
-**Problem**: Assistant responses don't show token/character counts, making it hard to evaluate output length.
-
-**Solution**: Add a small stats line below each assistant message showing character count and an estimated token count (chars / 4 approximation, standard for English text).
-
-### Changes
-
-**`src/components/playground/MessageBubble.tsx`**
-- For assistant messages, render a stats line in the hover toolbar area:
-  `{charCount} chars | ~{tokenEstimate} tokens`
-- Use `message.content.length` for chars, `Math.ceil(content.length / 4)` for token estimate
-
-**`src/components/playground/CompareView.tsx`**
-- Add the same char/token stats below each assistant message in the panel render
+This ensures only roleplay sessions appear in "Continue Roleplay."
 
 ---
 
-## 3. Preserve Response Time and Log in Tables
+### 2. Fix Default Model in MobileRoleplayChat State Initialization
 
-**Problem**: Response time is tracked in CompareView locally but not in the main Chat flow, and it's never persisted to the database.
+**File: `src/pages/MobileRoleplayChat.tsx`**
 
-**Solution**: 
-- Return `generation_time` (already in edge function response) to the PlaygroundContext
-- Store it on each assistant message in local state
-- Display it in MessageBubble for assistant messages
+**Line 199**: Change `useState<string>('chat_worker')` to `useState<string>('')`
 
-### Changes
+The actual value gets set by the `useEffect` on line 212 from either navigation state or `initializeSettings()`. Using an empty string as initial prevents accidental use of `chat_worker`.
 
-**`src/contexts/PlaygroundContext.tsx`**
-- After receiving a successful response, store `data.generation_time` on the assistant message object as `response_time_ms`
-- Include `generation_time` in `lastResponseMeta`
+**Lines 158, 184**: Change the fallback `'chat_worker'` in `initializeSettings()` to use `ModelRoutingService.getDefaultChatModelKey()` -- this returns a reliable OpenRouter model (Dolphin 3.0).
 
-**`src/components/playground/MessageBubble.tsx`**
-- Display `message.response_time_ms` (if present) in the hover toolbar: e.g., `1.2s`
+**Line 905 (kickoff call)**: Read model selections directly from `location.state` to bypass stale React state:
+```text
+const locationState = location.state as { selectedChatModel?: string; selectedImageModel?: string; ... };
+const effectiveChatModel = locationState?.selectedChatModel || modelProvider || ModelRoutingService.getDefaultChatModelKey();
+const effectiveImageModel = locationState?.selectedImageModel || getValidImageModel();
 
-**`src/components/playground/CompareView.tsx`**
-- Already tracks `responseTime` per panel -- also show per-message response time from the edge function's `generation_time` field (the worker inference time, not the full round-trip)
+// Then use in the body:
+model_provider: effectiveChatModel,
+selected_image_model: effectiveImageModel,
+```
 
----
-
-## 4. Lightbox Generation Details: Template and Model
-
-**Problem**: The `PromptDetailsSlider` shows template name from `generation_settings.templateName` or the `jobs` table backfill, but never shows the `model_used` column from `workspace_assets`. For library assets, neither is available.
-
-**Solution**: Read the `model_used` column and surface it in the details panel. Also add `template_name` from the `jobs` table backfill (already partially done, just needs display).
-
-### Changes
-
-**`src/hooks/useFetchImageDetails.ts`**
-- Add `modelUsed?: string` to the `ImageDetails` interface
-- Set `modelUsed: workspaceAsset.model_used` when reading workspace assets
-- For library assets, check `user_library.model_used` if available, or extract from tags
-
-**`src/components/lightbox/PromptDetailsSlider.tsx`**
-- In the "Generation Summary" section, render the model used:
-  ```
-  Model: fal-ai/seedream-v4
-  ```
-- Display as a Badge below the job type badge
-- Include `modelUsed` in the "Copy All" metadata output
+This fixes the race condition where `modelProvider` state is still the initial empty/default value when the kickoff fires.
 
 ---
 
-## Technical Summary
+### 3. Fix PlaygroundContext Default
+
+**File: `src/contexts/PlaygroundContext.tsx`**
+
+**Line 149**: Change `model_provider: hasCharacter ? 'chat_worker' : 'openrouter'` to use the user's selected model from `settings.chatModel`, with fallback to `ModelRoutingService.getDefaultChatModelKey()`.
+
+---
+
+### 4. Fix Edge Function Default Parameter
+
+**File: `supabase/functions/playground-chat/index.ts`**
+
+**Line 440**: Change `model_provider = 'chat_worker'` default to `model_provider = ''` (empty string).
+
+Then add logic below the destructuring to resolve an empty `model_provider` to the first active default model from the database, or fall back to the hardcoded OpenRouter default (Dolphin 3.0). This makes the edge function self-healing -- it will always route to a working model even if the frontend sends nothing.
+
+**Line 1087**: Change `model_used: model_provider === 'openrouter' ? ... : 'chat_worker'` to use the actual resolved model identifier.
+
+---
+
+### 5. Fix Edge Function Default in roleplay-chat
+
+**File: `supabase/functions/roleplay-chat/index.ts`**
+
+The `chat_worker` references here are **routing logic**, not defaults -- the function checks `if (model_provider === 'chat_worker')` to route to the local worker. These should stay, since `chat_worker` is a valid model identifier when the user explicitly selects it. No change needed here for the routing paths.
+
+However, the type annotation on line 136 (`model_provider: 'chat_worker' | 'openrouter' | ...`) should be widened to `string` since model keys are dynamic.
+
+---
+
+## Result After Changes
+
+| Scenario | Before | After |
+|---|---|---|
+| User picks Dolphin 3.0 in scene modal | Ignored, sends `chat_worker` | Dolphin 3.0 sent correctly |
+| No model selected anywhere | `chat_worker` (local, may be down) | Dolphin 3.0 via ModelRoutingService |
+| Playground sessions on dashboard | Shown in "Continue Roleplay" | Filtered out |
+| Edge function receives empty model | Routes to local Qwen | Resolves to DB default or OpenRouter fallback |
+
+## Files Changed
 
 | File | Change |
 |---|---|
-| `src/contexts/PlaygroundContext.tsx` | Persist/restore active conversation ID via localStorage; include `generation_time` in response metadata |
-| `src/components/playground/ChatInterface.tsx` | Persist/restore `currentMode` and `systemPrompt` via localStorage |
-| `src/components/playground/MessageBubble.tsx` | Show char/token counts and response time for assistant messages |
-| `src/components/playground/CompareView.tsx` | Show char/token counts per assistant message |
-| `src/hooks/useFetchImageDetails.ts` | Extract `model_used` from workspace_assets column |
-| `src/components/lightbox/PromptDetailsSlider.tsx` | Display model used badge in Generation Summary section |
+| `src/hooks/useUserConversations.ts` | Add `conversation_type` filter for roleplay types only |
+| `src/pages/MobileRoleplayChat.tsx` | Replace `chat_worker` defaults with dynamic defaults; read model from location.state in kickoff |
+| `src/contexts/PlaygroundContext.tsx` | Use selected model instead of hardcoded `chat_worker` |
+| `supabase/functions/playground-chat/index.ts` | Replace `chat_worker` default param with dynamic resolution |
+| `supabase/functions/roleplay-chat/index.ts` | Widen type annotation (routing logic stays) |
