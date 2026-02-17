@@ -1,128 +1,124 @@
 
 
-# Deliver Dialogue First + Show Full fal.ai Prompt in Edit Modal
+# Add Image Compare Tab to Playground
 
-## Problem 1: Dialogue Blocked by Scene Generation (~60s wait)
+## Overview
 
-Currently the edge function flow is fully sequential and synchronous:
+Add a new "Image Compare" tab to the Playground that lets you compare image generations side-by-side. Each panel gets its own image model selector and optional prompt template, and a shared text prompt is sent to both panels simultaneously. Results display as images with generation metadata (time, model, seed).
 
-```text
-Client awaits -->  [Chat LLM ~10s] --> [Save Message] --> [generateScene ~60s] --> Return JSON
-```
-
-The dialogue text is ready after step 2 (~10s), but the user waits ~70s total because the edge function does not return until scene generation completes. The user cannot read the dialogue or type a response during that time.
-
-### Fix: Fire-and-forget scene generation
-
-After saving the assistant message, return the dialogue response to the client immediately. Fire `generateScene()` without awaiting it, using `EdgeRuntime.waitUntil()` (Supabase edge functions support this for background work that continues after the response is sent).
-
-**File:** `supabase/functions/roleplay-chat/index.ts` (around lines 636-768)
-
-Change the flow to:
+## UX Design
 
 ```text
-Client awaits -->  [Chat LLM ~10s] --> [Save Message] --> Return JSON immediately
-                                                      \-> [generateScene runs in background]
++---------------------------------------------------+
+| AI Playground                          [Settings]  |
+| [Chat] [Compare] [Image Compare] [Admin]          |
++---------------------------------------------------+
+|  Panel A                  |  Panel B               |
+|  [Model: Seedream v4.5 T2I ▼]  [Model: Seedream v4 ▼]  |
+|  [Template: scene_generation ▼] [Template: none ▼]      |
+|  [New]                    |  [New]                 |
+|                           |                        |
+|  +---------------------+ | +---------------------+|
+|  |                     | | |                     ||
+|  |   Generated Image   | | |   Generated Image   ||
+|  |                     | | |                     ||
+|  +---------------------+ | +---------------------+|
+|  Seedream v4.5 | 12.3s   | Seedream v4 | 8.1s     |
+|  Seed: 12345              | Seed: 67890            |
+|                           |                        |
+|  (scrollable history)     | (scrollable history)   |
++---------------------------------------------------+
+| [Enter image prompt...]                    [Send]  |
++---------------------------------------------------+
 ```
 
-Steps:
-1. After saving the assistant message (line 614), build the response JSON with `scene_generated: true` and a placeholder (the scene_id and job_id will be discovered by the client via the existing `subscribeToJobCompletion` realtime subscription).
-2. Use `EdgeRuntime.waitUntil(promise)` to keep the function alive while scene generation completes in the background.
-3. The client already has polling/subscription logic (`subscribeToJobCompletion`) that watches for job completion -- no client changes needed for image delivery.
-4. For the scene metadata (scene_id, job_id), the background task will update the message metadata in the DB after generation completes, and the client can pick it up via realtime or polling.
+**Key interactions:**
+- Select different image models per panel from a dropdown (all active image models from `api_models`)
+- Optionally select a prompt template (scene_generation, enhancement, etc.) that wraps/enhances the raw prompt
+- Type a prompt and hit Send -- both panels generate simultaneously
+- Each result shows the image, model name, generation time, and seed
+- "New" button clears the panel history
+- Images are clickable for a larger lightbox view
+- History scrolls vertically showing previous prompt/image pairs
 
-Since the client needs the `scene_job_id` to start polling, we need a two-phase approach:
-- Create the `character_scenes` DB record (with `job_id: null`) BEFORE returning the response, so we have a `scene_id`.
-- Return the `scene_id` in the response immediately.
-- In the background task, run the actual image generation, get the `job_id`, and update the scene record + message metadata.
+## Architecture
 
-The client-side `subscribeToJobCompletion` will need a small adjustment to also support subscribing by `scene_id` (watching for `job_id` to appear on the scene record), or we can use a Supabase realtime subscription on `character_scenes` filtered by `scene_id`.
+The tab calls the existing `fal-image` edge function directly (no new edge function needed). Each panel sends:
 
-**Alternative simpler approach:** Create the scene record AND submit the fal.ai job synchronously (this is fast -- just an API queue submission, ~1-2s), then return immediately with the `job_id`. The actual image generation happens asynchronously on fal.ai's side already. The bottleneck is the narrative LLM call + prompt building, not the fal.ai submission itself.
+```json
+{
+  "prompt": "user prompt text (optionally enhanced by template)",
+  "apiModelId": "selected-model-uuid",
+  "job_type": "image_high",
+  "metadata": { "source": "playground-image-compare" }
+}
+```
 
-Looking at the current code, `generateScene()` already submits to fal.ai's queue API which returns a `job_id` immediately. The ~60s is fal.ai processing time, which already happens async. So the real question is: what takes the edge function so long?
+The `fal-image` function already handles model resolution, job creation, and queue submission. It returns a `job_id` which the client polls via the existing `subscribeToJobCompletion` pattern (or direct polling of the `jobs` table).
 
-Based on the logs, the edge function itself takes ~20-30s (chat LLM + narrative LLM + scene record creation + fal.ai queue submission). The fal.ai processing is already async. So the fix is simpler:
+## Technical Details
 
-- Skip the narrative LLM call (already planned, saves ~7s)
-- The remaining ~15-20s is the chat LLM call + scene record + fal.ai submission
-- We can further decouple by moving the scene record creation + fal.ai submission into a `waitUntil()` background task
+### New file: `src/components/playground/ImageCompareView.tsx`
 
-**Recommended approach:**
-1. After chat LLM response + message save, return dialogue immediately
-2. Use `waitUntil()` for scene generation (record creation + fal.ai submission)
-3. Client subscribes to `character_scenes` table filtered by `conversation_id` for new scene records
-4. When a scene record appears with a `job_id`, client starts `subscribeToJobCompletion` as usual
+- Two-panel layout mirroring `CompareView.tsx` structure
+- Each panel has state: `{ modelId, templateId, generations: [{prompt, imageUrl, time, seed}], isLoading }`
+- Model selector uses `useImageModels()` hook (already exists, fetches active image models)
+- Template selector fetches `prompt_templates` filtered to scene/enhancement use cases
+- On submit: calls `supabase.functions.invoke('fal-image', { body })` for each panel
+- Polls `jobs` table by job_id until status = 'completed', then extracts `result_url`
+- Shows loading spinner with elapsed timer while generating
+- Completed images render in a scrollable history list
 
-### Client-side changes needed
+### Modified file: `src/components/playground/PlaygroundModeSelector.tsx`
 
-**File:** `src/pages/MobileRoleplayChat.tsx`
+- Add `'image_compare'` to `PlaygroundMode` type
+- Add `{ id: 'image_compare', label: 'Image Compare' }` to modes array
 
-- When receiving the response, show the dialogue immediately (already works)
-- Add a Supabase realtime subscription on `character_scenes` for the conversation to detect when the background scene generation creates a record with a `job_id`
-- Re-enable the input field as soon as dialogue is received (before image arrives)
-- Show a subtle loading indicator on the message while scene generates in background
+### Modified file: `src/components/playground/ChatInterface.tsx`
 
-## Problem 2: Edit Modal Not Showing Full fal.ai Prompt
+- Add `ImageCompareView` import
+- Add rendering branch for `currentMode === 'image_compare'` (same pattern as the existing `compare` mode block at line 131)
 
-### Root cause
-The `original_scene_prompt` stored in `generation_metadata` (line 3232) is `cleanScenePrompt || scenePrompt` -- this is the raw narrative text BEFORE the Figure notation, character descriptions, composition rules, etc. are added.
+### Job polling logic
 
-The actual full prompt sent to fal.ai is `enhancedScenePrompt` (built at lines 3354-3418) and then `optimizedPrompt` (after char_limit truncation at line 3430). This full prompt is never stored anywhere.
+The `fal-image` function creates a job record and submits to fal.ai's queue. The response includes the `job_id`. The client polls the `jobs` table:
 
-### Fix
-Store `optimizedPrompt` (the final prompt sent to fal.ai) in the scene record's `generation_metadata` as a new field `fal_prompt` or replace `original_scene_prompt` with the full prompt.
+```typescript
+const pollForResult = async (jobId: string): Promise<string> => {
+  const maxAttempts = 60; // 2 minutes at 2s intervals
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const { data } = await supabase
+      .from('jobs')
+      .select('status, result_url, error')
+      .eq('id', jobId)
+      .single();
+    if (data?.status === 'completed' && data.result_url) return data.result_url;
+    if (data?.status === 'failed') throw new Error(data.error || 'Generation failed');
+  }
+  throw new Error('Generation timed out');
+};
+```
 
-**File:** `supabase/functions/roleplay-chat/index.ts`
+### Template integration
 
-1. After `optimizedPrompt` is built (line 3430), update the scene record's `generation_metadata` to include the full prompt:
-   ```
-   // Update scene record with full fal.ai prompt
-   if (sceneId) {
-     await supabase.from('character_scenes')
-       .update({ 
-         scene_prompt: optimizedPrompt,
-         generation_metadata: { ...existingMetadata, fal_prompt: optimizedPrompt }
-       })
-       .eq('id', sceneId);
-   }
-   ```
+When a prompt template is selected (e.g., `scene_generation`), the system prompt from the template is prepended to the user prompt as context. Since image generation doesn't use system prompts, the template text is concatenated with the user prompt:
 
-2. Also update the return value's `original_scene_prompt` to use `optimizedPrompt` instead of `cleanScenePrompt`.
+```typescript
+const finalPrompt = selectedTemplate
+  ? `${selectedTemplate.system_prompt}\n\n${userPrompt}`
+  : userPrompt;
+```
 
-**File:** `src/components/roleplay/ScenePromptEditModal.tsx`
+This lets users test how different prompt templates affect image output.
 
-3. Update the prompt priority to check `fal_prompt` first:
-   ```
-   const actualPrompt = sceneData?.generation_metadata?.fal_prompt
-     || sceneData?.generation_metadata?.original_scene_prompt
-     || sceneData?.scene_prompt
-     || currentPrompt;
-   ```
+## Files Changed
 
-**File:** `src/components/roleplay/ChatMessage.tsx`
+| File | Change |
+|------|--------|
+| `src/components/playground/ImageCompareView.tsx` | New component -- two-panel image comparison view |
+| `src/components/playground/PlaygroundModeSelector.tsx` | Add `image_compare` mode to type and modes array |
+| `src/components/playground/ChatInterface.tsx` | Add rendering branch for image_compare mode |
 
-4. Update line 628 to also check `fal_prompt`:
-   ```
-   currentPrompt={message.metadata?.generation_metadata?.fal_prompt 
-     || message.metadata?.generation_metadata?.original_scene_prompt 
-     || message.metadata?.scene_prompt}
-   ```
-
-## Problem 3: Skip Narrative LLM (from previous plan, still needed)
-
-When `sceneContext.actions` are available, use them directly instead of calling `generateSceneNarrativeWithOpenRouter`. This saves ~7s.
-
-## Summary of Changes
-
-| File | Change | Impact |
-|------|--------|--------|
-| `supabase/functions/roleplay-chat/index.ts` | Return dialogue before scene generation using `waitUntil()` | User sees dialogue in ~10s instead of ~70s |
-| `supabase/functions/roleplay-chat/index.ts` | Store `optimizedPrompt` as `fal_prompt` in `generation_metadata` | Full prompt available for editing |
-| `supabase/functions/roleplay-chat/index.ts` | Skip narrative LLM when actions available | ~7s faster scene generation |
-| `supabase/functions/roleplay-chat/index.ts` | Update `original_scene_prompt` return value to use full prompt | Client receives full prompt |
-| `src/pages/MobileRoleplayChat.tsx` | Add realtime subscription on `character_scenes` for background scene detection | Picks up scene from background generation |
-| `src/pages/MobileRoleplayChat.tsx` | Re-enable input immediately after dialogue received | User can type while image generates |
-| `src/components/roleplay/ScenePromptEditModal.tsx` | Check `fal_prompt` field first for prompt display | Shows full prompt in editor |
-| `src/components/roleplay/ChatMessage.tsx` | Pass `fal_prompt` as currentPrompt to edit modal | Full prompt flows to editor |
+No edge function changes needed -- uses existing `fal-image` function.
 
