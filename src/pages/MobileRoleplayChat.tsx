@@ -40,6 +40,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
+import { useI2IModels } from '@/hooks/useI2IModels';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useSceneContinuity } from '@/hooks/useSceneContinuity';
 
@@ -94,6 +95,17 @@ const MobileRoleplayChat: React.FC = () => {
     defaultModel: defaultImageModel,
     isLoading: imageModelsLoading
   } = useImageModels();
+  const {
+    modelOptions: i2iModelOptions
+  } = useI2IModels();
+
+  // I2I model state
+  const [selectedI2IModel, setSelectedI2IModel] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('roleplay-settings');
+      return saved ? JSON.parse(saved).selectedI2IModel || 'auto' : 'auto';
+    } catch { return 'auto'; }
+  });
 
   // Load user characters for identity settings
   const {
@@ -2544,6 +2556,14 @@ const MobileRoleplayChat: React.FC = () => {
             settings.selectedImageModel = value;
             localStorage.setItem('roleplay-settings', JSON.stringify(settings));
           }}
+          selectedI2IModel={selectedI2IModel}
+          onSelectedI2IModelChange={(value) => {
+            setSelectedI2IModel(value);
+            const savedSettings = localStorage.getItem('roleplay-settings');
+            const settings = savedSettings ? JSON.parse(savedSettings) : {};
+            settings.selectedI2IModel = value;
+            localStorage.setItem('roleplay-settings', JSON.stringify(settings));
+          }}
           sceneStyle={sceneStyle}
           onSceneStyleChange={(value) => {
             setSceneStyle(value);
@@ -2555,6 +2575,7 @@ const MobileRoleplayChat: React.FC = () => {
           }}
           chatModels={roleplayModelOptions}
           imageModels={imageModelOptions}
+          i2iModels={i2iModelOptions}
           chatWorkerHealthy={chatWorkerHealthy}
           sdxlWorkerHealthy={false}
           hasUserCharacter={!!selectedUserCharacterId && !!selectedUserCharacter?.reference_image_url}

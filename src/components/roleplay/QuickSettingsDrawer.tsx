@@ -1,7 +1,6 @@
 import React from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -16,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SceneStyle } from '@/types/roleplay';
+import { I2IModelOption } from '@/hooks/useI2IModels';
 
 interface QuickSettingsDrawerProps {
   isOpen: boolean;
@@ -26,11 +26,14 @@ interface QuickSettingsDrawerProps {
   onModelProviderChange: (value: string) => void;
   selectedImageModel: string;
   onSelectedImageModelChange: (value: string) => void;
+  selectedI2IModel: string;
+  onSelectedI2IModelChange: (value: string) => void;
   sceneStyle: SceneStyle;
   onSceneStyleChange: (value: SceneStyle) => void;
   // Model options
   chatModels: Array<{ value: string; label: string; isAvailable: boolean; isLocal: boolean }>;
   imageModels: Array<{ value: string; label: string; isAvailable: boolean; type: string }>;
+  i2iModels: I2IModelOption[];
   chatWorkerHealthy: boolean;
   sdxlWorkerHealthy: boolean;
   // User character for scene style
@@ -45,10 +48,13 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
   onModelProviderChange,
   selectedImageModel,
   onSelectedImageModelChange,
+  selectedI2IModel,
+  onSelectedI2IModelChange,
   sceneStyle,
   onSceneStyleChange,
   chatModels,
   imageModels,
+  i2iModels,
   chatWorkerHealthy,
   sdxlWorkerHealthy,
   hasUserCharacter
@@ -60,22 +66,16 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
         className="rounded-t-2xl max-h-[80vh] overflow-y-auto"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}
       >
-        <SheetHeader className="pb-4">
-          <SheetTitle className="text-left">Quick Settings</SheetTitle>
+        <SheetHeader className="pb-3">
+          <SheetTitle className="text-left text-sm">Quick Settings</SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Chat Model */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Chat Model</Label>
-            {!chatWorkerHealthy && (
-              <div className="flex items-center gap-2 text-xs text-amber-400 mb-1">
-                <WifiOff className="w-3 h-3" />
-                <span>Local models offline</span>
-              </div>
-            )}
+          <div className="space-y-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Chat Model</span>
             <Select value={modelProvider} onValueChange={onModelProviderChange}>
-              <SelectTrigger className="h-12">
+              <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select model..." />
               </SelectTrigger>
               <SelectContent>
@@ -114,17 +114,14 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
             </Select>
           </div>
 
-          {/* Image Model */}
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">Image Model</Label>
-            {!sdxlWorkerHealthy && (
-              <div className="flex items-center gap-2 text-xs text-amber-400 mb-1">
-                <WifiOff className="w-3 h-3" />
-                <span>Local SDXL offline</span>
-              </div>
-            )}
+          {/* T2I Model */}
+          <div className="space-y-1.5">
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">T2I Model</span>
+              <p className="text-[10px] text-muted-foreground">Text-to-Image</p>
+            </div>
             <Select value={selectedImageModel} onValueChange={onSelectedImageModelChange}>
-              <SelectTrigger className="h-12">
+              <SelectTrigger className="h-9 text-sm">
                 <SelectValue placeholder="Select model..." />
               </SelectTrigger>
               <SelectContent>
@@ -160,36 +157,67 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
             </Select>
           </div>
 
+          {/* I2I Model */}
+          <div className="space-y-1.5">
+            <div>
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">I2I Model</span>
+              <p className="text-[10px] text-muted-foreground">Image-to-Image</p>
+            </div>
+            <Select value={selectedI2IModel} onValueChange={onSelectedI2IModelChange}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Select model..." />
+              </SelectTrigger>
+              <SelectContent>
+                {i2iModels.filter(model => model.value).map((model) => (
+                  <SelectItem
+                    key={model.value}
+                    value={model.value}
+                    disabled={!model.isAvailable}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>{model.label}</span>
+                      {model.value === 'auto' && (
+                        <Badge variant="outline" className="text-xs text-muted-foreground ml-auto">
+                          Auto
+                        </Badge>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Scene Style */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium flex items-center gap-2">
-              <Camera className="w-4 h-4" />
+          <div className="space-y-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <Camera className="w-3.5 h-3.5" />
               Scene Style
-            </Label>
+            </span>
             <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => onSceneStyleChange('character_only')}
                 className={cn(
-                  "flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors min-h-[72px]",
+                  "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors min-h-[56px]",
                   sceneStyle === 'character_only'
                     ? "bg-blue-600/20 border-blue-500"
                     : "bg-card border-border hover:bg-accent"
                 )}
               >
-                <Eye className="w-5 h-5 text-muted-foreground" />
+                <Eye className="w-4 h-4 text-muted-foreground" />
                 <span className="text-xs text-center">Character</span>
               </button>
 
               <button
                 onClick={() => onSceneStyleChange('pov')}
                 className={cn(
-                  "flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors min-h-[72px]",
+                  "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors min-h-[56px]",
                   sceneStyle === 'pov'
                     ? "bg-blue-600/20 border-blue-500"
                     : "bg-card border-border hover:bg-accent"
                 )}
               >
-                <Eye className="w-5 h-5 text-purple-400" />
+                <Eye className="w-4 h-4 text-purple-400" />
                 <span className="text-xs text-center">POV</span>
               </button>
 
@@ -197,7 +225,7 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
                 onClick={() => onSceneStyleChange('both_characters')}
                 disabled={!hasUserCharacter}
                 className={cn(
-                  "flex flex-col items-center gap-1 p-3 rounded-lg border transition-colors min-h-[72px]",
+                  "flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors min-h-[56px]",
                   !hasUserCharacter
                     ? "opacity-50 cursor-not-allowed bg-card border-border"
                     : sceneStyle === 'both_characters'
@@ -205,12 +233,12 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
                       : "bg-card border-border hover:bg-accent"
                 )}
               >
-                <Users className="w-5 h-5 text-blue-400" />
+                <Users className="w-4 h-4 text-blue-400" />
                 <span className="text-xs text-center">Both</span>
               </button>
             </div>
             {!hasUserCharacter && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] text-muted-foreground">
                 Select a character with a reference image in Advanced Settings to enable "Both" mode
               </p>
             )}
@@ -223,13 +251,13 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
               onClose();
               onAdvancedSettingsClick();
             }}
-            className="w-full h-12 justify-between"
+            className="w-full h-9 justify-between text-sm"
           >
             <span className="flex items-center gap-2">
-              <Settings2 className="w-4 h-4" />
+              <Settings2 className="w-3.5 h-3.5" />
               Advanced Settings
             </span>
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3.5 h-3.5" />
           </Button>
         </div>
       </SheetContent>
