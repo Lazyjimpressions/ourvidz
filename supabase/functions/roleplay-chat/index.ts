@@ -2868,7 +2868,7 @@ OUTPUT FORMAT:
         { role: 'system', content: scenePrompt },
         { role: 'user', content: 'Generate the scene description now.' }
       ],
-      max_tokens: 80, // ✅ Reduced from 150 - enforces 40-60 word limit
+      max_tokens: 200, // ✅ Increased from 80 - prevents mid-word truncation while keeping narratives concise
       temperature: 0.5, // ✅ Reduced from 0.7 - more focused, less creative
       top_p: 0.9, // ✅ Slightly tighter sampling
       frequency_penalty: 0.3, // ✅ Increased from 0.1 - discourage repetition
@@ -3361,7 +3361,7 @@ CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${char
 
 CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 
-ACTION/POSE: ${scenePrompt}
+ACTION/POSE: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}
 
 COMPOSITION RULES:
 - Maintain the exact environment, lighting, and atmosphere from Figure 1
@@ -3378,7 +3378,7 @@ SCENE (Figure 1): ${scenePrompt}
 
 CHARACTER (from Figure 2): ${briefCharacterIdentity} with ${userCharacter.name}, ${userAppearanceFinal}
 
-ACTION: ${scenePrompt}
+ACTION: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}
 
 RULES:
 - Maintain the exact environment from Figure 1
@@ -3394,7 +3394,7 @@ SCENE (Figure 1): ${scenePrompt}
 
 CHARACTER (from Figure 2): ${briefCharacterIdentity}, looking at viewer
 
-ACTION: ${scenePrompt}
+ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}
 
 RULES:
 - Maintain the exact environment from Figure 1
@@ -3410,7 +3410,7 @@ SCENE (Figure 1): ${scenePrompt}
 
 CHARACTER (from Figure 2): ${briefCharacterIdentity}
 
-ACTION: ${scenePrompt}
+ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}
 
 RULES:
 - Maintain the exact environment from Figure 1
