@@ -146,7 +146,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
           message: messageText,
           conversation_id: conversationId,
           character_id: state.selectedCharacter?.id || options?.characterId || null,
-          model_provider: hasCharacter ? 'chat_worker' : 'openrouter',
+          model_provider: settings.chatModel || 'openrouter',
           model_variant: settings.chatModel,
           memory_tier: 'conversation',
           content_tier: settings.contentMode,

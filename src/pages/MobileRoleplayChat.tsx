@@ -34,6 +34,7 @@ import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { Character, Message, CharacterScene, SceneStyle, ScenarioSessionPayload, ImageGenerationMode } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
+import { ModelRoutingService } from '@/lib/services/ModelRoutingService';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
@@ -155,7 +156,7 @@ const MobileRoleplayChat: React.FC = () => {
         // If local model was saved but is now unavailable, fall back to API
         const effectiveChatModel = isValidChatModel
           ? savedChatModel
-          : (defaultChatModel?.value || 'chat_worker');
+          : (defaultChatModel?.value || ModelRoutingService.getDefaultChatModelKey());
 
         const effectiveImageModel = isValidImageModel
           ? savedImageModel
@@ -181,7 +182,7 @@ const MobileRoleplayChat: React.FC = () => {
 
     // Use defaults from hooks (always non-local API models for reliability)
     return {
-      modelProvider: defaultChatModel?.value || 'chat_worker',
+      modelProvider: defaultChatModel?.value || ModelRoutingService.getDefaultChatModelKey(),
       selectedImageModel: defaultImageModel?.value || '',
       consistencySettings: {
         method: 'hybrid',
@@ -196,7 +197,7 @@ const MobileRoleplayChat: React.FC = () => {
   };
   
   // Initialize settings after models are loaded
-  const [modelProvider, setModelProvider] = useState<string>('chat_worker');
+  const [modelProvider, setModelProvider] = useState<string>('');
   const [selectedImageModel, setSelectedImageModel] = useState<string>(''); // Will be set from database API models (not 'sdxl')
   const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
     method: 'hybrid',
@@ -897,27 +898,37 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
+        // Read model selections directly from location.state to bypass stale React state
+        const modelState = location.state as { selectedChatModel?: string; selectedImageModel?: string } | null;
+        const effectiveChatModel = modelState?.selectedChatModel || modelProvider || ModelRoutingService.getDefaultChatModelKey();
+        const effectiveImageModel = modelState?.selectedImageModel || getValidImageModel();
+
+        // Also update state so subsequent messages use the correct models
+        if (modelState?.selectedChatModel && modelState.selectedChatModel !== modelProvider) {
+          setModelProvider(modelState.selectedChatModel);
+        }
+        if (modelState?.selectedImageModel && modelState.selectedImageModel !== selectedImageModel) {
+          setSelectedImageModel(modelState.selectedImageModel);
+        }
+
         const { data, error} = await supabase.functions.invoke('roleplay-chat', {
           body: {
             kickoff: true,
             conversation_id: conversation.id,
             character_id: characterId,
-            model_provider: modelProvider,
+            model_provider: effectiveChatModel,
             memory_tier: memoryTier,
             content_tier: contentTier,
-            scene_generation: true, // ✅ Enable auto scene generation on kickoff
+            scene_generation: true,
             scene_context: loadedScene?.scene_prompt || null,
             scene_name: loadedScene?.name || null,
             scene_description: loadedScene?.description || null,
             scene_starters: loadedScene?.scene_starters || null,
-            scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
+            scene_preview_image_url: signedScenePreviewUrl || null,
             user_id: user.id,
-            // ✅ FIX: Pass user role and character for scene immersion
             user_role: userRole || null,
             user_character_id: effectiveUserCharacterId || null,
-            // NOTE: Template selection is handled server-side based on model_provider
-            // Add image model selection (with fallback)
-            selected_image_model: getValidImageModel(),
+            selected_image_model: effectiveImageModel,
             // Scene style for user representation in images
             scene_style: sceneStyle,
             // ✅ Multi-reference: user character reference for both_characters scenes

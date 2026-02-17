@@ -437,7 +437,7 @@ You say: ...`;
       roleplay_settings,
       participants,
     long_response = false,
-    model_provider = 'chat_worker',
+    model_provider = '',
     model_variant,
     context_type: requestedContextType,
     prompt_template_id,
@@ -446,6 +446,39 @@ You say: ...`;
 
     if (!conversation_id || !message) {
       throw new Error('Missing required fields: conversation_id and message');
+    }
+
+    // Resolve empty model_provider to a reliable default
+    if (!model_provider) {
+      // Try to find the default chat model from the database
+      const { data: defaultModel } = await supabaseClient
+        .from('api_models')
+        .select('model_key')
+        .eq('modality', 'roleplay')
+        .eq('is_active', true)
+        .eq('is_default', true)
+        .order('priority', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (defaultModel?.model_key) {
+        model_provider = defaultModel.model_key;
+        console.log(`🔄 Resolved empty model_provider to DB default: ${model_provider}`);
+      } else {
+        // Hardcoded fallback to OpenRouter
+        model_provider = 'openrouter';
+        console.log('🔄 Resolved empty model_provider to openrouter fallback');
+      }
+    }
+
+    // Normalize: any non-'chat_worker' model_provider should route through OpenRouter
+    if (model_provider !== 'chat_worker' && model_provider !== 'openrouter') {
+      // It's a model_key like 'gryphe/mythomax-l2-13b' — set it as variant and route via openrouter
+      if (!model_variant) {
+        model_variant = model_provider;
+      }
+      model_provider = 'openrouter';
+      console.log(`🔄 Normalized model_provider to openrouter, variant: ${model_variant}`);
     }
 
     // Verify user owns the conversation and get character info if provided
@@ -1084,7 +1117,7 @@ You say: ...`;
         template_meta: lastPromptMeta,
         enforcement_diagnostics: enforcementDiagnostics,
         model_provider,
-        model_used: model_provider === 'openrouter' ? (model_variant || DEFAULT_OPENROUTER_MODEL) : 'chat_worker',
+        model_used: model_provider === 'openrouter' ? (model_variant || DEFAULT_OPENROUTER_MODEL) : model_provider,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
