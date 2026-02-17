@@ -58,34 +58,51 @@ export const ApiUsageTab: React.FC = () => {
     });
   };
 
+  const formatResponseTime = (ms: number | null) => {
+    if (ms === null || ms === undefined || ms === 0) return '--';
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    const mins = Math.floor(ms / 60000);
+    const secs = Math.round((ms % 60000) / 1000);
+    return `${mins}m ${secs}s`;
+  };
+
   // Build model inventory with usage stats
   const modelInventory = React.useMemo(() => {
     if (!models) return [];
 
-    // Create usage stats map from aggregates
-    const usageMap = new Map<string, { requests: number; cost: number; avgCost: number }>();
+    // Create usage stats map from aggregates - use success_count for accurate metrics
+    const usageMap = new Map<string, { requests: number; errors: number; cost: number; avgCost: number; weightedTime: number }>();
     
     aggregates?.forEach(agg => {
       if (agg.model_id) {
-        const existing = usageMap.get(agg.model_id) || { requests: 0, cost: 0, avgCost: 0 };
-        existing.requests += agg.request_count;
+        const existing = usageMap.get(agg.model_id) || { requests: 0, errors: 0, cost: 0, avgCost: 0, weightedTime: 0 };
+        existing.requests += agg.success_count;
+        existing.errors += agg.error_count;
         existing.cost += Number(agg.cost_usd_total) || 0;
+        // Weighted avg time from aggregates (blends success+failure, best we have)
+        if (agg.avg_response_time_ms && agg.success_count > 0) {
+          existing.weightedTime += (Number(agg.avg_response_time_ms) * agg.success_count);
+        }
         usageMap.set(agg.model_id, existing);
       }
     });
 
-    // Calculate avg cost
-    usageMap.forEach((stats, key) => {
+    // Calculate avg cost and avg time
+    usageMap.forEach((stats) => {
       stats.avgCost = stats.requests > 0 ? stats.cost / stats.requests : 0;
     });
 
     return models.map(model => {
-      const usage = usageMap.get(model.id) || { requests: 0, cost: 0, avgCost: 0 };
+      const usage = usageMap.get(model.id) || { requests: 0, errors: 0, cost: 0, avgCost: 0, weightedTime: 0 };
+      const avgTime = usage.requests > 0 ? usage.weightedTime / usage.requests : null;
       return {
         ...model,
         requests: usage.requests,
+        errors: usage.errors,
         totalCost: usage.cost,
         avgCost: usage.avgCost,
+        avgTime,
         hasUsage: usage.requests > 0
       };
     }).sort((a, b) => {
@@ -104,7 +121,7 @@ export const ApiUsageTab: React.FC = () => {
     let totalErrors = 0;
 
     aggregates?.forEach(agg => {
-      totalRequests += agg.request_count;
+      totalRequests += agg.success_count;
       totalCost += Number(agg.cost_usd_total) || 0;
       totalErrors += agg.error_count;
     });
@@ -304,6 +321,7 @@ export const ApiUsageTab: React.FC = () => {
                 <TableHead className="text-right">Requests</TableHead>
                 <TableHead className="text-right">Total Cost</TableHead>
                 <TableHead className="text-right">Avg Cost</TableHead>
+                <TableHead className="text-right">Avg Time</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -330,6 +348,9 @@ export const ApiUsageTab: React.FC = () => {
                   </TableCell>
                   <TableCell className="text-right text-xs">
                     {model.avgCost > 0 ? formatCurrency(model.avgCost) : '-'}
+                  </TableCell>
+                  <TableCell className="text-right text-xs font-mono">
+                    {formatResponseTime(model.avgTime)}
                   </TableCell>
                   <TableCell>
                     {model.hasUsage ? (
