@@ -1,88 +1,111 @@
 
 
-# Simplify API Models: Type + Task Taxonomy
+# Convert `task` to Multi-Select `tasks` Array
 
-## The Problem
+## Overview
 
-`modality` and `task` overlap confusingly. `roleplay` appears as both a modality and a task. `chat` also appears as both. The admin UI lists 7 modalities and 10 tasks, most unused.
+Change the `task` text column to `tasks text[]` to support models that serve multiple purposes (e.g. a chat model that does both reasoning and roleplay). Also introduce granular video tasks (`t2v`, `i2v`, `extend`) instead of the generic `generation`.
 
-## Recommendation: 3 Types, 7 Tasks
+## Final Taxonomy
 
-**Type** (currently `modality` column) answers: "What kind of output does this model produce?"
+| Type (modality) | Available Tasks | Notes |
+|---|---|---|
+| `image` | `generation`, `style_transfer`, `upscale` | Unchanged from prior plan |
+| `video` | `t2v`, `i2v`, `extend` | Replaces generic `generation` |
+| `chat` | `roleplay`, `reasoning`, `enhancement`, `embedding` | Multi-select: a model can have multiple |
 
-Only 3 values: `image`, `video`, `chat`
+## Database Changes
 
-**Task** answers: "What specific job does this model do within its type?"
-
-| Type | Task | Description | Current models |
-|---|---|---|---|
-| `image` | `generation` | Text-to-Image | Seedream T2I, SDXL |
-| `image` | `style_transfer` | Image-to-Image editing | Seedream Edit |
-| `image` | `upscale` | Resolution upscaling | (future) |
-| `video` | `generation` | T2V, I2V, extend | LTX, WAN |
-| `chat` | `roleplay` | RP-optimized LLMs | MythoMax, MiMo |
-| `chat` | `reasoning` | General reasoning LLMs | Grok, Kimi, Lumimaid |
-| `chat` | `enhancement` | Prompt rewriting | (future) |
-| `chat` | `embedding` | Text embeddings | (future) |
-
-## Data Migration
-
-Update existing rows in `api_models`:
+### Step 1: Add new column, migrate data, drop old column
 
 ```text
-modality='roleplay', task='chat'       -->  modality='chat', task='reasoning'
-modality='roleplay', task='roleplay'   -->  modality='chat', task='roleplay'
+1. Add column: tasks text[] NOT NULL DEFAULT '{}'
+2. Migrate existing data:
+   - image generation models -> tasks = '{generation}'
+   - image style_transfer models -> tasks = '{style_transfer}'
+   - roleplay + task='chat' models (Grok, Kimi x2) -> modality='chat', tasks='{reasoning}'
+   - roleplay + task='roleplay' models (MiMo, MythoMax) -> modality='chat', tasks='{roleplay}'
+   - LTX t2v -> tasks = '{t2v}'
+   - LTX i2v -> tasks = '{i2v}'
+   - LTX extend -> tasks = '{extend}'
+   - LTX multi -> tasks = '{t2v,i2v,extend}'
+   - WAN i2v -> tasks = '{i2v}'
+3. Drop old column: task
 ```
 
-Only 5 rows affected (Grok, Kimi x2, Lumimaid, MiMo, MythoMax).
+### Step 2: Specific model mapping (from current data)
+
+| Model | Current modality/task | New modality/tasks |
+|---|---|---|
+| Seedream v4, v4.5 T2I, SDXL variants | image/generation | image / `{generation}` |
+| Seedream v4 Edit, v4.5 Edit | image/style_transfer | image / `{style_transfer}` |
+| Grok 4.1 Fast | roleplay/chat | chat / `{reasoning}` |
+| Kimi-K2.5-Thinking Chat | roleplay/chat | chat / `{reasoning}` |
+| Kimi-K2-Thinking | roleplay/chat | chat / `{reasoning}` |
+| MiMo-V2-Flash | roleplay/roleplay | chat / `{roleplay}` |
+| MythoMax 13B | roleplay/roleplay | chat / `{roleplay}` |
+| LTX 13b - t2v | video/generation | video / `{t2v}` |
+| LTX 13b - i2v | video/generation | video / `{i2v}` |
+| LTX 13b - extend | video/generation | video / `{extend}` |
+| LTX 13b - multi | video/generation | video / `{t2v,i2v,extend}` |
+| WAN 2.1 I2V | video/generation | video / `{i2v}` |
 
 ## Code Changes
 
-### 1. Admin UI: `src/components/admin/ApiModelsTab.tsx`
+### 1. `src/components/admin/ApiModelsTab.tsx`
 
-- Change `MODALITIES` from 7 items to: `['image', 'video', 'chat']`
-- Change `TASKS` from 10 items to: `['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding']`
-- Rename the "Modality" column header to **"Type"** in the table
-- Keep "Task" label as-is
+- Change `MODALITIES` to `['image', 'video', 'chat']`
+- Change `TASKS` to `['generation', 'style_transfer', 'upscale', 't2v', 'i2v', 'extend', 'roleplay', 'reasoning', 'enhancement', 'embedding']`
+- Rename "Modality" column header to **"Type"**
+- Replace the Task `<Select>` single-select with a **multi-select checkbox group** (compact inline checkboxes or pill toggles) so admins can assign multiple tasks per model
+- Update `formData.task` (string) to `formData.tasks` (string array) throughout the add/edit form
+- Update the table display to show tasks as comma-separated pills or badges
+- Update save/insert mutations to write `tasks` array instead of `task` string
 
-### 2. Hooks that filter by `modality='roleplay'`
+### 2. `src/hooks/useApiModels.ts`
 
-| File | Current filter | New filter |
-|---|---|---|
-| `src/hooks/useRoleplayModels.ts` | `.eq('modality', 'roleplay')` | `.eq('modality', 'chat')` |
-| `src/hooks/usePlaygroundModels.ts` | `m.modality === 'roleplay' \|\| m.modality === 'chat'` | `m.modality === 'chat'` |
-| `src/hooks/useApiModels.ts` | Type union includes `'roleplay'` | Replace `'roleplay'` with just `'chat'` in the type, remove `'prompt'`, `'audio'`, `'embedding'` from modality type |
+- Update TypeScript interface: `task` becomes `tasks: string[]`
+- Update type union for modality: `'image' | 'video' | 'chat'`
+- Change `useImageModels` filter from `.eq('task', 'generation')` to `.contains('tasks', ['generation'])`
+- Same pattern for `useVideoModels` if task filtering is added
 
-### 3. Type definitions: `src/hooks/useApiModels.ts`
+### 3. `src/hooks/useI2IModels.ts`
 
-Update the TypeScript type to match:
+- Change `.eq('task', 'style_transfer')` to `.contains('tasks', ['style_transfer'])`
 
-```text
-modality: 'image' | 'video' | 'chat'
-task: 'generation' | 'style_transfer' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding'
-```
+### 4. `src/hooks/useRoleplayModels.ts`
 
-### 4. No changes needed
+- Change `.eq('modality', 'roleplay')` to `.eq('modality', 'chat')`
+- Optionally add `.contains('tasks', ['roleplay'])` to only get RP-capable chat models, or keep it broad to show all chat models (reasoning models can RP too)
 
-- `useImageModels.ts` -- already filters `modality='image'`, unaffected
-- `useI2IModels.ts` -- filters by `task='style_transfer'` within image models, unaffected
-- Edge functions -- they resolve models by `api_model_id` (UUID), not by modality string
+### 5. `src/hooks/usePlaygroundModels.ts`
+
+- Update `PlaygroundModel` interface: `task` becomes `tasks: string[]`
+- Update grouped filter: `m.modality === 'roleplay' || m.modality === 'chat'` becomes `m.modality === 'chat'`
+- Update i2i filter: `m.task === 'style_transfer'` becomes `m.tasks?.includes('style_transfer')`
+- Update image filter: `m.task === 'generation'` becomes `m.tasks?.includes('generation')`
+
+### 6. `supabase/functions/roleplay-chat/index.ts`
+
+- Change `.eq('task', requiredTask)` to `.contains('tasks', [requiredTask])`
+- Change `.eq('task', 'style_transfer')` to `.contains('tasks', ['style_transfer'])`
+
+## Technical Notes
+
+- Supabase PostgREST supports `.contains()` for array columns, which maps to the `@>` Postgres operator
+- The `tasks` column uses `text[]` (Postgres array type) which is well-supported by Supabase client
+- Multi-select in the admin form can use inline checkboxes filtered by the selected modality (e.g., selecting `chat` type shows only `roleplay`, `reasoning`, `enhancement`, `embedding` as task options)
+- Existing hooks that filter by single task use `.contains('tasks', ['value'])` which matches any model that includes that task in its array
 
 ## Files to Change
 
 | File | Change |
 |---|---|
-| Database (SQL) | UPDATE 5 rows: `modality` from `'roleplay'` to `'chat'`, `task` from `'chat'` to `'reasoning'` |
-| `src/components/admin/ApiModelsTab.tsx` | Simplify MODALITIES to 3 items, TASKS to 7, rename column to "Type" |
-| `src/hooks/useApiModels.ts` | Update TypeScript type union |
-| `src/hooks/useRoleplayModels.ts` | Change filter from `'roleplay'` to `'chat'` |
-| `src/hooks/usePlaygroundModels.ts` | Simplify chat grouping filter |
-
-## Result
-
-- Clean 3-type taxonomy: image, video, chat
-- Tasks are specific and non-overlapping within each type
-- No more "roleplay" as both a type and a task
-- Admin UI dropdowns are short and clear
-- Extensible for future models (TTS could become a 4th type when needed)
+| Database | Add `tasks text[]`, migrate data, drop `task` |
+| `src/components/admin/ApiModelsTab.tsx` | Simplify types to 3, multi-select task UI, rename column |
+| `src/hooks/useApiModels.ts` | Update interface and type unions |
+| `src/hooks/useI2IModels.ts` | `.contains('tasks', ['style_transfer'])` |
+| `src/hooks/useRoleplayModels.ts` | Filter by `modality='chat'` |
+| `src/hooks/usePlaygroundModels.ts` | Update interface and grouping filters |
+| `supabase/functions/roleplay-chat/index.ts` | `.contains()` for task filtering |
 
