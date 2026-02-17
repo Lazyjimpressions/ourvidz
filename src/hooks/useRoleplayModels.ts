@@ -89,7 +89,7 @@ export const useRoleplayModels = () => {
             priority,
             api_providers!inner(name, display_name)
           `)
-          .eq('modality', 'roleplay')
+          .eq('modality', 'chat')
           .eq('is_active', true)
           .order('priority', { ascending: true });
 
