@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 
-export type PlaygroundMode = 'chat' | 'compare' | 'admin';
+export type PlaygroundMode = 'chat' | 'compare' | 'image_compare' | 'admin';
 
 interface PlaygroundModeSelectorProps {
   currentMode: PlaygroundMode;
@@ -18,6 +18,7 @@ export const PlaygroundModeSelector: React.FC<PlaygroundModeSelectorProps> = ({
   const modes = [
     { id: 'chat' as const, label: 'Chat' },
     { id: 'compare' as const, label: 'Compare' },
+    { id: 'image_compare' as const, label: 'Image Compare' },
     ...(isAdmin ? [{ id: 'admin' as const, label: 'Admin' }] : []),
   ];
 
