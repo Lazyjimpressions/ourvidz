@@ -3048,18 +3048,24 @@ const sceneContext = analyzeSceneContent(response);
       // ✅ ADMIN: Set template label so debug panel shows "Scene template (first scene)"
       sceneTemplateName = sceneTemplateName ?? 'Scene template (first scene)';
       console.log('✅ Using template scene prompt (first scene) with character visual description:', scenePrompt.substring(0, 150) + '...');
+    } else if (sceneContext?.actions?.length > 0) {
+      // ⚡ EFFICIENCY: Skip narrative LLM call when actions are already extracted (~7s saved)
+      const actionsSummary = sceneContext.actions.slice(0, 3).join('. ');
+      const setting = sceneContext.setting || 'the scene';
+      const mood = sceneContext.mood || 'engaging';
+      const visuals = sceneContext.visualElements?.slice(0, 3).join(', ') || '';
+      scenePrompt = `${setting}. ${actionsSummary}. ${visuals ? `Visual details: ${visuals}.` : ''} The mood is ${mood}.`;
+      sceneTemplateName = 'Direct action extraction (no narrative LLM)';
+      console.log('⚡ EFFICIENCY: Skipped narrative LLM call, using extracted actions directly:', scenePrompt.substring(0, 150));
     } else {
-      // Generate AI-powered scene narrative using OpenRouter
+      // Generate AI-powered scene narrative using OpenRouter (fallback when no actions extracted)
       console.log('🎬 Generating scene narrative for character:', character.name);
 
       try {
-        // Use the same provider configuration as the current roleplay conversation
-        // (pick the DB default OpenRouter model so we never reference stale/hardcoded keys)
         const roleplayModel = await getDefaultOpenRouterModel(supabase);
         const modelConfig = await getModelConfig(supabase, roleplayModel);
 
         if (modelConfig && modelConfig.provider_name === 'openrouter') {
-          // ✅ FIX: Use contentTier parameter instead of sceneContext.isNSFW (more reliable)
           const effectiveContentTier = contentTier || (sceneContext.isNSFW ? 'nsfw' : 'sfw');
           const narrativeResult = await generateSceneNarrativeWithOpenRouter(
             character,
@@ -3067,28 +3073,23 @@ const sceneContext = analyzeSceneContent(response);
             conversationHistory,
             characterVisualDescription,
             roleplayModel,
-            effectiveContentTier, // ✅ FIX: Use contentTier parameter
+            effectiveContentTier,
             modelConfig,
             supabase,
-            useI2IIteration,  // ✅ FIX 3.3: PASS I2I FLAG
-            previousSceneId,  // ✅ FIX: Pass previous scene ID for location continuity
-            response,  // ✅ CRITICAL FIX: Pass character response for direct scene description extraction
-            currentLocation  // ✅ FIX #3: Pass current location for scene grounding
+            useI2IIteration,
+            previousSceneId,
+            response,
+            currentLocation
           );
           scenePrompt = narrativeResult.scenePrompt;
-          // ✅ ADMIN: Store template info for metadata (will be used in scene generation metadata)
           sceneTemplateId = narrativeResult.templateId;
           sceneTemplateName = narrativeResult.templateName;
-          console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...', {
-            templateId: sceneTemplateId,
-            templateName: sceneTemplateName
-          });
+          console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...');
         } else {
           throw new Error('OpenRouter model configuration not found');
         }
       } catch (narrativeError) {
         console.log('🎬 Fallback to enhanced scene extraction:', narrativeError instanceof Error ? narrativeError.message : String(narrativeError));
-        // Fallback to enhanced scene extraction with storyline context
         const extractedScene = extractSceneFromResponse(response);
         const fallbackStoryline = extractStorylineContext(conversationHistory);
         const fallbackLocation = fallbackStoryline.locations.length > 0
@@ -3096,11 +3097,8 @@ const sceneContext = analyzeSceneContent(response);
           : 'intimate setting';
 
         if (!extractedScene) {
-          console.log('🎬 No specific scene description found, using storyline context for scene generation');
-          // Use storyline context as scene prompt if no specific scene is detected
           scenePrompt = `A scene showing ${character.name} at ${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-5).join(' | ')}`;
         } else {
-          // Enhance extracted scene with storyline location
           scenePrompt = `${extractedScene}. Location: ${fallbackLocation}.`;
         }
       }
@@ -3845,6 +3843,26 @@ RULES:
                 model_override: effectiveI2IModelOverride
               });
             }
+          }
+
+          // ✅ FIRST-SCENE I2I for character_only/pov: Build 2-image array [scene, character]
+          if (!useMultiReference && isFirstScene && templatePreviewImageUrl 
+              && (character.reference_image_url || character.image_url)) {
+            const firstSceneImageUrls = [
+              templatePreviewImageUrl,  // Figure 1: Scene environment
+              (character.reference_image_url || character.image_url)!  // Figure 2: Character
+            ];
+            multiReferenceImageUrls = firstSceneImageUrls;
+            useMultiReference = true;
+            if (!effectiveI2IModelOverride) {
+              effectiveI2IModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
+            }
+            console.log('📸 FIRST-SCENE I2I (character_only/pov): Built 2-image array', {
+              scene_style: sceneStyle,
+              figure_1: templatePreviewImageUrl.substring(0, 60),
+              figure_2: firstSceneImageUrls[1].substring(0, 60),
+              model_override: effectiveI2IModelOverride
+            });
           }
 
           // Build fal.ai-specific request body

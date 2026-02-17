@@ -910,18 +910,39 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
-        // Read model selections directly from location.state to bypass stale React state
-        const modelState = location.state as { selectedChatModel?: string; selectedImageModel?: string } | null;
+        // Read ALL selections directly from location.state to bypass stale React state
+        const modelState = location.state as { 
+          selectedChatModel?: string; 
+          selectedImageModel?: string;
+          sceneStyle?: 'character_only' | 'pov' | 'both_characters';
+          imageGenerationMode?: string;
+        } | null;
         const effectiveChatModel = modelState?.selectedChatModel || modelProvider || ModelRoutingService.getDefaultChatModelKey();
         const effectiveImageModel = modelState?.selectedImageModel || getValidImageModel();
+        const effectiveSceneStyle = modelState?.sceneStyle || sceneStyle;
+        const effectiveImageGenMode = modelState?.imageGenerationMode || imageGenerationMode;
 
-        // Also update state so subsequent messages use the correct models
+        // Also update state so subsequent messages use the correct settings
         if (modelState?.selectedChatModel && modelState.selectedChatModel !== modelProvider) {
           setModelProvider(modelState.selectedChatModel);
         }
         if (modelState?.selectedImageModel && modelState.selectedImageModel !== selectedImageModel) {
           setSelectedImageModel(modelState.selectedImageModel);
         }
+        if (modelState?.sceneStyle && modelState.sceneStyle !== sceneStyle) {
+          setSceneStyle(modelState.sceneStyle);
+        }
+        if (modelState?.imageGenerationMode && modelState.imageGenerationMode !== imageGenerationMode) {
+          setImageGenerationMode(modelState.imageGenerationMode as ImageGenerationMode);
+        }
+
+        console.log('🎯 KICKOFF: Effective settings from location.state:', {
+          chatModel: effectiveChatModel,
+          imageModel: effectiveImageModel,
+          sceneStyle: effectiveSceneStyle,
+          imageGenMode: effectiveImageGenMode,
+          fromState: !!modelState
+        });
 
         const { data, error} = await supabase.functions.invoke('roleplay-chat', {
           body: {
@@ -931,7 +952,7 @@ const MobileRoleplayChat: React.FC = () => {
             model_provider: effectiveChatModel,
             memory_tier: memoryTier,
             content_tier: contentTier,
-            scene_generation: true,
+            scene_generation: effectiveImageGenMode !== 'manual',
             scene_context: loadedScene?.scene_prompt || null,
             scene_name: loadedScene?.name || null,
             scene_description: loadedScene?.description || null,
@@ -942,7 +963,7 @@ const MobileRoleplayChat: React.FC = () => {
             user_character_id: effectiveUserCharacterId || null,
             selected_image_model: effectiveImageModel,
             // Scene style for user representation in images
-            scene_style: sceneStyle,
+            scene_style: effectiveSceneStyle,
             // ✅ Multi-reference: user character reference for both_characters scenes
             user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
             // ✅ Pass consistency settings from UI
