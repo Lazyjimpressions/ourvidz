@@ -1,95 +1,58 @@
 
-# Remove Hardcoded `chat_worker` Defaults and Fix Dashboard Filtering
 
-## Problem Summary
+# Remove Legacy Hardcoded Local Model References from Character Generation
 
-`chat_worker` (the local Qwen model identifier) is hardcoded as the default model in **5 locations** across the frontend and edge functions. This means:
-- If the user selects a model in the scene setup modal, it gets overwritten by the `chat_worker` default due to a React state race condition
-- The edge function defaults to local Qwen if no model is sent, instead of a reliable API model
-- Playground conversations appear in the roleplay "Continue" section
+## Problem
 
-## Changes
+The character portrait and scene generation pipeline has multiple hardcoded references to `sdxl`, `queue-job`, and `chat_worker` that cause 500 errors when the local worker infrastructure (Upstash Redis) is unavailable. Since the system now runs third-party models dynamically, these legacy paths should be removed or made dynamic.
 
-### 1. Filter Dashboard Conversations (one-line fix)
+## Hardcoded Locations Found
 
-**File: `src/hooks/useUserConversations.ts`**
+### 1. `src/services/CharacterImageService.ts` (Critical - causes the 500)
 
-Add `.in('conversation_type', ['character_roleplay', 'scene_roleplay', 'roleplay'])` to the query (after line 78's `.eq('status', 'active')`).
+- **Line 59**: `if (params.apiModelId === 'sdxl')` routes to `queue-job` edge function (the one failing with the Redis error)
+- **Line 251**: `model_used: 'sdxl'` hardcoded in `generateCharacterScene()`
+- The entire `sdxl` branch (lines 59-78) should be removed. When no `apiModelId` is provided, it already defaults to `fal-image`. The `else` branch (line 79+) correctly queries `api_models` for provider routing.
 
-This ensures only roleplay sessions appear in "Continue Roleplay."
+**Fix**: Remove the `sdxl` branch entirely. If someone somehow passes `'sdxl'` as an `apiModelId`, it will fall through to the dynamic `api_models` lookup (which won't find it and will gracefully fall back to `fal-image`). In `generateCharacterScene`, replace `model_used: 'sdxl'` with `model_used: 'fal'`.
 
----
+### 2. `src/utils/characterImageUtils.ts`
 
-### 2. Fix Default Model in MobileRoleplayChat State Initialization
+- **Line 177**: `model_used: 'sdxl_high'` hardcoded when saving to user library
 
-**File: `src/pages/MobileRoleplayChat.tsx`**
+**Fix**: Change to `model_used: 'fal'` or accept a parameter for the actual model used.
 
-**Line 199**: Change `useState<string>('chat_worker')` to `useState<string>('')`
+### 3. `src/services/ImageConsistencyService.ts`
 
-The actual value gets set by the `useEffect` on line 212 from either navigation state or `initializeSettings()`. Using an empty string as initial prevents accidental use of `chat_worker`.
+- **Line 14**: Type `modelChoice: 'sdxl' | 'replicate'` limits options
+- **Line 53**: `if (request.modelChoice === 'sdxl')` routes to `queue-job`
+- **Lines 170-176**: `generateWithSDXL` method calls `queue-job`
 
-**Lines 158, 184**: Change the fallback `'chat_worker'` in `initializeSettings()` to use `ModelRoutingService.getDefaultChatModelKey()` -- this returns a reliable OpenRouter model (Dolphin 3.0).
+**Fix**: Change the type to `string`, remove the `sdxl` branch, and route all requests through `fal-image` (or the dynamic provider lookup). The `generateWithSDXL` method can be removed.
 
-**Line 905 (kickoff call)**: Read model selections directly from `location.state` to bypass stale React state:
-```text
-const locationState = location.state as { selectedChatModel?: string; selectedImageModel?: string; ... };
-const effectiveChatModel = locationState?.selectedChatModel || modelProvider || ModelRoutingService.getDefaultChatModelKey();
-const effectiveImageModel = locationState?.selectedImageModel || getValidImageModel();
+### 4. `src/components/characters/CharacterCard.tsx`
 
-// Then use in the body:
-model_provider: effectiveChatModel,
-selected_image_model: effectiveImageModel,
-```
+- **Line 119**: Reads `localStorage.getItem('roleplay_image_model')` which could return `'sdxl'`
 
-This fixes the race condition where `modelProvider` state is still the initial empty/default value when the kickoff fires.
+**Fix**: No change needed here -- it passes whatever is stored. The fix in `CharacterImageService` will handle the `'sdxl'` value gracefully.
 
----
+### 5. `src/hooks/useImageModels.ts`
 
-### 3. Fix PlaygroundContext Default
+- **Lines 113-129**: Hardcodes a local SDXL model option in the UI model list
 
-**File: `src/contexts/PlaygroundContext.tsx`**
+**Fix**: Keep this for now (it shows as "Offline" when unavailable), but ensure it doesn't get selected as default. The real fix is in the service layer routing.
 
-**Line 149**: Change `model_provider: hasCharacter ? 'chat_worker' : 'openrouter'` to use the user's selected model from `settings.chatModel`, with fallback to `ModelRoutingService.getDefaultChatModelKey()`.
-
----
-
-### 4. Fix Edge Function Default Parameter
-
-**File: `supabase/functions/playground-chat/index.ts`**
-
-**Line 440**: Change `model_provider = 'chat_worker'` default to `model_provider = ''` (empty string).
-
-Then add logic below the destructuring to resolve an empty `model_provider` to the first active default model from the database, or fall back to the hardcoded OpenRouter default (Dolphin 3.0). This makes the edge function self-healing -- it will always route to a working model even if the frontend sends nothing.
-
-**Line 1087**: Change `model_used: model_provider === 'openrouter' ? ... : 'chat_worker'` to use the actual resolved model identifier.
-
----
-
-### 5. Fix Edge Function Default in roleplay-chat
-
-**File: `supabase/functions/roleplay-chat/index.ts`**
-
-The `chat_worker` references here are **routing logic**, not defaults -- the function checks `if (model_provider === 'chat_worker')` to route to the local worker. These should stay, since `chat_worker` is a valid model identifier when the user explicitly selects it. No change needed here for the routing paths.
-
-However, the type annotation on line 136 (`model_provider: 'chat_worker' | 'openrouter' | ...`) should be widened to `string` since model keys are dynamic.
-
----
-
-## Result After Changes
-
-| Scenario | Before | After |
-|---|---|---|
-| User picks Dolphin 3.0 in scene modal | Ignored, sends `chat_worker` | Dolphin 3.0 sent correctly |
-| No model selected anywhere | `chat_worker` (local, may be down) | Dolphin 3.0 via ModelRoutingService |
-| Playground sessions on dashboard | Shown in "Continue Roleplay" | Filtered out |
-| Edge function receives empty model | Routes to local Qwen | Resolves to DB default or OpenRouter fallback |
-
-## Files Changed
+## Files to Change
 
 | File | Change |
 |---|---|
-| `src/hooks/useUserConversations.ts` | Add `conversation_type` filter for roleplay types only |
-| `src/pages/MobileRoleplayChat.tsx` | Replace `chat_worker` defaults with dynamic defaults; read model from location.state in kickoff |
-| `src/contexts/PlaygroundContext.tsx` | Use selected model instead of hardcoded `chat_worker` |
-| `supabase/functions/playground-chat/index.ts` | Replace `chat_worker` default param with dynamic resolution |
-| `supabase/functions/roleplay-chat/index.ts` | Widen type annotation (routing logic stays) |
+| `src/services/CharacterImageService.ts` | Remove `sdxl`/`queue-job` branch from `generateCharacterPortrait()`. Fix hardcoded `model_used` in `generateCharacterScene()`. |
+| `src/utils/characterImageUtils.ts` | Change `model_used: 'sdxl_high'` to `'fal'` or make dynamic. |
+| `src/services/ImageConsistencyService.ts` | Widen `modelChoice` type to `string`. Remove `sdxl` routing branch and `generateWithSDXL` method. Route all through `fal-image`. |
+
+## Result
+
+- Character tile "Generate" button will always route through `fal-image` (cloud) or `replicate-image`, never through `queue-job` (local Redis)
+- No more 500 errors from Upstash being unavailable
+- Model selection remains dynamic via the `api_models` database table
+
