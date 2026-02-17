@@ -14,6 +14,7 @@ import { PromptCounter } from './PromptCounter';
 import { PlaygroundSettingsPopover } from './PlaygroundSettingsPopover';
 import { SystemPromptEditor } from './SystemPromptEditor';
 import { CompareView } from './CompareView';
+import { ImageCompareView } from './ImageCompareView';
 
 export const ChatInterface = () => {
   const {
@@ -32,7 +33,7 @@ export const ChatInterface = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentMode, setCurrentMode] = useState<PlaygroundMode>(() => {
     const stored = localStorage.getItem('playground-mode');
-    return (stored === 'chat' || stored === 'compare' || stored === 'admin') ? stored : 'chat';
+    return (stored === 'chat' || stored === 'compare' || stored === 'image_compare' || stored === 'admin') ? stored : 'chat';
   });
   const [systemPrompt, setSystemPrompt] = useState(() => {
     return localStorage.getItem('playground-system-prompt') || '';
@@ -138,6 +139,22 @@ export const ChatInterface = () => {
         <PlaygroundModeSelector currentMode={currentMode} onModeChange={handleModeChange} />
         <div className="flex-1 overflow-hidden">
           <CompareView />
+        </div>
+      </div>
+    );
+  }
+
+  // Image compare mode renders its own view
+  if (currentMode === 'image_compare') {
+    return (
+      <div className="h-full flex flex-col">
+        <div className="border-b border-border p-2 flex items-center justify-between">
+          <h1 className="text-sm font-medium">AI Playground</h1>
+          <PlaygroundSettingsPopover settings={settings} onSettingsChange={updateSettings} />
+        </div>
+        <PlaygroundModeSelector currentMode={currentMode} onModeChange={handleModeChange} />
+        <div className="flex-1 overflow-hidden">
+          <ImageCompareView />
         </div>
       </div>
     );
