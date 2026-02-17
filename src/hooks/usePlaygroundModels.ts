@@ -5,7 +5,7 @@
    id: string;
    display_name: string;
    model_key: string;
-   modality: 'image' | 'video' | 'roleplay' | 'chat' | 'prompt';
+   modality: 'image' | 'video' | 'chat';
    task: string;
    model_family: string | null;
    is_default: boolean;
@@ -89,7 +89,7 @@
    const { data: models, isLoading, error } = usePlaygroundModels();
  
    const grouped = {
-     chat: models?.filter(m => m.modality === 'roleplay' || m.modality === 'chat') || [],
+     chat: models?.filter(m => m.modality === 'chat') || [],
      image: models?.filter(m => m.modality === 'image' && m.task === 'generation') || [],
      video: models?.filter(m => m.modality === 'video') || [],
      i2i: models?.filter(m => m.modality === 'image' && (m.task === 'style_transfer' || m.task === 'enhancement')) || [],

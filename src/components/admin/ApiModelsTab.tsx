@@ -48,8 +48,8 @@ interface ApiModel {
   priority: number;
 }
 
-const MODALITIES = ['image', 'video', 'chat', 'prompt', 'audio', 'embedding', 'roleplay'] as const;
-const TASKS = ['generation', 'enhancement', 'moderation', 'style_transfer', 'upscale', 'roleplay', 'tts', 'stt', 'chat', 'embedding'] as const;
+const MODALITIES = ['image', 'video', 'chat'] as const;
+const TASKS = ['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding'] as const;
 
 const formatResponseTime = (ms: number | null | undefined) => {
   if (ms === null || ms === undefined || ms === 0) return '--';
