@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateCharacterPortrait } from '@/utils/characterImageUtils';
 import { supabase } from '@/integrations/supabase/client';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
+import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { CharacterV2 } from '@/types/character-hub-v2';
 import { CharacterCardOverlay } from './CharacterCardOverlay';
@@ -45,6 +46,21 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
     const [signedImageUrl, setSignedImageUrl] = useState<string>('');
     const { toast } = useToast();
     const { user } = useAuth();
+
+    const { data: isAdmin } = useQuery({
+        queryKey: ['user-admin-role', user?.id],
+        queryFn: async () => {
+            if (!user) return false;
+            const { data } = await supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', user.id)
+                .eq('role', 'admin')
+                .single();
+            return !!data;
+        },
+        enabled: !!user,
+    });
 
     const imageUrl = character.image_url || character.preview_image_url;
 
@@ -194,7 +210,7 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
                     onGenerate={handleGenerateImage}
                     onDuplicate={onDuplicate}
                     onDelete={onDelete ? () => onDelete(character.id) : undefined}
-                    isOwner={user?.id === character.user_id}
+                    isOwner={user?.id === character.user_id || !!isAdmin}
                 />
 
                 {/* Text Details (Bottom Gradient) */}
