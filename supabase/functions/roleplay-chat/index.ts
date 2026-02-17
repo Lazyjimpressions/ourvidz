@@ -3283,11 +3283,9 @@ const sceneContext = analyzeSceneContent(response);
     const styleTokens = SCENE_STYLE_TOKENS[sceneStyle] || [];
     const styleTokensStr = styleTokens.length > 0 ? `, ${styleTokens.join(', ')}` : '';
 
-    // ✅ SEEDREAM DETECTION: Check if we're using Seedream edit models (which don't use strength parameter)
-    // For Seedream edit, the prompt itself controls preservation vs change
-    // ✅ CRITICAL FIX: Use imageModelConfig (fetched earlier) instead of undefined modelConfig
-    const isSeedreamEdit = imageModelConfig?.model_key?.includes('seedream') &&
-                           imageModelConfig?.model_key?.includes('edit');
+    // ✅ UNIFIED I2I PROMPT: All scenes use Figure notation. No model-specific branching.
+    // The I2I model is selected by the user in UI settings. Prompt length is governed by
+    // prompt_templates.token_limit (upstream) and capabilities.char_limit (downstream).
 
     // ✅ MULTI-REFERENCE DETECTION: Check if we can use Figure notation for both_characters
     // Multi-reference requires: both_characters style + character reference + user character reference
@@ -3305,114 +3303,27 @@ const sceneContext = analyzeSceneContent(response);
       });
     }
 
-    // ✅ FIX: For I2I iterations, prioritize scene action/changes first
-    if (useI2IIteration || generationMode === 'modification') {
-      // I2I MODE: Emphasize changes first, then brief character identity
-      // This ensures the scene action isn't truncated by CLIP's 77-token limit
-      
-      const briefCharacterIdentity = `${character.name}, ${(character.appearance_tags || []).slice(0, 3).join(', ')}`;
-      
-      // ✅ SEEDREAM-SPECIFIC: Use PRESERVE/CHANGE structure for Seedream edit models
-      // Since Seedream has no strength parameter, the prompt controls everything
-      if (isSeedreamEdit) {
-        // ✅ FIX #4: Enhanced character-specific preservation with appearance_tags
-        // Build detailed preservation phrase with character-specific details
-        const characterAppearance = (character.appearance_tags || []).slice(0, 5).join(', ');
-        const preservePhrase = characterAppearance
-          ? `Maintain exact character identity: ${character.name} with ${characterAppearance}, exact facial features, same hair color and style, same lighting conditions, same environment, same clothing state unless explicitly changed`
-          : 'Maintain exact character identity, facial features, hair color and style, same lighting conditions, same environment, same clothing state unless explicitly changed';
+    // Build character identity with fallback to characterVisualDescription when appearance_tags is empty
+    const characterAppearance = (character.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription;
+    const briefCharacterIdentity = `${character.name}, ${characterAppearance}`;
 
-        if (sceneStyle === 'both_characters' && userCharacter) {
-          const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
-          const userAppearance = (userCharacter.appearance_tags || []).slice(0, 3).join(', ');
-
-          // ✅ MULTI-REFERENCE: Use Figure notation when both references are available
-          if (canUseMultiReference) {
-            enhancedScenePrompt = `In the setting from Figure 1, show two people together.
-
-SCENE SETTING (from Figure 1): ${scenePrompt}
-
-CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${characterAppearance || characterVisualDescription}
-
-CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearance || briefUserIdentity}
-
-ACTION/POSE: ${scenePrompt}
-
-COMPOSITION RULES:
-- Maintain the exact environment, lighting, and atmosphere from Figure 1
-- Preserve Character 1's facial features, hair, and body type from Figure 2
-- Preserve Character 2's facial features, hair, and body type from Figure 3
-- Characters should be interacting naturally within the scene
-- Photorealistic, cinematic lighting, shallow depth of field`;
-            console.log('🎭 Multi-reference I2I: Using Figure notation for both_characters');
-          } else {
-            const enhancedPreserve = userAppearance
-              ? `${preservePhrase}; maintain ${userCharacter.name} appearance: ${userAppearance}`
-              : preservePhrase;
-            enhancedScenePrompt = `[PRESERVE] ${enhancedPreserve}, same character positions relative to each other. [CHANGE] ${scenePrompt}. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
-          }
-        } else if (sceneStyle === 'pov') {
-          enhancedScenePrompt = `[PRESERVE] ${preservePhrase}, POV camera angle. [CHANGE] ${scenePrompt}${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer.`;
-        } else {
-          enhancedScenePrompt = `[PRESERVE] ${preservePhrase}. [CHANGE] ${scenePrompt}. [CHARACTER] ${briefCharacterIdentity}.`;
-        }
-
-        console.log('🎬 Seedream Edit I2I: Using enhanced PRESERVE/CHANGE with character-specific details (no strength parameter)');
-      } else {
-        // Non-Seedream models: Use standard I2I prompt structure
-        if (sceneStyle === 'both_characters' && userCharacter) {
-          const briefUserIdentity = `${userCharacter.name}, ${(userCharacter.appearance_tags || []).slice(0, 2).join(', ')}`;
-          const userAppearance = (userCharacter.appearance_tags || []).slice(0, 3).join(', ');
-
-          // ✅ MULTI-REFERENCE: Use Figure notation when both references are available
-          if (canUseMultiReference) {
-            enhancedScenePrompt = `In the setting from Figure 1, show two people together.
-
-SCENE SETTING (from Figure 1): ${scenePrompt}
-
-CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${(character.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription}
-
-CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearance || briefUserIdentity}
-
-ACTION/POSE: ${scenePrompt}
-
-COMPOSITION RULES:
-- Maintain the exact environment, lighting, and atmosphere from Figure 1
-- Preserve Character 1's facial features, hair, and body type from Figure 2
-- Preserve Character 2's facial features, hair, and body type from Figure 3
-- Characters should be interacting naturally within the scene
-- Photorealistic, cinematic lighting, shallow depth of field`;
-            console.log('🎭 Multi-reference I2I (non-Seedream): Using Figure notation for both_characters');
-          } else {
-            enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting, natural progression. [CHARACTERS] ${briefCharacterIdentity} with ${briefUserIdentity}${styleTokensStr}.`;
-          }
-        } else if (sceneStyle === 'pov') {
-          enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same setting, same lighting${styleTokensStr}. [CHARACTER] ${briefCharacterIdentity}, looking at viewer, POV perspective.`;
-        } else {
-          enhancedScenePrompt = `[SCENE CHANGE] ${scenePrompt}. [CONTINUITY] Same character identity, same lighting. [CHARACTER] ${briefCharacterIdentity}.`;
-        }
-        
-        console.log('🎬 Standard I2I prompt structure: Changes first, brief character ID');
-      }
-    } else if (sceneStyle === 'both_characters' && userCharacter) {
-      // T2I MODE: Both characters in scene - include user visual description
-      const userVisualDescription = buildUserVisualDescriptionForScene(
+    if (sceneStyle === 'both_characters' && userCharacter) {
+      const userAppearance = (userCharacter.appearance_tags || []).slice(0, 5).join(', ');
+      const userVisualFallback = buildUserVisualDescriptionForScene(
         userCharacter.gender,
         userCharacter.appearance_tags || []
       );
+      const userAppearanceFinal = userAppearance || userVisualFallback;
 
-      // ✅ MULTI-REFERENCE: Use Figure notation when both references are available
       if (canUseMultiReference) {
-        const characterAppearance = (character.appearance_tags || []).slice(0, 5).join(', ');
-        const userAppearance = (userCharacter.appearance_tags || []).slice(0, 5).join(', ');
-
+        // Figure notation for multi-reference I2I
         enhancedScenePrompt = `In the setting from Figure 1, show two people together.
 
 SCENE SETTING (from Figure 1): ${scenePrompt}
 
-CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${characterAppearance || characterVisualDescription}
+CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${characterAppearance}
 
-CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearance || userVisualDescription}
+CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 
 ACTION/POSE: ${scenePrompt}
 
@@ -3422,57 +3333,68 @@ COMPOSITION RULES:
 - Preserve Character 2's facial features, hair, and body type from Figure 3
 - Characters should be interacting naturally within the scene
 - Photorealistic, cinematic lighting, shallow depth of field`;
-        console.log('🎭 Multi-reference T2I: Using Figure notation for both_characters');
+        console.log('🎭 Multi-reference I2I: Using Figure notation for both_characters');
       } else {
-        enhancedScenePrompt = `Generate a scene showing ${character.name} (${characterVisualDescription}) and ${userCharacter.name} (${userVisualDescription}) together${styleTokensStr}, in the following scenario: ${scenePrompt}. Both characters should maintain their distinctive appearances. Composition: two people interacting.`;
-        console.log('🎬 Scene style: both_characters - including user:', userCharacter.name);
-      }
-    } else if (sceneStyle === 'pov' && userCharacter) {
-      // POV scene - first person view from user's perspective looking at character
-      enhancedScenePrompt = `Generate a first-person POV scene${styleTokensStr} showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should be looking at the viewer. Camera angle: first person perspective.`;
+        // Two-character scene without multi-reference
+        enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2.
 
-      console.log('🎬 Scene style: pov - first person view');
-    } else {
-      // Character only (default) - T2I mode with full character description
-      const scenePromptLower = scenePrompt.toLowerCase();
-      const hasCharacterInPrompt = scenePromptLower.includes(character.name.toLowerCase());
-      const hasVisualDescInPrompt = scenePromptLower.includes(characterVisualDescription.substring(0, 30).toLowerCase());
-      
-      if (hasCharacterInPrompt && hasVisualDescInPrompt) {
-        enhancedScenePrompt = `Generate a scene in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
-        console.log('🎬 Scene style: character_only (template prompt already includes character info)');
-      } else {
-        enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
-        console.log('🎬 Scene style: character_only (default)');
+SCENE (Figure 1): ${scenePrompt}
+
+CHARACTER (from Figure 2): ${briefCharacterIdentity} with ${userCharacter.name}, ${userAppearanceFinal}
+
+ACTION: ${scenePrompt}
+
+RULES:
+- Maintain the exact environment from Figure 1
+- Preserve the character's appearance from Figure 2
+- Photorealistic, cinematic lighting, shallow depth of field`;
+        console.log('🎬 Both characters I2I: Figure notation without multi-reference');
       }
+    } else if (sceneStyle === 'pov') {
+      // POV scene - first person view looking at character
+      enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2 from a first-person perspective, looking at the character.
+
+SCENE (Figure 1): ${scenePrompt}
+
+CHARACTER (from Figure 2): ${briefCharacterIdentity}, looking at viewer
+
+ACTION: ${scenePrompt}
+
+RULES:
+- Maintain the exact environment from Figure 1
+- Preserve the character's appearance from Figure 2
+- POV camera angle, first person perspective
+- Photorealistic, cinematic lighting, shallow depth of field`;
+      console.log('🎬 POV I2I: Figure notation');
+    } else {
+      // Character only (default) - standard I2I with Figure notation
+      enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2.
+
+SCENE (Figure 1): ${scenePrompt}
+
+CHARACTER (from Figure 2): ${briefCharacterIdentity}
+
+ACTION: ${scenePrompt}
+
+RULES:
+- Maintain the exact environment from Figure 1
+- Preserve the character's appearance from Figure 2
+- Photorealistic, cinematic lighting, shallow depth of field`;
+      console.log('🎬 Character-only I2I: Figure notation');
     }
 
     console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
     
-    // ✅ SEEDREAM FIX: Skip CLIP optimization for Seedream models (they use character limits, not CLIP tokens)
-    // Seedream supports 8,000-12,000 character prompts, no 77-token CLIP limit
+    // Prompt length governed by prompt_templates.token_limit (upstream LLM generation)
+    // and capabilities.char_limit (downstream image model). No CLIP truncation.
     let optimizedPrompt: string;
-    
-    if (isSeedreamEdit) {
-      // Seedream: No CLIP truncation needed, just check character limit (10,000 chars)
-      const charLimit = 10000;
-      if (enhancedScenePrompt.length > charLimit) {
-        optimizedPrompt = enhancedScenePrompt.substring(0, charLimit);
-        console.log(`🎯 Seedream: Prompt truncated to ${charLimit} characters (no CLIP limit)`);
-      } else {
-        optimizedPrompt = enhancedScenePrompt;
-        console.log(`🎯 Seedream: Full prompt used (${enhancedScenePrompt.length} chars, no CLIP limit)`);
-      }
+    const charLimit = (imageModelConfig?.capabilities as any)?.char_limit || 10000;
+    if (enhancedScenePrompt.length > charLimit) {
+      optimizedPrompt = enhancedScenePrompt.substring(0, charLimit);
+      console.log(`🎯 Prompt truncated to model char_limit: ${charLimit} (was ${enhancedScenePrompt.length} chars)`);
     } else {
-      // Non-Seedream: Apply CLIP optimization
-      optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt, character.appearance_tags || [], sceneContext);
-      console.log('🔧 CLIP optimization:', {
-        original_length: enhancedScenePrompt.length,
-        optimized_length: optimizedPrompt.length,
-        original_estimated_tokens: estimateCLIPTokens(enhancedScenePrompt),
-        optimized_estimated_tokens: estimateCLIPTokens(optimizedPrompt),
-        scenario_preserved: optimizedPrompt.includes(scenePrompt.substring(0, 50))
-      });
+      optimizedPrompt = enhancedScenePrompt;
+      console.log(`🎯 Full prompt used: ${enhancedScenePrompt.length} chars (limit: ${charLimit})`);
     }
     
     // ✅ ENHANCED: Determine image model routing (effectiveImageModel already determined above)
@@ -3698,7 +3620,6 @@ COMPOSITION RULES:
             prompt_preview: optimizedPrompt.substring(0, 100) + '...',
             original_prompt_length: enhancedScenePrompt.length,
             optimized_prompt_length: optimizedPrompt.length,
-            estimated_tokens: estimateCLIPTokens(optimizedPrompt),
             apiModelId: modelConfig.id,
             jobType: replicateJobType
           }, null, 2));
@@ -4563,514 +4484,6 @@ async function loadCharacterWithVoice(supabase: any, characterId: string): Promi
 // CLIP tokenizer has a hard limit of 77 tokens - everything after is truncated
 // We need to optimize prompts to fit within 77 tokens while preserving the most important content
 
-/**
- * Estimate CLIP tokens (based on real-world Replicate behavior)
- * CLIP tokenizer is more aggressive - ~3.8 chars per token in practice
- */
-function estimateCLIPTokens(text: string): number {
-  if (!text || typeof text !== 'string') return 0;
-  // ✅ FIX: Use 3.8 chars per token based on actual Replicate behavior
-  // 293 chars = 77 tokens (at limit), so 293/77 = 3.8
-  return Math.ceil(text.length / 3.8);
-}
-
-/**
- * Extract action phrases from scenario text
- * Prioritizes physical interactions over movement verbs
- * Returns 3-5 key action phrases (2-4 words each)
- */
-function extractActionPhrases(scenario: string, sceneContext?: SceneContext): string[] {
-  const actionPhrases: string[] = [];
-  const lowerScenario = scenario.toLowerCase();
-  
-  // First, try to use sceneContext.actions if available
-  if (sceneContext?.actions && sceneContext.actions.length > 0) {
-    // Use actions from sceneContext, but expand them into phrases
-    sceneContext.actions.slice(0, 5).forEach(action => {
-      // Find the action verb in the scenario and extract surrounding context
-      const actionLower = action.toLowerCase();
-      const actionIndex = lowerScenario.indexOf(actionLower);
-      if (actionIndex !== -1) {
-        // Extract 2-4 word phrase around the action
-        const start = Math.max(0, actionIndex - 15);
-        const end = Math.min(scenario.length, actionIndex + action.length + 20);
-        let phrase = scenario.substring(start, end).trim();
-        
-        // Clean up phrase boundaries
-        const firstSpace = phrase.indexOf(' ');
-        if (firstSpace > 0 && firstSpace < 10) {
-          phrase = phrase.substring(firstSpace).trim();
-        }
-        const lastSpace = phrase.lastIndexOf(' ');
-        if (lastSpace > phrase.length - 10 && lastSpace > 0) {
-          phrase = phrase.substring(0, lastSpace).trim();
-        }
-        
-        // Limit to 4 words max
-        const words = phrase.split(/\s+/);
-        if (words.length > 4) {
-          phrase = words.slice(0, 4).join(' ');
-        }
-        
-        if (phrase.length > 3 && phrase.length < 40) {
-          actionPhrases.push(phrase);
-        }
-      }
-    });
-  }
-  
-  // If we don't have enough from sceneContext, scan scenario for action verbs
-  if (actionPhrases.length < 3) {
-    // Combine physical interactions and movement verbs (prioritize physical interactions)
-    const allActionVerbs = [...SCENE_DETECTION_PATTERNS.physicalInteractions, ...SCENE_DETECTION_PATTERNS.movement];
-    
-    for (const verb of allActionVerbs) {
-      if (actionPhrases.length >= 5) break; // Limit to 5 phrases
-      
-      const verbLower = verb.toLowerCase();
-      const verbIndex = lowerScenario.indexOf(verbLower);
-      
-      if (verbIndex !== -1) {
-        // Extract 2-4 word phrase around the verb
-        const start = Math.max(0, verbIndex - 15);
-        const end = Math.min(scenario.length, verbIndex + verb.length + 20);
-        let phrase = scenario.substring(start, end).trim();
-        
-        // Clean up phrase boundaries at word boundaries
-        const firstSpace = phrase.indexOf(' ');
-        if (firstSpace > 0 && firstSpace < 10) {
-          phrase = phrase.substring(firstSpace).trim();
-        }
-        const lastSpace = phrase.lastIndexOf(' ');
-        if (lastSpace > phrase.length - 10 && lastSpace > 0) {
-          phrase = phrase.substring(0, lastSpace).trim();
-        }
-        
-        // Limit to 4 words max
-        const words = phrase.split(/\s+/);
-        if (words.length > 4) {
-          phrase = words.slice(0, 4).join(' ');
-        }
-        
-        // Only add if it's a valid phrase and not already included
-        if (phrase.length > 3 && phrase.length < 40) {
-          const phraseLower = phrase.toLowerCase();
-          const isDuplicate = actionPhrases.some(existing => 
-            existing.toLowerCase().includes(phraseLower) || phraseLower.includes(existing.toLowerCase())
-          );
-          if (!isDuplicate) {
-            actionPhrases.push(phrase);
-          }
-        }
-      }
-    }
-  }
-  
-  // Prioritize physical interactions over movement (reorder if needed)
-  const physicalFirst = actionPhrases.sort((a, b) => {
-    const aIsPhysical = SCENE_DETECTION_PATTERNS.physicalInteractions.some(verb => 
-      a.toLowerCase().includes(verb)
-    );
-    const bIsPhysical = SCENE_DETECTION_PATTERNS.physicalInteractions.some(verb => 
-      b.toLowerCase().includes(verb)
-    );
-    if (aIsPhysical && !bIsPhysical) return -1;
-    if (!aIsPhysical && bIsPhysical) return 1;
-    return 0;
-  });
-  
-  // Limit to 5 phrases max (target: 3-5 phrases, ~15-20 tokens)
-  return physicalFirst.slice(0, 5);
-}
-
-/**
- * Extract essential setting/atmosphere from scenario
- * Removes action phrases and character names, keeps setting description
- * Truncates from end to preserve beginning context
- */
-function extractEssentialSetting(scenario: string, actionPhrases: string[]): string {
-  let setting = scenario;
-  
-  // Remove action phrases from scenario
-  actionPhrases.forEach(phrase => {
-    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    setting = setting.replace(regex, '').trim();
-  });
-  
-  // Clean up multiple spaces and punctuation
-  setting = setting
-    .replace(/\s+/g, ' ')
-    .replace(/\s*\.\s*\./g, '.')
-    .replace(/\s*,\s*,/g, ',')
-    .trim();
-  
-  // Extract setting keywords (environmental patterns)
-  const settingKeywords: string[] = [];
-  SCENE_DETECTION_PATTERNS.environmental.forEach(env => {
-    if (setting.toLowerCase().includes(env)) {
-      settingKeywords.push(env);
-    }
-  });
-  
-  // If we have setting keywords, prioritize them
-  if (settingKeywords.length > 0) {
-    // Find sentences/phrases containing setting keywords
-    const sentences = setting.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const settingSentences = sentences.filter(s => 
-      settingKeywords.some(keyword => s.toLowerCase().includes(keyword))
-    );
-    
-    if (settingSentences.length > 0) {
-      // Use first setting sentence, truncate if needed
-      let result = settingSentences[0].trim();
-      if (result.length > 100) {
-        // Truncate at word boundary
-        const lastSpace = result.lastIndexOf(' ', 100);
-        if (lastSpace > 80) {
-          result = result.substring(0, lastSpace).trim();
-        } else {
-          result = result.substring(0, 100).trim();
-        }
-      }
-      return result;
-    }
-  }
-  
-  // Fallback: use beginning of scenario (first 100 chars, truncate at word boundary)
-  if (setting.length > 100) {
-    const lastSpace = setting.lastIndexOf(' ', 100);
-    if (lastSpace > 80) {
-      return setting.substring(0, lastSpace).trim();
-    }
-    return setting.substring(0, 100).trim();
-  }
-  
-  return setting;
-}
-
-/**
- * Optimize prompt for CLIP's 77-token limit
- * Strategy: Prioritize action verbs and interactions (conversation "spirit")
- * Use negative prompts for quality/style guidance (handled by replicate-image)
- * 
- * New approach: Preserve actions, truncate descriptive/setting text first
- */
-function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appearanceTags: string[] = [], sceneContext?: SceneContext): string {
-  // ✅ CRITICAL FIX: CLIP tokenizer is more aggressive than 4 chars/token
-  // Real-world testing shows ~3.8 chars/token, so target 65 tokens for safety
-  const MAX_CLIP_TOKENS = 65; // ✅ FIX: Very aggressive - 65 tokens (was 70, was 75)
-  const AVG_CHARS_PER_TOKEN = 3.8; // ✅ FIX: More accurate based on Replicate behavior
-  const TARGET_CHARS = Math.floor(MAX_CLIP_TOKENS * AVG_CHARS_PER_TOKEN); // 247 chars max
-  
-  // Extract scenario - this is the MOST IMPORTANT part
-  const scenarioMatch = fullPrompt.match(/in the following scenario: (.+?)(?:\. Both characters|\. The character|\. Composition|$)/s);
-  let scenario = scenarioMatch ? scenarioMatch[1].trim() : scenarioText;
-  
-  // Extract character name
-  const charMatch = fullPrompt.match(/showing (.+?)(?: \(|\s+\(|,|$)/);
-  const charName = charMatch ? charMatch[1].trim().replace(/"/g, '') : '';
-  
-  // ✅ CRITICAL FIX: Aggressively remove ALL character name references from scenario
-  // This includes: full name, ALL name parts (first, middle, last), quoted variations
-  if (charName) {
-    const nameParts = charName.split(' ').filter(p => p.length > 0);
-    const firstName = nameParts[0];
-    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
-    
-    // Build comprehensive patterns to catch ALL variations
-    const patterns: RegExp[] = [];
-    
-    // 1. Quoted full name: "Lily Lilith Chen"
-    patterns.push(new RegExp(`"${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'gi'));
-    
-    // 2. Full name with word boundaries: Lily Lilith Chen
-    patterns.push(new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'));
-    
-    // 3. Remove EACH name part individually (catches middle names like "Lilith")
-    nameParts.forEach(part => {
-      // Quoted name part: "Lilith"
-      patterns.push(new RegExp(`"${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'gi'));
-      // Name part with word boundaries: Lilith
-      patterns.push(new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'));
-    });
-    
-    // 4. "AnyNamePart" LastName pattern: "Lilith" Chen (catches middle+last)
-    if (lastName) {
-      nameParts.slice(0, -1).forEach(part => { // All parts except last
-        patterns.push(new RegExp(`"${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\s+${lastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi'));
-        patterns.push(new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+${lastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'));
-      });
-    }
-    
-    // Apply all patterns
-    patterns.forEach(pattern => {
-      scenario = scenario.replace(pattern, '');
-    });
-    
-    // Clean up multiple spaces, periods, and trim
-    scenario = scenario
-      .replace(/\s+/g, ' ')
-      .replace(/\s*\.\s*\./g, '.') // Fix double periods
-      .replace(/\s*,\s*,/g, ',') // Fix double commas
-      .trim();
-    
-    console.log(`🧹 Removed character name references from scenario (${nameParts.length} name parts), saved tokens`);
-  }
-  
-  // ✅ NEW: Extract action phrases from scenario text (PRIORITY: preserve actions)
-  // Action phrases are critical for matching conversation "spirit"
-  const actionPhrases = extractActionPhrases(scenario, sceneContext);
-  
-  // Extract ONLY essential visual tags (limit to 3-4 most important)
-  const visualTags = appearanceTags.length > 0 
-    ? appearanceTags.slice(0, 4).join(', ') // Allow 4 tags since we're prioritizing actions
-    : extractVisualTagsOnly(fullPrompt).split(', ').slice(0, 4).join(', ');
-  
-  // ✅ RESTRUCTURED: Build prompt with actions prioritized
-  // Format: "CharacterName, tags, key actions, essential setting"
-  // Priority: Name (2 tokens) > Tags (8 tokens) > Actions (20 tokens) > Setting (remaining)
-  let optimized = '';
-  
-  // Start with character name and tags
-  if (charName && visualTags) {
-    optimized = `${charName}, ${visualTags}`;
-  } else if (charName) {
-    optimized = charName;
-  } else if (visualTags) {
-    optimized = visualTags;
-  }
-  
-  // Add action phrases (HIGHEST PRIORITY after name/tags)
-  if (actionPhrases.length > 0) {
-    const actionsText = actionPhrases.join(', ');
-    if (optimized) {
-      optimized = `${optimized}, ${actionsText}`;
-    } else {
-      optimized = actionsText;
-    }
-  }
-  
-  // Extract essential setting/atmosphere (truncate descriptive text, preserve beginning for context)
-  const essentialSetting = extractEssentialSetting(scenario, actionPhrases);
-  if (essentialSetting) {
-    if (optimized) {
-      optimized = `${optimized}, ${essentialSetting}`;
-    } else {
-      optimized = essentialSetting;
-    }
-  }
-  
-  // ✅ SMART TRUNCATION: Preserve action phrases, truncate setting text first
-  // Strategy: Only truncate from the end if it's setting text, preserve actions
-  if (optimized.length > TARGET_CHARS) {
-    // Find where actions end and setting begins
-    const actionsText = actionPhrases.length > 0 ? actionPhrases.join(', ') : '';
-    let actionsEndIndex = -1;
-    if (actionsText && optimized.includes(actionsText)) {
-      actionsEndIndex = optimized.indexOf(actionsText) + actionsText.length;
-    }
-    
-    // If we have actions, try to truncate only the setting part
-    if (actionsEndIndex > 0 && actionsEndIndex < optimized.length) {
-      // Calculate how much we need to truncate
-      const excessChars = optimized.length - TARGET_CHARS;
-      const settingStart = actionsEndIndex + 2; // +2 for ", " separator
-      
-      if (settingStart < optimized.length) {
-        // Truncate setting text from the end
-        const settingText = optimized.substring(settingStart);
-        let truncatedSetting = settingText;
-        
-        if (truncatedSetting.length > excessChars) {
-          // Truncate setting at word boundary
-          const targetSettingLength = truncatedSetting.length - excessChars;
-          let cutoff = targetSettingLength;
-          
-          // Find word boundary
-          const lastComma = truncatedSetting.lastIndexOf(',', cutoff);
-          const lastPeriod = truncatedSetting.lastIndexOf('.', cutoff);
-          const lastSpace = truncatedSetting.lastIndexOf(' ', cutoff);
-          
-          if (lastComma > cutoff * 0.8) {
-            cutoff = lastComma;
-          } else if (lastPeriod > cutoff * 0.8) {
-            cutoff = lastPeriod + 1;
-          } else if (lastSpace > cutoff * 0.9) {
-            cutoff = lastSpace;
-          }
-          
-          truncatedSetting = truncatedSetting.substring(0, cutoff).trim();
-        }
-        
-        // Rebuild with truncated setting
-        optimized = optimized.substring(0, settingStart) + truncatedSetting;
-      } else {
-        // No setting text, truncate from end (shouldn't happen, but fallback)
-        let cutoff = TARGET_CHARS;
-        const lastComma = optimized.lastIndexOf(',', cutoff);
-        const lastSpace = optimized.lastIndexOf(' ', cutoff);
-        
-        if (lastComma > cutoff * 0.8) {
-          cutoff = lastComma;
-        } else if (lastSpace > cutoff * 0.9) {
-          cutoff = lastSpace;
-        }
-        
-        optimized = optimized.substring(0, cutoff).trim();
-      }
-    } else {
-      // No actions found, use standard truncation
-      let cutoff = TARGET_CHARS;
-      const lastComma = optimized.lastIndexOf(',', cutoff);
-      const lastPeriod = optimized.lastIndexOf('.', cutoff);
-      const lastSpace = optimized.lastIndexOf(' ', cutoff);
-      
-      if (lastComma > cutoff * 0.8) {
-        cutoff = lastComma;
-      } else if (lastPeriod > cutoff * 0.8) {
-        cutoff = lastPeriod + 1;
-      } else if (lastSpace > cutoff * 0.9) {
-        cutoff = lastSpace;
-      }
-      
-      optimized = optimized.substring(0, cutoff).trim();
-    }
-    
-    console.log('✂️ Smart truncation applied (preserve actions):', {
-      originalLength: fullPrompt.length,
-      optimizedLength: optimized.length,
-      actionsPreserved: actionPhrases.length,
-      estimatedTokens: Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN)
-    });
-  } else if (optimized.length > TARGET_CHARS - 10) {
-    // ✅ FIX: Also truncate if we're within 10 chars of limit (safety margin)
-    // CLIP tokenizer can be unpredictable, so be conservative
-    // But still preserve actions
-    const actionsText = actionPhrases.length > 0 ? actionPhrases.join(', ') : '';
-    let actionsEndIndex = -1;
-    if (actionsText && optimized.includes(actionsText)) {
-      actionsEndIndex = optimized.indexOf(actionsText) + actionsText.length;
-    }
-    
-    if (actionsEndIndex > 0 && actionsEndIndex < optimized.length) {
-      // Truncate only setting
-      const settingStart = actionsEndIndex + 2;
-      if (settingStart < optimized.length) {
-        const settingText = optimized.substring(settingStart);
-        const targetSettingLength = Math.max(0, settingText.length - 10);
-        
-        if (targetSettingLength < settingText.length) {
-          let cutoff = targetSettingLength;
-          const lastComma = settingText.lastIndexOf(',', cutoff);
-          const lastSpace = settingText.lastIndexOf(' ', cutoff);
-          
-          if (lastComma > cutoff * 0.8) {
-            cutoff = lastComma;
-          } else if (lastSpace > cutoff * 0.9) {
-            cutoff = lastSpace;
-          }
-          
-          const truncatedSetting = settingText.substring(0, cutoff).trim();
-          optimized = optimized.substring(0, settingStart) + truncatedSetting;
-        }
-      }
-    } else {
-      // Standard truncation
-      let cutoff = TARGET_CHARS - 10;
-      const lastComma = optimized.lastIndexOf(',', cutoff);
-      const lastSpace = optimized.lastIndexOf(' ', cutoff);
-      
-      if (lastComma > cutoff * 0.8) {
-        cutoff = lastComma;
-      } else if (lastSpace > cutoff * 0.9) {
-        cutoff = lastSpace;
-      }
-      
-      optimized = optimized.substring(0, cutoff).trim();
-    }
-    
-    console.log('✂️ Safety truncation applied (preserve actions):', {
-      originalLength: fullPrompt.length,
-      optimizedLength: optimized.length,
-      actionsPreserved: actionPhrases.length,
-      estimatedTokens: Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN)
-    });
-  }
-  
-  const finalTokens = Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN);
-  console.log(`✅ Optimized prompt: ${finalTokens} tokens (target: ${MAX_CLIP_TOKENS}, max: 77)`);
-  console.log(`📝 Optimized preview: ${optimized.substring(0, 150)}...`);
-  
-  // ✅ SAFEGUARD: Ensure prompt is not empty or too short after optimization
-  if (!optimized || optimized.trim().length < 10) {
-    console.error('❌ CRITICAL: Optimized prompt is too short or empty! Using fallback.');
-    // Fallback to minimal prompt with character name and essential tags
-    const fallbackPrompt = charName && visualTags 
-      ? `${charName}, ${visualTags}`
-      : (charName || visualTags || 'scene');
-    console.warn('⚠️ Using fallback prompt:', fallbackPrompt);
-    return fallbackPrompt;
-  }
-  
-  // ✅ SAFEGUARD: Warn if prompt was heavily truncated (more than 50% reduction)
-  const originalLength = fullPrompt.length;
-  const reductionPercent = ((originalLength - optimized.length) / originalLength) * 100;
-  if (reductionPercent > 50) {
-    console.warn(`⚠️ WARNING: Prompt was heavily truncated (${reductionPercent.toFixed(1)}% reduction). Some details may be lost.`);
-    console.warn(`⚠️ Original: ${originalLength} chars, Optimized: ${optimized.length} chars`);
-  }
-  
-  return optimized;
-}
-
-/**
- * Extract ONLY visual appearance tags (no personality/behavior)
- * Uses appearance_tags array if available, otherwise filters from description
- */
-function extractVisualTagsOnly(prompt: string): string {
-  // Visual-only keywords to look for
-  const visualKeywords = [
-    'asian', 'athletic', 'flexible', 'dance team', 'captain', 'confident posture',
-    'graceful movements', 'sports bra', 'dance shorts', 'leotard', 'dance shoes',
-    'sweaty', 'muscular', 'toned body', 'long hair', 'bright eyes', 'determined expression',
-    'captivating smile', 'tall', 'curly hair', 'sweat pants', 'athletic build',
-    'casual style', '1boy', '1girl', 'handsome', 'beautiful', 'petite', 'tall'
-  ];
-  
-  // Try to extract from appearance_tags pattern first
-  const appearanceMatch = prompt.match(/\(([^)]+)\)/);
-  if (!appearanceMatch) return '';
-  
-  const appearanceText = appearanceMatch[1];
-  
-  // Split and filter for visual-only tags
-  const tags = appearanceText
-    .split(',')
-    .map(tag => tag.trim())
-    .filter(tag => {
-      const lower = tag.toLowerCase();
-      
-      // Keep if it matches visual keywords
-      if (visualKeywords.some(keyword => lower.includes(keyword))) {
-        return true;
-      }
-      
-      // Remove personality/behavior words
-      const personalityWords = [
-        'leader', 'commands', 'seeks', 'direct', 'loves', 'wants', 'knows',
-        'stunning', 'incredible', 'natural', 'attention', 'passion', 'desires',
-        'intense', 'experiences', 'match', 'energy', 'control', 'intimate'
-      ];
-      
-      if (personalityWords.some(word => lower.includes(word))) {
-        return false;
-      }
-      
-      // Keep short visual descriptors (2-4 words, mostly nouns/adjectives)
-      const wordCount = tag.split(/\s+/).length;
-      return wordCount <= 4 && tag.length > 2 && tag.length < 30;
-    })
-    .slice(0, 8); // Limit to 8 most important visual tags
-  
-  return tags.join(', ');
-}
+// CLIP optimization functions removed - all I2I models accept full text prompts.
+// Prompt length is governed by prompt_templates.token_limit (upstream) and
+// capabilities.char_limit (downstream, default 10,000 chars).
