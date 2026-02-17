@@ -174,7 +174,7 @@ export const saveCharacterImageToLibrary = async (
         storage_path: imageUrl,
         file_size_bytes: 0, // Will be updated when actual file is processed
         mime_type: 'image/png', // Default for generated images
-        model_used: 'sdxl_high', // From the job type
+        model_used: 'fal',
       });
 
     if (error) {

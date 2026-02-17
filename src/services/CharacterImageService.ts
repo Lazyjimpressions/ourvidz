@@ -56,26 +56,6 @@ export class CharacterImageService {
       // If no model specified, use default (fal-image)
       if (!params.apiModelId) {
         console.log('🎨 No model specified, using default fal-image');
-      } else if (params.apiModelId === 'sdxl') {
-        // Local SDXL model - use queue-job
-        edgeFunction = 'queue-job';
-        requestBody = {
-          prompt: characterPrompt,
-          format: 'sdxl_image_high',
-          metadata: {
-            destination: 'character_portrait',
-            character_id: params.characterId,
-            character_name: params.characterName,
-            consistency_method: params.consistencyMethod || 'i2i_reference',
-            reference_strength: params.referenceImageUrl ? 0.35 : undefined,
-            reference_image_url: params.referenceImageUrl,
-            base_prompt: characterPrompt,
-            seed_locked: params.seedLocked || false,
-            contentType: 'sfw'
-          },
-          referenceImageUrl: params.referenceImageUrl,
-          seed: params.seedLocked
-        };
       } else {
         // Query api_models to get provider type
         const { data: modelData, error: modelError } = await supabase
@@ -248,7 +228,7 @@ export class CharacterImageService {
           conversation_id: conversationId,
           scene_prompt: fullScenePrompt,
           generation_metadata: {
-            model_used: 'sdxl',
+            model_used: 'fal',
             consistency_method: character.consistency_method || 'i2i_reference',
             reference_strength: 0.35,
             base_prompt: fullScenePrompt

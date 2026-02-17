@@ -11,7 +11,7 @@ export interface ConsistencySettings {
 export interface SceneGenerationRequest {
   characterId: string;
   scenePrompt: string;
-  modelChoice: 'sdxl' | 'replicate';
+  modelChoice: string;
   consistencySettings: ConsistencySettings;
   conversationContext?: string;
   userPreferences?: any;
@@ -48,13 +48,8 @@ class ImageConsistencyService {
       // Apply consistency method
       const generationParams = await this.applyConsistencyMethod(request, character);
       
-      // Generate image based on model choice
-      let result;
-      if (request.modelChoice === 'sdxl') {
-        result = await this.generateWithSDXL(enhancedPrompt, generationParams);
-      } else {
-        result = await this.generateWithReplicate(enhancedPrompt, generationParams);
-      }
+      // Generate image via cloud provider
+      const result = await this.generateWithFal(enhancedPrompt, generationParams);
 
       // Calculate consistency score
       const consistencyScore = await this.calculateConsistencyScore(result.imageUrl, character);
@@ -165,43 +160,24 @@ class ImageConsistencyService {
   }
 
   /**
-   * Generate image using SDXL worker
+   * Generate image using fal.ai cloud provider
    */
-  private async generateWithSDXL(prompt: string, params: any) {
-    const { data, error } = await this.supabase.functions.invoke('queue-job', {
+  private async generateWithFal(prompt: string, params: any) {
+    const { data, error } = await this.supabase.functions.invoke('fal-image', {
       body: {
         prompt,
-        job_type: 'sdxl_image_fast',
+        quality: 'high',
+        input: {
+          image_url: params.init_image,
+          seed: params.seed,
+          strength: params.denoising_strength
+        },
         metadata: {
           destination: 'roleplay_scene',
           character_id: params.character_id,
           scene_type: 'chat_scene',
           consistency_method: params.consistency_method,
-          seed: params.seed,
-          denoising_strength: params.denoising_strength
-        }
-      }
-    });
-
-    if (error) throw error;
-    return { imageUrl: data.image_url, seed: params.seed };
-  }
-
-  /**
-   * Generate image using Replicate API
-   */
-  private async generateWithReplicate(prompt: string, params: any) {
-    const { data, error } = await this.supabase.functions.invoke('replicate-image', {
-      body: {
-        prompt,
-        apiModelId: 'replicate-rv5.1-model-id',
-        jobType: 'image_generation',
-        metadata: {
-          destination: 'roleplay_scene',
-          character_id: params.character_id,
-          scene_type: 'chat_scene',
-          seed: params.seed,
-          denoising_strength: params.denoising_strength
+          seed: params.seed
         }
       }
     });
