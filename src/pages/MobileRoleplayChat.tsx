@@ -944,7 +944,7 @@ const MobileRoleplayChat: React.FC = () => {
             // Scene style for user representation in images
             scene_style: sceneStyle,
             // ✅ Multi-reference: user character reference for both_characters scenes
-            user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+            user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
             // ✅ Pass consistency settings from UI
             consistency_settings: consistencySettings,
             // 🔄 Scene continuity (initial kickoff - no previous scene yet)
@@ -1388,12 +1388,12 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Sign template preview image for first-scene I2I when starting from a scene template
       let signedScenePreviewUrl: string | null = null;
-      if (selectedScene?.image_url) {
-        if (selectedScene.image_url.startsWith('http://') || selectedScene.image_url.startsWith('https://')) {
-          signedScenePreviewUrl = selectedScene.image_url;
+      if (selectedScene?.preview_image_url) {
+        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.preview_image_url;
         } else {
-          const bucket = selectedScene.image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
-          signedScenePreviewUrl = await getSignedUrl(selectedScene.image_url, bucket);
+          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
         }
       }
 
@@ -1421,7 +1421,7 @@ const MobileRoleplayChat: React.FC = () => {
           // ✅ Scene style for user representation in images
           scene_style: sceneStyle,
           // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // 🔄 Scene continuity for I2I iteration
@@ -1591,7 +1591,7 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // 🔄 Scene continuity for I2I iteration
@@ -1750,12 +1750,12 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Sign template preview for first-scene I2I when applicable
       let signedScenePreviewUrl: string | null = null;
-      if (selectedScene?.image_url) {
-        if (selectedScene.image_url.startsWith('http://') || selectedScene.image_url.startsWith('https://')) {
-          signedScenePreviewUrl = selectedScene.image_url;
+      if (selectedScene?.preview_image_url) {
+        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.preview_image_url;
         } else {
-          const bucket = selectedScene.image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
-          signedScenePreviewUrl = await getSignedUrl(selectedScene.image_url, bucket);
+          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
         }
       }
       
@@ -1775,7 +1775,7 @@ const MobileRoleplayChat: React.FC = () => {
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           selected_image_model: validImageModel,
           scene_style: sceneStyle,
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           consistency_settings: consistencySettings,
           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: previousSceneId || null,
@@ -1891,7 +1891,7 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle,
           // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           consistency_settings: effectiveConsistencySettings,
           // Scene regeneration/modification fields
           scene_prompt_override: editedPrompt,
@@ -2008,12 +2008,12 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Sign template preview for first-scene I2I when retrying with a scene template
       let signedScenePreviewUrl: string | null = null;
-      if (selectedScene?.image_url) {
-        if (selectedScene.image_url.startsWith('http://') || selectedScene.image_url.startsWith('https://')) {
-          signedScenePreviewUrl = selectedScene.image_url;
+      if (selectedScene?.preview_image_url) {
+        if (selectedScene.preview_image_url.startsWith('http://') || selectedScene.preview_image_url.startsWith('https://')) {
+          signedScenePreviewUrl = selectedScene.preview_image_url;
         } else {
-          const bucket = selectedScene.image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
-          signedScenePreviewUrl = await getSignedUrl(selectedScene.image_url, bucket);
+          const bucket = selectedScene.preview_image_url.includes('workspace') ? 'workspace-temp' : 'user-library';
+          signedScenePreviewUrl = await getSignedUrl(selectedScene.preview_image_url, bucket);
         }
       }
 
@@ -2044,7 +2044,7 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // 🔄 Scene continuity (kickoff retry - use existing previous scene if any)
@@ -2192,7 +2192,7 @@ const MobileRoleplayChat: React.FC = () => {
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || null,
+          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
           consistency_settings: consistencySettings,
           // NOTE: Template selection is handled server-side based on model_provider
