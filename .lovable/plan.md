@@ -1,58 +1,53 @@
 
 
-# Remove Legacy Hardcoded Local Model References from Character Generation
+# Compact Roleplay Settings Modal - Models Tab Redesign
 
-## Problem
+## Current State
 
-The character portrait and scene generation pipeline has multiple hardcoded references to `sdxl`, `queue-job`, and `chat_worker` that cause 500 errors when the local worker infrastructure (Upstash Redis) is unavailable. Since the system now runs third-party models dynamically, these legacy paths should be removed or made dynamic.
+The Models tab in the settings gear has 3 model selectors (Chat, Image, I2I) plus a large "Chat Model Information Card" with speed/cost/quality badges, and verbose offline banners. The sheet spans `w-[90vw] sm:w-[500px] max-w-2xl`.
 
-## Hardcoded Locations Found
+## Changes
 
-### 1. `src/services/CharacterImageService.ts` (Critical - causes the 500)
+### 1. Relabel and clarify model selectors
 
-- **Line 59**: `if (params.apiModelId === 'sdxl')` routes to `queue-job` edge function (the one failing with the Redis error)
-- **Line 251**: `model_used: 'sdxl'` hardcoded in `generateCharacterScene()`
-- The entire `sdxl` branch (lines 59-78) should be removed. When no `apiModelId` is provided, it already defaults to `fal-image`. The `else` branch (line 79+) correctly queries `api_models` for provider routing.
+**File: `src/components/roleplay/RoleplaySettingsModal.tsx`**
 
-**Fix**: Remove the `sdxl` branch entirely. If someone somehow passes `'sdxl'` as an `apiModelId`, it will fall through to the dynamic `api_models` lookup (which won't find it and will gracefully fall back to `fal-image`). In `generateCharacterScene`, replace `model_used: 'sdxl'` with `model_used: 'fal'`.
+- Rename "Image Model" (line 1095) to **"T2I Model"** with a small `(Text-to-Image)` subtitle
+- Rename "Scene Iteration Model (I2I)" (line 1165) to **"I2I Model"** with a `(Image-to-Image)` subtitle
+- Both selectors already pull from their respective hooks (`useImageModels`, `useI2IModels`) which are fully dynamic and include local + cloud options -- no logic changes needed
 
-### 2. `src/utils/characterImageUtils.ts`
+### 2. Remove the Chat Model Information Card
 
-- **Line 177**: `model_used: 'sdxl_high'` hardcoded when saving to user library
+Remove the large capability card (lines 1217-1405) that shows speed/cost/quality/NSFW badges. This is ~190 lines of verbose UI. The model name in the dropdown is sufficient context.
 
-**Fix**: Change to `model_used: 'fal'` or accept a parameter for the actual model used.
+### 3. Remove verbose offline banners
 
-### 3. `src/services/ImageConsistencyService.ts`
+- Remove the "Local AI Workers Offline" card banner (lines 1025-1037) -- the inline "Offline" badges on each model item already communicate this
+- Remove the "Local SDXL offline" inline banner (lines 1096-1101) -- same reason
 
-- **Line 14**: Type `modelChoice: 'sdxl' | 'replicate'` limits options
-- **Line 53**: `if (request.modelChoice === 'sdxl')` routes to `queue-job`
-- **Lines 170-176**: `generateWithSDXL` method calls `queue-job`
+### 4. Compact the sheet width
 
-**Fix**: Change the type to `string`, remove the `sdxl` branch, and route all requests through `fal-image` (or the dynamic provider lookup). The `generateWithSDXL` method can be removed.
+Change `w-[90vw] sm:w-[500px] max-w-2xl` to `w-[85vw] sm:w-[400px] max-w-md` for a tighter panel.
 
-### 4. `src/components/characters/CharacterCard.tsx`
+### 5. Use compact label style
 
-- **Line 119**: Reads `localStorage.getItem('roleplay_image_model')` which could return `'sdxl'`
+Switch model labels from `<Label>` to a smaller `text-xs font-medium uppercase tracking-wide text-muted-foreground` style for a utility-first look. Add `text-xs` to helper text below selectors.
 
-**Fix**: No change needed here -- it passes whatever is stored. The fix in `CharacterImageService` will handle the `'sdxl'` value gracefully.
+### 6. Reduce select trigger height
 
-### 5. `src/hooks/useImageModels.ts`
-
-- **Lines 113-129**: Hardcodes a local SDXL model option in the UI model list
-
-**Fix**: Keep this for now (it shows as "Offline" when unavailable), but ensure it doesn't get selected as default. The real fix is in the service layer routing.
+Add `h-9 text-sm` to all `SelectTrigger` elements in the Models tab for compact selectors.
 
 ## Files to Change
 
 | File | Change |
 |---|---|
-| `src/services/CharacterImageService.ts` | Remove `sdxl`/`queue-job` branch from `generateCharacterPortrait()`. Fix hardcoded `model_used` in `generateCharacterScene()`. |
-| `src/utils/characterImageUtils.ts` | Change `model_used: 'sdxl_high'` to `'fal'` or make dynamic. |
-| `src/services/ImageConsistencyService.ts` | Widen `modelChoice` type to `string`. Remove `sdxl` routing branch and `generateWithSDXL` method. Route all through `fal-image`. |
+| `src/components/roleplay/RoleplaySettingsModal.tsx` | Relabel selectors, remove info card + offline banners, compact width + styling |
 
 ## Result
 
-- Character tile "Generate" button will always route through `fal-image` (cloud) or `replicate-image`, never through `queue-job` (local Redis)
-- No more 500 errors from Upstash being unavailable
-- Model selection remains dynamic via the `api_models` database table
+- Models tab becomes a clean stack of 3 compact dropdowns: Chat Model, T2I Model, I2I Model
+- No more large info cards or redundant banners
+- Sheet is narrower and more focused
+- All model options remain fully dynamic (local + cloud) from database hooks
+- Mobile gets proportionally tighter with `w-[85vw]`
 
