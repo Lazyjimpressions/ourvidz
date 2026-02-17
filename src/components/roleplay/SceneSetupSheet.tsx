@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Sheet,
   SheetContent,
@@ -35,6 +35,7 @@ import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { SceneTemplate, ContentRating, SceneStyle, ImageGenerationMode } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
 import { Loader2, Settings2 } from 'lucide-react';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 
 interface SceneSetupSheetProps {
   scene: SceneTemplate | null;
@@ -105,6 +106,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
   const [showSecondCharacter, setShowSecondCharacter] = useState(false);
   const [expandedSection, setExpandedSection] = useState<'primary' | 'secondary' | null>('primary');
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
 
   // Combine public and user-created characters for AI companion selection, removing duplicates
   const allCharacters = useMemo(() => {
@@ -153,6 +155,44 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
     });
   }, [allCharacters, scene, searchQuery]);
 
+  // Sign character image URLs for private storage paths
+  useEffect(() => {
+    const signUrls = async () => {
+      const newUrls: Record<string, string> = {};
+      const toSign: Array<{ id: string; url: string; bucket: 'user-library' | 'workspace-temp' }> = [];
+
+      for (const char of filteredCharacters) {
+        const rawUrl = char.reference_image_url || char.image_url;
+        if (!rawUrl) continue;
+        if (signedUrls[char.id]) { newUrls[char.id] = signedUrls[char.id]; continue; }
+        if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+          newUrls[char.id] = rawUrl;
+        } else if (rawUrl.includes('user-library')) {
+          toSign.push({ id: char.id, url: rawUrl, bucket: 'user-library' });
+        } else if (rawUrl.includes('workspace-temp')) {
+          toSign.push({ id: char.id, url: rawUrl, bucket: 'workspace-temp' });
+        } else {
+          newUrls[char.id] = rawUrl;
+        }
+      }
+
+      // Sign in parallel
+      const results = await Promise.allSettled(
+        toSign.map(async ({ id, url, bucket }) => {
+          const signed = await urlSigningService.getSignedUrl(url, bucket);
+          return { id, signed };
+        })
+      );
+      for (const r of results) {
+        if (r.status === 'fulfilled') newUrls[r.value.id] = r.value.signed;
+      }
+
+      setSignedUrls(prev => ({ ...prev, ...newUrls }));
+    };
+
+    if (filteredCharacters.length > 0) signUrls();
+  }, [filteredCharacters]);
+
   const primaryCharacter = allCharacters.find(c => c.id === primaryCharacterId);
   const secondaryCharacter = allCharacters.find(c => c.id === secondaryCharacterId);
   const selectedUserCharacter = userPersonas.find(c => c.id === selectedUserCharacterId);
@@ -196,7 +236,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
           )}
         >
           <Avatar className="w-12 h-12 mb-1">
-            <AvatarImage src={char.reference_image_url || char.image_url} alt={char.name} />
+            <AvatarImage src={signedUrls[char.id] || char.reference_image_url || char.image_url} alt={char.name} />
             <AvatarFallback>{char.name.charAt(0)}</AvatarFallback>
           </Avatar>
           <span className="text-xs font-medium text-center line-clamp-1">{char.name}</span>
