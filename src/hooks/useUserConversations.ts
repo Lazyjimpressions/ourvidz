@@ -76,6 +76,7 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
         `)
         .eq('user_id', user.id)
         .eq('status', 'active')
+        .in('conversation_type', ['character_roleplay', 'scene_roleplay', 'roleplay'])
         .order('updated_at', { ascending: false })
         .limit(limit);
 

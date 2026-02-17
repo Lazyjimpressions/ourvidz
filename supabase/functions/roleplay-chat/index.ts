@@ -133,7 +133,7 @@ interface RoleplayChatRequest {
   message?: string; // Optional for kickoff
   conversation_id: string;
   character_id: string;
-  model_provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt' | string;
+  model_provider: string;
   model_variant?: string;
   memory_tier: 'conversation' | 'character' | 'profile';
   content_tier: 'sfw' | 'nsfw';
