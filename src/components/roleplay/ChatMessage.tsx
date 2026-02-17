@@ -625,7 +625,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           jobId={message.metadata?.job_id}
           conversationId={conversationId}
           characterId={character?.id}
-          currentPrompt={message.metadata?.generation_metadata?.original_scene_prompt || message.metadata?.scene_prompt}
+          currentPrompt={message.metadata?.generation_metadata?.fal_prompt || message.metadata?.generation_metadata?.original_scene_prompt || message.metadata?.scene_prompt}
           consistencySettings={consistencySettings}
           currentSceneImageUrl={signedSceneImage || message.metadata?.image_url}
           onRegenerate={onSceneRegenerate}
@@ -644,7 +644,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           }}
           onFreshGeneration={handleFreshGeneration}
           currentSceneImageUrl={signedSceneImage || message.metadata?.image_url}
-          currentScenePrompt={message.metadata?.generation_metadata?.original_scene_prompt || message.metadata?.scene_prompt || ''}
+          currentScenePrompt={message.metadata?.generation_metadata?.fal_prompt || message.metadata?.generation_metadata?.original_scene_prompt || message.metadata?.scene_prompt || ''}
           contentMode={contentMode}
         />
       )}
