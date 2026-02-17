@@ -1003,6 +1003,10 @@ const MobileRoleplayChat: React.FC = () => {
             messageId: openerMessage.id 
           });
           subscribeToJobCompletion(data.scene_job_id, openerMessage.id);
+        } else if (data.scene_generating_async && conversation?.id) {
+          // ✅ ASYNC SCENE: Scene is generating in background - subscribe to character_scenes
+          console.log('🎬 Scene generating async - subscribing to character_scenes for:', conversation.id);
+          subscribeToConversationScenes(conversation.id, openerMessage.id);
         } else {
           console.log('⚠️ No scene_job_id in kickoff response - scene generation may have been skipped');
         }
@@ -1316,6 +1320,79 @@ const MobileRoleplayChat: React.FC = () => {
     (channel as any)._timeoutId = timeoutId;
   };
 
+  // ✅ ASYNC SCENE: Subscribe to character_scenes for background scene detection
+  const subscribeToConversationScenes = (convId: string, messageId: string) => {
+    console.log('🔄 Subscribing to character_scenes for background scene detection:', { convId, messageId });
+    
+    const channel = supabase
+      .channel(`bg-scene-${convId}-${messageId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'character_scenes',
+          filter: `conversation_id=eq.${convId}`
+        },
+        (payload) => {
+          const scene = payload.new as any;
+          if (scene.job_id) {
+            console.log('🎬 Background scene UPDATE with job_id:', scene.job_id, 'scene_id:', scene.id);
+            setMessages(prev => prev.map(msg => {
+              if (msg.id === messageId) {
+                return {
+                  ...msg,
+                  metadata: { ...msg.metadata, scene_generated: true, job_id: scene.job_id, scene_id: scene.id }
+                };
+              }
+              return msg;
+            }));
+            messageSceneIdsRef.current.set(messageId, scene.id);
+            subscribeToJobCompletion(scene.job_id, messageId);
+            supabase.removeChannel(channel);
+            activeChannelsRef.current.delete(channel);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'character_scenes',
+          filter: `conversation_id=eq.${convId}`
+        },
+        (payload) => {
+          const scene = payload.new as any;
+          if (scene.job_id) {
+            console.log('🎬 Background scene INSERT with job_id:', scene.job_id, 'scene_id:', scene.id);
+            setMessages(prev => prev.map(msg => {
+              if (msg.id === messageId) {
+                return {
+                  ...msg,
+                  metadata: { ...msg.metadata, scene_generated: true, job_id: scene.job_id, scene_id: scene.id }
+                };
+              }
+              return msg;
+            }));
+            messageSceneIdsRef.current.set(messageId, scene.id);
+            subscribeToJobCompletion(scene.job_id, messageId);
+            supabase.removeChannel(channel);
+            activeChannelsRef.current.delete(channel);
+          }
+        }
+      )
+      .subscribe();
+    
+    activeChannelsRef.current.add(channel);
+    
+    // Cleanup after 3 minutes
+    setTimeout(() => {
+      supabase.removeChannel(channel);
+      activeChannelsRef.current.delete(channel);
+    }, 180000);
+  };
+
   const handleSendMessage = async (content: string) => {
     console.log('📤 handleSendMessage called:', { 
       content: content.trim(), 
@@ -1531,6 +1608,10 @@ const MobileRoleplayChat: React.FC = () => {
         if (newJobId) {
           console.log('🎬 Starting subscription for scene job:', { newJobId, messageId: characterMessage.id });
           subscribeToJobCompletion(newJobId, characterMessage.id);
+        } else if (data.scene_generating_async && conversationId) {
+          // ✅ ASYNC SCENE: Scene is generating in background - subscribe to character_scenes
+          console.log('🎬 Scene generating async - subscribing to character_scenes for:', conversationId);
+          subscribeToConversationScenes(conversationId, characterMessage.id);
         } else {
           console.log('⚠️ No job ID in response - scene generation may have been skipped');
         }

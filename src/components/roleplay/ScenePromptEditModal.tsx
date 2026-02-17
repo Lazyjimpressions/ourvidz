@@ -61,8 +61,9 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
   // Set prompt when currentPrompt or sceneData changes
   // ✅ FIX: Prioritize original_scene_prompt from metadata (actual prompt used for generation)
   useEffect(() => {
-    // Priority: original_scene_prompt from metadata > scene_prompt from DB > currentPrompt prop
-    const actualPrompt = sceneData?.generation_metadata?.original_scene_prompt 
+    // Priority: fal_prompt (full prompt sent to fal.ai) > original_scene_prompt > scene_prompt > currentPrompt
+    const actualPrompt = sceneData?.generation_metadata?.fal_prompt
+      || sceneData?.generation_metadata?.original_scene_prompt 
       || sceneData?.scene_prompt 
       || currentPrompt;
     

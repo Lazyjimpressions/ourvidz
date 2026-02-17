@@ -213,6 +213,7 @@ interface RoleplayChatResponse {
   model_used?: string;
   memory_updated?: boolean;
   scene_generated?: boolean;
+  scene_generating_async?: boolean; // ✅ NEW: Signal that scene is generating in background
   consistency_score?: number;
   processing_time?: number;
   message_id?: string; // For kickoff messages
@@ -633,109 +634,59 @@ serve(async (req) => {
 
     dbWriteTime = Date.now() - dbWriteStart;
 
-    // Handle scene generation if requested
-    let sceneGenerated = false;
-    let consistencyScore = 0;
-    let sceneJobId: string | null = null;
-    // ✅ FIX: Declare sceneResult outside if block for scope access
-    let sceneResult: { 
-      success: boolean; 
-      consistency_score?: number; 
-      job_id?: string; 
-      scene_id?: string; 
-      error?: string; 
-      debug?: any;
-      scene_template_id?: string;
-      scene_template_name?: string;
-      original_scene_prompt?: string;
-    } | null = null;
+    // ✅ ASYNC SCENE GENERATION: Fire scene gen in background, return dialogue immediately
+    let sceneGeneratingAsync = false;
     
     if (scene_generation) {
-      console.log('🎬 Scene generation requested:', {
-        character_id,
-        selected_image_model: requestBody.selected_image_model,
-        response_length: response.length,
-        consistency_method: character.consistency_method
-      });
+      sceneGeneratingAsync = true;
+      console.log('🎬 Scene generation requested - firing in background to deliver dialogue first');
       
-      // Build conversation history for scene context
       const conversationHistory = recentMessages.map(msg =>
         `${msg.sender === 'user' ? (conversation.user_character?.name || 'User') : character.name}: ${msg.content}`
       );
 
-      // Pass user character and scene style for enhanced scene generation
-      // ✅ CRITICAL FIX: Pass scene_context (template's scene_prompt) for first scene generation
-      sceneResult = await generateScene(
-        supabase,
-        character_id,
-        response,
-        character.consistency_method,
-        conversationHistory,
-        requestBody.selected_image_model,
-        authHeader,
-        conversation.user_character as UserCharacterForScene | null,
-        requestBody.scene_style || 'character_only',
-        requestBody.consistency_settings, // Pass user's consistency settings from UI
-        conversation_id, // ✅ FIX: Pass conversation_id to link scene to conversation
-        content_tier, // ✅ FIX: Pass content_tier to respect NSFW setting
-        scene_name, // ✅ FIX: Pass scene_name from request body
-        scene_description, // ✅ FIX: Pass scene_description from request body
-        conversation.current_location || undefined, // ✅ FIX #3: Pass current location for scene grounding
-        // ✅ CRITICAL FIX: Pass scene_context (template's scene_prompt) for image generation
-        scene_context || undefined, // Template's scene_prompt from scenes table
-        // ✅ First-scene I2I: template's preview image as reference (kick off with I2I, not T2I)
-        scene_preview_image_url || undefined,
-        // Scene continuity (I2I iteration) parameters
-        previous_scene_id,
-        previous_scene_image_url,
-        scene_continuity_enabled ?? true, // Default to enabled
-        // Scene regeneration/modification parameters
-        scene_prompt_override,
-        current_scene_image_url,
-        // ✅ NEW: Pass I2I model override for scene iterations
-        requestBody.selected_i2i_model
-      );
-      // ✅ ENHANCED: Validate generateScene response
-      if (!sceneResult) {
-        console.error('❌ generateScene returned null/undefined');
-        sceneGenerated = false;
-        sceneJobId = null;
-      } else if (sceneResult.success && !sceneResult.job_id) {
-        console.error('❌ generateScene returned success=true but no job_id:', sceneResult);
-        sceneGenerated = false;
-        sceneJobId = null;
-      } else {
-        sceneGenerated = sceneResult.success;
-        consistencyScore = sceneResult.consistency_score || 0;
-        sceneJobId = sceneResult.job_id || null as string | null;
-        
-        if (sceneResult.error) {
-          console.error('❌ generateScene returned error:', sceneResult.error);
+      const bgSceneGeneration = (async () => {
+        try {
+          const bgResult = await generateScene(
+            supabase,
+            character_id,
+            response,
+            character.consistency_method,
+            conversationHistory,
+            requestBody.selected_image_model,
+            authHeader,
+            conversation.user_character as UserCharacterForScene | null,
+            requestBody.scene_style || 'character_only',
+            requestBody.consistency_settings,
+            conversation_id,
+            content_tier,
+            scene_name,
+            scene_description,
+            conversation.current_location || undefined,
+            scene_context || undefined,
+            scene_preview_image_url || undefined,
+            previous_scene_id,
+            previous_scene_image_url,
+            scene_continuity_enabled ?? true,
+            scene_prompt_override,
+            current_scene_image_url,
+            requestBody.selected_i2i_model
+          );
+          
+          console.log('🎬 Background scene generation completed:', {
+            success: bgResult?.success,
+            job_id: bgResult?.job_id,
+            scene_id: bgResult?.scene_id,
+            error: bgResult?.error
+          });
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error('🎬❌ Background scene generation failed:', errMsg);
         }
-      }
+      })();
       
-      console.log('🎬 Scene generation result:', {
-        success: sceneGenerated,
-        consistency_score: consistencyScore,
-        job_id: sceneJobId,
-        scene_id: sceneResult?.scene_id,
-        hasError: !!sceneResult?.error,
-        errorMessage: sceneResult?.error
-      });
-    }
-
-    // ✅ FIX: Use scene template info directly from generateScene response (more reliable than fetching from DB)
-    const sceneTemplateId = sceneResult?.scene_template_id;
-    const sceneTemplateName = sceneResult?.scene_template_name;
-    const originalScenePrompt = sceneResult?.original_scene_prompt;
-    
-    if (sceneResult?.scene_id && (sceneTemplateId || sceneTemplateName || originalScenePrompt)) {
-      console.log('✅ Scene metadata from generateScene:', {
-        scene_id: sceneResult.scene_id,
-        hasTemplateId: !!sceneTemplateId,
-        hasTemplateName: !!sceneTemplateName,
-        hasOriginalPrompt: !!originalScenePrompt
-      });
+      // @ts-ignore - EdgeRuntime.waitUntil keeps the function alive for background work
+      EdgeRuntime.waitUntil(bgSceneGeneration);
     }
 
     const totalTime = Date.now() - startTime;
@@ -745,22 +696,16 @@ serve(async (req) => {
       response,
       model_used: modelUsed,
       memory_updated: memoryUpdated,
-      scene_generated: sceneGenerated,
-      consistency_score: consistencyScore,
+      scene_generated: false, // Scene generates in background, not yet complete
+      scene_generating_async: sceneGeneratingAsync, // Signal to client
+      consistency_score: 0,
       processing_time: totalTime,
       message_id: savedMessage?.id,
-      scene_job_id: sceneJobId || undefined,
-      // Include fallback info so frontend can update UI
+      // No scene_job_id yet - client picks it up via realtime subscription on character_scenes
       usedFallback,
       fallbackModel: usedFallback ? effectiveModelProvider : undefined,
-      // ✅ ADMIN: Include prompt template info for debugging (handled server-side now)
       prompt_template_id: undefined,
       prompt_template_name: undefined,
-      // ✅ FIX: Include scene generation metadata
-      scene_id: sceneResult?.scene_id || undefined,
-      scene_template_id: sceneTemplateId || undefined,
-      scene_template_name: sceneTemplateName || undefined,
-      original_scene_prompt: originalScenePrompt || undefined
     };
 
     return new Response(JSON.stringify(responseData), {
@@ -3430,6 +3375,31 @@ RULES:
       optimizedPrompt = enhancedScenePrompt;
       console.log(`🎯 Full prompt used: ${enhancedScenePrompt.length} chars (limit: ${charLimit})`);
     }
+
+    // ✅ Store full fal.ai prompt in scene record for edit modal auditing
+    if (sceneId) {
+      try {
+        const { data: currentSceneForPrompt } = await supabase
+          .from('character_scenes')
+          .select('generation_metadata')
+          .eq('id', sceneId)
+          .single();
+        
+        const existingMeta = (currentSceneForPrompt?.generation_metadata as Record<string, any>) || {};
+        
+        await supabase
+          .from('character_scenes')
+          .update({
+            scene_prompt: optimizedPrompt,
+            generation_metadata: { ...existingMeta, fal_prompt: optimizedPrompt }
+          })
+          .eq('id', sceneId);
+        
+        console.log('✅ Stored full fal.ai prompt (fal_prompt) in scene record');
+      } catch (err) {
+        console.error('⚠️ Failed to store fal_prompt in scene record:', err);
+      }
+    }
     
     // ✅ ENHANCED: Determine image model routing (effectiveImageModel already determined above)
     let imageResponse;
@@ -4093,7 +4063,7 @@ RULES:
       // ✅ FIX: Return scene template info directly (already available in scope)
       scene_template_id: sceneTemplateId || undefined,
       scene_template_name: sceneTemplateName || undefined,
-      original_scene_prompt: cleanScenePrompt || scenePrompt || undefined
+      original_scene_prompt: optimizedPrompt || cleanScenePrompt || scenePrompt || undefined
     };
   } catch (error) {
     console.error('🎬❌ Scene generation error:', error);
