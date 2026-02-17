@@ -1,74 +1,51 @@
 
 
-# Fix Overstated Request Counts and Add Avg Time
+# Fix Missing Character Thumbnails in Scene Setup Sheet
 
-## Problem Confirmed
+## Problem
 
-The `api_usage_aggregates` table tracks `request_count`, `success_count`, and `error_count` separately. But the UI uses `request_count` (which includes failures) everywhere:
+When you open a scene and see the character selection grid, many character avatars show blank/broken because the images are stored as private storage paths (e.g., `user-library/3348b481.../image.png`) that need to be "signed" (authenticated) before the browser can load them. The `CharacterCard` component elsewhere in the app handles this correctly, but the `SceneSetupSheet`'s inline character grid skips this step entirely.
 
-- **ApiUsageTab `modelInventory`**: Uses `agg.request_count` to sum requests and divide cost -- overstates requests, understates avg cost
-- **ApiUsageTab `totals`**: Shows inflated "X requests" in the summary bar
-- **`avg_response_time_ms` in aggregates**: Includes failed request times (often just 100-300ms error responses), dragging down the real generation averages
+## Root Cause
 
-Example: Seedream v4.5 Edit shows 212 total requests but only 167 succeeded. The 45 failures (422 errors) inflate the count and drag down the avg response time since errors return in milliseconds vs real generation taking 20-30 seconds.
-
-## Changes
-
-### 1. `src/components/admin/ApiUsageTab.tsx` -- Fix modelInventory to use success_count
-
-**modelInventory memo (line 62-98):**
-- Change `existing.requests += agg.request_count` to `existing.requests += agg.success_count`
-- Add `existing.errors += agg.error_count` for a separate error tracking field
-- Add `avgTime` calculation: accumulate weighted response time from successful requests only
-- Add "Avg Time" column to the Model Inventory table between "Avg Cost" and "Status"
-- Display formatted time (e.g., "1.6s", "24.6s", "1m 55s")
-
-**totals memo (line 100-113):**
-- Change `totalRequests += agg.request_count` to `totalRequests += agg.success_count`
-- Keep `totalErrors` separate for potential display
-
-**Note on avg_response_time_ms from aggregates:** The aggregate `avg_response_time_ms` unfortunately blends success and failure times. For the modelInventory, we will use it as-is since it's the only source available without querying raw logs. The values are still directionally correct since most requests succeed. A future improvement could add `avg_success_response_time_ms` to the aggregates table.
-
-### 2. `src/components/admin/ApiModelsTab.tsx` -- Add Avg Cost and Avg Time columns
-
-**New query:** Add a `useQuery` that fetches per-model stats from `api_usage_logs` filtered to `response_status = 200`:
-
-```text
-SELECT model_id, 
-  COUNT(*) as requests, 
-  AVG(cost_usd) as avg_cost, 
-  AVG(response_time_ms) as avg_time
-FROM api_usage_logs 
-WHERE response_status = 200 AND model_id IS NOT NULL
-GROUP BY model_id
+In `SceneSetupSheet.tsx`, the `CharacterGrid` component (line 199) renders:
 ```
+<AvatarImage src={char.reference_image_url || char.image_url} />
+```
+This passes the raw storage path directly. Characters with `image_url` values like `user-library/...` (private bucket paths) or expired signed URLs will fail to load.
 
-This gives accurate success-only averages directly from raw logs.
+The fix used everywhere else (`CharacterCard`, `ChatMessage`, etc.) is to run these URLs through `urlSigningService` first.
 
-**Table changes:**
-- Add two new columns after "Family": **"Avg Cost"** and **"Avg Time"**
-- Add them to the `SortableHead` system so they are sortable
-- Display as `$0.004` and `1.6s` (compact format)
-- Show `--` for models with no usage data
-- Merge the stats map into `ModelRow` via props
+## Fix
 
-### 3. Time formatting helper
+### 1. `src/components/roleplay/SceneSetupSheet.tsx` -- Sign character image URLs
 
-Add a shared `formatResponseTime` function:
-- Less than 1000ms: `"320ms"`
-- 1-60 seconds: `"1.6s"`, `"24.6s"`  
-- Over 60 seconds: `"1m 55s"`
+- Import `urlSigningService` from `@/lib/services/UrlSigningService`
+- Add a state map to hold signed URLs keyed by character ID
+- Add a `useEffect` that signs all character image URLs when `filteredCharacters` changes (same pattern as `CharacterCard`)
+- Update the `CharacterGrid` to use the signed URL from the map instead of the raw path
+
+The signing logic follows the established pattern from `CharacterCard`:
+- If the URL contains `user-library/` or `workspace-temp/`, sign it via `urlSigningService.getSignedUrl()`
+- If it's already a full `https://` URL (e.g., fal.ai CDN links), use it as-is
+- Fall back to the `AvatarFallback` (first letter of name) if no URL exists
+
+### 2. No changes needed to CharacterEditModal
+
+The edit modal already supports setting `image_url` via:
+- **Generate Portrait** button (AI-generated)
+- **Upload** button (file upload to avatars bucket)
+- **Library** button (pick from existing images)
+- **Manual URL** input field
+
+All of these correctly save the URL to the character record. The problem is purely on the display side in the scene setup sheet.
 
 ## Files to Change
 
 | File | Change |
 |---|---|
-| `src/components/admin/ApiUsageTab.tsx` | Use `success_count` instead of `request_count`, add "Avg Time" column |
-| `src/components/admin/ApiModelsTab.tsx` | Add success-only stats query, add "Avg Cost" and "Avg Time" sortable columns |
+| `src/components/roleplay/SceneSetupSheet.tsx` | Sign character image URLs before rendering in CharacterGrid |
 
 ## Result
 
-- Request counts reflect actual successful API calls, not failed attempts
-- Average costs are calculated from successful requests only (accurate per-generation cost)
-- Average generation times exclude error responses (which return in milliseconds and drag down averages)
-- Both the Usage tab and Models tab show consistent, accurate metrics
+Character thumbnails in the scene setup sheet will display correctly for all URL formats (private storage paths, signed URLs, and CDN URLs), matching the behavior of the main character grid on the roleplay dashboard.
