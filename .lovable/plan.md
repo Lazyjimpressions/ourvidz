@@ -1,43 +1,88 @@
 
-# Update QuickSettingsDrawer: Split Image Model into T2I + I2I
 
-## Problem
+# Simplify API Models: Type + Task Taxonomy
 
-The QuickSettingsDrawer on the main roleplay page has a single "Image Model" selector. The advanced settings modal already has separate T2I and I2I selectors. These need to match. The drawer also needs compact styling per our design standards.
+## The Problem
 
-## Changes
+`modality` and `task` overlap confusingly. `roleplay` appears as both a modality and a task. `chat` also appears as both. The admin UI lists 7 modalities and 10 tasks, most unused.
 
-### 1. Add I2I model state to MobileRoleplayChat.tsx
+## Recommendation: 3 Types, 7 Tasks
 
-The page currently tracks `selectedImageModel` (T2I) but has no I2I model state. Need to:
-- Import `useI2IModels` hook
-- Add `selectedI2IModel` state (default: `'auto'`)
-- Load/save it from `roleplay-settings` localStorage alongside existing settings
-- Pass it to QuickSettingsDrawer as a new prop
+**Type** (currently `modality` column) answers: "What kind of output does this model produce?"
 
-### 2. Update QuickSettingsDrawer.tsx
+Only 3 values: `image`, `video`, `chat`
 
-**Props**: Add `selectedI2IModel`, `onSelectedI2IModelChange`, and `i2iModels` array to the interface.
+**Task** answers: "What specific job does this model do within its type?"
 
-**UI changes**:
-- Rename "Image Model" label to **"T2I Model"** with `(Text-to-Image)` subtitle
-- Add new **"I2I Model"** selector with `(Image-to-Image)` subtitle below it
-- Remove verbose offline banners (inline badges on items are sufficient)
-- Compact styling: `h-9 text-sm` triggers, `text-xs uppercase tracking-wide` labels
-- Reduce `space-y-6` to `space-y-4` for tighter layout
-- Compact scene style buttons: reduce `min-h-[72px]` to `min-h-[56px]`, `p-3` to `p-2`
-- Advanced Settings button: `h-12` to `h-9`
+| Type | Task | Description | Current models |
+|---|---|---|---|
+| `image` | `generation` | Text-to-Image | Seedream T2I, SDXL |
+| `image` | `style_transfer` | Image-to-Image editing | Seedream Edit |
+| `image` | `upscale` | Resolution upscaling | (future) |
+| `video` | `generation` | T2V, I2V, extend | LTX, WAN |
+| `chat` | `roleplay` | RP-optimized LLMs | MythoMax, MiMo |
+| `chat` | `reasoning` | General reasoning LLMs | Grok, Kimi, Lumimaid |
+| `chat` | `enhancement` | Prompt rewriting | (future) |
+| `chat` | `embedding` | Text embeddings | (future) |
 
-### 3. Files to change
+## Data Migration
+
+Update existing rows in `api_models`:
+
+```text
+modality='roleplay', task='chat'       -->  modality='chat', task='reasoning'
+modality='roleplay', task='roleplay'   -->  modality='chat', task='roleplay'
+```
+
+Only 5 rows affected (Grok, Kimi x2, Lumimaid, MiMo, MythoMax).
+
+## Code Changes
+
+### 1. Admin UI: `src/components/admin/ApiModelsTab.tsx`
+
+- Change `MODALITIES` from 7 items to: `['image', 'video', 'chat']`
+- Change `TASKS` from 10 items to: `['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding']`
+- Rename the "Modality" column header to **"Type"** in the table
+- Keep "Task" label as-is
+
+### 2. Hooks that filter by `modality='roleplay'`
+
+| File | Current filter | New filter |
+|---|---|---|
+| `src/hooks/useRoleplayModels.ts` | `.eq('modality', 'roleplay')` | `.eq('modality', 'chat')` |
+| `src/hooks/usePlaygroundModels.ts` | `m.modality === 'roleplay' \|\| m.modality === 'chat'` | `m.modality === 'chat'` |
+| `src/hooks/useApiModels.ts` | Type union includes `'roleplay'` | Replace `'roleplay'` with just `'chat'` in the type, remove `'prompt'`, `'audio'`, `'embedding'` from modality type |
+
+### 3. Type definitions: `src/hooks/useApiModels.ts`
+
+Update the TypeScript type to match:
+
+```text
+modality: 'image' | 'video' | 'chat'
+task: 'generation' | 'style_transfer' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding'
+```
+
+### 4. No changes needed
+
+- `useImageModels.ts` -- already filters `modality='image'`, unaffected
+- `useI2IModels.ts` -- filters by `task='style_transfer'` within image models, unaffected
+- Edge functions -- they resolve models by `api_model_id` (UUID), not by modality string
+
+## Files to Change
 
 | File | Change |
 |---|---|
-| `src/components/roleplay/QuickSettingsDrawer.tsx` | Split image model into T2I + I2I selectors, compact styling |
-| `src/pages/MobileRoleplayChat.tsx` | Add `useI2IModels` hook, `selectedI2IModel` state, pass to drawer |
+| Database (SQL) | UPDATE 5 rows: `modality` from `'roleplay'` to `'chat'`, `task` from `'chat'` to `'reasoning'` |
+| `src/components/admin/ApiModelsTab.tsx` | Simplify MODALITIES to 3 items, TASKS to 7, rename column to "Type" |
+| `src/hooks/useApiModels.ts` | Update TypeScript type union |
+| `src/hooks/useRoleplayModels.ts` | Change filter from `'roleplay'` to `'chat'` |
+| `src/hooks/usePlaygroundModels.ts` | Simplify chat grouping filter |
 
-### 4. Result
+## Result
 
-- QuickSettingsDrawer matches the advanced settings modal with T2I and I2I selectors
-- T2I controls scene/character generation without reference images
-- I2I controls scene iteration with reference images
-- Compact, mobile-friendly layout consistent with our design standards
+- Clean 3-type taxonomy: image, video, chat
+- Tasks are specific and non-overlapping within each type
+- No more "roleplay" as both a type and a task
+- Admin UI dropdowns are short and clear
+- Extensible for future models (TTS could become a 4th type when needed)
+
