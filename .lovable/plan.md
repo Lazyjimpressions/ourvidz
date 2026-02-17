@@ -1,51 +1,49 @@
 
 
-# Fix Missing Character Thumbnails in Scene Setup Sheet
+# Fix Opening Scene Reference Image Bugs
 
-## Problem
+## Bug 1: Wrong field name on `selectedScene` (3 locations)
 
-When you open a scene and see the character selection grid, many character avatars show blank/broken because the images are stored as private storage paths (e.g., `user-library/3348b481.../image.png`) that need to be "signed" (authenticated) before the browser can load them. The `CharacterCard` component elsewhere in the app handles this correctly, but the `SceneSetupSheet`'s inline character grid skips this step entirely.
+The `SceneTemplate` type uses `preview_image_url`, but three code paths in `MobileRoleplayChat.tsx` incorrectly access `selectedScene?.image_url` (which is `undefined` on the type, so the preview URL is always `null`). This forces T2I instead of I2I for the opening scene.
 
-## Root Cause
+**Note:** The kickoff path at line 902 already correctly uses `loadedScene?.preview_image_url` -- only the post-kickoff paths are broken.
 
-In `SceneSetupSheet.tsx`, the `CharacterGrid` component (line 199) renders:
+### Fix locations in `src/pages/MobileRoleplayChat.tsx`:
+
+| Line | Current (broken) | Fixed |
+|---|---|---|
+| 1391-1397 | `selectedScene?.image_url` (x4 refs) | `selectedScene?.preview_image_url` |
+| 1753-1758 | `selectedScene?.image_url` (x4 refs) | `selectedScene?.preview_image_url` |
+| 2011-2016 | `selectedScene?.image_url` (x4 refs) | `selectedScene?.preview_image_url` |
+
+Each block is the same pattern -- just replace `image_url` with `preview_image_url` in the conditional and all references within.
+
+## Bug 2: Empty-string `reference_image_url` bypasses multi-reference
+
+All 7 call sites pass:
 ```
-<AvatarImage src={char.reference_image_url || char.image_url} />
+user_character_reference_url: selectedUserCharacter?.reference_image_url || null
 ```
-This passes the raw storage path directly. Characters with `image_url` values like `user-library/...` (private bucket paths) or expired signed URLs will fail to load.
 
-The fix used everywhere else (`CharacterCard`, `ChatMessage`, etc.) is to run these URLs through `urlSigningService` first.
+If `reference_image_url` is `''` (empty string), `'' || null` evaluates to `null` -- so this actually works correctly for empty strings. However, many user characters have a valid `image_url` but no `reference_image_url` at all. The fix is to fall back to `image_url`:
 
-## Fix
+```
+user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null
+```
 
-### 1. `src/components/roleplay/SceneSetupSheet.tsx` -- Sign character image URLs
+This ensures multi-reference composition works when the user has an avatar but hasn't explicitly set a separate reference image.
 
-- Import `urlSigningService` from `@/lib/services/UrlSigningService`
-- Add a state map to hold signed URLs keyed by character ID
-- Add a `useEffect` that signs all character image URLs when `filteredCharacters` changes (same pattern as `CharacterCard`)
-- Update the `CharacterGrid` to use the signed URL from the map instead of the raw path
+### Fix locations (all in `src/pages/MobileRoleplayChat.tsx`):
 
-The signing logic follows the established pattern from `CharacterCard`:
-- If the URL contains `user-library/` or `workspace-temp/`, sign it via `urlSigningService.getSignedUrl()`
-- If it's already a full `https://` URL (e.g., fal.ai CDN links), use it as-is
-- Fall back to the `AvatarFallback` (first letter of name) if no URL exists
-
-### 2. No changes needed to CharacterEditModal
-
-The edit modal already supports setting `image_url` via:
-- **Generate Portrait** button (AI-generated)
-- **Upload** button (file upload to avatars bucket)
-- **Library** button (pick from existing images)
-- **Manual URL** input field
-
-All of these correctly save the URL to the character record. The problem is purely on the display side in the scene setup sheet.
+Lines 947, 1424, 1594, 1778, 1894, 2047, 2195 -- same one-line change at each.
 
 ## Files to Change
 
 | File | Change |
 |---|---|
-| `src/components/roleplay/SceneSetupSheet.tsx` | Sign character image URLs before rendering in CharacterGrid |
+| `src/pages/MobileRoleplayChat.tsx` | Fix `selectedScene?.image_url` to `preview_image_url` (3 blocks); fall back `reference_image_url` to `image_url` (7 lines) |
 
 ## Result
 
-Character thumbnails in the scene setup sheet will display correctly for all URL formats (private storage paths, signed URLs, and CDN URLs), matching the behavior of the main character grid on the roleplay dashboard.
+- Opening scenes from templates will correctly use I2I with the template's preview image as reference
+- User characters with avatars will be included in multi-reference composition even without a separate `reference_image_url`
