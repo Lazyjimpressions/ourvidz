@@ -2453,13 +2453,42 @@ async function generateScene(
     let isFirstScene = true;
     let verifiedPreviousSceneImageUrl: string | undefined = undefined;
 
-    if (previousSceneId && previousSceneImageUrl) {
+    // ✅ SERVER-SIDE CONTINUITY FALLBACK: If frontend didn't provide previous scene info,
+    // query DB for the latest completed scene in this conversation (fixes race condition
+    // where scene 2 request fires before scene 1 image URL is saved to frontend state).
+    let resolvedPreviousSceneId = previousSceneId;
+    let resolvedPreviousSceneImageUrl = previousSceneImageUrl;
+
+    if (!resolvedPreviousSceneId && conversationId) {
+      try {
+        const { data: latestScenes } = await supabase
+          .from('character_scenes')
+          .select('id, image_url')
+          .eq('conversation_id', conversationId)
+          .not('image_url', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const found = latestScenes?.[0];
+        if (found?.image_url) {
+          resolvedPreviousSceneId = found.id;
+          resolvedPreviousSceneImageUrl = found.image_url;
+          console.log('🔄 Server-side continuity fallback: found previous scene', {
+            scene_id: found.id,
+            image_url: found.image_url.substring(0, 60) + '...'
+          });
+        }
+      } catch (e) {
+        console.warn('⚠️ Server-side continuity fallback query failed:', e);
+      }
+    }
+
+    if (resolvedPreviousSceneId && resolvedPreviousSceneImageUrl) {
       // Verify the previous scene actually exists and has an image
       try {
         const { data: prevScene, error: prevSceneError } = await supabase
           .from('character_scenes')
           .select('id, image_url')
-          .eq('id', previousSceneId)
+          .eq('id', resolvedPreviousSceneId)
           .not('image_url', 'is', null)
           .single();
         
@@ -2467,12 +2496,12 @@ async function generateScene(
           isFirstScene = false;
           verifiedPreviousSceneImageUrl = prevScene.image_url;
           console.log('✅ Previous scene verified:', {
-            scene_id: previousSceneId,
+            scene_id: resolvedPreviousSceneId,
             has_image: !!prevScene.image_url
           });
         } else {
           console.warn('⚠️ Previous scene ID provided but scene not found or missing image:', {
-            scene_id: previousSceneId,
+            scene_id: resolvedPreviousSceneId,
             error: prevSceneError?.message
           });
           // Treat as first scene if previous scene doesn't exist
@@ -2482,14 +2511,14 @@ async function generateScene(
         console.warn('⚠️ Error verifying previous scene:', error);
         isFirstScene = true;
       }
-    } else if (previousSceneId && !previousSceneImageUrl) {
+    } else if (resolvedPreviousSceneId && !resolvedPreviousSceneImageUrl) {
       // ✅ FIX: Scene ID provided but no image URL - query database to get it
       console.log('🔄 Previous scene ID provided but no image URL - querying database...');
       try {
         const { data: prevScene, error: prevSceneError } = await supabase
           .from('character_scenes')
           .select('id, image_url')
-          .eq('id', previousSceneId)
+          .eq('id', resolvedPreviousSceneId)
           .not('image_url', 'is', null)
           .single();
         
@@ -2497,12 +2526,12 @@ async function generateScene(
           isFirstScene = false;
           verifiedPreviousSceneImageUrl = prevScene.image_url;
           console.log('✅ Previous scene image URL retrieved from database:', {
-            scene_id: previousSceneId,
+            scene_id: resolvedPreviousSceneId,
             has_image: !!prevScene.image_url
           });
         } else {
           console.warn('⚠️ Previous scene ID provided but scene not found or missing image in database:', {
-            scene_id: previousSceneId,
+            scene_id: resolvedPreviousSceneId,
             error: prevSceneError?.message
           });
           isFirstScene = true; // Treat as first scene if previous scene doesn't exist or has no image
@@ -2511,11 +2540,11 @@ async function generateScene(
         console.warn('⚠️ Error querying database for previous scene:', error);
         isFirstScene = true;
       }
-    } else if (!previousSceneId && previousSceneImageUrl) {
+    } else if (!resolvedPreviousSceneId && resolvedPreviousSceneImageUrl) {
       // Image URL provided but no scene ID - use the URL but log warning
       console.warn('⚠️ Previous scene image URL provided but no scene ID - using URL but treating as first scene for tracking');
       isFirstScene = true;
-      verifiedPreviousSceneImageUrl = previousSceneImageUrl;
+      verifiedPreviousSceneImageUrl = resolvedPreviousSceneImageUrl;
     } else {
       // No previous scene info - definitely first scene
       isFirstScene = true;
@@ -2526,6 +2555,9 @@ async function generateScene(
 
     // ✅ CRITICAL: I2I mode REQUIRES a valid previous scene image
     // If no previous scene image, force T2I mode even if continuity is enabled
+    // NOTE: canUseI2I covers CONTINUATION mode only (scene 2+). First-scene template
+    // I2I uses a separate branch below (isFirstScene && templatePreviewImageUrl).
+    // Both result in generationMode='i2i' but with different reference images.
     const canUseI2I = sceneContinuityEnabled && !isFirstScene && !!verifiedPreviousSceneImageUrl;
 
     if (sceneContinuityEnabled && !verifiedPreviousSceneImageUrl) {
@@ -2557,7 +2589,7 @@ async function generateScene(
       generationMode = 'i2i';
       effectiveReferenceImageUrl = verifiedPreviousSceneImageUrl;
       console.log('🎬 Continuation mode: I2I from previous scene', {
-        previous_scene_id: previousSceneId,
+        previous_scene_id: resolvedPreviousSceneId,
         has_verified_image: !!verifiedPreviousSceneImageUrl
       });
     } else if (isFirstScene && templatePreviewImageUrl) {
@@ -2581,9 +2613,13 @@ async function generateScene(
 
     // ✅ CRITICAL DEBUG LOGGING: Track scene continuity for I2I
     console.log('📸 SCENE_CONTINUITY_DEBUG:', {
-      // Request info
+      // Request info (what frontend sent)
       requestedPreviousSceneId: previousSceneId || null,
       requestedPreviousSceneImageUrl: previousSceneImageUrl ? previousSceneImageUrl.substring(0, 80) + '...' : null,
+      // Resolved values (after server-side fallback)
+      resolvedPreviousSceneId: resolvedPreviousSceneId || null,
+      resolvedPreviousSceneImageUrl: resolvedPreviousSceneImageUrl ? resolvedPreviousSceneImageUrl.substring(0, 80) + '...' : null,
+      usedServerFallback: resolvedPreviousSceneId !== previousSceneId,
       templatePreviewImageUrl: templatePreviewImageUrl ? templatePreviewImageUrl.substring(0, 80) + '...' : null,
       sceneContinuityEnabled,
       // Verification results
@@ -3174,8 +3210,8 @@ const sceneContext = analyzeSceneContent(response);
           scene_prompt: cleanScenePrompt || scenePrompt,
           system_prompt: null,
           // Scene continuity (I2I iteration) fields
-          previous_scene_id: previousSceneId || null,
-          previous_scene_image_url: previousSceneImageUrl || null,
+          previous_scene_id: resolvedPreviousSceneId || null,
+          previous_scene_image_url: resolvedPreviousSceneImageUrl || null,
           generation_mode: generationMode, // 't2i' or 'i2i'
           generation_metadata: {
             model_used: selectedImageModel ? 'api_model' : 'sdxl',
@@ -3235,8 +3271,8 @@ const sceneContext = analyzeSceneContent(response);
               conversation_id: conversationId || null,
               scene_prompt: cleanScenePrompt || scenePrompt,
               generation_mode: generationMode,
-              previous_scene_id: previousSceneId || null,
-              previous_scene_image_url: verifiedPreviousSceneImageUrl || previousSceneImageUrl || null,
+              previous_scene_id: resolvedPreviousSceneId || null,
+              previous_scene_image_url: verifiedPreviousSceneImageUrl || resolvedPreviousSceneImageUrl || null,
               image_url: null, // Will be updated after generation
               system_prompt: null,
               scene_name: finalSceneName,
@@ -3290,8 +3326,8 @@ const sceneContext = analyzeSceneContent(response);
     // ✅ MULTI-REFERENCE DETECTION: Check if we can use Figure notation for both_characters
     // Multi-reference requires: both_characters style + character reference + user character reference
     const canUseMultiReference = sceneStyle === 'both_characters' &&
-                                  !!character.reference_image_url &&
-                                  !!userCharacter?.reference_image_url;
+                                  !!(character.reference_image_url || character.image_url) &&
+                                  !!(userCharacter?.reference_image_url || userCharacter?.image_url);
 
     if (canUseMultiReference) {
       console.log('🎭 Multi-reference eligible:', {
@@ -3716,7 +3752,7 @@ RULES:
               model: effectiveI2IModelOverride,
               strength: i2iStrength,
               strength_source: effectiveDenoiseStrength ? 'user_override' : 'default',
-              previous_scene_id: previousSceneId,
+              previous_scene_id: resolvedPreviousSceneId,
               user_selected_i2i: i2iModelOverride || 'auto'
             });
           } else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
@@ -3768,7 +3804,7 @@ RULES:
           let multiReferenceImageUrls: string[] | undefined = undefined;
           let useMultiReference = false;
 
-          if (canUseMultiReference && userCharacter?.reference_image_url && character.reference_image_url) {
+          if (canUseMultiReference && (userCharacter?.reference_image_url || userCharacter?.image_url) && (character.reference_image_url || character.image_url)) {
             const imageUrlsArray: string[] = [];
 
             // Figure 1: Scene environment. Priority: template preview (first scene) > previous chat scene > character ref fallback
@@ -3778,17 +3814,17 @@ RULES:
             } else if (verifiedPreviousSceneImageUrl) {
               imageUrlsArray.push(verifiedPreviousSceneImageUrl);
               console.log('📸 Multi-ref Figure 1 (Scene): Using previous scene image');
-            } else if (character.reference_image_url) {
-              imageUrlsArray.push(character.reference_image_url);
+            } else if (character.reference_image_url || character.image_url) {
+              imageUrlsArray.push((character.reference_image_url || character.image_url)!);
               console.log('📸 Multi-ref Figure 1 (Scene): Using character reference as base');
             }
 
-            // Figure 2: AI Character reference
-            imageUrlsArray.push(character.reference_image_url);
+            // Figure 2: AI Character reference (falls back to avatar image_url)
+            imageUrlsArray.push((character.reference_image_url || character.image_url)!);
             console.log('📸 Multi-ref Figure 2 (Character):', character.name);
 
-            // Figure 3: User Character reference
-            imageUrlsArray.push(userCharacter.reference_image_url);
+            // Figure 3: User Character reference (falls back to avatar image_url)
+            imageUrlsArray.push((userCharacter.reference_image_url || userCharacter.image_url)!);
             console.log('📸 Multi-ref Figure 3 (User):', userCharacter.name);
 
             if (imageUrlsArray.length >= 2) {
@@ -3857,8 +3893,8 @@ RULES:
               // I2I iteration tracking
               generation_mode: generationMode,
               use_i2i_iteration: useI2IIteration,
-              previous_scene_id: previousSceneId || null,
-              has_previous_scene_image: !!previousSceneImageUrl,
+              previous_scene_id: resolvedPreviousSceneId || null,
+              has_previous_scene_image: !!resolvedPreviousSceneImageUrl,
               // ✅ Multi-reference tracking
               use_multi_reference: useMultiReference,
               multi_reference_image_count: multiReferenceImageUrls?.length || 0,
