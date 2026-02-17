@@ -1,53 +1,43 @@
 
+# Update QuickSettingsDrawer: Split Image Model into T2I + I2I
 
-# Compact Roleplay Settings Modal - Models Tab Redesign
+## Problem
 
-## Current State
-
-The Models tab in the settings gear has 3 model selectors (Chat, Image, I2I) plus a large "Chat Model Information Card" with speed/cost/quality badges, and verbose offline banners. The sheet spans `w-[90vw] sm:w-[500px] max-w-2xl`.
+The QuickSettingsDrawer on the main roleplay page has a single "Image Model" selector. The advanced settings modal already has separate T2I and I2I selectors. These need to match. The drawer also needs compact styling per our design standards.
 
 ## Changes
 
-### 1. Relabel and clarify model selectors
+### 1. Add I2I model state to MobileRoleplayChat.tsx
 
-**File: `src/components/roleplay/RoleplaySettingsModal.tsx`**
+The page currently tracks `selectedImageModel` (T2I) but has no I2I model state. Need to:
+- Import `useI2IModels` hook
+- Add `selectedI2IModel` state (default: `'auto'`)
+- Load/save it from `roleplay-settings` localStorage alongside existing settings
+- Pass it to QuickSettingsDrawer as a new prop
 
-- Rename "Image Model" (line 1095) to **"T2I Model"** with a small `(Text-to-Image)` subtitle
-- Rename "Scene Iteration Model (I2I)" (line 1165) to **"I2I Model"** with a `(Image-to-Image)` subtitle
-- Both selectors already pull from their respective hooks (`useImageModels`, `useI2IModels`) which are fully dynamic and include local + cloud options -- no logic changes needed
+### 2. Update QuickSettingsDrawer.tsx
 
-### 2. Remove the Chat Model Information Card
+**Props**: Add `selectedI2IModel`, `onSelectedI2IModelChange`, and `i2iModels` array to the interface.
 
-Remove the large capability card (lines 1217-1405) that shows speed/cost/quality/NSFW badges. This is ~190 lines of verbose UI. The model name in the dropdown is sufficient context.
+**UI changes**:
+- Rename "Image Model" label to **"T2I Model"** with `(Text-to-Image)` subtitle
+- Add new **"I2I Model"** selector with `(Image-to-Image)` subtitle below it
+- Remove verbose offline banners (inline badges on items are sufficient)
+- Compact styling: `h-9 text-sm` triggers, `text-xs uppercase tracking-wide` labels
+- Reduce `space-y-6` to `space-y-4` for tighter layout
+- Compact scene style buttons: reduce `min-h-[72px]` to `min-h-[56px]`, `p-3` to `p-2`
+- Advanced Settings button: `h-12` to `h-9`
 
-### 3. Remove verbose offline banners
-
-- Remove the "Local AI Workers Offline" card banner (lines 1025-1037) -- the inline "Offline" badges on each model item already communicate this
-- Remove the "Local SDXL offline" inline banner (lines 1096-1101) -- same reason
-
-### 4. Compact the sheet width
-
-Change `w-[90vw] sm:w-[500px] max-w-2xl` to `w-[85vw] sm:w-[400px] max-w-md` for a tighter panel.
-
-### 5. Use compact label style
-
-Switch model labels from `<Label>` to a smaller `text-xs font-medium uppercase tracking-wide text-muted-foreground` style for a utility-first look. Add `text-xs` to helper text below selectors.
-
-### 6. Reduce select trigger height
-
-Add `h-9 text-sm` to all `SelectTrigger` elements in the Models tab for compact selectors.
-
-## Files to Change
+### 3. Files to change
 
 | File | Change |
 |---|---|
-| `src/components/roleplay/RoleplaySettingsModal.tsx` | Relabel selectors, remove info card + offline banners, compact width + styling |
+| `src/components/roleplay/QuickSettingsDrawer.tsx` | Split image model into T2I + I2I selectors, compact styling |
+| `src/pages/MobileRoleplayChat.tsx` | Add `useI2IModels` hook, `selectedI2IModel` state, pass to drawer |
 
-## Result
+### 4. Result
 
-- Models tab becomes a clean stack of 3 compact dropdowns: Chat Model, T2I Model, I2I Model
-- No more large info cards or redundant banners
-- Sheet is narrower and more focused
-- All model options remain fully dynamic (local + cloud) from database hooks
-- Mobile gets proportionally tighter with `w-[85vw]`
-
+- QuickSettingsDrawer matches the advanced settings modal with T2I and I2I selectors
+- T2I controls scene/character generation without reference images
+- I2I controls scene iteration with reference images
+- Compact, mobile-friendly layout consistent with our design standards
