@@ -1,104 +1,128 @@
 
 
-# Fix: Wire UI Scene Settings Into Edge Function Call
+# Deliver Dialogue First + Show Full fal.ai Prompt in Edit Modal
 
-## Root Cause
+## Problem 1: Dialogue Blocked by Scene Generation (~60s wait)
 
-There's a race condition in `MobileRoleplayChat.tsx`. The kickoff function already reads `selectedChatModel` and `selectedImageModel` from `location.state` (lines 913-916) to bypass stale React state -- but it does NOT do the same for `scene_style`. Instead, line 945 reads `sceneStyle` from React state, which is still the default `'character_only'` (initialized on line 220) because the state update from `setSceneStyle(effectiveSceneStyle)` (line 272) hasn't flushed yet.
+Currently the edge function flow is fully sequential and synchronous:
 
-This means:
-- You select "both" in the scene modal
-- The dashboard navigates with `state.sceneStyle = 'both_characters'`
-- The chat page initializes `sceneStyle` state as `'character_only'`
-- The model defaults effect calls `setSceneStyle('both_characters')` -- but this is async
-- The kickoff fires and reads `sceneStyle` from state = still `'character_only'`
-- Edge function receives `scene_style: 'character_only'` instead of `'both_characters'`
+```text
+Client awaits -->  [Chat LLM ~10s] --> [Save Message] --> [generateScene ~60s] --> Return JSON
+```
 
-The same pattern applies to `imageGenerationMode`.
+The dialogue text is ready after step 2 (~10s), but the user waits ~70s total because the edge function does not return until scene generation completes. The user cannot read the dialogue or type a response during that time.
 
-## Fix
+### Fix: Fire-and-forget scene generation
+
+After saving the assistant message, return the dialogue response to the client immediately. Fire `generateScene()` without awaiting it, using `EdgeRuntime.waitUntil()` (Supabase edge functions support this for background work that continues after the response is sent).
+
+**File:** `supabase/functions/roleplay-chat/index.ts` (around lines 636-768)
+
+Change the flow to:
+
+```text
+Client awaits -->  [Chat LLM ~10s] --> [Save Message] --> Return JSON immediately
+                                                      \-> [generateScene runs in background]
+```
+
+Steps:
+1. After saving the assistant message (line 614), build the response JSON with `scene_generated: true` and a placeholder (the scene_id and job_id will be discovered by the client via the existing `subscribeToJobCompletion` realtime subscription).
+2. Use `EdgeRuntime.waitUntil(promise)` to keep the function alive while scene generation completes in the background.
+3. The client already has polling/subscription logic (`subscribeToJobCompletion`) that watches for job completion -- no client changes needed for image delivery.
+4. For the scene metadata (scene_id, job_id), the background task will update the message metadata in the DB after generation completes, and the client can pick it up via realtime or polling.
+
+Since the client needs the `scene_job_id` to start polling, we need a two-phase approach:
+- Create the `character_scenes` DB record (with `job_id: null`) BEFORE returning the response, so we have a `scene_id`.
+- Return the `scene_id` in the response immediately.
+- In the background task, run the actual image generation, get the `job_id`, and update the scene record + message metadata.
+
+The client-side `subscribeToJobCompletion` will need a small adjustment to also support subscribing by `scene_id` (watching for `job_id` to appear on the scene record), or we can use a Supabase realtime subscription on `character_scenes` filtered by `scene_id`.
+
+**Alternative simpler approach:** Create the scene record AND submit the fal.ai job synchronously (this is fast -- just an API queue submission, ~1-2s), then return immediately with the `job_id`. The actual image generation happens asynchronously on fal.ai's side already. The bottleneck is the narrative LLM call + prompt building, not the fal.ai submission itself.
+
+Looking at the current code, `generateScene()` already submits to fal.ai's queue API which returns a `job_id` immediately. The ~60s is fal.ai processing time, which already happens async. So the real question is: what takes the edge function so long?
+
+Based on the logs, the edge function itself takes ~20-30s (chat LLM + narrative LLM + scene record creation + fal.ai queue submission). The fal.ai processing is already async. So the fix is simpler:
+
+- Skip the narrative LLM call (already planned, saves ~7s)
+- The remaining ~15-20s is the chat LLM call + scene record + fal.ai submission
+- We can further decouple by moving the scene record creation + fal.ai submission into a `waitUntil()` background task
+
+**Recommended approach:**
+1. After chat LLM response + message save, return dialogue immediately
+2. Use `waitUntil()` for scene generation (record creation + fal.ai submission)
+3. Client subscribes to `character_scenes` table filtered by `conversation_id` for new scene records
+4. When a scene record appears with a `job_id`, client starts `subscribeToJobCompletion` as usual
+
+### Client-side changes needed
 
 **File:** `src/pages/MobileRoleplayChat.tsx`
 
-In the kickoff function (around lines 912-945), apply the same `location.state` bypass pattern already used for chat/image models:
+- When receiving the response, show the dialogue immediately (already works)
+- Add a Supabase realtime subscription on `character_scenes` for the conversation to detect when the background scene generation creates a record with a `job_id`
+- Re-enable the input field as soon as dialogue is received (before image arrives)
+- Show a subtle loading indicator on the message while scene generates in background
 
-1. Read `sceneStyle` from `location.state` (already typed at line 232 but never used in kickoff)
-2. Read `imageGenerationMode` from `location.state` similarly
-3. Use these values in the edge function call body instead of React state
+## Problem 2: Edit Modal Not Showing Full fal.ai Prompt
 
-```
-// Around line 913, extend the existing location.state read:
-const modelState = location.state as { 
-  selectedChatModel?: string; 
-  selectedImageModel?: string;
-  sceneStyle?: 'character_only' | 'pov' | 'both_characters';
-  imageGenerationMode?: string;
-} | null;
+### Root cause
+The `original_scene_prompt` stored in `generation_metadata` (line 3232) is `cleanScenePrompt || scenePrompt` -- this is the raw narrative text BEFORE the Figure notation, character descriptions, composition rules, etc. are added.
 
-const effectiveChatModel = modelState?.selectedChatModel || modelProvider || ModelRoutingService.getDefaultChatModelKey();
-const effectiveImageModel = modelState?.selectedImageModel || getValidImageModel();
-const effectiveSceneStyle = modelState?.sceneStyle || sceneStyle;
-const effectiveImageGenMode = modelState?.imageGenerationMode || imageGenerationMode;
+The actual full prompt sent to fal.ai is `enhancedScenePrompt` (built at lines 3354-3418) and then `optimizedPrompt` (after char_limit truncation at line 3430). This full prompt is never stored anywhere.
 
-// Also sync state for subsequent messages
-if (modelState?.sceneStyle && modelState.sceneStyle !== sceneStyle) {
-  setSceneStyle(modelState.sceneStyle);
-}
-```
-
-Then on line 945, change:
-```
-scene_style: effectiveSceneStyle,
-```
-
-And update the `scene_generation` field to respect the mode:
-```
-scene_generation: effectiveImageGenMode !== 'manual',
-```
-
-## Fix 2: First-Scene I2I Array for character_only/pov
+### Fix
+Store `optimizedPrompt` (the final prompt sent to fal.ai) in the scene record's `generation_metadata` as a new field `fal_prompt` or replace `original_scene_prompt` with the full prompt.
 
 **File:** `supabase/functions/roleplay-chat/index.ts`
 
-After the existing `canUseMultiReference` block (around line 3848), add a fallback block for first scenes with `character_only` or `pov` styles that builds a 2-element `image_urls` array:
+1. After `optimizedPrompt` is built (line 3430), update the scene record's `generation_metadata` to include the full prompt:
+   ```
+   // Update scene record with full fal.ai prompt
+   if (sceneId) {
+     await supabase.from('character_scenes')
+       .update({ 
+         scene_prompt: optimizedPrompt,
+         generation_metadata: { ...existingMetadata, fal_prompt: optimizedPrompt }
+       })
+       .eq('id', sceneId);
+   }
+   ```
 
-```
-if (!useMultiReference && isFirstScene && templatePreviewImageUrl 
-    && (character.reference_image_url || character.image_url)) {
-  const firstSceneImageUrls = [
-    templatePreviewImageUrl,
-    (character.reference_image_url || character.image_url)!
-  ];
-  multiReferenceImageUrls = firstSceneImageUrls;
-  useMultiReference = true;
-  if (!effectiveI2IModelOverride) {
-    effectiveI2IModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
-  }
-}
-```
+2. Also update the return value's `original_scene_prompt` to use `optimizedPrompt` instead of `cleanScenePrompt`.
 
-## Fix 3: Skip Redundant Narrative LLM Call
+**File:** `src/components/roleplay/ScenePromptEditModal.tsx`
 
-**File:** `supabase/functions/roleplay-chat/index.ts`
+3. Update the prompt priority to check `fal_prompt` first:
+   ```
+   const actualPrompt = sceneData?.generation_metadata?.fal_prompt
+     || sceneData?.generation_metadata?.original_scene_prompt
+     || sceneData?.scene_prompt
+     || currentPrompt;
+   ```
 
-When `sceneContext.actions` already has content, use those actions directly as the scene prompt instead of calling `generateSceneNarrativeWithOpenRouter` (saves ~7s):
+**File:** `src/components/roleplay/ChatMessage.tsx`
 
-```
-if (sceneContext?.actions?.length > 0) {
-  const actionsSummary = sceneContext.actions.slice(0, 3).join('. ');
-  const setting = sceneContext.setting || 'the scene';
-  const mood = sceneContext.mood || 'engaging';
-  scenePrompt = `${setting}. ${actionsSummary}. The mood is ${mood}.`;
-} else {
-  // Existing narrative LLM call as fallback
-}
-```
+4. Update line 628 to also check `fal_prompt`:
+   ```
+   currentPrompt={message.metadata?.generation_metadata?.fal_prompt 
+     || message.metadata?.generation_metadata?.original_scene_prompt 
+     || message.metadata?.scene_prompt}
+   ```
+
+## Problem 3: Skip Narrative LLM (from previous plan, still needed)
+
+When `sceneContext.actions` are available, use them directly instead of calling `generateSceneNarrativeWithOpenRouter`. This saves ~7s.
 
 ## Summary of Changes
 
 | File | Change | Impact |
 |------|--------|--------|
-| `src/pages/MobileRoleplayChat.tsx` | Read `sceneStyle` and `imageGenerationMode` from `location.state` in kickoff | UI selections respected by edge function |
-| `supabase/functions/roleplay-chat/index.ts` | Add 2-image array for first-scene character_only/pov | Proper I2I with scene + character reference |
+| `supabase/functions/roleplay-chat/index.ts` | Return dialogue before scene generation using `waitUntil()` | User sees dialogue in ~10s instead of ~70s |
+| `supabase/functions/roleplay-chat/index.ts` | Store `optimizedPrompt` as `fal_prompt` in `generation_metadata` | Full prompt available for editing |
 | `supabase/functions/roleplay-chat/index.ts` | Skip narrative LLM when actions available | ~7s faster scene generation |
+| `supabase/functions/roleplay-chat/index.ts` | Update `original_scene_prompt` return value to use full prompt | Client receives full prompt |
+| `src/pages/MobileRoleplayChat.tsx` | Add realtime subscription on `character_scenes` for background scene detection | Picks up scene from background generation |
+| `src/pages/MobileRoleplayChat.tsx` | Re-enable input immediately after dialogue received | User can type while image generates |
+| `src/components/roleplay/ScenePromptEditModal.tsx` | Check `fal_prompt` field first for prompt display | Shows full prompt in editor |
+| `src/components/roleplay/ChatMessage.tsx` | Pass `fal_prompt` as currentPrompt to edit modal | Full prompt flows to editor |
 
