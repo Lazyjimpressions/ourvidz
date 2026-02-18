@@ -56,6 +56,8 @@ export default function CharacterStudioV3() {
   const [workspaceTab, setWorkspaceTab] = useState<'portraits' | 'scenes'>('portraits');
   // Prompt text
   const [promptText, setPromptText] = useState('');
+  // Reference strength for I2I (0.1–1.0, default 0.65)
+  const [referenceStrength, setReferenceStrength] = useState(0.65);
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -129,7 +131,8 @@ export default function CharacterStudioV3() {
   const handleGenerate = async (prompt: string, refUrl?: string, modelId?: string) => {
     await generatePortrait(prompt, {
       referenceImageUrl: refUrl || character.reference_image_url || undefined,
-      model: modelId || selectedImageModel
+      model: modelId || selectedImageModel,
+      referenceStrength: hasReferenceImage ? referenceStrength : undefined
     });
   };
 
@@ -150,6 +153,7 @@ export default function CharacterStudioV3() {
     onOpenImagePicker: () => setShowImagePicker(true),
     onSave: saveCharacter, primaryPortraitUrl: primaryPortrait?.image_url,
     entryMode, onClearSuggestions: clearSuggestions,
+    referenceStrength, onReferenceStrengthChange: setReferenceStrength,
   };
 
   // Shared workspace props
@@ -174,6 +178,7 @@ export default function CharacterStudioV3() {
       toast({ title: 'Prompt copied', description: 'Loaded into prompt bar and copied to clipboard.' });
     },
     characterData: { name: character.name, gender: character.gender, traits: character.traits, appearance_tags: character.appearance_tags || [] },
+    referenceStrength,
   };
 
   // MOBILE

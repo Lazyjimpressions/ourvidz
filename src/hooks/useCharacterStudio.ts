@@ -327,6 +327,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
   const generatePortrait = useCallback(async (prompt: string, options?: {
     referenceImageUrl?: string;
     model?: string; // This is the api_models.id from database
+    referenceStrength?: number; // 0.1–1.0, controls how much the reference image influences output
   }) => {
     // Auto-save if new character or dirty state
     let charId = savedCharacterId;
@@ -409,10 +410,11 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
           characterId: charId,
           referenceImageUrl: effectiveReferenceUrl,
           contentRating: character.content_rating,
-          apiModelId: options?.model || undefined, // Pass model ID from database
-          presets: {}, // Can be extended to pass appearance presets
-          characterData: null, // Character already saved, use ID
-          promptOverride: prompt || undefined // Pass user's typed prompt
+          apiModelId: options?.model || undefined,
+          presets: {},
+          characterData: null,
+          promptOverride: prompt || undefined,
+          referenceStrength: options?.referenceStrength || undefined
         }
       });
       
