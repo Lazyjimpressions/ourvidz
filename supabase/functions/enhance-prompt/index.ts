@@ -28,7 +28,8 @@ serve(async (req) => {
     const jobType = requestBody.jobType || requestBody.job_type
     const format = requestBody.format
     const quality = requestBody.quality
-    const selectedModel = requestBody.selectedModel || requestBody.enhancement_model || 'gryphe/mythomax-l2-13b'
+    const selectedModel = requestBody.selectedModel || requestBody.enhancement_model
+    const enhancement_model = requestBody.enhancement_model
     const user_id = requestBody.user_id
     const regeneration = requestBody.regeneration
     const selectedPresets = requestBody.selectedPresets || []
@@ -451,7 +452,8 @@ ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : 
       quality: quality as 'fast' | 'high',
       user_id,
       selectedModel: selectedModel,
-      model_id: model_id, // NOW PASSED THROUGH
+      model_id: model_id,
+      enhancement_model: enhancement_model,
       contentType: contentType,
       preferences: { enhancement_style: selectedModel },
       regeneration: regeneration || false,
@@ -560,13 +562,11 @@ class TableDrivenEnhancementOrchestrator {
       const targetModel = modelKey || this.fallbackModelKey(request.job_type);
       console.log('🎯 Target model for template lookup:', targetModel, modelKey ? '(from model_id)' : '(from job_type fallback)')
 
-      // Step 3: Find enhancement template
+      // Step 3: Find enhancement template (4-tuple, no enhancerModel)
       const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
-      const enhancerModel = request.selectedModel || 'gryphe/mythomax-l2-13b'
       
       console.log('🔍 Template lookup:', {
         targetModel,
-        enhancerModel,
         jobType: jobTypeCategory,
         useCase: 'enhancement',
         contentMode
@@ -581,7 +581,6 @@ class TableDrivenEnhancementOrchestrator {
         const cachedTemplate = getTemplateFromCache(
           cache,
           targetModel,
-          enhancerModel,
           jobTypeCategory,
           'enhancement',
           contentMode
@@ -600,7 +599,6 @@ class TableDrivenEnhancementOrchestrator {
         try {
           template = await getDatabaseTemplate(
             targetModel,
-            enhancerModel,
             jobTypeCategory,
             'enhancement',
             contentMode
@@ -626,8 +624,11 @@ class TableDrivenEnhancementOrchestrator {
         }
       }
 
+      // Resolve the enhancer model dynamically
+      const resolvedEnhancer = await this.resolveEnhancerModel(request.enhancement_model, supabase);
+      
       // Call OpenRouter with the template
-      const result = await this.enhanceViaOpenRouter(request.prompt, template, contentMode)
+      const result = await this.enhanceViaOpenRouter(request.prompt, template, contentMode, resolvedEnhancer)
       
       // Apply token optimization using template's token_limit
       const tokenLimit = template.token_limit || 2000;
@@ -638,7 +639,7 @@ class TableDrivenEnhancementOrchestrator {
         strategy: `template_${cacheHit ? 'cached' : 'db'}`,
         content_mode: contentMode,
         template_name: template.template_name || 'unnamed',
-        model_used: template.enhancer_model || 'gryphe/mythomax-l2-13b',
+        model_used: result.model_used,
         token_count: optimized.token_count,
         compressed: optimized.compressed,
         enhancement_time_ms: Date.now() - startTime
@@ -660,13 +661,47 @@ class TableDrivenEnhancementOrchestrator {
   }
 
   /**
+   * Resolve the enhancement model dynamically.
+   * Priority: user choice -> DB default -> last-resort fallback
+   */
+  private async resolveEnhancerModel(userChoice: string | undefined, supabase: any): Promise<string> {
+    if (userChoice) {
+      console.log('🎯 Using user-selected enhancement model:', userChoice);
+      return userChoice;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('api_models')
+        .select('model_key')
+        .eq('modality', 'chat')
+        .eq('task', 'enhancement')
+        .eq('is_default', true)
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+
+      if (!error && data?.model_key) {
+        console.log('✅ Resolved default enhancement model from DB:', data.model_key);
+        return data.model_key;
+      }
+    } catch (err) {
+      console.warn('⚠️ Failed to resolve enhancement model from DB:', err instanceof Error ? err.message : String(err));
+    }
+
+    console.log('⚠️ Using last-resort fallback enhancement model');
+    return 'gryphe/mythomax-l2-13b';
+  }
+
+  /**
    * Call OpenRouter with the template's system_prompt and user prompt.
-   * Uses the template's enhancer_model as the OpenRouter model key.
+   * Uses the resolved enhancer model key.
    */
   private async enhanceViaOpenRouter(
     userPrompt: string,
     template: any,
-    contentMode: string
+    contentMode: string,
+    resolvedEnhancer: string
   ): Promise<{ enhanced_prompt: string; model_used: string }> {
     const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
     
@@ -675,7 +710,7 @@ class TableDrivenEnhancementOrchestrator {
       return { enhanced_prompt: userPrompt, model_used: 'none' };
     }
 
-    const modelToCall = template.enhancer_model || 'gryphe/mythomax-l2-13b';
+    const modelToCall = resolvedEnhancer;
     
     console.log('🌐 Calling OpenRouter for enhancement:', {
       model: modelToCall,

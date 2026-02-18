@@ -10,7 +10,7 @@ export interface CacheData {
       sfw: Record<string, string>;
       nsfw: Record<string, string>;
     };
-    enhancement: Record<string, Record<string, Record<string, Record<string, Record<string, any>>>>>;
+    enhancement: Record<string, Record<string, Record<string, Record<string, any>>>>;
   };
   negativeCache: Record<string, Record<string, string[]>>;
   nsfwTerms: string[];
@@ -95,12 +95,11 @@ export async function getCachedData(): Promise<CacheData | null> {
 }
 
 /**
- * Get specific template from cache using 5-tuple
+ * Get specific template from cache using 4-tuple (enhancerModel removed)
  */
 export function getTemplateFromCache(
   cache: CacheData | null,
   targetModel: string,
-  enhancerModel: string,
   jobType: string,
   useCase: string,
   contentMode: 'sfw' | 'nsfw'
@@ -121,15 +120,15 @@ export function getTemplateFromCache(
     return { system_prompt: chatTemplate };
   }
 
-  // Handle enhancement templates using 5-tuple
-  const template = cache.templateCache.enhancement?.[targetModel]?.[enhancerModel]?.[jobType]?.[useCase]?.[contentMode];
+  // Handle enhancement templates using 4-tuple (no enhancerModel)
+  const template = cache.templateCache.enhancement?.[targetModel]?.[jobType]?.[useCase]?.[contentMode];
   
   if (!template) {
-    console.warn(`⚠️ Enhancement template not found in cache: enhancement.${targetModel}.${enhancerModel}.${jobType}.${useCase}.${contentMode}`);
+    console.warn(`⚠️ Enhancement template not found in cache: enhancement.${targetModel}.${jobType}.${useCase}.${contentMode}`);
     return null;
   }
 
-  console.log(`✅ Enhancement template found in cache: enhancement.${targetModel}.${enhancerModel}.${jobType}.${useCase}.${contentMode}`);
+  console.log(`✅ Enhancement template found in cache: enhancement.${targetModel}.${jobType}.${useCase}.${contentMode}`);
   return template;
 }
 
@@ -277,7 +276,6 @@ export function getChatTemplateFromCache(
  */
 export async function getDatabaseTemplate(
   targetModel: string,
-  enhancerModel: string,
   jobType: string,
   useCase: string,
   contentMode: string
@@ -289,18 +287,16 @@ export async function getDatabaseTemplate(
 
   console.log(`🔄 Fetching template from database:`, {
     targetModel,
-    enhancerModel,
     jobType,
     useCase,
     contentMode
   });
 
-  // Build query with all 5 criteria
+  // Build query without enhancer_model filter
   let query = supabase
     .from('prompt_templates')
     .select('*')
     .eq('target_model', targetModel)
-    .eq('enhancer_model', enhancerModel)
     .eq('job_type', jobType)
     .eq('use_case', useCase)
     .eq('content_mode', contentMode)
@@ -310,35 +306,15 @@ export async function getDatabaseTemplate(
 
   let { data, error } = await query.single();
 
-  // Fallback 1: Try different enhancer model
+  // Fallback: Try different content mode
   if (error || !data) {
-    console.log(`⚠️ Exact match failed, trying enhancer fallback...`);
-    const fallbackEnhancer = enhancerModel === 'qwen_instruct' ? 'qwen_base' : 'qwen_instruct';
-    
-    ({ data, error } = await supabase
-      .from('prompt_templates')
-      .select('*')
-      .eq('target_model', targetModel)
-      .eq('enhancer_model', fallbackEnhancer)
-      .eq('job_type', jobType)
-      .eq('use_case', useCase)
-      .eq('content_mode', contentMode)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single());
-  }
-
-  // Fallback 2: Try different content mode
-  if (error || !data) {
-    console.log(`⚠️ Enhancer fallback failed, trying content mode fallback...`);
+    console.log(`⚠️ Exact match failed, trying content mode fallback...`);
     const fallbackContent = contentMode === 'sfw' ? 'nsfw' : 'sfw';
     
     ({ data, error } = await supabase
       .from('prompt_templates')
       .select('*')
       .eq('target_model', targetModel)
-      .eq('enhancer_model', enhancerModel)
       .eq('job_type', jobType)
       .eq('use_case', useCase)
       .eq('content_mode', fallbackContent)
@@ -351,13 +327,12 @@ export async function getDatabaseTemplate(
   if (error || !data) {
     console.log(`❌ Database template lookup failed:`, { 
       targetModel,
-      enhancerModel,
       jobType,
       useCase,
       contentMode,
       error: error?.message || 'No data returned'
     });
-    throw new Error(`No template found in database for ${targetModel}/${enhancerModel}/${jobType}/${useCase}/${contentMode}`);
+    throw new Error(`No template found in database for ${targetModel}/${jobType}/${useCase}/${contentMode}`);
   }
 
   console.log(`✅ Database template loaded: "${data.template_name}" (ID: ${data.id})`);

@@ -602,12 +602,14 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     if (!prompt.trim() || !selectedModel?.id) return;
     setIsEnhancing(true);
     try {
+      const playgroundSettings = JSON.parse(localStorage.getItem('playground-settings') || '{}');
       const { data, error } = await supabase.functions.invoke('enhance-prompt', {
         body: {
           prompt: prompt.trim(),
           model_id: selectedModel.id,
           job_type: mode === 'video' ? 'video' : 'image',
           contentType: contentType || 'sfw',
+          enhancement_model: playgroundSettings.enhancementModel || undefined,
         }
       });
       if (error) throw error;
