@@ -42,6 +42,7 @@ interface StudioWorkspaceProps {
   characterAppearanceTags: string[];
   onRegenerate: (prompt: string, refUrl: string) => void;
   onEnhancePrompt?: (prompt: string, modelId: string) => Promise<string | null>;
+  characterData?: { name: string; gender: string; traits: string; appearance_tags: string[] };
   mobileMode?: boolean;
   scenesOnly?: boolean;
 }
@@ -54,7 +55,7 @@ export function StudioWorkspace({
   onGenerate, promptText, setPromptText, onUseAsReference,
   onEditScene, onDeleteScene, onAddScene, onStartChatWithScene,
   workspaceTab, setWorkspaceTab, characterAppearanceTags, onRegenerate,
-  onEnhancePrompt, mobileMode, scenesOnly,
+  onEnhancePrompt, characterData, mobileMode, scenesOnly,
 }: StudioWorkspaceProps) {
 
   // Scenes-only mode for mobile scenes tab
@@ -111,6 +112,7 @@ export function StudioWorkspace({
           value={promptText}
           onValueChange={setPromptText}
           onEnhancePrompt={onEnhancePrompt}
+          characterData={characterData}
         />
       </div>
     );
@@ -182,6 +184,7 @@ export function StudioWorkspace({
             value={promptText}
             onValueChange={setPromptText}
             onEnhancePrompt={onEnhancePrompt}
+            characterData={characterData}
           />
         </>
       ) : (

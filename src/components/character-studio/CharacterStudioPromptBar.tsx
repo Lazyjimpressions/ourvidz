@@ -6,9 +6,7 @@ import {
   Wand2,
   Loader2,
   Image as ImageIcon,
-  Upload,
   X,
-  Library,
   ChevronDown,
   Sparkles,
 } from 'lucide-react';
@@ -21,8 +19,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 interface CharacterStudioPromptBarProps {
@@ -52,6 +48,9 @@ interface CharacterStudioPromptBarProps {
 
   /** Optional enhancement callback */
   onEnhancePrompt?: (prompt: string, modelId: string) => Promise<string | null>;
+
+  /** Character data for auto-fill */
+  characterData?: { name: string; gender: string; traits: string; appearance_tags: string[] };
 }
 
 export function CharacterStudioPromptBar({
@@ -69,11 +68,10 @@ export function CharacterStudioPromptBar({
   value,
   onValueChange,
   onEnhancePrompt,
+  characterData,
 }: CharacterStudioPromptBarProps) {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [internalPrompt, setInternalPrompt] = React.useState('');
-  const [isUploading, setIsUploading] = React.useState(false);
   const [isEnhancing, setIsEnhancing] = React.useState(false);
 
   // Use controlled value if provided, otherwise use internal state
@@ -98,61 +96,27 @@ export function CharacterStudioPromptBar({
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    setIsUploading(true);
-    try {
-      let processedFile: File = file;
-
-      // Handle HEIC conversion for iPhone
-      if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
-        const heic2any = (await import('heic2any')).default;
-        const blob = await heic2any({ blob: file, toType: 'image/jpeg' });
-        processedFile = new File([blob as Blob], file.name.replace(/\.heic$/i, '.jpg'), {
-          type: 'image/jpeg',
-        });
-      }
-
-      // Upload to reference_images bucket (same approach as CreateCharacter)
-      const path = `${user.id}/ref_${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from('reference_images')
-        .upload(path, processedFile, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      const { data: signedData, error: signError } = await supabase.storage
-        .from('reference_images')
-        .createSignedUrl(path, 3600);
-
-      if (signError) throw signError;
-
-      if (signedData?.signedUrl) {
-        onReferenceImageChange?.(signedData.signedUrl);
-        toast({ title: 'Reference uploaded', description: 'Image Match Mode enabled.' });
-      }
-    } catch (error) {
-      console.error('Reference upload error:', error);
-      toast({
-        title: 'Upload failed',
-        description: error instanceof Error ? error.message : 'Failed to upload image.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsUploading(false);
-      // Allow uploading the same file again by resetting the input
-      e.target.value = '';
-    }
-  };
-
-  const handleLibrarySelect = () => {
-    onOpenImagePicker();
-  };
 
   const handleEnhance = async () => {
-    if (!onEnhancePrompt || !prompt.trim() || isEnhancing) return;
+    if (isEnhancing) return;
+
+    // Stage 1: If prompt is empty, auto-fill from character data (no LLM call)
+    if (!prompt.trim() && characterData) {
+      const parts: string[] = [];
+      if (characterData.name) parts.push(`Portrait of ${characterData.name}`);
+      if (characterData.gender && characterData.gender !== 'unspecified') parts.push(characterData.gender);
+      if (characterData.traits) parts.push(characterData.traits);
+      if (characterData.appearance_tags?.length > 0) parts.push(characterData.appearance_tags.join(', '));
+      const assembled = parts.filter(Boolean).join(', ');
+      if (assembled) {
+        setPrompt(assembled);
+        toast({ title: 'Prompt filled', description: 'Click ✨ again to enhance for selected model.' });
+      }
+      return;
+    }
+
+    // Stage 2: If prompt has text, enhance via LLM
+    if (!onEnhancePrompt || !prompt.trim()) return;
     setIsEnhancing(true);
     try {
       const result = await onEnhancePrompt(prompt.trim(), selectedImageModel);
@@ -161,6 +125,10 @@ export function CharacterStudioPromptBar({
       setIsEnhancing(false);
     }
   };
+
+  const sparkleTitle = !prompt.trim() && characterData
+    ? 'Auto-fill from character traits'
+    : 'Enhance prompt for selected model';
 
   return (
     <div className={cn('border-t border-border bg-card/95 backdrop-blur', 'p-3 pb-4')}>
@@ -178,56 +146,35 @@ export function CharacterStudioPromptBar({
 
         {/* Row 2: Compact button row */}
         <div className="flex items-center gap-2">
-          {/* Reference Image Options - enhanced for iteration workflow */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant={referenceImageUrl ? "secondary" : "outline"}
-                size="icon"
-                disabled={isDisabled}
-                className="h-9 w-9 flex-shrink-0"
-              >
-                {isUploading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
+          {/* Reference Image indicator */}
+          {referenceImageUrl ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon"
+                  disabled={isDisabled}
+                  className="h-9 w-9 flex-shrink-0"
+                >
                   <ImageIcon className="w-4 h-4" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="z-[100] bg-popover border border-border">
-              {!!referenceImageUrl && (
-                <>
-                  <DropdownMenuItem onSelect={() => onReferenceImageChange?.(null)} className="text-destructive">
-                    <X className="w-4 h-4 mr-2" />
-                    Remove Reference
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </>
-              )}
-              <DropdownMenuItem
-                onSelect={() => document.getElementById('file-upload-input')?.click()}
-                disabled={isUploading || !user}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {isUploading ? 'Uploading...' : 'Upload New'}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={handleLibrarySelect}>
-                <Library className="w-4 h-4 mr-2" />
-                From Library
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Hidden file input */}
-          <input
-            id="file-upload-input"
-            type="file"
-            accept="image/*"
-            onChange={handleFileUpload}
-            className="hidden"
-            disabled={isDisabled || isUploading}
-          />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="z-[100] bg-popover border border-border">
+                <div className="px-2 py-1.5 flex items-center gap-2">
+                  <div className="w-8 h-8 rounded overflow-hidden border border-border flex-shrink-0">
+                    <img src={referenceImageUrl} alt="Ref" className="w-full h-full object-cover" />
+                  </div>
+                  <span className="text-xs text-muted-foreground">Style Locked</span>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onReferenceImageChange?.(null)} className="text-destructive">
+                  <X className="w-4 h-4 mr-2" />
+                  Remove Reference
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
 
           {/* Model Selector - compact */}
           <DropdownMenu>
@@ -268,16 +215,16 @@ export function CharacterStudioPromptBar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Enhance Button */}
-          {onEnhancePrompt && (
+          {/* Enhance Button - context-aware */}
+          {(onEnhancePrompt || characterData) && (
             <Button
               type="button"
               variant="outline"
               size="icon"
               onClick={handleEnhance}
-              disabled={!prompt.trim() || isEnhancing || isGenerating || isDisabled}
+              disabled={(!prompt.trim() && !characterData) || isEnhancing || isGenerating || isDisabled}
               className="h-9 w-9 flex-shrink-0"
-              title="Enhance prompt for selected model"
+              title={sparkleTitle}
             >
               {isEnhancing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
