@@ -1,95 +1,78 @@
 
 
-# Consolidate to Single Generation Path with Optional Enhancement
+# Fix Prompt Bar: Remove Auto-populate, Add Smart Sparkle
 
 ## Problem
 
-Two "Generate" buttons exist with different behaviors:
-- Sidebar "Generate Portrait" silently assembles a prompt from character fields
-- Prompt bar "Generate" uses freeform text the user typed
-
-This is confusing and neither path produces model-optimized prompts.
-
-## Approach
-
-Remove the sidebar generate button. Make sidebar field changes auto-populate the prompt bar in column 2. Add a sparkle (enhance) button to the prompt bar for optional model-aware enhancement.
+1. Auto-populating the prompt bar on every keystroke is distracting and produces flat comma lists
+2. Reference image exists in two independent places (sidebar + prompt bar) causing confusion
+3. The prompt bar has too many concepts competing for attention
 
 ## Changes
 
-### 1. Remove sidebar "Generate Portrait" button
+### 1. Remove auto-populate effect from CharacterStudioV3.tsx
 
-In `StudioSidebar.tsx`, remove the "Generate Portrait" button (line 319-322) and the `handleGeneratePortrait` function (lines 80-82). The sidebar becomes purely a data-entry panel.
+Delete the `useEffect` that watches character fields and assembles prompt text (lines 116-127). Delete the `promptAutoPopulatedRef`, `lastAutoPromptRef`, and the `handlePromptTextChange` wrapper. The prompt bar starts empty with a descriptive placeholder.
 
-Keep the Model Selector in the sidebar since it's logically grouped with appearance settings.
+### 2. Make Sparkle button context-aware (two-stage)
 
-### 2. Auto-populate the prompt bar from sidebar fields
+In `CharacterStudioPromptBar.tsx`, update the sparkle button behavior:
 
-In `CharacterStudioV3.tsx`, add an effect that watches character fields (name, gender, traits, appearance_tags) and assembles them into a natural-language prompt string, updating `promptText`. This runs on field changes so the prompt bar always reflects the current character state.
+- **If prompt is empty**: Assemble character traits into a natural-language prompt and populate the textarea (no LLM call). The assembly logic moves here from the deleted effect. This is the "populate" step.
+- **If prompt has text**: Call `enhance-prompt` as it does today (LLM enhancement). This is the "enhance" step.
 
-The assembly logic mirrors the existing `buildPrompt()` from the sidebar but produces a more readable sentence:
+This gives users a clear two-click flow: Sparkle once to populate, Sparkle again to enhance. Or they can type their own prompt and Sparkle to enhance just that.
 
-```
-Portrait of Maya, female. Long dark hair, green eyes, athletic build. Standing pose.
-```
+The sparkle icon tooltip changes based on state:
+- Empty prompt: "Auto-fill from character traits"
+- Has text: "Enhance prompt for selected model"
 
-Include a guard so that if the user has manually edited the prompt text (typed something custom), the auto-population does not overwrite their work. Track this with a `promptManuallyEdited` ref that resets when character fields change.
+### 3. Sync reference image between sidebar and prompt bar
 
-### 3. Add sparkle (enhance) button to CharacterStudioPromptBar
+The prompt bar already receives `referenceImageUrl` from `character.reference_image_url` and writes back via `onReferenceImageChange`. This is correct. But remove the independent upload/library options from the prompt bar's image dropdown -- instead, only show:
+- A thumbnail of the current reference (if set)
+- "Remove Reference" to clear it
+- "Change in sidebar" text link
 
-Add a sparkle icon button next to the textarea in `CharacterStudioPromptBar.tsx`. When clicked, it:
-- Calls `enhance-prompt` edge function with the current prompt text and `targetModelId`
-- Replaces the prompt text with the enhanced version
-- Shows a loading spinner during the call
+This makes the sidebar the single source for setting references, and the prompt bar just reflects/clears it.
 
-This follows the exact same pattern as the workspace sparkle button. The user can review the enhanced prompt before clicking Generate.
+### 4. Improve reference image labeling in sidebar
 
-Props to add to `CharacterStudioPromptBar`:
-- `onEnhancePrompt?: (prompt: string, modelId: string) => Promise<string | null>` -- callback that returns enhanced text or null on failure
+In `StudioSidebar.tsx`, rename "Reference Image" label to "Style Lock" with a sublabel: "Portraits will match this face/style". Change "Image Match Mode" badge to "Style Locked".
 
-The parent (`CharacterStudioV3.tsx`) provides the implementation that calls `enhance-prompt`.
+---
 
-### 4. Wire up the enhance-prompt call in CharacterStudioV3
+## Technical Details
 
-Add a handler:
+### File: `src/pages/CharacterStudioV3.tsx`
 
-```typescript
-const handleEnhancePrompt = async (prompt: string, modelId: string): Promise<string | null> => {
-  const { data, error } = await supabase.functions.invoke('enhance-prompt', {
-    body: { prompt, targetModelId: modelId, jobType: 'image', contentRating: character.content_rating }
-  });
-  if (error || !data?.enhancedPrompt) return null;
-  return data.enhancedPrompt;
-};
-```
+- Remove the auto-populate `useEffect` (lines 116-127)
+- Remove `promptAutoPopulatedRef` and `lastAutoPromptRef` refs
+- Remove `handlePromptTextChange` callback -- pass `setPromptText` directly
+- Keep `handleEnhancePrompt` as-is
 
-Pass this to both desktop and mobile `CharacterStudioPromptBar` instances via the workspace props.
+### File: `src/components/character-studio/CharacterStudioPromptBar.tsx`
 
-### 5. Keep the prompt bar generate as the single action
+- Add a new prop: `characterData?: { name: string; gender: string; traits: string; appearance_tags: string[] }` for assembly
+- Update `handleEnhance`:
+  - If `prompt` is empty and `characterData` exists: assemble natural-language prompt from character fields, set it in the textarea, return (no LLM call)
+  - If `prompt` has text: call `onEnhancePrompt` as today
+- Update sparkle button title/tooltip based on whether prompt is empty or not
+- Simplify reference image dropdown: remove Upload/Library options, keep only thumbnail display and "Remove Reference"
 
-No changes to the generate flow itself -- `onGenerate` in the prompt bar continues to call `generatePortrait` as it does today. The only difference is the prompt text is now pre-populated from sidebar fields and optionally enhanced.
+### File: `src/components/character-studio-v3/StudioWorkspace.tsx`
 
-## What Does NOT Change
+- Pass `characterData` prop through to `CharacterStudioPromptBar` (assembled from existing `character` prop)
 
-- The `character-portrait` edge function prompt building stays as-is for now (it still assembles its own prompt server-side from character data). This is a separate concern.
-- Model selector stays in the sidebar.
-- Reference image controls stay in both sidebar and prompt bar (they serve different ergonomic purposes).
-- No new database tables or templates.
-- No new edge functions.
+### File: `src/components/character-studio-v3/StudioSidebar.tsx`
 
-## File Summary
-
-| File | Change |
-|------|--------|
-| `StudioSidebar.tsx` | Remove "Generate Portrait" button and `handleGeneratePortrait`. Remove `onGenerate` prop. |
-| `CharacterStudioV3.tsx` | Add auto-populate effect for `promptText`. Add `handleEnhancePrompt` handler. Pass it through workspace props. |
-| `StudioWorkspace.tsx` | Accept and forward `onEnhancePrompt` prop to `CharacterStudioPromptBar`. |
-| `CharacterStudioPromptBar.tsx` | Add sparkle button with loading state. Accept `onEnhancePrompt` prop. |
+- Change "Reference Image" label to "Style Lock"
+- Change "Image Match Mode" badge text to "Style Locked"
+- Add sublabel text "Portraits will match this face/style"
 
 ## UX Result
 
-- One generate button (prompt bar in column 2)
-- Prompt auto-fills from sidebar fields -- user always sees what will be sent
-- Optional sparkle button for model-aware enhancement when desired
-- Fast iteration by default (no forced LLM overhead)
-- Consistent with workspace sparkle pattern
-
+- Prompt bar starts empty with helpful placeholder
+- Single sparkle button: populate on first click, enhance on second
+- Reference image has one source of truth (sidebar), prompt bar just reflects it
+- Clear labeling explains what the reference image actually does
