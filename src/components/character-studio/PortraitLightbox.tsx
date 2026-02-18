@@ -10,7 +10,8 @@ import {
   RefreshCw,
   ChevronUp,
   ChevronDown,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +51,7 @@ export function PortraitLightbox({
 }: PortraitLightboxProps) {
   const [editablePrompt, setEditablePrompt] = useState('');
   const [showPanel, setShowPanel] = useState(true);
+  const [showMetadata, setShowMetadata] = useState(false);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null);
   const { toast } = useToast();
@@ -356,6 +358,57 @@ export function PortraitLightbox({
               ))}
             </div>
           )}
+
+          {/* Generation Metadata */}
+          {(() => {
+            const meta = currentPortrait.generation_metadata as Record<string, unknown> | null;
+            if (!meta) return null;
+            const model = (meta.model as string) || null;
+            const mode = (meta.generation_mode as string) || null;
+            const timeMs = meta.generation_time_ms as number | null;
+            const modelKey = (meta.model_key as string) || null;
+
+            return (
+              <div className="space-y-1.5">
+                <button
+                  onClick={() => setShowMetadata(!showMetadata)}
+                  className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
+                >
+                  <Info className="w-3.5 h-3.5" />
+                  <span>Generation Details</span>
+                  {showMetadata ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+                </button>
+                {showMetadata && (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs bg-white/5 rounded-md p-2.5">
+                    {model && (
+                      <>
+                        <span className="text-white/40">Model</span>
+                        <span className="text-white/80 font-medium">{model}</span>
+                      </>
+                    )}
+                    {mode && (
+                      <>
+                        <span className="text-white/40">Mode</span>
+                        <span className="text-white/80">{mode === 'txt2img' ? 'Text to Image' : mode === 'i2i' ? 'Image to Image' : mode}</span>
+                      </>
+                    )}
+                    {timeMs != null && (
+                      <>
+                        <span className="text-white/40">Gen Time</span>
+                        <span className="text-white/80">{(timeMs / 1000).toFixed(1)}s</span>
+                      </>
+                    )}
+                    {modelKey && (
+                      <>
+                        <span className="text-white/40">Model Key</span>
+                        <span className="text-white/80 truncate" title={modelKey}>{modelKey.split('/').pop()}</span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Action Buttons - Mobile optimized 2-row layout */}
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
