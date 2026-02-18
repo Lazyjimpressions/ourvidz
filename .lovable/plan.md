@@ -1,79 +1,65 @@
 
+# Character Studio: Reference Strength Control
 
-# Add "Copy Prompt" to Portrait Dropdown and Fix Icon
+## Problem
+When a Style Lock image is active, the I2I strength is hardcoded to 0.7. This makes it impossible to make significant visual changes (aging, different hairstyle, body type) because the reference image dominates too heavily. Users have no way to control how much creative freedom the prompt gets vs. how closely the output matches the reference.
 
-## Summary
+## Solution
+Add a **Reference Strength slider** to the Character Studio that lets users control the balance between their reference image and their prompt.
 
-Add a "Copy Prompt" option to the portrait dropdown menu that copies the generation prompt to clipboard AND populates the prompt bar for easy iteration. Also fix the misleading icon on "Use as Reference".
+---
 
-## Changes
+## How It Works
 
-### 1. Add "Copy Prompt" menu item to PortraitGallery.tsx
+- **Slider range:** 0.1 to 1.0 (displayed as percentage: 10%–100%)
+- **Default:** 0.65 (slightly lower than current 0.7 for better prompt responsiveness)
+- **Only visible when Style Lock is active** (no reference = T2I, slider irrelevant)
 
-Add a new dropdown item between "Use as Reference" and "Download" that:
-- Reads `portrait.enhanced_prompt || portrait.prompt` (prefer enhanced since that is what produced the image)
-- Copies the text to the clipboard via `navigator.clipboard.writeText()`
-- Calls a new `onCopyPrompt` callback to populate the prompt bar
-- Shows a toast: "Prompt copied and loaded"
-- Is hidden when neither `prompt` nor `enhanced_prompt` exists (uploaded/legacy portraits)
+### Strength Guide (shown as helper text):
+- Low (0.3–0.5): "Major changes — aging, restyling, different look"
+- Medium (0.5–0.7): "Outfit and expression changes"  
+- High (0.7–0.9): "Minor tweaks — lighting, pose, background"
 
-New prop: `onCopyPrompt?: (prompt: string) => void`
+---
 
-Icon: `ClipboardCopy` from lucide-react (distinct from the reference action)
+## Technical Changes
 
-### 2. Fix "Use as Reference" icon
+### 1. Frontend: Character Studio Sidebar
+**File:** `src/pages/CharacterStudioV3.tsx` (or the sidebar component)
 
-Change the icon from `Copy` to `ImageIcon` (or `Lock`) to align with the "Style Lock" terminology established in the sidebar. `Copy` is misleading -- it suggests clipboard copying, not image referencing.
+- Add `referenceStrength` state (default 0.65)
+- Render a Slider component below the Style Lock image preview, only when a reference image is active
+- Show current value as percentage label
+- Include a small hint label that changes based on the range
 
-### 3. Wire onCopyPrompt in StudioWorkspace.tsx and CharacterStudioV3.tsx
+### 2. Frontend: Pass Strength to Generation
+**File:** `src/hooks/useCharacterStudio.ts`
 
-- `StudioWorkspace` accepts a new `onCopyPrompt` prop and passes it to `PortraitGallery`
-- `CharacterStudioV3` provides the handler: `(prompt: string) => setPromptText(prompt)` -- this populates the prompt bar directly
-- A toast confirms the action so users know both clipboard and prompt bar were updated
+- Accept `referenceStrength` in the `generatePortrait` options
+- Pass it through to the `character-portrait` edge function body
 
-## Technical Details
+### 3. Edge Function: Use Strength Value
+**File:** `supabase/functions/character-portrait/index.ts`
 
-### File: src/components/character-studio/PortraitGallery.tsx
+- Accept `referenceStrength` from the request body
+- When building fal.ai model input for I2I, set `prompt_strength` (or the model's equivalent key) to `1 - referenceStrength`
+  - Note: fal.ai Seedream uses `prompt_strength` where higher = more prompt influence, which is the inverse of "reference strength"
+  - So a user-facing "Reference Strength" of 0.8 maps to a fal.ai `prompt_strength` of 0.2
+- Fallback to current behavior (0.7 equivalent) if not provided
 
-- Add `onCopyPrompt?: (prompt: string) => void` to `PortraitGalleryProps`
-- Import `ClipboardCopy` and `ImageIcon` (or `Lock`) from lucide-react, remove unused `Copy` import
-- Change "Use as Reference" icon from `Copy` to `ImageIcon`
-- Add new menu item after "Use as Reference":
+### 4. Prompt Bar Badge Update
+**File:** `src/components/character-studio/CharacterStudioPromptBar.tsx`
 
-```tsx
-{(portrait.enhanced_prompt || portrait.prompt) && onCopyPrompt && (
-  <>
-    <DropdownMenuItem onClick={() => {
-      const text = portrait.enhanced_prompt || portrait.prompt || '';
-      navigator.clipboard.writeText(text);
-      onCopyPrompt(text);
-    }}>
-      <ClipboardCopy className="w-4 h-4 mr-2" />
-      Copy Prompt
-    </DropdownMenuItem>
-  </>
-)}
-```
+- Update the "Style Locked" badge to show the current strength percentage, e.g., "Style Locked 65%"
+- Gives quick visual feedback without opening the sidebar
 
-### File: src/components/character-studio-v3/StudioWorkspace.tsx
+---
 
-- Add `onCopyPrompt?: (prompt: string) => void` to `StudioWorkspaceProps`
-- Pass it through to both `PortraitGallery` instances (mobile and desktop)
+## Files to Modify
+1. `src/pages/CharacterStudioV3.tsx` — add state + slider UI in sidebar
+2. `src/hooks/useCharacterStudio.ts` — pass strength to edge function
+3. `supabase/functions/character-portrait/index.ts` — apply strength to fal.ai input
+4. `src/components/character-studio/CharacterStudioPromptBar.tsx` — badge update
 
-### File: src/pages/CharacterStudioV3.tsx
-
-- Add handler and pass via workspace props:
-
-```typescript
-onCopyPrompt: (prompt: string) => {
-  setPromptText(prompt);
-  toast({ title: 'Prompt copied', description: 'Loaded into prompt bar and copied to clipboard.' });
-}
-```
-
-## No changes needed for
-
-- "Use as Reference" behavior -- it already works correctly (sets ref image directly, no lightbox)
-- Prompt bar component -- it already handles controlled `value` changes
-- Database -- portraits already store `prompt` and `enhanced_prompt`
-
+## No New Dependencies
+Uses the existing `@radix-ui/react-slider` (already installed via shadcn Slider component).
