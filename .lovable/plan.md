@@ -1,78 +1,79 @@
 
 
-# Fix Prompt Bar: Remove Auto-populate, Add Smart Sparkle
+# Add "Copy Prompt" to Portrait Dropdown and Fix Icon
 
-## Problem
+## Summary
 
-1. Auto-populating the prompt bar on every keystroke is distracting and produces flat comma lists
-2. Reference image exists in two independent places (sidebar + prompt bar) causing confusion
-3. The prompt bar has too many concepts competing for attention
+Add a "Copy Prompt" option to the portrait dropdown menu that copies the generation prompt to clipboard AND populates the prompt bar for easy iteration. Also fix the misleading icon on "Use as Reference".
 
 ## Changes
 
-### 1. Remove auto-populate effect from CharacterStudioV3.tsx
+### 1. Add "Copy Prompt" menu item to PortraitGallery.tsx
 
-Delete the `useEffect` that watches character fields and assembles prompt text (lines 116-127). Delete the `promptAutoPopulatedRef`, `lastAutoPromptRef`, and the `handlePromptTextChange` wrapper. The prompt bar starts empty with a descriptive placeholder.
+Add a new dropdown item between "Use as Reference" and "Download" that:
+- Reads `portrait.enhanced_prompt || portrait.prompt` (prefer enhanced since that is what produced the image)
+- Copies the text to the clipboard via `navigator.clipboard.writeText()`
+- Calls a new `onCopyPrompt` callback to populate the prompt bar
+- Shows a toast: "Prompt copied and loaded"
+- Is hidden when neither `prompt` nor `enhanced_prompt` exists (uploaded/legacy portraits)
 
-### 2. Make Sparkle button context-aware (two-stage)
+New prop: `onCopyPrompt?: (prompt: string) => void`
 
-In `CharacterStudioPromptBar.tsx`, update the sparkle button behavior:
+Icon: `ClipboardCopy` from lucide-react (distinct from the reference action)
 
-- **If prompt is empty**: Assemble character traits into a natural-language prompt and populate the textarea (no LLM call). The assembly logic moves here from the deleted effect. This is the "populate" step.
-- **If prompt has text**: Call `enhance-prompt` as it does today (LLM enhancement). This is the "enhance" step.
+### 2. Fix "Use as Reference" icon
 
-This gives users a clear two-click flow: Sparkle once to populate, Sparkle again to enhance. Or they can type their own prompt and Sparkle to enhance just that.
+Change the icon from `Copy` to `ImageIcon` (or `Lock`) to align with the "Style Lock" terminology established in the sidebar. `Copy` is misleading -- it suggests clipboard copying, not image referencing.
 
-The sparkle icon tooltip changes based on state:
-- Empty prompt: "Auto-fill from character traits"
-- Has text: "Enhance prompt for selected model"
+### 3. Wire onCopyPrompt in StudioWorkspace.tsx and CharacterStudioV3.tsx
 
-### 3. Sync reference image between sidebar and prompt bar
-
-The prompt bar already receives `referenceImageUrl` from `character.reference_image_url` and writes back via `onReferenceImageChange`. This is correct. But remove the independent upload/library options from the prompt bar's image dropdown -- instead, only show:
-- A thumbnail of the current reference (if set)
-- "Remove Reference" to clear it
-- "Change in sidebar" text link
-
-This makes the sidebar the single source for setting references, and the prompt bar just reflects/clears it.
-
-### 4. Improve reference image labeling in sidebar
-
-In `StudioSidebar.tsx`, rename "Reference Image" label to "Style Lock" with a sublabel: "Portraits will match this face/style". Change "Image Match Mode" badge to "Style Locked".
-
----
+- `StudioWorkspace` accepts a new `onCopyPrompt` prop and passes it to `PortraitGallery`
+- `CharacterStudioV3` provides the handler: `(prompt: string) => setPromptText(prompt)` -- this populates the prompt bar directly
+- A toast confirms the action so users know both clipboard and prompt bar were updated
 
 ## Technical Details
 
-### File: `src/pages/CharacterStudioV3.tsx`
+### File: src/components/character-studio/PortraitGallery.tsx
 
-- Remove the auto-populate `useEffect` (lines 116-127)
-- Remove `promptAutoPopulatedRef` and `lastAutoPromptRef` refs
-- Remove `handlePromptTextChange` callback -- pass `setPromptText` directly
-- Keep `handleEnhancePrompt` as-is
+- Add `onCopyPrompt?: (prompt: string) => void` to `PortraitGalleryProps`
+- Import `ClipboardCopy` and `ImageIcon` (or `Lock`) from lucide-react, remove unused `Copy` import
+- Change "Use as Reference" icon from `Copy` to `ImageIcon`
+- Add new menu item after "Use as Reference":
 
-### File: `src/components/character-studio/CharacterStudioPromptBar.tsx`
+```tsx
+{(portrait.enhanced_prompt || portrait.prompt) && onCopyPrompt && (
+  <>
+    <DropdownMenuItem onClick={() => {
+      const text = portrait.enhanced_prompt || portrait.prompt || '';
+      navigator.clipboard.writeText(text);
+      onCopyPrompt(text);
+    }}>
+      <ClipboardCopy className="w-4 h-4 mr-2" />
+      Copy Prompt
+    </DropdownMenuItem>
+  </>
+)}
+```
 
-- Add a new prop: `characterData?: { name: string; gender: string; traits: string; appearance_tags: string[] }` for assembly
-- Update `handleEnhance`:
-  - If `prompt` is empty and `characterData` exists: assemble natural-language prompt from character fields, set it in the textarea, return (no LLM call)
-  - If `prompt` has text: call `onEnhancePrompt` as today
-- Update sparkle button title/tooltip based on whether prompt is empty or not
-- Simplify reference image dropdown: remove Upload/Library options, keep only thumbnail display and "Remove Reference"
+### File: src/components/character-studio-v3/StudioWorkspace.tsx
 
-### File: `src/components/character-studio-v3/StudioWorkspace.tsx`
+- Add `onCopyPrompt?: (prompt: string) => void` to `StudioWorkspaceProps`
+- Pass it through to both `PortraitGallery` instances (mobile and desktop)
 
-- Pass `characterData` prop through to `CharacterStudioPromptBar` (assembled from existing `character` prop)
+### File: src/pages/CharacterStudioV3.tsx
 
-### File: `src/components/character-studio-v3/StudioSidebar.tsx`
+- Add handler and pass via workspace props:
 
-- Change "Reference Image" label to "Style Lock"
-- Change "Image Match Mode" badge text to "Style Locked"
-- Add sublabel text "Portraits will match this face/style"
+```typescript
+onCopyPrompt: (prompt: string) => {
+  setPromptText(prompt);
+  toast({ title: 'Prompt copied', description: 'Loaded into prompt bar and copied to clipboard.' });
+}
+```
 
-## UX Result
+## No changes needed for
 
-- Prompt bar starts empty with helpful placeholder
-- Single sparkle button: populate on first click, enhance on second
-- Reference image has one source of truth (sidebar), prompt bar just reflects it
-- Clear labeling explains what the reference image actually does
+- "Use as Reference" behavior -- it already works correctly (sets ref image directly, no lightbox)
+- Prompt bar component -- it already handles controlled `value` changes
+- Database -- portraits already store `prompt` and `enhanced_prompt`
+
