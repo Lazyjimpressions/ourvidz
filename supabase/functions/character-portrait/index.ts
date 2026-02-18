@@ -147,46 +147,76 @@ serve(async (req) => {
       );
     }
 
-    // Build portrait prompt
-    const promptParts: string[] = ['masterpiece', 'best quality', 'photorealistic'];
-    
-    // Gender-aware base
+    // Determine generation intent based on reference image presence
+    const generationIntent = isI2I ? 'direct' : 'explore';
+    console.log(`🎯 Generation intent: ${generationIntent}`);
+
+    // Build portrait prompt — conditional on T2I vs I2I
+    const promptParts: string[] = [];
     const gender = character.gender?.toLowerCase() || 'unspecified';
-    if (gender === 'male') {
-      promptParts.push('1boy', 'handsome man', 'portrait');
-    } else if (gender === 'female') {
-      promptParts.push('1girl', 'beautiful woman', 'portrait');
-    } else {
-      promptParts.push('1person', 'portrait');
-    }
 
-    // Add preset tags
-    if (presets?.pose) promptParts.push(presets.pose);
-    if (presets?.expression) promptParts.push(presets.expression);
-    if (presets?.outfit) promptParts.push(presets.outfit);
-    if (presets?.camera) promptParts.push(presets.camera);
-
-    // Add appearance tags (limit to avoid token overflow)
-    if (character.appearance_tags?.length) {
-      promptParts.push(...character.appearance_tags.slice(0, 8));
-    }
-
-    // ===== PROMPT OVERRIDE: User-typed prompt from Character Studio =====
-    // This allows users to influence generation with their own descriptions
-    if (promptOverride && typeof promptOverride === 'string' && promptOverride.trim()) {
-      // Cap at 200 chars to avoid overwhelming the base prompt
-      const cleanedOverride = promptOverride.trim().slice(0, 200);
-      promptParts.push(cleanedOverride);
-      console.log('📝 Added promptOverride:', cleanedOverride.substring(0, 50) + '...');
-    }
-
-    // I2I identity preservation
     if (isI2I) {
-      promptParts.push('maintain same character identity', 'consistent features');
-    }
+      // === I2I (Directing Mode) ===
+      // Reference image handles identity and style. Prompt describes ONLY what changes.
+      // No style boilerplate — it fights the reference image.
 
-    // Quality enhancers
-    promptParts.push('studio photography', 'professional lighting', 'sharp focus', 'detailed face');
+      // Gender tag for model routing only
+      if (gender === 'male') promptParts.push('1boy');
+      else if (gender === 'female') promptParts.push('1girl');
+      else promptParts.push('1person');
+
+      // Appearance tags (identity descriptors the model needs to maintain)
+      if (character.appearance_tags?.length) {
+        promptParts.push(...character.appearance_tags.slice(0, 8));
+      }
+
+      // User's directorial instruction (outfit, scene, pose, companions)
+      if (promptOverride && typeof promptOverride === 'string' && promptOverride.trim()) {
+        const cleanedOverride = promptOverride.trim().slice(0, 200);
+        promptParts.push(cleanedOverride);
+        console.log('📝 I2I promptOverride (directorial):', cleanedOverride.substring(0, 50) + '...');
+      }
+
+      // Add preset tags (these are user-chosen directives, not style boilerplate)
+      if (presets?.pose) promptParts.push(presets.pose);
+      if (presets?.expression) promptParts.push(presets.expression);
+      if (presets?.outfit) promptParts.push(presets.outfit);
+      if (presets?.camera) promptParts.push(presets.camera);
+
+    } else {
+      // === T2I (Exploration Mode) ===
+      // No visual anchor — style tags establish quality.
+      promptParts.push('masterpiece', 'best quality', 'photorealistic');
+
+      if (gender === 'male') {
+        promptParts.push('1boy', 'handsome man', 'portrait');
+      } else if (gender === 'female') {
+        promptParts.push('1girl', 'beautiful woman', 'portrait');
+      } else {
+        promptParts.push('1person', 'portrait');
+      }
+
+      // Add preset tags
+      if (presets?.pose) promptParts.push(presets.pose);
+      if (presets?.expression) promptParts.push(presets.expression);
+      if (presets?.outfit) promptParts.push(presets.outfit);
+      if (presets?.camera) promptParts.push(presets.camera);
+
+      // Appearance tags
+      if (character.appearance_tags?.length) {
+        promptParts.push(...character.appearance_tags.slice(0, 8));
+      }
+
+      // User prompt override
+      if (promptOverride && typeof promptOverride === 'string' && promptOverride.trim()) {
+        const cleanedOverride = promptOverride.trim().slice(0, 200);
+        promptParts.push(cleanedOverride);
+        console.log('📝 T2I promptOverride:', cleanedOverride.substring(0, 50) + '...');
+      }
+
+      // Quality enhancers (T2I only)
+      promptParts.push('studio photography', 'professional lighting', 'sharp focus', 'detailed face');
+    }
 
     const prompt = promptParts.join(', ');
 
@@ -215,6 +245,7 @@ serve(async (req) => {
           character_id: characterId,
           character_name: character.name,
           generation_mode: isI2I ? 'i2i' : 'txt2img',
+          generation_intent: generationIntent,
           content_rating: effectiveContentRating,
           presets,
           prompt_override: promptOverride || null
@@ -251,7 +282,8 @@ serve(async (req) => {
     if (isI2I && referenceImageUrl) {
       // Map user-facing referenceStrength to fal.ai prompt_strength (inverse)
       // referenceStrength 0.8 = strong ref = low prompt influence = prompt_strength 0.2
-      const effectiveRefStrength = typeof referenceStrength === 'number' ? referenceStrength : 0.65;
+      // Default to 0.75 for I2I directing mode (was 0.65) — reference should dominate
+      const effectiveRefStrength = typeof referenceStrength === 'number' ? referenceStrength : 0.75;
       const promptStrength = Math.round((1 - effectiveRefStrength) * 100) / 100;
       modelInput.prompt_strength = promptStrength;
       console.log(`🎛️ Reference strength: ${effectiveRefStrength} → prompt_strength: ${promptStrength}`);
@@ -459,6 +491,7 @@ serve(async (req) => {
         metadata: {
           ...jobData.metadata,
           generation_time_ms: generationTime,
+          generation_intent: generationIntent,
           result_url: finalImageUrl,
           storage_path: storagePath
         }
