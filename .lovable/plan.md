@@ -1,100 +1,48 @@
 
 
-# Describe Image: Vision Pipeline with Kimi K2.5
+# Fix: Vision Task Support + Empty Response Handling
 
-## Database Change (Data Update Only -- No Migration)
+## Two Issues Found
 
-Update the **existing** Kimi K2.5 row (`82e0b6e3-0a64-4396-9d5b-24d609c24b77`) to add `'vision'` to its `default_for_tasks` array:
+### Issue 1: "vision" not available as a task in the UI or database
 
-```sql
-UPDATE api_models 
-SET default_for_tasks = array_append(default_for_tasks, 'vision')
-WHERE id = '82e0b6e3-0a64-4396-9d5b-24d609c24b77';
-```
+The `task` column on `api_models` has a **database CHECK constraint** that only allows these 7 values:
+`generation, style_transfer, upscale, roleplay, reasoning, enhancement, embedding`
 
-No new row. No schema change. Just a multi-task assignment on the existing model, exactly like how other models serve multiple roles.
+The frontend mirrors this in two places:
+- `src/components/admin/ApiModelsTab.tsx` line 65: `TASKS` array
+- `src/hooks/useApiModels.ts` line 11: TypeScript type
 
----
+Since `default_for_tasks` is an unconstrained text array, adding `'vision'` there worked fine. But the task dropdown and the column itself can never be set to `'vision'`.
 
-## Edge Function: `describe-image`
+**Fix:**
+1. **Database migration**: ALTER the CHECK constraint to add `'vision'` to the allowed values
+2. **`ApiModelsTab.tsx`**: Add `'vision'` to the `TASKS` array
+3. **`useApiModels.ts`**: Add `'vision'` to the TypeScript union type
 
-**File**: `supabase/functions/describe-image/index.ts` (new)
+### Issue 2: Empty model response causes silent failure
 
-### Model Resolution (standard priority chain)
-1. Explicit `modelId` (UUID) from request body
-2. Explicit `modelKey` from request body
-3. DB default: `.contains('default_for_tasks', ['vision'])` on active chat models
-4. Hardcoded fallback: `moonshotai/kimi-k2.5`
+The latest call returned `contentLength: 0` from Kimi K2.5. The function correctly fell back to `{ description: "", traits: "", ... }` but the frontend treated this as "success" and showed a toast saying traits were extracted — even though nothing was actually extracted.
 
-This is the same pattern used by `character-suggestions`, `enhance-prompt`, `roleplay-chat`, etc.
+Previous calls to the same model with the same image worked fine (1218 chars, 1123 chars), so this is a transient/flaky response.
 
-### Input
-```text
-{ imageUrl, contentRating?, outputMode?, modelId?, modelKey?, originalPrompt? }
-```
-- `outputMode`: `'caption'` | `'detailed'` | `'structured'` (default: `'structured'`)
+**Fix (in `CharacterStudioV3.tsx`):**
+- After receiving the response, check if the returned `data.description` (or `data.traits`) is empty
+- If empty, show an error toast: "Vision model returned empty response. Try again."
+- Don't overwrite existing character fields with empty values
 
-### Processing
-- Resolve model + provider from DB
-- Look up provider's `base_url`, `secret_name`, and `auth_scheme`
-- Build OpenRouter-compatible chat completion with image content block:
-  ```text
-  messages: [
-    { role: "system", content: "<structured extraction prompt>" },
-    { role: "user", content: [
-      { type: "image_url", image_url: { url: imageUrl } },
-      { type: "text", text: "Describe this character" }
-    ]}
-  ]
-  ```
-- Parse response into structured JSON
-
-### Output Modes
-- **caption**: Single sentence description
-- **detailed**: Narrative paragraph
-- **structured**: JSON mapping 1:1 to character table fields:
-  ```text
-  { gender, description, appearance_tags, physical_traits, traits, suggested_names }
-  ```
-- When `originalPrompt` is provided, also returns a quality score
-
-### Config
-Add to `supabase/config.toml`:
-```toml
-[functions.describe-image]
-verify_jwt = false
-```
+**Fix (in `describe-image/index.ts`):**
+- When `rawContent` is empty, return `success: false` with a clear error message instead of returning a fallback object that looks like success
 
 ---
 
-## Frontend Integration
+## Files to Modify
 
-### `StudioSidebar.tsx`
-- Add a "Describe Image" button below the Style Lock preview (visible when reference image is set)
-- On click: invoke `describe-image` with `outputMode: 'structured'`
-- Map response fields to `updateCharacter()`:
-  - `description` -> `traits`
-  - `appearance_tags` -> `appearance_tags`
-  - `gender` -> `gender`
-  - `physical_traits` -> `physical_traits`
-- Show loading state during analysis, toast on completion
-
-### `CharacterStudioV3.tsx`
-- When `entryMode === 'from-image'` and a reference image is set, auto-trigger the describe flow (no manual button click needed)
-
----
-
-## Files Summary
-
-| File | Action |
+| File | Change |
 |------|--------|
-| `api_models` table | UPDATE existing Kimi K2.5 row: add `'vision'` to `default_for_tasks` |
-| `supabase/functions/describe-image/index.ts` | Create new edge function |
-| `supabase/config.toml` | Add `[functions.describe-image]` entry |
-| `src/components/character-studio-v3/StudioSidebar.tsx` | Add "Describe Image" button + handler |
-| `src/pages/CharacterStudioV3.tsx` | Auto-trigger for `from-image` entry mode |
-
-## No New Dependencies or Secrets
-- Uses existing OpenRouter provider + `OpenRouter_Roleplay_API_KEY` secret
-- No new npm packages
+| Database (`api_models_task_check`) | ALTER CHECK constraint to include `'vision'` |
+| `src/components/admin/ApiModelsTab.tsx` | Add `'vision'` to `TASKS` array |
+| `src/hooks/useApiModels.ts` | Add `'vision'` to task type union |
+| `supabase/functions/describe-image/index.ts` | Return `success: false` when model returns empty content |
+| `src/pages/CharacterStudioV3.tsx` | Handle empty/failed responses gracefully with retry toast |
 
