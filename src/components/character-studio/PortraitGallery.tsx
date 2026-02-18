@@ -250,7 +250,7 @@ export function PortraitGallery({
                       <DropdownMenuContent align="end" className="w-44 bg-popover z-50">
                         {!isPrimary && (
                           <>
-                            <DropdownMenuItem onClick={() => onSetPrimary(portrait.id)}>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSetPrimary(portrait.id); }}>
                               <Star className="w-4 h-4 mr-2" />
                               Set as Primary
                             </DropdownMenuItem>
@@ -262,7 +262,8 @@ export function PortraitGallery({
                           Use as Reference
                         </DropdownMenuItem>
                         {(portrait.enhanced_prompt || portrait.prompt) && onCopyPrompt && (
-                          <DropdownMenuItem onClick={() => {
+                          <DropdownMenuItem onClick={(e) => {
+                            e.stopPropagation();
                             const text = portrait.enhanced_prompt || portrait.prompt || '';
                             navigator.clipboard.writeText(text);
                             onCopyPrompt(text);
@@ -271,14 +272,14 @@ export function PortraitGallery({
                             Copy Prompt
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={() => handleDownload(portrait)}>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownload(portrait); }}>
                           <Download className="w-4 h-4 mr-2" />
                           Download
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
-                          onClick={() => onDelete(portrait.id)}
+                          onClick={(e) => { e.stopPropagation(); onDelete(portrait.id); }}
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           Delete
