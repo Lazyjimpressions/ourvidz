@@ -6,14 +6,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Initialize Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-/**
- * AI Suggestion types for character creation "sprinkle" feature
- */
 type SuggestionType = 'traits' | 'voice' | 'appearance' | 'backstory' | 'voice_examples' | 'description' | 'all';
 type ContentRating = 'sfw' | 'nsfw';
 
@@ -33,11 +29,11 @@ interface CharacterSuggestionRequest {
   };
   existingAppearance?: string[];
   contentRating: ContentRating;
-  modelId?: string;  // UUID from api_models table
-  modelKey?: string; // Alternative: model_key string
+  modelId?: string;
+  modelKey?: string;
 }
 
-interface ModelConfig {
+interface ResolvedModel {
   model_key: string;
   display_name: string;
   input_defaults: {
@@ -45,6 +41,13 @@ interface ModelConfig {
     temperature?: number;
     top_p?: number;
     stream?: boolean;
+  };
+  provider: {
+    name: string;
+    base_url: string;
+    secret_name: string;
+    auth_scheme: string;
+    auth_header_name: string;
   };
 }
 
@@ -67,62 +70,95 @@ interface CharacterSuggestionResponse {
 }
 
 /**
- * Fetch model configuration from api_models table
+ * Resolve model + provider entirely from the database.
+ * Priority: explicit modelId > explicit modelKey > default_for_tasks containing 'roleplay' > first active chat model
  */
-async function getModelConfig(modelId?: string, modelKey?: string): Promise<ModelConfig> {
-  // Default fallback model
-  const defaultModelKey = 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free';
-  const defaultConfig: ModelConfig = {
-    model_key: defaultModelKey,
-    display_name: 'Dolphin Mistral 24B Venice',
-    input_defaults: {
-      max_tokens: 500,
-      temperature: 0.8,
-      top_p: 0.9
+async function resolveModel(modelId?: string, modelKey?: string): Promise<ResolvedModel> {
+  const selectFields = 'model_key, display_name, input_defaults, api_providers!inner(name, base_url, secret_name, auth_scheme, auth_header_name)';
+
+  let data: any = null;
+  let error: any = null;
+
+  // 1. Try explicit ID
+  if (modelId) {
+    const result = await supabase
+      .from('api_models')
+      .select(selectFields)
+      .eq('id', modelId)
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+    data = result.data;
+    error = result.error;
+  }
+
+  // 2. Try explicit model_key
+  if (!data && modelKey) {
+    const result = await supabase
+      .from('api_models')
+      .select(selectFields)
+      .eq('model_key', modelKey)
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+    data = result.data;
+    error = result.error;
+  }
+
+  // 3. Try default for roleplay task
+  if (!data) {
+    const result = await supabase
+      .from('api_models')
+      .select(selectFields)
+      .eq('is_active', true)
+      .contains('default_for_tasks', ['roleplay'])
+      .order('priority', { ascending: true })
+      .limit(1)
+      .single();
+    data = result.data;
+    error = result.error;
+  }
+
+  // 4. Fallback: any active chat model
+  if (!data) {
+    const result = await supabase
+      .from('api_models')
+      .select(selectFields)
+      .eq('is_active', true)
+      .eq('modality', 'chat')
+      .order('priority', { ascending: true })
+      .limit(1)
+      .single();
+    data = result.data;
+    error = result.error;
+  }
+
+  if (!data || error) {
+    throw new Error(`No active chat model found in api_models table. Searched: modelId=${modelId}, modelKey=${modelKey}, default_for_tasks=roleplay, modality=chat. Error: ${error?.message}`);
+  }
+
+  const provider = (data as any).api_providers;
+
+  console.log('✅ Resolved model:', { model_key: data.model_key, display_name: data.display_name, provider: provider.name });
+
+  return {
+    model_key: data.model_key,
+    display_name: data.display_name,
+    input_defaults: (data.input_defaults as ResolvedModel['input_defaults']) || {},
+    provider: {
+      name: provider.name,
+      base_url: provider.base_url,
+      secret_name: provider.secret_name,
+      auth_scheme: provider.auth_scheme || 'bearer',
+      auth_header_name: provider.auth_header_name || 'Authorization',
     }
   };
-
-  try {
-    let query = supabase
-      .from('api_models')
-      .select('model_key, display_name, input_defaults')
-      .eq('modality', 'roleplay')
-      .eq('is_active', true);
-
-    if (modelId) {
-      query = query.eq('id', modelId);
-    } else if (modelKey) {
-      query = query.eq('model_key', modelKey);
-    } else {
-      // Get the default model for roleplay
-      query = query.contains('default_for_tasks', ['roleplay']);
-    }
-
-    const { data, error } = await query.limit(1).single();
-
-    if (error || !data) {
-      console.log('⚠️ Model not found, using default:', { modelId, modelKey, error: error?.message });
-      return defaultConfig;
-    }
-
-    console.log('✅ Model config loaded:', {
-      model_key: data.model_key,
-      display_name: data.display_name
-    });
-
-    return {
-      model_key: data.model_key,
-      display_name: data.display_name,
-      input_defaults: (data.input_defaults as ModelConfig['input_defaults']) || defaultConfig.input_defaults
-    };
-  } catch (error) {
-    console.error('❌ Error fetching model config:', error);
-    return defaultConfig;
-  }
 }
 
 /**
- * Build the system prompt based on content rating and suggestion type
+ * Build the system prompt based on content rating and suggestion type.
+ * @param contentRating
+ * @param suggestionType
  */
 function buildSystemPrompt(contentRating: ContentRating, suggestionType: SuggestionType): string {
   const basePrompt = `You are an expert character designer for AI roleplay. Generate creative, engaging suggestions that make characters feel alive and distinct.
@@ -137,7 +173,7 @@ IMPORTANT RULES:
     ? `\n\nCONTENT CONTEXT: This is for adult roleplay. Suggestions can include sensual, romantic, and explicit themes. Voice examples can reference intimate scenarios.`
     : `\n\nCONTENT CONTEXT: Keep suggestions appropriate for general audiences. Focus on personality, adventure, and drama without explicit content.`;
 
-  const typeGuidance = {
+  const typeGuidance: Record<string, string> = {
     traits: `\n\nFOCUS: Generate 3-5 personality traits that work well together. Traits should be specific enough to guide behavior but not contradictory.`,
     voice: `\n\nFOCUS: Suggest a voice tone and communication style. Consider how they speak, their verbosity, humor usage, and emotional openness.`,
     appearance: `\n\nFOCUS: Suggest 4-6 visual appearance tags. Include hair, clothing style, body type hints, and distinctive features. Keep tags suitable for image generation.`,
@@ -151,7 +187,8 @@ IMPORTANT RULES:
 }
 
 /**
- * Build the user prompt with existing character context
+ * Build the user prompt based on the request.
+ * @param request
  */
 function buildUserPrompt(request: CharacterSuggestionRequest): string {
   const parts: string[] = [];
@@ -159,44 +196,25 @@ function buildUserPrompt(request: CharacterSuggestionRequest): string {
   if (request.characterName) {
     parts.push(`Character Name: ${request.characterName}`);
   }
-
   if (request.existingDescription) {
     parts.push(`Existing Description: ${request.existingDescription}`);
   }
-
   if (request.existingTraits && request.existingTraits.length > 0) {
     parts.push(`Existing Traits: ${request.existingTraits.join(', ')}`);
   }
-
   if (request.existingPersonality) {
     const personalityParts: string[] = [];
-    if (request.existingPersonality.emotionalBaseline) {
-      personalityParts.push(`emotional baseline: ${request.existingPersonality.emotionalBaseline}`);
-    }
-    if (request.existingPersonality.socialStyle) {
-      personalityParts.push(`social style: ${request.existingPersonality.socialStyle}`);
-    }
-    if (request.existingPersonality.temperament) {
-      personalityParts.push(`temperament: ${request.existingPersonality.temperament}`);
-    }
-    if (personalityParts.length > 0) {
-      parts.push(`Personality: ${personalityParts.join(', ')}`);
-    }
+    if (request.existingPersonality.emotionalBaseline) personalityParts.push(`emotional baseline: ${request.existingPersonality.emotionalBaseline}`);
+    if (request.existingPersonality.socialStyle) personalityParts.push(`social style: ${request.existingPersonality.socialStyle}`);
+    if (request.existingPersonality.temperament) personalityParts.push(`temperament: ${request.existingPersonality.temperament}`);
+    if (personalityParts.length > 0) parts.push(`Personality: ${personalityParts.join(', ')}`);
   }
-
   if (request.existingRole) {
     const roleParts: string[] = [];
-    if (request.existingRole.type) {
-      roleParts.push(`role: ${request.existingRole.type}`);
-    }
-    if (request.existingRole.relationshipContext) {
-      roleParts.push(`relationship: ${request.existingRole.relationshipContext}`);
-    }
-    if (roleParts.length > 0) {
-      parts.push(`Role: ${roleParts.join(', ')}`);
-    }
+    if (request.existingRole.type) roleParts.push(`role: ${request.existingRole.type}`);
+    if (request.existingRole.relationshipContext) roleParts.push(`relationship: ${request.existingRole.relationshipContext}`);
+    if (roleParts.length > 0) parts.push(`Role: ${roleParts.join(', ')}`);
   }
-
   if (request.existingAppearance && request.existingAppearance.length > 0) {
     parts.push(`Existing Appearance: ${request.existingAppearance.join(', ')}`);
   }
@@ -205,7 +223,7 @@ function buildUserPrompt(request: CharacterSuggestionRequest): string {
     ? `Based on the following character context:\n${parts.join('\n')}\n\n`
     : 'Create suggestions for a new character.\n\n';
 
-  const typeInstructions = {
+  const typeInstructions: Record<string, string> = {
     traits: `Generate 3-5 personality traits. Return as JSON: { "suggestedTraits": ["trait1", "trait2", ...] }`,
     voice: `Suggest voice characteristics. Return as JSON: { "suggestedVoiceTone": "tone", "suggestedPersona": "brief persona description" }`,
     appearance: `Generate 4-6 appearance tags. Return as JSON: { "suggestedAppearance": ["tag1", "tag2", ...] }`,
@@ -228,21 +246,24 @@ function buildUserPrompt(request: CharacterSuggestionRequest): string {
 }
 
 /**
- * Call OpenRouter API for suggestions using model config
+ * Call a chat provider dynamically using resolved model config.
+ * Supports OpenRouter-compatible APIs (OpenAI chat/completions format).
+ * Retries once on 429 with backoff before trying a fallback model.
  */
-async function callOpenRouter(
+async function callChatProvider(
   systemPrompt: string,
   userPrompt: string,
-  modelConfig: ModelConfig
+  model: ResolvedModel,
+  retryCount = 0
 ): Promise<{ content: string; model: string; display_name: string }> {
-  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
-  if (!openRouterKey) {
-    throw new Error('OpenRouter API key not configured');
+  const apiKey = Deno.env.get(model.provider.secret_name);
+  if (!apiKey) {
+    throw new Error(`API key secret "${model.provider.secret_name}" not configured for provider "${model.provider.name}"`);
   }
 
-  const defaults = modelConfig.input_defaults || {};
+  const defaults = model.input_defaults;
   const payload = {
-    model: modelConfig.model_key,
+    model: model.model_key,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
@@ -253,18 +274,21 @@ async function callOpenRouter(
     stream: false
   };
 
-  console.log('📤 Sending to OpenRouter for character suggestions:', {
+  const apiUrl = `${model.provider.base_url}/chat/completions`;
+  const authValue = model.provider.auth_scheme === 'bearer' ? `Bearer ${apiKey}` : apiKey;
+
+  console.log('📤 Calling chat provider:', {
+    provider: model.provider.name,
     model: payload.model,
-    display_name: modelConfig.display_name,
-    systemPromptLength: systemPrompt.length,
-    userPromptLength: userPrompt.length,
+    url: apiUrl,
+    attempt: retryCount + 1,
     settings: { max_tokens: payload.max_tokens, temperature: payload.temperature }
   });
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${openRouterKey}`,
+      [model.provider.auth_header_name]: authValue,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload)
@@ -272,137 +296,145 @@ async function callOpenRouter(
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error(`❌ OpenRouter error ${response.status}:`, errorText);
-    throw new Error(`OpenRouter error: ${response.status} - ${errorText}`);
+
+    // Retry once on 429 with backoff
+    if (response.status === 429 && retryCount < 1) {
+      const retryAfter = parseInt(response.headers.get('retry-after') || '3', 10);
+      const waitMs = Math.min(retryAfter * 1000, 5000);
+      console.warn(`⚠️ 429 rate limited, retrying in ${waitMs}ms...`);
+      await new Promise(r => setTimeout(r, waitMs));
+      return callChatProvider(systemPrompt, userPrompt, model, retryCount + 1);
+    }
+
+    // On 429 after retry, try a different model from the table
+    if (response.status === 429) {
+      console.warn('⚠️ Still rate limited after retry, trying alternate model...');
+      const alternate = await resolveAlternateModel(model.model_key);
+      if (alternate) {
+        console.log('🔄 Falling back to:', alternate.model_key);
+        return callChatProvider(systemPrompt, userPrompt, alternate, 0);
+      }
+    }
+
+    console.error(`❌ Provider error ${response.status}:`, errorText);
+    throw new Error(`${model.provider.name} error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '';
 
-  console.log('✅ OpenRouter response received:', {
+  console.log('✅ Response received:', {
     contentLength: content.length,
-    model: modelConfig.model_key,
+    model: model.model_key,
     preview: content.substring(0, 100) + '...'
   });
 
+  return { content, model: model.model_key, display_name: model.display_name };
+}
+
+/**
+ * Find an alternate active chat model (different from the one that failed).
+ */
+async function resolveAlternateModel(excludeModelKey: string): Promise<ResolvedModel | null> {
+  const selectFields = 'model_key, display_name, input_defaults, api_providers!inner(name, base_url, secret_name, auth_scheme, auth_header_name)';
+
+  const { data, error } = await supabase
+    .from('api_models')
+    .select(selectFields)
+    .eq('is_active', true)
+    .in('modality', ['chat', 'roleplay'])
+    .neq('model_key', excludeModelKey)
+    .order('priority', { ascending: true })
+    .limit(1)
+    .single();
+
+  if (!data || error) return null;
+
+  const provider = (data as any).api_providers;
   return {
-    content,
-    model: modelConfig.model_key,
-    display_name: modelConfig.display_name
+    model_key: data.model_key,
+    display_name: data.display_name,
+    input_defaults: (data.input_defaults as ResolvedModel['input_defaults']) || {},
+    provider: {
+      name: provider.name,
+      base_url: provider.base_url,
+      secret_name: provider.secret_name,
+      auth_scheme: provider.auth_scheme || 'bearer',
+      auth_header_name: provider.auth_header_name || 'Authorization',
+    }
   };
 }
 
 /**
- * Parse the AI response as JSON with robust key-based extraction fallback
+ * Attempt to parse AI suggestions from a string.
+ * Handles common formatting issues and extracts key fields.
+ * @param content
  */
 function parseAISuggestions(content: string): Record<string, unknown> {
-  // Try to extract JSON from the response
   let jsonStr = content.trim();
-
-  // Handle markdown code blocks
-  if (jsonStr.startsWith('```json')) {
-    jsonStr = jsonStr.slice(7);
-  } else if (jsonStr.startsWith('```')) {
-    jsonStr = jsonStr.slice(3);
-  }
-  if (jsonStr.endsWith('```')) {
-    jsonStr = jsonStr.slice(0, -3);
-  }
+  if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+  else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+  if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
   jsonStr = jsonStr.trim();
 
-  // Try to find JSON object in the response
   const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[0];
-  }
+  if (jsonMatch) jsonStr = jsonMatch[0];
 
   try {
     const parsed = JSON.parse(jsonStr);
-    // Validate we got meaningful content
     if (Object.keys(parsed).length > 0) {
       console.log('✅ JSON parsed successfully:', Object.keys(parsed));
       return parsed;
     }
-  } catch (error) {
-    console.warn('⚠️ Failed to parse AI response as JSON, attempting key-based extraction:', error);
+  } catch (e) {
+    console.warn('⚠️ Failed to parse JSON, attempting key-based extraction:', e);
   }
 
-  // ===== ROBUST KEY-BASED EXTRACTION =====
-  // This handles malformed JSON from LLMs that may have unterminated strings
   const suggestions: Record<string, unknown> = {};
 
-  // Extract suggestedDescription (handles multiline by being greedy but stopping at next key)
-  const descMatch = content.match(/"suggestedDescription"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|"\s*$)/);
-  if (descMatch && descMatch[1] && descMatch[1].length > 10) {
-    // Clean up escaped characters and normalize
-    suggestions.suggestedDescription = descMatch[1]
-      .replace(/\\n/g, ' ')
-      .replace(/\\"/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim();
+  const descMatch = content.match(/"suggestedDescription"\s*:\s*"([\s\S]*?)(?:"\s*[,}]|"$)/);
+  if (descMatch?.[1] && descMatch[1].length > 10) {
+    suggestions.suggestedDescription = descMatch[1].replace(/\n/g, ' ').replace(/\\"/g, '"').replace(/\s+/g, ' ').trim();
   }
 
-  // Extract suggestedTraits array
   const traitsMatch = content.match(/"suggestedTraits"\s*:\s*\[([\s\S]*?)\]/);
-  if (traitsMatch && traitsMatch[1]) {
-    const traitItems = traitsMatch[1].match(/"([^"]+)"/g);
-    if (traitItems && traitItems.length > 0) {
-      suggestions.suggestedTraits = traitItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
-    }
+  if (traitsMatch?.[1]) {
+    const items = traitsMatch[1].match(/"([^"]+)"/g);
+    if (items?.length) suggestions.suggestedTraits = items.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
   }
 
-  // Extract suggestedVoiceTone (simple string)
   const voiceToneMatch = content.match(/"suggestedVoiceTone"\s*:\s*"([^"]+)"/);
-  if (voiceToneMatch && voiceToneMatch[1] && voiceToneMatch[1].length > 2) {
-    suggestions.suggestedVoiceTone = voiceToneMatch[1].trim();
-  }
+  if (voiceToneMatch?.[1] && voiceToneMatch[1].length > 2) suggestions.suggestedVoiceTone = voiceToneMatch[1].trim();
 
-  // Extract suggestedAppearance array
   const appearanceMatch = content.match(/"suggestedAppearance"\s*:\s*\[([\s\S]*?)\]/);
-  if (appearanceMatch && appearanceMatch[1]) {
-    const appearanceItems = appearanceMatch[1].match(/"([^"]+)"/g);
-    if (appearanceItems && appearanceItems.length > 0) {
-      suggestions.suggestedAppearance = appearanceItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
-    }
+  if (appearanceMatch?.[1]) {
+    const items = appearanceMatch[1].match(/"([^"]+)"/g);
+    if (items?.length) suggestions.suggestedAppearance = items.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
   }
 
-  // Extract suggestedPersona
   const personaMatch = content.match(/"suggestedPersona"\s*:\s*"([^"]+)"/);
-  if (personaMatch && personaMatch[1] && personaMatch[1].length > 5) {
-    suggestions.suggestedPersona = personaMatch[1].trim();
-  }
+  if (personaMatch?.[1] && personaMatch[1].length > 5) suggestions.suggestedPersona = personaMatch[1].trim();
 
-  // Extract suggestedBackstory array
   const backstoryMatch = content.match(/"suggestedBackstory"\s*:\s*\[([\s\S]*?)\]/);
-  if (backstoryMatch && backstoryMatch[1]) {
-    const backstoryItems = backstoryMatch[1].match(/"([^"]+)"/g);
-    if (backstoryItems && backstoryItems.length > 0) {
-      suggestions.suggestedBackstory = backstoryItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
-    }
+  if (backstoryMatch?.[1]) {
+    const items = backstoryMatch[1].match(/"([^"]+)"/g);
+    if (items?.length) suggestions.suggestedBackstory = items.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
   }
 
-  // Extract suggestedVoiceExamples array
   const voiceExMatch = content.match(/"suggestedVoiceExamples"\s*:\s*\[([\s\S]*?)\]/);
-  if (voiceExMatch && voiceExMatch[1]) {
-    const exampleItems = voiceExMatch[1].match(/"([^"]+)"/g);
-    if (exampleItems && exampleItems.length > 0) {
-      suggestions.suggestedVoiceExamples = exampleItems.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
-    }
+  if (voiceExMatch?.[1]) {
+    const items = voiceExMatch[1].match(/"([^"]+)"/g);
+    if (items?.length) suggestions.suggestedVoiceExamples = items.map(t => t.replace(/"/g, '').trim()).filter(t => t.length > 0);
   }
 
   console.log('📋 Key-based extraction result:', Object.keys(suggestions));
-
-  if (Object.keys(suggestions).length === 0) {
-    throw new Error('Could not parse AI suggestions - no valid fields extracted');
-  }
-
+  if (Object.keys(suggestions).length === 0) throw new Error('Could not parse AI suggestions - no valid fields extracted');
   return suggestions;
 }
 
 serve(async (req) => {
   const startTime = Date.now();
 
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -410,18 +442,13 @@ serve(async (req) => {
   try {
     const requestBody: CharacterSuggestionRequest = await req.json();
 
-    // Validate request
     if (!requestBody.type) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Suggestion type is required'
-      }), {
+      return new Response(JSON.stringify({ success: false, error: 'Suggestion type is required' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400
       });
     }
 
-    // Default to NSFW content rating
     const contentRating = requestBody.contentRating || 'nsfw';
 
     console.log('🎭 Character suggestion request:', {
@@ -433,22 +460,20 @@ serve(async (req) => {
       hasExistingRole: !!requestBody.existingRole
     });
 
-    // Build prompts
     const systemPrompt = buildSystemPrompt(contentRating, requestBody.type);
     const userPrompt = buildUserPrompt(requestBody);
 
-    // Get model configuration from api_models table
-    const modelConfig = await getModelConfig(requestBody.modelId, requestBody.modelKey);
+    // Fully dynamic model resolution from api_models + api_providers
+    const resolvedModel = await resolveModel(requestBody.modelId, requestBody.modelKey);
 
     console.log('🎭 Using model for suggestions:', {
-      model_key: modelConfig.model_key,
-      display_name: modelConfig.display_name
+      model_key: resolvedModel.model_key,
+      display_name: resolvedModel.display_name,
+      provider: resolvedModel.provider.name
     });
 
-    // Call OpenRouter with model config
-    const { content, model, display_name } = await callOpenRouter(systemPrompt, userPrompt, modelConfig);
+    const { content, model, display_name } = await callChatProvider(systemPrompt, userPrompt, resolvedModel);
 
-    // Parse response
     const suggestions = parseAISuggestions(content);
 
     const response: CharacterSuggestionResponse = {
