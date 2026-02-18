@@ -459,7 +459,7 @@ You say: ...`;
         .select('model_key')
         .eq('modality', 'roleplay')
         .eq('is_active', true)
-        .eq('is_default', true)
+        .contains('default_for_tasks', ['roleplay'])
         .order('priority', { ascending: true })
         .limit(1)
         .maybeSingle();

@@ -13,13 +13,15 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from '@/components/ui/alert-dialog';
 import { EditableCell } from './EditableCell';
 import { SchemaEditor, CapabilitiesEditor, type InputSchema } from './SchemaEditor';
-import { Plus, Pencil, Trash2, ChevronRight, Star, X, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronRight, X, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface SafeApiProvider {
@@ -45,8 +47,19 @@ interface ApiModel {
   output_format: string | null;
   is_active: boolean;
   is_default: boolean;
+  default_for_tasks: string[];
   priority: number;
 }
+
+const TASK_ABBREVIATIONS: Record<string, string> = {
+  generation: 'GEN',
+  style_transfer: 'STY',
+  upscale: 'UPS',
+  roleplay: 'RP',
+  reasoning: 'RSN',
+  enhancement: 'ENH',
+  embedding: 'EMB',
+};
 
 const MODALITIES = ['image', 'video', 'chat'] as const;
 const TASKS = ['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding'] as const;
@@ -175,7 +188,7 @@ export const ApiModelsTab = () => {
           case 'avg_cost': cmp = (statsA?.avgCost || 0) - (statsB?.avgCost || 0); break;
           case 'avg_time': cmp = (statsA?.avgTime || 0) - (statsB?.avgTime || 0); break;
           case 'priority': cmp = a.priority - b.priority; break;
-          case 'is_default': cmp = (a.is_default ? 1 : 0) - (b.is_default ? 1 : 0); break;
+          case 'is_default': cmp = (a.default_for_tasks?.length || 0) - (b.default_for_tasks?.length || 0); break;
           case 'is_active': cmp = (a.is_active ? 1 : 0) - (b.is_active ? 1 : 0); break;
           default: cmp = 0;
         }
@@ -319,7 +332,7 @@ export const ApiModelsTab = () => {
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="avg_cost" label="Avg Cost" onClick={handleSort} className="w-[70px] text-right" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="avg_time" label="Avg Time" onClick={handleSort} className="w-[70px] text-right" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="priority" label="Pri" onClick={handleSort} className="w-[45px]" />
-                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_default" label="Def" onClick={handleSort} className="w-[35px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_default" label="Defaults" onClick={handleSort} className="w-[90px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_active" label="On" onClick={handleSort} className="w-[45px]" />
                       <TableHead className="h-7 px-2 text-[10px] w-[55px]">Acts</TableHead>
                     </TableRow>
@@ -477,14 +490,45 @@ function ModelRow({ model, avgCost, avgTime, editingCellId, setEditingCellId, on
         />
       </TableCell>
 
-      {/* Default - star toggle */}
-      <TableCell className="p-1 text-center">
-        <button
-          onClick={() => onUpdate({ is_default: !model.is_default })}
-          className="hover:scale-110 transition-transform"
-        >
-          <Star className={`h-3.5 w-3.5 ${model.is_default ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/40'}`} />
-        </button>
+      {/* Default tasks - popover with checkboxes */}
+      <TableCell className="p-1">
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className="flex flex-wrap gap-0.5 min-w-[60px] cursor-pointer hover:opacity-80 transition-opacity">
+              {(model.default_for_tasks?.length > 0) ? (
+                model.default_for_tasks.map(t => (
+                  <Badge key={t} variant="secondary" className="text-[9px] h-3.5 px-1 font-mono">
+                    {TASK_ABBREVIATIONS[t] || t.slice(0, 3).toUpperCase()}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-[10px] text-muted-foreground/40">---</span>
+              )}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-44 p-2" align="start">
+            <div className="text-[10px] font-semibold text-muted-foreground mb-1.5">Default for tasks</div>
+            <div className="space-y-1">
+              {TASKS.map(task => {
+                const checked = model.default_for_tasks?.includes(task) ?? false;
+                return (
+                  <label key={task} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(c) => {
+                        const current = model.default_for_tasks || [];
+                        const next = c ? [...current, task] : current.filter(t => t !== task);
+                        onUpdate({ default_for_tasks: next, is_default: next.length > 0 } as any);
+                      }}
+                      className="h-3 w-3"
+                    />
+                    <span>{task}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
       </TableCell>
 
       {/* Active - switch toggle */}
@@ -552,6 +596,7 @@ function ModelForm({ model, providers, onSubmit, onCancel }: {
     output_format: model?.output_format || null,
     is_active: model?.is_active ?? true,
     is_default: model?.is_default ?? false,
+    default_for_tasks: model?.default_for_tasks || [],
     priority: model?.priority || 0
   });
 
@@ -653,9 +698,25 @@ function ModelForm({ model, providers, onSubmit, onCancel }: {
               <Switch checked={formData.is_active} onCheckedChange={(v) => set('is_active', v)} className="scale-75" />
               <Label className="text-[10px]">Active</Label>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Switch checked={formData.is_default} onCheckedChange={(v) => set('is_default', v)} className="scale-75" />
-              <Label className="text-[10px]">Default</Label>
+            <div className="flex flex-wrap items-center gap-1">
+              <Label className="text-[10px] text-muted-foreground mr-1">Defaults:</Label>
+              {TASKS.map(task => {
+                const checked = formData.default_for_tasks?.includes(task) ?? false;
+                return (
+                  <label key={task} className="flex items-center gap-0.5 text-[10px] cursor-pointer">
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={(c) => {
+                        const current = formData.default_for_tasks || [];
+                        const next = c ? [...current, task] : current.filter(t => t !== task);
+                        setFormData(prev => ({ ...prev, default_for_tasks: next, is_default: next.length > 0 }));
+                      }}
+                      className="h-3 w-3"
+                    />
+                    <span>{TASK_ABBREVIATIONS[task] || task}</span>
+                  </label>
+                );
+              })}
             </div>
           </div>
           <div className="flex gap-2">

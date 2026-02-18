@@ -72,6 +72,7 @@ export type Database = {
           cost_per_use: number | null
           created_at: string
           created_by: string | null
+          default_for_tasks: string[]
           display_name: string
           endpoint_path: string | null
           id: string
@@ -95,6 +96,7 @@ export type Database = {
           cost_per_use?: number | null
           created_at?: string
           created_by?: string | null
+          default_for_tasks?: string[]
           display_name: string
           endpoint_path?: string | null
           id?: string
@@ -118,6 +120,7 @@ export type Database = {
           cost_per_use?: number | null
           created_at?: string
           created_by?: string | null
+          default_for_tasks?: string[]
           display_name?: string
           endpoint_path?: string | null
           id?: string

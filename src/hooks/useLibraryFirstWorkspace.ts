@@ -205,14 +205,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         return;
       }
       
-      // Load default model from api_models table (non-local, is_default=true)
+      // Load default model from api_models table (non-local, default for generation)
       try {
         const { data: defaultModel, error } = await supabase
           .from('api_models')
           .select('id, model_key, display_name, api_providers!inner(name)')
           .eq('modality', 'image')
           .eq('is_active', true)
-          .eq('is_default', true)
+          .contains('default_for_tasks', ['generation'])
           .order('priority', { ascending: true })
           .limit(1)
           .single();
