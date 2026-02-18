@@ -1,38 +1,43 @@
 
 
-# Fix: Vision Task Support + Empty Response Handling
+# Fix: Vision Task + Truncated Response Handling
 
-## Two Issues Found
+## Issue 1: "vision" still not in dropdowns
 
-### Issue 1: "vision" not available as a task in the UI or database
+The database CHECK constraint `api_models_task_check` still only allows 7 values. The previous migration was never applied.
 
-The `task` column on `api_models` has a **database CHECK constraint** that only allows these 7 values:
-`generation, style_transfer, upscale, roleplay, reasoning, enhancement, embedding`
+**Changes needed:**
 
-The frontend mirrors this in two places:
-- `src/components/admin/ApiModelsTab.tsx` line 65: `TASKS` array
-- `src/hooks/useApiModels.ts` line 11: TypeScript type
+1. **Database migration**: Drop old constraint, add new one including `'vision'`
+2. **`src/components/admin/ApiModelsTab.tsx`** (line 54-65):
+   - Add `vision: 'VIS'` to `TASK_ABBREVIATIONS`
+   - Add `'vision'` to the `TASKS` array
+3. **`src/hooks/useApiModels.ts`** (line 11):
+   - Add `'vision'` to the task type union
 
-Since `default_for_tasks` is an unconstrained text array, adding `'vision'` there worked fine. But the task dropdown and the column itself can never be set to `'vision'`.
+## Issue 2: Truncated JSON returned as description
 
-**Fix:**
-1. **Database migration**: ALTER the CHECK constraint to add `'vision'` to the allowed values
-2. **`ApiModelsTab.tsx`**: Add `'vision'` to the `TASKS` array
-3. **`useApiModels.ts`**: Add `'vision'` to the TypeScript union type
+The logs reveal what happened:
 
-### Issue 2: Empty model response causes silent failure
+```
+contentLength: 299
+preview: " ```json\n{\n  \"gender\": \"female\",\n  \"description\": \"She radiates a dreamy, tropical allure with her upward gaze suggesting quiet confidence and wanderl..."
+```
 
-The latest call returned `contentLength: 0` from Kimi K2.5. The function correctly fell back to `{ description: "", traits: "", ... }` but the frontend treated this as "success" and showed a toast saying traits were extracted — even though nothing was actually extracted.
+The model returned only 299 characters -- it hit `max_tokens` and cut off mid-sentence. The JSON parser correctly failed (`Unterminated string at position 290`), but the **fallback behavior** put the entire raw string (including the ` ```json` prefix) into `description`. The frontend then saved this broken JSON blob as the character description.
 
-Previous calls to the same model with the same image worked fine (1218 chars, 1123 chars), so this is a transient/flaky response.
+**Root cause**: `max_tokens: 800` is too low for the structured JSON response, especially with Kimi K2.5 which may use tokens on `<think>` reasoning before outputting.
 
-**Fix (in `CharacterStudioV3.tsx`):**
-- After receiving the response, check if the returned `data.description` (or `data.traits`) is empty
-- If empty, show an error toast: "Vision model returned empty response. Try again."
-- Don't overwrite existing character fields with empty values
+**Fixes:**
 
-**Fix (in `describe-image/index.ts`):**
-- When `rawContent` is empty, return `success: false` with a clear error message instead of returning a fallback object that looks like success
+### Edge function (`describe-image/index.ts`):
+- Increase `max_tokens` default from `800` to `2048` for structured mode (the thinking tokens + JSON output need room)
+- When `rawContent` is empty or when JSON parsing fails, return `success: false` with an error message instead of a fallback object that looks like success
+- The fallback at line 192 currently returns `{ description: content.trim() }` which puts broken JSON into the description field -- this must stop
+
+### Frontend (`CharacterStudioV3.tsx`):
+- After receiving the response, also check if `data.success === false` and show an error toast
+- Add a guard: if `data.data.description` contains ` ```json` or starts with `{`, treat it as a failed parse and show error instead of saving
 
 ---
 
@@ -40,9 +45,9 @@ Previous calls to the same model with the same image worked fine (1218 chars, 11
 
 | File | Change |
 |------|--------|
-| Database (`api_models_task_check`) | ALTER CHECK constraint to include `'vision'` |
-| `src/components/admin/ApiModelsTab.tsx` | Add `'vision'` to `TASKS` array |
+| Database | New migration: update CHECK constraint to include `'vision'` |
+| `src/components/admin/ApiModelsTab.tsx` | Add `'vision'` to `TASKS` and `TASK_ABBREVIATIONS` |
 | `src/hooks/useApiModels.ts` | Add `'vision'` to task type union |
-| `supabase/functions/describe-image/index.ts` | Return `success: false` when model returns empty content |
-| `src/pages/CharacterStudioV3.tsx` | Handle empty/failed responses gracefully with retry toast |
+| `supabase/functions/describe-image/index.ts` | Increase max_tokens to 2048; return `success: false` on empty/failed parse instead of fallback |
+| `src/pages/CharacterStudioV3.tsx` | Validate response data before saving; show error toast on bad data |
 
