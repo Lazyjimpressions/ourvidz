@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Loader2, ChevronDown, Check, AlertCircle, MessageSquare, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -55,6 +56,8 @@ export default function CharacterStudioV3() {
   const [workspaceTab, setWorkspaceTab] = useState<'portraits' | 'scenes'>('portraits');
   // Prompt text
   const [promptText, setPromptText] = useState('');
+  const promptAutoPopulatedRef = useRef(true);
+  const lastAutoPromptRef = useRef('');
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -110,6 +113,38 @@ export default function CharacterStudioV3() {
     return () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
   }, []);
 
+  // Auto-populate prompt bar from character fields
+  useEffect(() => {
+    const parts: string[] = [];
+    if (character.name) parts.push(`Portrait of ${character.name}`);
+    if (character.gender && character.gender !== 'unspecified') parts.push(character.gender);
+    if (character.traits) parts.push(character.traits);
+    if (character.appearance_tags?.length > 0) parts.push(character.appearance_tags.join(', '));
+    const assembled = parts.join(', ') || '';
+    lastAutoPromptRef.current = assembled;
+    if (promptAutoPopulatedRef.current && assembled) {
+      setPromptText(assembled);
+    }
+  }, [character.name, character.gender, character.traits, character.appearance_tags]);
+
+  // Track manual edits to prompt
+  const handlePromptTextChange = useCallback((v: string) => {
+    setPromptText(v);
+    promptAutoPopulatedRef.current = v === lastAutoPromptRef.current;
+  }, []);
+
+  // Enhancement handler
+  const handleEnhancePrompt = useCallback(async (prompt: string, modelId: string): Promise<string | null> => {
+    const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+      body: { prompt, targetModelId: modelId, jobType: 'image', contentRating: character.content_rating }
+    });
+    if (error || !data?.enhancedPrompt) {
+      toast({ title: 'Enhancement failed', description: error?.message || 'Could not enhance prompt', variant: 'destructive' });
+      return null;
+    }
+    return data.enhancedPrompt;
+  }, [character.content_rating, toast]);
+
   // Handlers
   const handleGenerate = async (prompt: string, refUrl?: string, modelId?: string) => {
     await generatePortrait(prompt, {
@@ -133,7 +168,7 @@ export default function CharacterStudioV3() {
     character, updateCharacter, isNewCharacter, isDirty, isSaving, isGenerating,
     selectedImageModel, onImageModelChange: setSelectedImageModel, imageModelOptions,
     onOpenImagePicker: () => setShowImagePicker(true),
-    onGenerate: handleGenerate, onSave: saveCharacter, primaryPortraitUrl: primaryPortrait?.image_url,
+    onSave: saveCharacter, primaryPortraitUrl: primaryPortrait?.image_url,
     entryMode, onClearSuggestions: clearSuggestions,
   };
 
@@ -144,7 +179,7 @@ export default function CharacterStudioV3() {
     selectedItemId, selectedItemType, selectItem, character,
     updateCharacter, selectedImageModel, onImageModelChange: setSelectedImageModel,
     imageModelOptions, onOpenImagePicker: () => setShowImagePicker(true),
-    onGenerate: handleGenerate, promptText, setPromptText,
+    onGenerate: handleGenerate, promptText, setPromptText: handlePromptTextChange,
     onUseAsReference: handleUseAsReference,
     onEditScene: (s: CharacterScene) => { setSceneToEdit(s); setShowSceneModal(true); },
     onDeleteScene: async (id: string) => { console.log('Delete scene:', id); },
@@ -153,6 +188,7 @@ export default function CharacterStudioV3() {
     workspaceTab, setWorkspaceTab,
     characterAppearanceTags: character.appearance_tags || [],
     onRegenerate: (prompt: string, refUrl: string) => { updateCharacter({ reference_image_url: refUrl }); handleGenerate(prompt, refUrl, selectedImageModel); },
+    onEnhancePrompt: handleEnhancePrompt,
   };
 
   // MOBILE
