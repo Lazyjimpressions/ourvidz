@@ -1,131 +1,103 @@
 
 
-# Refactor: Table-Driven Prompt Enhancement (Remove All Hardcoding)
+# Dynamic Enhancement Model Assignment
 
-## Problem Summary
+## What Changes
 
-The `enhance-prompt` edge function is stuck in a legacy architecture designed for local Qwen workers (`qwen_instruct`, `qwen_base`). It has three major issues:
+The enhancement LLM (the model that rewrites prompts before generation) will become a first-class dynamic assignment -- just like roleplay and reasoning models already are in `api_models`. No model keys will be hardcoded in edge functions.
 
-1. **Worker routing is hardcoded for local models only.** The orchestrator's `selectWorkerType()` only knows about `qwen_instruct` and `qwen_base`, routing to local chat/WAN workers. There is no path to use OpenRouter (or any API provider) for the main enhancement flow -- OpenRouter is only used in the `scene_creation` and `scene_starters` branches, not in the sparkle button's general enhancement path.
+## 1. Register Enhancement Models in `api_models`
 
-2. **`model_id` is sent by the UI but never extracted.** The sparkle button sends `model_id` (the image model UUID), but line 31-39 of the edge function never destructures it. The orchestrator code at line 572 checks for `request.model_id` but it's always undefined, so it falls back to `getModelTypeFromJobType()` which returns generic `'sdxl'` for all image jobs.
+Insert the current default (MythoMax) as a `chat / enhancement` model so the system can resolve it dynamically. Future models (Grok, etc.) are added via the Admin Portal with zero code changes.
 
-3. **Multiple layers of hardcoded fallbacks.** When no template matches (which is every time for Flux models), the code cascades through: `enhanceWithTemplate` (tries local workers, fails) -> `enhanceWithRules` (appends hardcoded CLIP tags like "masterpiece, best quality") -> `enhanceWithHardcodedFallback` (more hardcoded tags). None of these know about Flux, Kontext, or any non-SDXL/WAN model.
-
-## Current Enhancement Flow (Broken for API Models)
+**Database insert** (not a schema migration -- the table already supports `task: 'enhancement'`):
 
 ```text
-Sparkle Button
-  |-- sends { model_id, job_type, contentType }
-  v
-enhance-prompt edge function
-  |-- extracts prompt, jobType, contentType
-  |-- IGNORES model_id  <-- BUG
-  v
-DynamicEnhancementOrchestrator.enhancePrompt()
-  |-- model_id is undefined, falls back to getModelTypeFromJobType()
-  |-- returns 'sdxl' for ALL image jobs
-  v
-Template lookup (cache -> DB)
-  |-- looks for target_model='sdxl', enhancer_model='qwen_instruct'
-  |-- finds old Qwen-era SDXL template
-  v
-enhanceWithChatWorker()
-  |-- calls getChatWorkerUrl() -> get-active-worker-url
-  |-- local Qwen worker is offline -> FAILS
-  v
-enhanceWithRules() fallback
-  |-- appends "masterpiece, best quality, detailed" <-- WRONG for Flux
+| display_name | model_key                  | modality | task        | is_default |
+|-------------|----------------------------|----------|-------------|------------|
+| MythoMax 13B | gryphe/mythomax-l2-13b    | chat     | enhancement | true       |
 ```
 
-## Proposed Architecture: Fully Table-Driven Enhancement
+## 2. Edge Function: Resolve Enhancer from `api_models`
 
-### Key Design Change
+**File:** `supabase/functions/enhance-prompt/index.ts`
 
-Instead of routing through local workers, the orchestrator should:
+Replace every instance of the hardcoded `'gryphe/mythomax-l2-13b'` fallback with a dynamic DB lookup:
 
-1. **Resolve the image model** from `model_id` to get its `model_key`
-2. **Find the matching `prompt_templates` row** using `target_model = model_key`
-3. **Use the template's `enhancer_model` field** to determine HOW to enhance (which LLM to call)
-4. **Route to OpenRouter** using the `enhancer_model` value as the OpenRouter model key (e.g., `gryphe/mythomax-l2-13b`)
-5. **Send the template's `system_prompt` + user prompt** to OpenRouter for enhancement
-6. **Return the enhanced prompt** -- no hardcoded tags appended
+- Accept optional `enhancement_model` from request body (user's explicit choice from UI)
+- If not provided, query `api_models` for the default: `modality = 'chat'`, `task = 'enhancement'`, `is_default = true`
+- Only use a hardcoded string as an absolute last-resort if the DB query itself fails
 
-### Fix 1: Extract `model_id` at Top Level
+Specific changes:
+- **Line 31**: Also extract `enhancement_model` from `requestBody`
+- **Line 565**: Replace `request.selectedModel || 'gryphe/mythomax-l2-13b'` with resolved enhancer
+- **Line 641**: Replace `template.enhancer_model || 'gryphe/mythomax-l2-13b'` with resolved enhancer
+- **Line 678**: Same replacement in `enhanceViaOpenRouter`
+- Add a `resolveEnhancerModel()` method that: checks `request.enhancement_model` (user choice) then queries DB default then falls back
 
-Add `model_id` extraction from `requestBody` (around line 36) and pass it into the orchestrator call (line 474).
+## 3. Decouple `enhancer_model` from Template Lookup
 
-### Fix 2: Route Enhancement Through OpenRouter
+The template lookup currently uses a 5-tuple key including `enhancer_model`. This couples "which LLM runs enhancement" to "which template is found." The same system prompt works regardless of whether MythoMax or Grok runs it.
 
-Replace the `enhanceWithChatWorker()` / `enhanceWithWanWorker()` local worker calls with a single `enhanceWithAPIModel()` method that:
+**File:** `supabase/functions/_shared/cache-utils.ts`
 
-- Takes the template's `enhancer_model` (e.g., `gryphe/mythomax-l2-13b`) as the model to call
-- Sends messages to OpenRouter using the existing `OpenRouter_Roleplay_API_KEY` secret
-- Falls back gracefully if OpenRouter is unavailable
+- `getTemplateFromCache()` (line 100-134): Change from 5-tuple `[targetModel][enhancerModel][jobType][useCase][contentMode]` to 4-tuple `[targetModel][jobType][useCase][contentMode]`. Remove `enhancerModel` parameter.
+- `getDatabaseTemplate()` (line 278-365): Remove `.eq('enhancer_model', enhancerModel)` from the query. Remove the `qwen_instruct`/`qwen_base` fallback logic (lines 314-329). Remove `enhancerModel` parameter.
+- Update `CacheData` interface (line 13) -- `enhancement` record nesting drops one level.
 
-This replaces the broken `selectWorkerType()` -> `getChatWorkerUrl()` -> local worker chain.
+**File:** `supabase/functions/enhance-prompt/index.ts`
 
-### Fix 3: Add Flux Enhancement Templates to Database
+- Lines 581-586 and 601-607: Remove `enhancerModel` argument from `getTemplateFromCache()` and `getDatabaseTemplate()` calls.
 
-Insert enhancement templates for the 4 active Flux models, using `enhancer_model: 'gryphe/mythomax-l2-13b'` (same as Seedream templates). Each template gets Flux-appropriate system prompts -- natural language descriptions, no CLIP tag formatting:
+## 4. Add Enhancement Model to Playground Settings UI
 
-| target_model | content_mode | Template |
-|---|---|---|
-| `fal-ai/flux-2` | nsfw | Flux 2 Prompt Enhance (NSFW) |
-| `fal-ai/flux-2` | sfw | Flux 2 Prompt Enhance (SFW) |
-| `fal-ai/flux-2/flash` | nsfw | Flux 2 Flash Prompt Enhance (NSFW) |
-| `fal-ai/flux-2/flash` | sfw | Flux 2 Flash Prompt Enhance (SFW) |
-| `fal-ai/flux-2/flash/edit` | nsfw | Flux 2 Flash Edit Prompt Enhance (NSFW) |
-| `fal-ai/flux-2/flash/edit` | sfw | Flux 2 Flash Edit Prompt Enhance (SFW) |
-| `fal-ai/flux-pro/kontext` | nsfw | Flux Kontext Prompt Enhance (NSFW) |
-| `fal-ai/flux-pro/kontext` | sfw | Flux Kontext Prompt Enhance (SFW) |
+**File:** `src/hooks/usePlaygroundSettings.ts`
+- Add `enhancementModel: string` to `PlaygroundSettings` interface
+- Default value: `''` (empty string = use DB default)
 
-Flux system prompts will instruct the LLM to produce natural language descriptions (Flux understands full sentences, not comma-separated tags).
+**File:** `src/hooks/usePlaygroundModels.ts`
+- Add `enhancement` group to `useGroupedModels()`: `models?.filter(m => m.modality === 'chat' && m.task === 'enhancement')`
 
-### Fix 4: Remove Hardcoded Fallbacks
+**File:** `src/components/playground/PlaygroundSettingsPopover.tsx`
+- Add an "Enhance" model selector row (same pattern as Chat/Image/Video selectors), populated from `grouped.enhancement`
 
-- Remove `enhanceWithHardcodedFallback()` entirely -- if no template exists for a model, return the original prompt unchanged with a clear strategy indicator (`no_template_available`)
-- Remove `enhanceWithRules()` tag-appending logic -- no more "masterpiece, best quality" injection
-- Remove `enhanceSDXLNSFW()` male character hardcoding
-- Remove `applyTemplateEnhancement()` and `applyBasicEnhancement()` which append hardcoded strings like `"NSFW, ..., detailed anatomy, explicit content"`
-- Remove `optimizeTokens()` hardcoded limits map -- use `template.token_limit` from database instead
+## 5. Pass Enhancement Model from UI to Edge Function
 
-### Fix 5: Simplify Worker Selection
+**File:** `src/components/workspace/SimplePromptInput.tsx` (line 605-611)
+- Add `enhancement_model: settings.enhancementModel || undefined` to the request body
+- This requires the component to read playground settings (via `usePlaygroundSettings` hook or prop)
 
-Remove `selectWorkerType()`, `getChatWorkerUrl()`, `getWanWorkerUrl()`, and `getModelTypeFromJobType()`. These are all legacy local-worker concepts. The new flow is:
+**File:** `src/components/workspace/MobileSimplePromptInput.tsx` (line 110-116)
+- Same change as desktop
 
-1. Look up template from DB by `target_model` (image model key) + `content_mode`
-2. Template's `enhancer_model` tells us which LLM to call
-3. Call OpenRouter with that model + template's `system_prompt`
-4. Done
+## 6. Update Cache Builder (if applicable)
 
-## Files Changed
+The cache builder that populates `system_config.config.promptCache.templateCache.enhancement` must also drop the `enhancerModel` nesting level. This is likely in an edge function like `refresh-cache` or `build-cache`.
+
+## Summary of All Changes
 
 | File | Change |
-|---|---|
-| `supabase/functions/enhance-prompt/index.ts` | Major refactor: extract model_id, add OpenRouter-based enhancement, remove all hardcoded fallbacks and local worker routing |
+|------|--------|
+| `supabase/functions/enhance-prompt/index.ts` | Extract `enhancement_model`, add `resolveEnhancerModel()`, remove all hardcoded model keys, drop `enhancerModel` from template lookup calls |
+| `supabase/functions/_shared/cache-utils.ts` | Simplify template lookup from 5-tuple to 4-tuple, remove `enhancerModel` parameter and qwen fallbacks |
+| `src/hooks/usePlaygroundSettings.ts` | Add `enhancementModel` field |
+| `src/hooks/usePlaygroundModels.ts` | Add `enhancement` group |
+| `src/components/playground/PlaygroundSettingsPopover.tsx` | Add Enhance model selector |
+| `src/components/workspace/SimplePromptInput.tsx` | Pass `enhancement_model` in sparkle request |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Pass `enhancement_model` in sparkle request |
+| Cache builder edge function | Drop `enhancerModel` nesting level |
 
 ## Database Changes
 
-| Change | Scope |
-|---|---|
-| Insert Flux enhancement templates into `prompt_templates` | 8 rows (4 models x 2 content modes) |
+| Change | Detail |
+|--------|--------|
+| Insert into `api_models` | 1 row: MythoMax as `chat/enhancement` default (data insert, not schema migration) |
 
-## What Stays Unchanged
-
-- The `scene_creation` and `scene_starters` branches (lines 81-415) -- these already use OpenRouter correctly
-- The `modify` flow (lines 417-452) -- this is a simple string operation, no LLM needed
-- The `exact_copy` early exit (lines 62-78)
-- Frontend sparkle button code -- it already sends `model_id` correctly
-- Template lookup via `cache-utils.ts` -- this already works, just needs correct input data
-
-## Fallback Chain (New)
+## Resolution Chain (New)
 
 ```text
-1. Cache lookup (target_model + enhancer_model + content_mode)
-2. Database lookup (same 5-tuple)
-3. Return original prompt unchanged (no_template_available)
+1. User-selected enhancement_model from UI (if set)
+2. DB default: api_models WHERE modality='chat' AND task='enhancement' AND is_default=true
+3. Last-resort hardcoded fallback (only if DB query fails entirely)
 ```
-
-No hardcoded prompt manipulation at any level.
 
