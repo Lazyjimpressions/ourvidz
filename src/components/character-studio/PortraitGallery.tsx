@@ -9,7 +9,8 @@ import {
   Image as ImageIcon,
   Loader2,
   Download,
-  Copy,
+  ClipboardCopy,
+  Lock,
   CheckSquare,
   Check
 } from 'lucide-react';
@@ -37,6 +38,7 @@ interface PortraitGalleryProps {
   onAddNew: () => void;
   onUseAsReference: (portrait: CharacterPortrait) => void;
   onRegenerate?: (prompt: string, referenceUrl: string) => void;
+  onCopyPrompt?: (prompt: string) => void;
   characterAppearanceTags?: string[];
 }
 
@@ -52,6 +54,7 @@ export function PortraitGallery({
   onAddNew,
   onUseAsReference,
   onRegenerate,
+  onCopyPrompt,
   characterAppearanceTags = []
 }: PortraitGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -255,9 +258,19 @@ export function PortraitGallery({
                           </>
                         )}
                         <DropdownMenuItem onClick={() => onUseAsReference(portrait)}>
-                          <Copy className="w-4 h-4 mr-2" />
+                          <Lock className="w-4 h-4 mr-2" />
                           Use as Reference
                         </DropdownMenuItem>
+                        {(portrait.enhanced_prompt || portrait.prompt) && onCopyPrompt && (
+                          <DropdownMenuItem onClick={() => {
+                            const text = portrait.enhanced_prompt || portrait.prompt || '';
+                            navigator.clipboard.writeText(text);
+                            onCopyPrompt(text);
+                          }}>
+                            <ClipboardCopy className="w-4 h-4 mr-2" />
+                            Copy Prompt
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => handleDownload(portrait)}>
                           <Download className="w-4 h-4 mr-2" />
                           Download

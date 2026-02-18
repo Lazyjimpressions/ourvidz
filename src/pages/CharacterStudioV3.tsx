@@ -168,6 +168,10 @@ export default function CharacterStudioV3() {
     characterAppearanceTags: character.appearance_tags || [],
     onRegenerate: (prompt: string, refUrl: string) => { updateCharacter({ reference_image_url: refUrl }); handleGenerate(prompt, refUrl, selectedImageModel); },
     onEnhancePrompt: handleEnhancePrompt,
+    onCopyPrompt: (prompt: string) => {
+      setPromptText(prompt);
+      toast({ title: 'Prompt copied', description: 'Loaded into prompt bar and copied to clipboard.' });
+    },
     characterData: { name: character.name, gender: character.gender, traits: character.traits, appearance_tags: character.appearance_tags || [] },
   };
 

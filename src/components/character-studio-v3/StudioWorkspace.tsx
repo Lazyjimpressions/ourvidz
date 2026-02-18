@@ -42,6 +42,7 @@ interface StudioWorkspaceProps {
   characterAppearanceTags: string[];
   onRegenerate: (prompt: string, refUrl: string) => void;
   onEnhancePrompt?: (prompt: string, modelId: string) => Promise<string | null>;
+  onCopyPrompt?: (prompt: string) => void;
   characterData?: { name: string; gender: string; traits: string; appearance_tags: string[] };
   mobileMode?: boolean;
   scenesOnly?: boolean;
@@ -55,7 +56,7 @@ export function StudioWorkspace({
   onGenerate, promptText, setPromptText, onUseAsReference,
   onEditScene, onDeleteScene, onAddScene, onStartChatWithScene,
   workspaceTab, setWorkspaceTab, characterAppearanceTags, onRegenerate,
-  onEnhancePrompt, characterData, mobileMode, scenesOnly,
+  onEnhancePrompt, onCopyPrompt, characterData, mobileMode, scenesOnly,
 }: StudioWorkspaceProps) {
 
   // Scenes-only mode for mobile scenes tab
@@ -93,6 +94,7 @@ export function StudioWorkspace({
               onAddNew={() => onGenerate(promptText || character.traits || character.name || 'portrait', character.reference_image_url || undefined, selectedImageModel)}
               onUseAsReference={onUseAsReference}
               onRegenerate={onRegenerate}
+              onCopyPrompt={onCopyPrompt}
               characterAppearanceTags={characterAppearanceTags}
             />
           </div>
@@ -165,6 +167,7 @@ export function StudioWorkspace({
                 onAddNew={() => onGenerate(promptText || character.traits || character.name || 'portrait', character.reference_image_url || undefined, selectedImageModel)}
                 onUseAsReference={onUseAsReference}
                 onRegenerate={onRegenerate}
+                onCopyPrompt={onCopyPrompt}
                 characterAppearanceTags={characterAppearanceTags}
               />
             </div>
