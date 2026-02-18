@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
-  ChevronDown, Wand2, Loader2, Sparkles, Upload, Library, X, User, Undo2, Eraser
+  ChevronDown, Loader2, Sparkles, Upload, Library, X, User, Undo2, Eraser
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
@@ -34,7 +34,6 @@ interface StudioSidebarProps {
   onImageModelChange: (id: string) => void;
   imageModelOptions: ImageModelOption[];
   onOpenImagePicker: () => void;
-  onGenerate: (prompt: string, refUrl?: string, modelId?: string) => void;
   onSave: () => Promise<string | null>;
   primaryPortraitUrl?: string | null;
   entryMode?: string | null;
@@ -44,7 +43,7 @@ interface StudioSidebarProps {
 export function StudioSidebar({
   character, updateCharacter, isNewCharacter, isDirty, isSaving, isGenerating,
   selectedImageModel, onImageModelChange, imageModelOptions, onOpenImagePicker,
-  onGenerate, onSave, primaryPortraitUrl, entryMode, onClearSuggestions,
+  onSave, primaryPortraitUrl, entryMode, onClearSuggestions,
 }: StudioSidebarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -66,20 +65,6 @@ export function StudioSidebar({
   const [selectedRoleplayModel, setSelectedRoleplayModel] = useState('');
 
   const toggle = (s: keyof typeof openSections) => setOpenSections(p => ({ ...p, [s]: !p[s] }));
-
-  // Build appearance prompt
-  const buildPrompt = () => {
-    const parts: string[] = [];
-    if (character.name) parts.push(character.name);
-    if (character.gender) parts.push(character.gender);
-    if (character.appearance_tags.length > 0) parts.push(character.appearance_tags.join(', '));
-    if (character.traits) parts.push(character.traits);
-    return parts.join(', ') || 'portrait';
-  };
-
-  const handleGeneratePortrait = () => {
-    onGenerate(buildPrompt(), character.reference_image_url || undefined, selectedImageModel);
-  };
 
   // Tag management
   const addTag = () => {
@@ -316,10 +301,6 @@ export function StudioSidebar({
                 <Label className="text-[10px] text-muted-foreground">Image Model</Label>
                 <ModelSelector models={imageModelOptions} selectedModel={selectedImageModel} onSelect={onImageModelChange} isLoading={false} hasReferenceImage={!!character.reference_image_url} size="sm" />
               </div>
-              <Button className="w-full h-8 text-xs gap-1.5" onClick={handleGeneratePortrait} disabled={isGenerating || (!character.name && !character.traits)}>
-                {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                Generate Portrait
-              </Button>
             </CollapsibleContent>
           </Collapsible>
 

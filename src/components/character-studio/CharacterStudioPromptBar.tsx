@@ -10,6 +10,7 @@ import {
   X,
   Library,
   ChevronDown,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ImageModelOption } from '@/hooks/useImageModels';
@@ -48,6 +49,9 @@ interface CharacterStudioPromptBarProps {
   /** Controlled prompt text (optional - for pose presets integration) */
   value?: string;
   onValueChange?: (value: string) => void;
+
+  /** Optional enhancement callback */
+  onEnhancePrompt?: (prompt: string, modelId: string) => Promise<string | null>;
 }
 
 export function CharacterStudioPromptBar({
@@ -64,11 +68,13 @@ export function CharacterStudioPromptBar({
   generationProgress,
   value,
   onValueChange,
+  onEnhancePrompt,
 }: CharacterStudioPromptBarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [internalPrompt, setInternalPrompt] = React.useState('');
   const [isUploading, setIsUploading] = React.useState(false);
+  const [isEnhancing, setIsEnhancing] = React.useState(false);
 
   // Use controlled value if provided, otherwise use internal state
   const prompt = value !== undefined ? value : internalPrompt;
@@ -143,6 +149,17 @@ export function CharacterStudioPromptBar({
 
   const handleLibrarySelect = () => {
     onOpenImagePicker();
+  };
+
+  const handleEnhance = async () => {
+    if (!onEnhancePrompt || !prompt.trim() || isEnhancing) return;
+    setIsEnhancing(true);
+    try {
+      const result = await onEnhancePrompt(prompt.trim(), selectedImageModel);
+      if (result) setPrompt(result);
+    } finally {
+      setIsEnhancing(false);
+    }
   };
 
   return (
@@ -250,6 +267,25 @@ export function CharacterStudioPromptBar({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Enhance Button */}
+          {onEnhancePrompt && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={handleEnhance}
+              disabled={!prompt.trim() || isEnhancing || isGenerating || isDisabled}
+              className="h-9 w-9 flex-shrink-0"
+              title="Enhance prompt for selected model"
+            >
+              {isEnhancing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+            </Button>
+          )}
 
           {/* Spacer */}
           <div className="flex-1" />
