@@ -1,54 +1,98 @@
 
 
-# Apply Type + Task Taxonomy Changes
+# Upgrade Image Compare Tab: I2I, I2V, Reference Images, and Solo-Panel Mode
 
-## What Was Missed
+## Overview
 
-The taxonomy simplification plan was never applied -- neither the database data migration nor the code changes. Everything still uses the old 7-modality, 10-task structure.
+Extend the current Image Compare tab from T2I-only to support Image-to-Image (I2I) and Image-to-Video (I2V) models, add reference image loading from multiple sources, and allow disabling one panel to test a single model.
 
-## Step 1: Database Data Migration (UPDATE only, no schema change)
+## Changes
 
-Update the 5 roleplay rows so `modality` becomes `chat` and `task='chat'` becomes `task='reasoning'`:
+### 1. Expand Model Dropdown (Grouped by Type)
 
-```sql
--- Models with modality='roleplay', task='chat' --> modality='chat', task='reasoning'
-UPDATE api_models SET modality = 'chat', task = 'reasoning'
-WHERE modality = 'roleplay' AND task = 'chat';
+Currently the dropdown only shows T2I generation models. The new dropdown will show all visual model categories using `SelectGroup` headers:
 
--- Models with modality='roleplay', task='roleplay' --> modality='chat', task='roleplay'  
-UPDATE api_models SET modality = 'chat'
-WHERE modality = 'roleplay' AND task = 'roleplay';
-```
+- **None** (disables the panel)
+- **Text-to-Image** -- Flux-2, Seedream, SDXL, etc.
+- **Image-to-Image** -- Flux-2 Flash i2i, Seedream Edit, etc.
+- **Image-to-Video** -- WAN 2.1 I2V, LTX 13b i2v, etc.
 
-After this, the distinct values become: `image/generation`, `image/style_transfer`, `video/generation`, `chat/roleplay`, `chat/reasoning`.
+### 2. "None" Option for Solo Testing
 
-## Step 2: Admin UI -- `src/components/admin/ApiModelsTab.tsx`
+When a panel is set to "None":
+- Panel shows a grayed-out disabled state
+- Generation only fires for the active panel
+- If both panels are "None", the Send button is disabled
 
-- Line 51: Change MODALITIES from 7 items to `['image', 'video', 'chat']`
-- Line 52: Change TASKS from 10 items to `['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding']`
-- Line 316: Rename table header from `"Task"` to keep as `"Task"` (already correct)
-- Line 305: The collapsible group header already shows uppercase modality, which will now show `IMAGE`, `VIDEO`, `CHAT` -- correct
+### 3. Reference Image Slots
 
-## Step 3: Hooks
+A new `ReferenceImageSlots` component appears in each panel header when the selected model requires reference images.
 
-**`src/hooks/useApiModels.ts`** (line 10-11):
-- Simplify modality type to `'image' | 'video' | 'chat'`
-- Simplify task type to `'generation' | 'style_transfer' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding'`
+**Slot behavior by model type:**
 
-**`src/hooks/useRoleplayModels.ts`** (line 92):
-- Change `.eq('modality', 'roleplay')` to `.eq('modality', 'chat')`
+| Model type          | Slots shown | Required? |
+|---------------------|-------------|-----------|
+| T2I (generation)    | 0 (hidden)  | N/A       |
+| I2I (single-ref)    | 1           | Yes       |
+| I2I (multi-ref)     | 1-4 (+add)  | At least 1|
+| I2V                 | 1           | Yes       |
+| None                | 0 (hidden)  | N/A       |
 
-**`src/hooks/usePlaygroundModels.ts`** (lines 8, 92):
-- Line 8: Update type to `'image' | 'video' | 'chat'`
-- Line 92: Change `m.modality === 'roleplay' || m.modality === 'chat'` to `m.modality === 'chat'`
+**Three loading sources per slot:**
+- **File upload**: Local file picker, uploads to `reference_images` bucket
+- **Library**: Opens existing `ImagePickerDialog` to browse user library
+- **Workspace**: Opens `ImagePickerDialog` in workspace mode
 
-## Files Changed
+Each panel has independent reference images, enabling comparison of the same prompt+image across different models.
+
+### 4. Video Output Rendering
+
+When the selected model is I2V, results render as `<video>` tags with controls instead of `<img>`. Detection: model's `modality === 'video'` or result URL ends in `.mp4`/`.webm`.
+
+### 5. Validation
+
+- If a panel's model requires reference images but none are provided, Send is disabled for that panel with a warning badge
+- Both panels "None" disables Send entirely
+
+## Technical Details
+
+### Files to Create
+
+| File | Purpose |
+|------|---------|
+| `src/components/playground/ReferenceImageSlots.tsx` | Reusable component: 1-4 image slots with upload/library/workspace sources |
+
+### Files to Modify
 
 | File | Change |
 |------|--------|
-| Database (data only) | UPDATE 5 rows: roleplay to chat modality |
-| `src/components/admin/ApiModelsTab.tsx` | Simplify MODALITIES to 3, TASKS to 7 |
-| `src/hooks/useApiModels.ts` | Update TypeScript type unions |
-| `src/hooks/useRoleplayModels.ts` | Change filter from 'roleplay' to 'chat' |
-| `src/hooks/usePlaygroundModels.ts` | Simplify type union and chat filter |
+| `src/components/playground/ImageCompareView.tsx` | Grouped model dropdown, None option, reference image state, conditional ReferenceImageSlots, video output, updated `generateForPanel` to pass `image_url`/`image_urls` |
+| `src/hooks/useApiModels.ts` | Add `useAllVisualModels()` hook fetching T2I + I2I + I2V models |
+
+### No Backend Changes
+
+The `fal-image` edge function already handles `image_url`, `image_urls`, and video models.
+
+### Generation Request Body (Updated)
+
+```text
+{
+  prompt: finalPrompt,
+  apiModelId: panel.modelId,
+  job_type: isVideo ? 'video' : 'image_high',
+  input: {
+    image_url: singleRefUrl,         // single-ref models
+    image_urls: [url1, url2, ...],   // multi-ref models
+  },
+  metadata: { source: 'playground-image-compare' }
+}
+```
+
+### Upload Flow (File Source)
+
+1. User clicks "+" on empty slot, selects "Upload file"
+2. Hidden file input opens (accept="image/*")
+3. Upload to `reference_images/{userId}/ref_{timestamp}.jpg`
+4. Get signed URL
+5. Store in panel's `referenceImages` array
 
