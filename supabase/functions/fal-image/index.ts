@@ -592,11 +592,11 @@ serve(async (req) => {
 
     if (safetyParam === 'safety_tolerance') {
       // Kontext-style: use safety_tolerance (string '1'-'6', 6 = most permissive)
-      modelInput.safety_tolerance = contentMode === 'nsfw' ? '6' : (inputDefaults?.safety_tolerance || '6');
+      modelInput.safety_tolerance = contentMode === 'nsfw' ? '6' : ((apiModel.input_defaults as any)?.safety_tolerance || '6');
       console.log(`🔓 Safety tolerance set to ${modelInput.safety_tolerance} (Kontext-style)`);
     } else {
       // Standard: enable_safety_checker (boolean) — default OFF for adult platform
-      modelInput.enable_safety_checker = inputDefaults?.enable_safety_checker ?? false;
+      modelInput.enable_safety_checker = (apiModel.input_defaults as any)?.enable_safety_checker ?? false;
       console.log(`🔓 Safety checker: ${modelInput.enable_safety_checker} (from input_defaults)`);
     }
 
