@@ -8,7 +8,7 @@ interface ApiModel {
   model_key: string;
   version: string | null;
   modality: 'image' | 'video' | 'chat';
-  task: 'generation' | 'style_transfer' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding';
+  task: 'generation' | 'style_transfer' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding' | 'vision';
   model_family: string | null;
   is_default: boolean;
   priority: number;

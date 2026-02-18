@@ -115,15 +115,21 @@ export default function CharacterStudioV3() {
         },
       });
       if (error) throw error;
-      if (data?.success && data.data) {
+      if (data?.success === false) {
+        toast({ title: 'Analysis failed', description: data.error || 'Vision model returned empty response. Try again.', variant: 'destructive' });
+      } else if (data?.success && data.data) {
         const d = data.data;
         const updates: Partial<typeof character> = {};
         if (d.traits) updates.traits = d.traits;
-        if (d.description) updates.description = d.description;
+        if (d.description && !d.description.includes('```json') && !d.description.startsWith('{')) updates.description = d.description;
         if (d.gender && d.gender !== 'unspecified') updates.gender = Array.isArray(d.gender) ? d.gender[0] : d.gender;
         if (d.appearance_tags && Array.isArray(d.appearance_tags)) updates.appearance_tags = d.appearance_tags;
-        updateCharacter(updates);
-        toast({ title: 'Image Analyzed', description: `Traits extracted via ${data.model_display_name || 'vision model'}` });
+        if (Object.keys(updates).length > 0) {
+          updateCharacter(updates);
+          toast({ title: 'Image Analyzed', description: `Traits extracted via ${data.model_display_name || 'vision model'}` });
+        } else {
+          toast({ title: 'Analysis incomplete', description: 'Could not extract usable traits. Try again.', variant: 'destructive' });
+        }
       }
     } catch (err) {
       toast({ title: 'Analysis failed', description: err instanceof Error ? err.message : 'Could not analyze image', variant: 'destructive' });

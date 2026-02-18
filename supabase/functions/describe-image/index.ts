@@ -232,7 +232,7 @@ serve(async (req) => {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
       ],
-      max_tokens: model.input_defaults.max_tokens || 800,
+      max_tokens: model.input_defaults.max_tokens || (outputMode === 'structured' ? 2048 : 800),
       temperature: model.input_defaults.temperature || 0.4,
       stream: false,
     };
@@ -262,10 +262,36 @@ serve(async (req) => {
 
     console.log('✅ Vision response received:', { contentLength: rawContent.length, preview: rawContent.substring(0, 150) });
 
+    // Reject empty responses
+    if (!rawContent.trim()) {
+      console.error('❌ Vision model returned empty content');
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Vision model returned empty response. Try again.',
+        model_used: model.model_key,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
+
     // 4. Parse based on output mode
     let data: Record<string, unknown>;
     if (outputMode === 'structured') {
-      data = parseStructuredResponse(rawContent);
+      const parsed = parseStructuredResponse(rawContent);
+      // Check if parsing actually failed (fallback returns empty description)
+      if (!parsed.description && !parsed.traits && parsed.gender === 'unspecified') {
+        console.error('❌ Failed to parse structured response from vision model');
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Vision model returned unparseable response. Try again.',
+          model_used: model.model_key,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        });
+      }
+      data = parsed;
     } else {
       data = { text: rawContent.trim() };
     }
