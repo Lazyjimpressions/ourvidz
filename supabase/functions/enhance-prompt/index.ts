@@ -10,25 +10,21 @@ const corsHeaders = {
 
 serve(async (req) => {
   const monitor = new EdgeFunctionMonitor('enhance-prompt')
-  let prompt: string = '' // Declare at function scope
+  let prompt: string = ''
   
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Run content detection tests on startup (development only)
     if (Deno.env.get('ENVIRONMENT') === 'development') {
       testContentDetection()
     }
     
     const requestBody = await req.json()
     
-    // ===== BACKWARDS COMPATIBILITY: Accept both old and new field names =====
-    // Old: original_prompt, job_type, enhancement_model
-    // New: prompt, jobType, selectedModel
-    prompt = requestBody.prompt || requestBody.original_prompt || '' // Support both
+    // ===== Extract all fields with backwards compatibility =====
+    prompt = requestBody.prompt || requestBody.original_prompt || ''
     const jobType = requestBody.jobType || requestBody.job_type
     const format = requestBody.format
     const quality = requestBody.quality
@@ -36,8 +32,10 @@ serve(async (req) => {
     const user_id = requestBody.user_id
     const regeneration = requestBody.regeneration
     const selectedPresets = requestBody.selectedPresets || []
-    const contentType = requestBody.contentType // Extract contentType from request
+    const contentType = requestBody.contentType
     const exactCopyMode = requestBody.metadata?.exact_copy_mode || false
+    // NEW: Extract model_id (the image/video model UUID sent by the sparkle button)
+    const model_id = requestBody.model_id
 
     console.log('📥 enhance-prompt received:', {
       hasPrompt: !!prompt,
@@ -45,7 +43,7 @@ serve(async (req) => {
       jobType,
       selectedModel,
       contentType,
-      // Log which field names were used for debugging
+      model_id: model_id || 'not provided',
       usedLegacyFields: !!(requestBody.original_prompt || requestBody.job_type || requestBody.enhancement_model)
     });
 
@@ -64,12 +62,11 @@ serve(async (req) => {
     const isPromptlessUploadedExactCopy = exactCopyMode && !hasOriginalEnhancedPrompt && (!requestBody.prompt || !requestBody.prompt.trim());
     const referenceMode = requestBody.metadata?.reference_mode;
 
-    // Early exit for promptless exact copy: skip enhancement completely
     if (isPromptlessUploadedExactCopy) {
       return new Response(JSON.stringify({
         success: true,
         original_prompt: requestBody.prompt || '',
-        enhanced_prompt: requestBody.prompt || '',       // worker will ignore anyway in copy mode
+        enhanced_prompt: requestBody.prompt || '',
         enhancement_strategy: 'skip_for_exact_copy',
         enhancement_metadata: { exact_copy_mode: true, template_name: 'skip', token_count: 0 }
       }), {
@@ -81,7 +78,7 @@ serve(async (req) => {
     if (contentType === 'scene_creation') {
       console.log('🎬 Processing scene_creation content type');
       const contentRating = requestBody.contentRating || 'nsfw';
-      const userSelectedModel = requestBody.selectedModel || requestBody.chatModel || ''; // User's model choice
+      const userSelectedModel = requestBody.selectedModel || requestBody.chatModel || '';
 
       const sceneCreationSystemPrompt = `You are an expert at creating roleplay scene templates. Given a user's scene description, create optimized content for both chat roleplay and image generation.
 
@@ -102,7 +99,6 @@ Focus on:
 - Character-agnostic descriptions (no specific names or identities)
 - Tags that help with discovery (3-5 relevant tags)`;
 
-      // Helper function to parse scene creation response
       const parseSceneResponse = (responseText: string, fallbackPrompt: string): any => {
         try {
           const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -121,7 +117,6 @@ Focus on:
         }
       };
 
-      // Helper function to build success response
       const buildSceneResponse = (sceneData: any, strategy: string, modelUsed: string) => {
         const validScenarioTypes = ['stranger', 'relationship', 'power_dynamic', 'fantasy', 'slow_burn'];
         const normalizedScenarioType = validScenarioTypes.includes(sceneData.suggested_scenario_type)
@@ -156,7 +151,6 @@ Focus on:
         });
       };
 
-      // Determine if user selected local model
       const isLocalModel = userSelectedModel === 'qwen_instruct' ||
                           userSelectedModel === 'qwen-local' ||
                           userSelectedModel === 'qwen_local';
@@ -168,9 +162,7 @@ Focus on:
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
 
-      // Route based on user's model selection
       if (isLocalModel) {
-        // User explicitly selected local model - try local chat worker
         console.log('👤 User selected local model, using chat worker');
         try {
           const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
@@ -202,7 +194,6 @@ Focus on:
               }
             }
           }
-          // Local worker failed - return error (user explicitly wanted local)
           console.error('❌ Local chat worker unavailable but user selected it');
           return new Response(JSON.stringify({
             success: false,
@@ -225,14 +216,12 @@ Focus on:
         }
       }
 
-      // User selected API model or Auto (default) - use OpenRouter
+      // Use OpenRouter for scene creation
       const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
       if (openRouterKey) {
         try {
-          // Determine which OpenRouter model to use
-          let openRouterModel = 'mistralai/mistral-small-3.1-24b-instruct:free'; // Default
+          let openRouterModel = 'mistralai/mistral-small-3.1-24b-instruct:free';
 
-          // If user selected a specific API model, look it up
           if (userSelectedModel && !isLocalModel) {
             const { data: modelData } = await supabase
               .from('api_models')
@@ -290,7 +279,7 @@ Focus on:
         console.log('⚠️ OpenRouter API key not configured');
       }
 
-      // Final fallback: Return original prompt with no enhancement
+      // Final fallback
       console.log('⚠️ All enhancement methods failed, returning original prompt');
       return new Response(JSON.stringify({
         success: true,
@@ -310,7 +299,7 @@ Focus on:
       });
     }
 
-    // Handle scene_starters content type - generates conversation starters for scenes
+    // Handle scene_starters content type
     if (contentType === 'scene_starters') {
       console.log('💬 Processing scene_starters content type');
       const contentRating = requestBody.contentRating || 'nsfw';
@@ -335,7 +324,6 @@ Guidelines:
 - Content rating: ${contentRating}
 ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : '- Keep content appropriate for general audiences'}`;
 
-      // Try OpenRouter for starters (simpler, more reliable)
       const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
       if (openRouterKey) {
         try {
@@ -385,7 +373,6 @@ ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : 
                 console.log('⚠️ Failed to parse starters JSON, using text fallback');
               }
 
-              // Fallback: return enhanced_prompt for manual parsing
               return new Response(JSON.stringify({
                 success: true,
                 enhanced_prompt: responseText,
@@ -422,16 +409,12 @@ ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : 
       
       let enhanced: string;
       if (userMod && base) {
-        // User typed modification with existing base prompt
         enhanced = `maintain the same subject; ${userMod}`;
       } else if (userMod) {
-        // User typed modification without base prompt
         enhanced = `maintain the same subject; ${userMod}`;
       } else if (base) {
-        // No user modification, use base
         enhanced = base;
       } else {
-        // Fallback
         enhanced = requestBody.prompt || '';
       }
 
@@ -451,54 +434,38 @@ ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : 
       });
     }
 
-    console.log('🎯 ENHANCE-PROMPT DEBUG:', {
+    console.log('🎯 ENHANCE-PROMPT: Starting table-driven enhancement:', {
       prompt: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt,
       jobType,
-      format,
-      quality,
       contentType,
-      exactCopyMode,
-      promptLength: prompt.length,
-      hasExactCopyMode: !!exactCopyMode,
-      exactCopyModeValue: exactCopyMode,
-      modificationKeywords: ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to'],
-      isModificationPrompt: exactCopyMode ? prompt.toLowerCase().includes('change') || prompt.toLowerCase().includes('modify') || prompt.toLowerCase().includes('replace') : 'N/A'
+      model_id: model_id || 'none',
+      promptLength: prompt.length
     })
 
-    // Legacy exact copy handling removed - now handled by reference_mode logic above
-
-    // Initialize Dynamic Enhancement Orchestrator
-    const orchestrator = new DynamicEnhancementOrchestrator()
+    // Initialize orchestrator and enhance
+    const orchestrator = new TableDrivenEnhancementOrchestrator()
     
-    // Use the orchestrator to enhance the prompt
     const enhancementResult = await orchestrator.enhancePrompt({
       prompt,
       job_type: jobType,
       quality: quality as 'fast' | 'high',
       user_id,
       selectedModel: selectedModel,
+      model_id: model_id, // NOW PASSED THROUGH
       contentType: contentType,
       preferences: { enhancement_style: selectedModel },
-      regeneration: regeneration || false
+      regeneration: regeneration || false,
+      metadata: requestBody.metadata
     })
 
-    console.log('✅ Dynamic enhanced prompt generated:', {
+    console.log('✅ Enhancement complete:', {
       originalLength: prompt.length,
       enhancedLength: enhancementResult.enhanced_prompt.length,
       strategy: enhancementResult.strategy,
       contentMode: enhancementResult.content_mode,
-      fallbackLevel: enhancementResult.fallback_level
+      templateUsed: enhancementResult.template_name
     })
 
-    // FIXED: Add explicit enhanced prompt logging
-    console.log('🎯 ENHANCED PROMPT GENERATED:', {
-      originalPrompt: prompt.length > 200 ? prompt.substring(0, 200) + '...' : prompt,
-      enhancedPrompt: enhancementResult.enhanced_prompt,
-      templateUsed: enhancementResult.template_name,
-      strategy: enhancementResult.strategy
-    })
-
-    // Finalize monitoring
     const metrics = monitor.finalize()
     
     return new Response(JSON.stringify({
@@ -514,11 +481,10 @@ ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : 
         format,
         quality,
         content_mode: enhancementResult.content_mode,
-        template_name: enhancementResult.template_name, // FIXED: Consistent field name
+        template_name: enhancementResult.template_name,
         model_used: enhancementResult.model_used,
         token_count: enhancementResult.token_count,
         compression_applied: enhancementResult.compressed,
-        fallback_level: enhancementResult.fallback_level,
         execution_time_ms: metrics.executionTime,
         cache_hit: metrics.cacheHit
       }
@@ -529,7 +495,7 @@ ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : 
   } catch (error) {
     const errorPrompt = typeof prompt === 'string' ? prompt.substring(0, 100) : 'unknown prompt'
     monitor.recordError(error instanceof Error ? error : new Error(String(error)), { prompt: errorPrompt })
-    console.error('❌ Dynamic enhance prompt error:', error)
+    console.error('❌ enhance-prompt error:', error)
     return new Response(JSON.stringify({
       error: 'Failed to enhance prompt',
       success: false,
@@ -542,35 +508,39 @@ ${contentRating === 'nsfw' ? '- Can include suggestive or intimate scenarios' : 
   }
 })
 
-/**
- * Dynamic Enhancement Orchestrator using database-driven prompts
- * COMPLETE IMPLEMENTATION with all required methods
- */
-class DynamicEnhancementOrchestrator {
+// =============================================================================
+// TABLE-DRIVEN ENHANCEMENT ORCHESTRATOR
+// All enhancement logic is driven by prompt_templates + OpenRouter API.
+// No hardcoded prompt manipulation. No local worker routing.
+// =============================================================================
+
+class TableDrivenEnhancementOrchestrator {
   
   /**
-   * Main enhancement method with SFW/NSFW detection and fallback system
+   * Main enhancement entry point.
+   * 1. Resolve content mode (from request or auto-detect)
+   * 2. Resolve target model key (from model_id UUID -> api_models.model_key)
+   * 3. Look up enhancement template from prompt_templates
+   * 4. Call OpenRouter with template's system_prompt + user prompt
+   * 5. Return enhanced prompt (or original if no template/API available)
    */
   async enhancePrompt(request: any) {
     const startTime = Date.now()
     
     try {
-      // Use provided contentType or fallback to auto-detection
-      const contentMode = request.contentType || await this.detectContentMode(request.prompt)
+      // Step 1: Resolve content mode
+      const contentMode = request.contentType || this.detectContentMode(request.prompt)
       console.log('🔍 Content mode:', request.contentType ? `user-provided: ${contentMode}` : `auto-detected: ${contentMode}`)
 
-      // Get model_key from request (preferred) or query from model_id, fallback to getModelTypeFromJobType
+      // Step 2: Resolve model key from model_id
       const supabase = createClient(
         Deno.env.get('SUPABASE_URL') ?? '',
         Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
       );
       
       let modelKey: string | null = null;
-      if (request.model_key) {
-        modelKey = request.model_key;
-        console.log('✅ Using model_key from request:', modelKey);
-      } else if (request.model_id) {
-        // Query model_key from database using model_id
+      
+      if (request.model_id) {
         try {
           const { data: modelData, error: modelError } = await supabase
             .from('api_models')
@@ -579,95 +549,103 @@ class DynamicEnhancementOrchestrator {
             .single();
           if (!modelError && modelData?.model_key) {
             modelKey = modelData.model_key;
-            console.log('✅ Fetched model_key from database:', modelKey);
+            console.log('✅ Resolved model_key from model_id:', modelKey);
           }
         } catch (err) {
-          console.warn('⚠️ Could not fetch model_key from model_id:', err);
+          console.warn('⚠️ Could not resolve model_key from model_id:', err instanceof Error ? err.message : String(err));
         }
       }
       
-      // Fallback to getModelTypeFromJobType if model_key not available
-      const modelType = modelKey || this.getModelTypeFromJobType(request.job_type);
-      console.log('🤖 Model type selected:', modelType, modelKey ? '(from model_key)' : '(from job_type fallback)')
+      // Fallback: map job_type to a generic model key
+      const targetModel = modelKey || this.fallbackModelKey(request.job_type);
+      console.log('🎯 Target model for template lookup:', targetModel, modelKey ? '(from model_id)' : '(from job_type fallback)')
 
-      // Try cache first, then database fallback using 5-tuple
-      let enhancementResult: {
-        enhanced_prompt: string;
-        strategy: string;
-        template_name?: string;
-        model_used: string;
-        token_count: number;
-        compressed: boolean;
-        fallback_level?: number;
-      }
+      // Step 3: Find enhancement template
+      const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
+      const enhancerModel = request.selectedModel || 'gryphe/mythomax-l2-13b'
+      
+      console.log('🔍 Template lookup:', {
+        targetModel,
+        enhancerModel,
+        jobType: jobTypeCategory,
+        useCase: 'enhancement',
+        contentMode
+      })
+      
+      let template: any = null;
+      let cacheHit = false;
+      
+      // Try cache first
       try {
-        const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
-        const enhancerModel = request.selectedModel || 'gryphe/mythomax-l2-13b'
-        
-        console.log('🔍 Template lookup parameters:', {
-          targetModel: modelType,
-          enhancerModel,
-          jobType: jobTypeCategory,
-          useCase: 'enhancement',
-          contentMode
-        })
-        
         const cache = await getCachedData()
         const cachedTemplate = getTemplateFromCache(
           cache,
-          modelType,           // targetModel
-          enhancerModel,       // enhancerModel  
-          jobTypeCategory,     // jobType
-          'enhancement',       // useCase
-          contentMode         // contentMode
+          targetModel,
+          enhancerModel,
+          jobTypeCategory,
+          'enhancement',
+          contentMode
         )
-        
         if (cachedTemplate) {
-          enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode) as typeof enhancementResult & { fallback_level: number }
-          ;(enhancementResult as any).fallback_level = 0
-          console.log('✅ Using cached template:', cachedTemplate.template_name || 'unnamed')
-        } else {
-          throw new Error('No cached template found')
+          template = cachedTemplate;
+          cacheHit = true;
+          console.log('✅ Cache hit:', template.template_name || 'unnamed')
         }
       } catch (cacheError) {
-        console.log('⚠️ Cache failed, trying database:', cacheError instanceof Error ? cacheError.message : String(cacheError))
-        
+        console.log('⚠️ Cache miss:', cacheError instanceof Error ? cacheError.message : String(cacheError))
+      }
+      
+      // Try database if cache missed
+      if (!template) {
         try {
-          const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
-          const enhancerModel = request.selectedModel || 'gryphe/mythomax-l2-13b'
-          
-          const template = await getDatabaseTemplate(
-            modelType,           // targetModel
-            enhancerModel,       // enhancerModel
-            jobTypeCategory,     // jobType  
-            'enhancement',       // useCase
-            contentMode         // contentMode
+          template = await getDatabaseTemplate(
+            targetModel,
+            enhancerModel,
+            jobTypeCategory,
+            'enhancement',
+            contentMode
           )
-          enhancementResult = await this.enhanceWithTemplate(request, template, contentMode) as typeof enhancementResult & { fallback_level: number }
-          ;(enhancementResult as any).fallback_level = 1
-          console.log('✅ Using database template:', template.template_name || 'unnamed')
+          console.log('✅ Database hit:', template.template_name || 'unnamed')
         } catch (dbError) {
-          console.log('⚠️ Database template failed, using hardcoded fallback:', dbError instanceof Error ? dbError.message : String(dbError))
-          enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode) as typeof enhancementResult & { fallback_level: number }
-          ;(enhancementResult as any).fallback_level = 2
-          ;(enhancementResult as any).template_name = 'hardcoded_fallback'
+          console.log('⚠️ No template found in database:', dbError instanceof Error ? dbError.message : String(dbError))
         }
       }
 
+      // Step 4: Enhance with template via OpenRouter, or return original
+      if (!template) {
+        console.log('📋 No enhancement template for target_model:', targetModel, '— returning original prompt unchanged')
+        return {
+          enhanced_prompt: request.prompt,
+          strategy: 'no_template_available',
+          content_mode: contentMode,
+          template_name: 'none',
+          model_used: 'none',
+          token_count: this.estimateTokens(request.prompt),
+          compressed: false,
+          enhancement_time_ms: Date.now() - startTime
+        }
+      }
+
+      // Call OpenRouter with the template
+      const result = await this.enhanceViaOpenRouter(request.prompt, template, contentMode)
+      
+      // Apply token optimization using template's token_limit
+      const tokenLimit = template.token_limit || 2000;
+      const optimized = this.optimizeTokens(result.enhanced_prompt, tokenLimit)
+
       return {
-        enhanced_prompt: enhancementResult.enhanced_prompt,
-        strategy: enhancementResult.strategy,
+        enhanced_prompt: optimized.text,
+        strategy: `template_${cacheHit ? 'cached' : 'db'}`,
         content_mode: contentMode,
-        template_name: enhancementResult.template_name,
-        model_used: enhancementResult.model_used,
-        token_count: enhancementResult.token_count,
-        compressed: enhancementResult.compressed,
-        enhancement_time_ms: Date.now() - startTime,
-        fallback_level: (enhancementResult as any).fallback_level
+        template_name: template.template_name || 'unnamed',
+        model_used: template.enhancer_model || 'gryphe/mythomax-l2-13b',
+        token_count: optimized.token_count,
+        compressed: optimized.compressed,
+        enhancement_time_ms: Date.now() - startTime
       }
 
     } catch (error) {
-      console.error('💥 Enhancement failed completely:', error instanceof Error ? error.message : String(error))
+      console.error('💥 Enhancement failed:', error instanceof Error ? error.message : String(error))
       return {
         enhanced_prompt: request.prompt,
         strategy: 'error_fallback',
@@ -676,715 +654,171 @@ class DynamicEnhancementOrchestrator {
         model_used: 'none',
         token_count: this.estimateTokens(request.prompt),
         compressed: false,
-        enhancement_time_ms: Date.now() - startTime,
-        fallback_level: 3
+        enhancement_time_ms: Date.now() - startTime
       }
     }
   }
 
   /**
-   * Enhance using template (database or cached) - FIXED for pure inference worker
+   * Call OpenRouter with the template's system_prompt and user prompt.
+   * Uses the template's enhancer_model as the OpenRouter model key.
    */
-  private async enhanceWithTemplate(request: any, template: any, contentMode: string) {
-    // Calculate UI control token usage from metadata
-    const uiControlTokens = this.calculateUIControlTokens(request.metadata);
-    const adjustedTokenLimit = (template.token_limit || 75) - uiControlTokens;
+  private async enhanceViaOpenRouter(
+    userPrompt: string,
+    template: any,
+    contentMode: string
+  ): Promise<{ enhanced_prompt: string; model_used: string }> {
+    const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
     
-    console.log('🎯 Template enhancement with UI control consideration:', {
+    if (!openRouterKey) {
+      console.warn('⚠️ OpenRouter API key not configured — returning original prompt');
+      return { enhanced_prompt: userPrompt, model_used: 'none' };
+    }
+
+    const modelToCall = template.enhancer_model || 'gryphe/mythomax-l2-13b';
+    
+    console.log('🌐 Calling OpenRouter for enhancement:', {
+      model: modelToCall,
       templateName: template.template_name,
-      originalTokenLimit: template.token_limit || 75,
-      uiControlTokens,
-      adjustedTokenLimit
-    });
-    // Use selectedModel directly from request, fallback to preferences
-    const selectedModel = request.selectedModel || request.preferences?.enhancement_style
-    const workerType = this.selectWorkerType(template.enhancer_model || template.model_type, selectedModel)
-    
-    console.log('🚀 Enhancing with template:', {
-      template: template.template_name || 'unnamed_template',
-      enhancerModel: template.enhancer_model,
-      modelType: template.model_type,
-      selectedModel,
-      workerType,
-      contentMode
-    })
-    
-    try {
-      let result
-      if (workerType === 'chat') {
-        console.log('💬 Using chat worker for pure inference enhancement')
-        result = await this.enhanceWithChatWorker(request, template)
-      } else {
-        console.log('🎬 Using WAN worker for enhancement')
-        result = await this.enhanceWithWanWorker(request, template)
-      }
-
-      // Apply model-specific token optimization with UI control consideration
-      // Use model_key from request if available, otherwise fallback to job_type mapping
-      const modelTypeForOptimization = request.model_key || this.getModelTypeFromJobType(request.job_type);
-      const optimized = this.optimizeTokens(result.enhanced_prompt, modelTypeForOptimization, adjustedTokenLimit)
-
-      return {
-        enhanced_prompt: optimized.enhanced_prompt,
-        strategy: template.template_name, // Store original template name, not with _chat suffix
-        template_name: template.template_name || 'dynamic',
-        model_used: workerType === 'chat' ? 'qwen_instruct' : 'qwen_base',
-        token_count: optimized.token_count,
-        compressed: optimized.compressed
-      }
-
-    } catch (workerError) {
-      console.log('⚠️ Worker failed, using rule-based enhancement:', workerError instanceof Error ? workerError.message : String(workerError))
-      return this.enhanceWithRules(request, template.model_type, contentMode, template)
-    }
-  }
-
-  /**
-   * FIXED: Enhance with chat worker (Qwen Instruct) using pure inference API
-   */
-  private async enhanceWithChatWorker(request: any, template: any) {
-    const chatWorkerUrl = await this.getChatWorkerUrl()
-    if (!chatWorkerUrl) {
-      throw new Error('No chat worker available')
-    }
-
-    // Build messages array using database template - THIS IS THE KEY FIX
-    const messages = [
-      {
-        role: "system",
-        content: template.system_prompt
-      },
-      {
-        role: "user", 
-        content: request.prompt
-      }
-    ];
-
-    // Calculate UI control token usage and adjust max_tokens
-    const uiControlTokens = this.calculateUIControlTokens(request.metadata);
-    const adjustedMaxTokens = Math.max(50, (template.token_limit || 200) - uiControlTokens);
-
-    const payload = {
-      messages: messages,
-      max_tokens: adjustedMaxTokens,
-      temperature: 0.7,
-      top_p: 0.9
-    };
-
-    console.log('💬 Chat worker payload (pure inference):', {
-      messagesCount: messages.length,
-      systemPromptLength: template.system_prompt.length,
-      userPromptLength: request.prompt.length,
-      maxTokens: payload.max_tokens,
-      originalTokenLimit: template.token_limit || 200,
-      uiControlTokens,
-      templateName: template.template_name || 'unnamed'
+      systemPromptLength: template.system_prompt?.length || 0,
+      tokenLimit: template.token_limit || 2000
     });
 
     try {
-      // Use the pure inference enhancement endpoint
-      const response = await fetch(`${chatWorkerUrl}/enhance`, {
+      const payload = {
+        model: modelToCall,
+        messages: [
+          { role: "system", content: template.system_prompt },
+          { role: "user", content: userPrompt }
+        ],
+        max_tokens: template.token_limit || 2000,
+        temperature: 0.7,
+        top_p: 0.9
+      };
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${openRouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://ulmdmzhcdwfadbvfpckt.supabase.co',
+          'X-Title': 'OurVidz Prompt Enhancement'
         },
         body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.log(`❌ Chat worker error (${response.status}): ${errorText}`);
-        throw new Error(`Chat worker failed: ${response.status} - ${errorText}`);
+        console.error('❌ OpenRouter error:', response.status, errorText);
+        return { enhanced_prompt: userPrompt, model_used: 'none' };
       }
 
-      const result = await response.json();
-      console.log('✅ Chat worker response (pure inference):', {
-        success: result.success,
-        responseLength: result.enhanced_prompt?.length || 0,
-        generationTime: result.generation_time,
-        tokensGenerated: result.tokens_generated
-      });
-      
-      // Validate response format
-      if (!result.success || !result.enhanced_prompt) {
-        console.warn('⚠️ Invalid chat worker response, using original prompt');
-        return {
-          enhanced_prompt: request.prompt,
-          strategy: 'chat_worker_fallback',
-          model_used: 'qwen_instruct'
-        };
+      const data = await response.json();
+      const enhancedText = data.choices?.[0]?.message?.content?.trim();
+
+      if (enhancedText) {
+        console.log('✅ OpenRouter enhancement success:', {
+          model: modelToCall,
+          inputLength: userPrompt.length,
+          outputLength: enhancedText.length
+        });
+        return { enhanced_prompt: enhancedText, model_used: modelToCall };
       }
 
-      return {
-        enhanced_prompt: result.enhanced_prompt,
-        strategy: 'chat_worker_template',
-        model_used: 'qwen_instruct',
-        generation_time: result.generation_time,
-        tokens_generated: result.tokens_generated
-      };
+      console.warn('⚠️ OpenRouter returned empty content — returning original');
+      return { enhanced_prompt: userPrompt, model_used: 'none' };
 
     } catch (error) {
-      console.error('❌ Chat worker request failed:', error instanceof Error ? error.message : String(error));
-      throw new Error(`Chat worker communication failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('❌ OpenRouter call failed:', error instanceof Error ? error.message : String(error));
+      return { enhanced_prompt: userPrompt, model_used: 'none' };
     }
   }
 
   /**
-   * Enhance with WAN worker (Qwen Base) - maintains legacy format for now
+   * Token optimization using template's token_limit (no hardcoded limits map).
    */
-  private async enhanceWithWanWorker(request: any, template: any) {
-    const wanWorkerUrl = await this.getWanWorkerUrl();
-    if (!wanWorkerUrl) {
-      throw new Error('No WAN worker available');
-    }
-
-    // Maintain existing WAN worker format for backward compatibility
-    const payload = {
-      inputs: `${template.system_prompt}\n\nEnhance this prompt: "${request.prompt}"\n\nEnhanced version:`,
-      parameters: {
-        max_new_tokens: template.token_limit || 150,
-        temperature: 0.7,
-        top_p: 0.9,
-        do_sample: true,
-        return_full_text: false
-      }
-    };
-
-    console.log('🎬 WAN worker payload (legacy):', {
-      originalPrompt: request.prompt,
-      systemPrompt: template.system_prompt,
-      tokenLimit: template.token_limit || 150
-    });
-
-    const response = await fetch(`${wanWorkerUrl}/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`WAN worker failed: ${response.status} - ${errorText}`);
-    }
-
-    const result = await response.json();
-    
-    // Clean and validate the response
-    let enhancedText = result.generated_text?.trim() || request.prompt;
-    
-    // Remove any residual system prompt or original prompt from the response
-    if (enhancedText.includes('Enhanced version:')) {
-      enhancedText = enhancedText.split('Enhanced version:').pop()?.trim() || enhancedText;
-    }
-    
-    // Remove quotes if the model wrapped the response
-    if (enhancedText.startsWith('"') && enhancedText.endsWith('"')) {
-      enhancedText = enhancedText.slice(1, -1);
-    }
-    
-    // Fallback to original if enhancement is empty or too similar
-    if (!enhancedText || enhancedText.length < 10 || enhancedText === request.prompt) {
-      enhancedText = request.prompt;
-    }
-
-    return {
-      enhanced_prompt: enhancedText,
-      strategy: 'wan_worker_legacy',
-      model_used: 'qwen_base'
-    };
-  }
-
-  /**
-   * Rule-based enhancement fallback when workers are unavailable
-   */
-  private enhanceWithRules(request: any, modelType: string, contentMode: string, template?: any) {
-    const { prompt } = request
-    let enhanced = prompt
-
-    if (template?.system_prompt) {
-      // Use the database template's system prompt as guidance for rule-based enhancement
-      const systemPrompt = template.system_prompt.toLowerCase()
-      
-      if (systemPrompt.includes('explicit') || systemPrompt.includes('adult') || systemPrompt.includes('sensual')) {
-        enhanced = `${template.system_prompt.split('.')[0]}: ${enhanced}`
-      } else if (systemPrompt.includes('artistic') || systemPrompt.includes('professional') || systemPrompt.includes('detailed')) {
-        enhanced = `${template.system_prompt.split('.')[0]}: ${enhanced}`
-      } else {
-        // Generic template enhancement
-        enhanced = `Enhanced prompt following template guidelines: ${enhanced}`
-      }
-    } else {
-      // Original fallback logic
-      if (contentMode === 'nsfw') {
-        enhanced = `Detailed explicit scene: ${enhanced}, sensual lighting, intimate atmosphere, adult themes`
-      } else {
-        enhanced = `Artistic composition: ${enhanced}, professional lighting, high composition quality`
-      }
-    }
-
-    // Add model-specific quality tags
-    if (modelType === 'sdxl') {
-      enhanced += contentMode === 'nsfw' 
-        ? ', masterpiece, best quality, detailed, sensual, intimate'
-        : ', masterpiece, best quality, detailed, artistic, professional'
-    } else if (modelType === 'wan') {
-      enhanced += contentMode === 'nsfw'
-        ? ', smooth motion, intimate video, sensual movement'
-        : ', smooth motion, cinematic, professional video'
-    }
-
-    return {
-      enhanced_prompt: enhanced,
-      strategy: template ? `template_rule_based_${modelType}_${contentMode}` : `rule_based_${modelType}_${contentMode}`,
-      template_name: template?.template_name || 'rule_based',
-      model_used: 'rule_based',
-      token_count: this.estimateTokens(enhanced),
-      compressed: false
-    }
-  }
-
-  /**
-   * Hardcoded fallback templates when database and cache fail
-   */
-  private enhanceWithHardcodedFallback(request: any, modelType: string, contentMode: string) {
-    const fallbackTemplates = {
-      'sdxl': {
-        'nsfw': {
-          system_prompt: 'You are an expert prompt engineer specializing in adult content generation. Transform the user prompt into a detailed, explicit description that captures sensual details, intimate scenarios, and adult themes. Focus on visual elements, emotions, and explicit content while maintaining artistic quality.',
-          token_limit: 75
-        },
-        'sfw': {
-          system_prompt: 'You are an expert prompt engineer specializing in artistic image generation. Transform the user prompt into a detailed, professional description that captures visual composition, lighting, and artistic elements. Focus on aesthetic quality and technical excellence.',
-          token_limit: 75
-        }
-      },
-      'wan': {
-        'nsfw': {
-          system_prompt: 'You are an expert prompt engineer specializing in adult video content. Transform the user prompt into a detailed description of motion, intimate actions, and explicit visual elements. Focus on movement, cinematography, and adult themes for video generation.',
-          token_limit: 100
-        },
-        'sfw': {
-          system_prompt: 'You are an expert prompt engineer specializing in cinematic video generation. Transform the user prompt into a detailed description of motion, camera work, and visual storytelling. Focus on professional cinematography and artistic movement.',
-          token_limit: 100
-        }
-      }
-    };
-
-    const template = (fallbackTemplates as Record<string, Record<string, { system_prompt: string; token_limit: number }>>)[modelType]?.[contentMode] || fallbackTemplates['sdxl']['nsfw'];
-    
-    // Apply simple rule-based enhancement using hardcoded template
-    let enhanced = request.prompt;
-    
-    if (contentMode === 'nsfw') {
-      enhanced = `${enhanced}, detailed explicit content, sensual lighting, intimate atmosphere, adult themes, masterpiece quality`;
-    } else {
-      enhanced = `${enhanced}, professional composition, artistic lighting, high quality, detailed, masterpiece`;
-    }
-
-    // Add model-specific tags
-    if (modelType === 'sdxl') {
-      enhanced += ', photorealistic, sharp focus, 8k resolution';
-    } else if (modelType === 'wan') {
-      enhanced += ', smooth motion, cinematic quality, professional video';
-    }
-
-    return {
-      enhanced_prompt: enhanced,
-      strategy: `hardcoded_fallback_${modelType}_${contentMode}`,
-      template_name: 'hardcoded_fallback',
-      model_used: 'hardcoded',
-      token_count: this.estimateTokens(enhanced),
-      compressed: false
-    };
-  }
-
-  /**
-   * Enhanced SDXL NSFW enhancement with male character guidance
-   */
-  async enhanceSDXLNSFW(request: any, template: any, contentMode: string) {
-    console.log('🎭 Enhanced SDXL NSFW enhancement for male character generation')
-    
-    try {
-      // Check if prompt contains male character indicators
-      const prompt = request.prompt.toLowerCase()
-      const isMaleCharacter = prompt.includes('male') || 
-                             prompt.includes('man') || 
-                             prompt.includes('guy') || 
-                             prompt.includes('boy') ||
-                             prompt.includes('he ') ||
-                             prompt.includes('his ')
-      
-      if (isMaleCharacter) {
-        console.log('👨 Detected male character - applying enhanced guidance')
-        
-        // Enhanced system prompt for male characters
-        const enhancedSystemPrompt = `${template.system_prompt}
-
-CRITICAL FOR MALE CHARACTERS:
-- Emphasize masculine features: broad shoulders, defined jawline, muscular build
-- Include specific male anatomy details: chest, arms, hands, facial features
-- Avoid floating body parts - ensure complete character representation
-- Use descriptive terms: "handsome man", "masculine figure", "male character"
-- Include clothing details that emphasize male form
-- Reference male-specific poses and expressions`
-        
-        const enhancedPrompt = await this.callEnhancementAPI(request.prompt, {
-          ...template,
-          system_prompt: enhancedSystemPrompt
-        }, contentMode)
-        
-        return {
-          enhanced_prompt: enhancedPrompt,
-          strategy: 'enhanced_sdxl_nsfw_male',
-          template_name: template.template_name || 'unnamed',
-          model_used: template.enhancer_model || 'unknown',
-          token_count: this.estimateTokens(enhancedPrompt),
-          compressed: false
-        }
-      }
-      
-      // Standard SDXL NSFW enhancement for non-male characters
-      const enhancedPrompt = await this.callEnhancementAPI(request.prompt, template, contentMode)
-      
-      return {
-        enhanced_prompt: enhancedPrompt,
-        strategy: 'template_enhancement',
-        template_name: template.template_name || 'unnamed',
-        model_used: template.enhancer_model || 'unknown',
-        token_count: this.estimateTokens(enhancedPrompt),
-        compressed: false
-      }
-    } catch (error) {
-      console.error('❌ Enhanced SDXL NSFW enhancement failed:', error instanceof Error ? error.message : String(error))
-      throw error
-    }
-  }
-
-  /**
-   * Call the enhancement API with the given template
-   */
-  async callEnhancementAPI(prompt: string, template: any, contentMode: string): Promise<string> {
-    try {
-      // For now, use a simple enhancement approach
-      // In production, this would call the actual enhancement API
-      const enhancedPrompt = this.applyTemplateEnhancement(prompt, template, contentMode)
-      return enhancedPrompt
-    } catch (error) {
-      console.error('❌ Enhancement API call failed:', error instanceof Error ? error.message : String(error))
-      // Fallback to basic enhancement
-      return this.applyBasicEnhancement(prompt, contentMode)
-    }
-  }
-
-  /**
-   * Apply template-based enhancement
-   */
-  applyTemplateEnhancement(prompt: string, template: any, contentMode: string): string {
-    if (!template.system_prompt) {
-      return this.applyBasicEnhancement(prompt, contentMode)
-    }
-
-    // Simple template application - in production this would use the actual API
-    let enhanced = prompt
-    
-    // Add content mode specific enhancements
-    if (contentMode === 'nsfw') {
-      enhanced = `NSFW, ${enhanced}, detailed anatomy, explicit content`
-    } else {
-      enhanced = `SFW, ${enhanced}, family-friendly, appropriate content`
-    }
-    
-    // Add model-specific enhancements
-    if (template.target_model === 'sdxl') {
-      enhanced = `${enhanced}, high quality, detailed, SDXL optimized`
-    }
-    
-    return enhanced
-  }
-
-  /**
-   * Apply basic enhancement as fallback
-   */
-  applyBasicEnhancement(prompt: string, contentMode: string): string {
-    let enhanced = prompt
-    
-    if (contentMode === 'nsfw') {
-      enhanced = `NSFW, ${enhanced}, detailed, explicit`
-    } else {
-      enhanced = `SFW, ${enhanced}, family-friendly, appropriate`
-    }
-    
-    return enhanced
-  }
-
-  /**
-   * Calculate UI control token usage from metadata - FIXED to include default style tokens
-   */
-  private calculateUIControlTokens(metadata: any): number {
-    if (!metadata) {
-      // FIXED: Include default style tokens when no metadata provided
-      return this.estimateTokens("cinematic lighting, film grain, dramatic composition");
-    }
-    
-    let tokenCount = 0;
-    
-    // Shot type (if not default 'wide')
-    if (metadata.shot_type && metadata.shot_type !== 'wide' && metadata.shot_type !== 'none') {
-      tokenCount += 1; // e.g., "medium", "close"
-    }
-    
-    // Camera angle (if not default 'eye_level')  
-    if (metadata.camera_angle && metadata.camera_angle !== 'eye_level' && metadata.camera_angle !== 'none') {
-      tokenCount += metadata.camera_angle.replace('_', ' ').split(' ').length; // e.g., "low angle" = 2 tokens
-    }
-    
-    // Style tokens - FIXED: Always include default if no custom style
-    const styleTokens = metadata.style && metadata.style.trim() 
-      ? this.estimateTokens(metadata.style)
-      : this.estimateTokens("cinematic lighting, film grain, dramatic composition"); // Default: ~6 tokens
-    tokenCount += styleTokens;
-    
-    console.log('🎨 UI Control tokens calculated:', {
-      shotType: metadata.shot_type,
-      cameraAngle: metadata.camera_angle,
-      style: metadata.style || 'default_style',
-      styleTokens,
-      totalTokens: tokenCount
-    });
-    
-    return tokenCount;
-  }
-
-  /**
-   * Token optimization for different model types with UI control consideration
-   */
-  private optimizeTokens(prompt: string, modelType: string, customLimit?: number) {
-    let optimized = prompt;
-    let compressed = false;
-    
-    // Get target token limits based on model type
-    const limits = {
-      'sdxl': 75,
-      'wan': 100,
-      'qwen_instruct': 200,
-      'qwen_base': 150
-    };
-    
-    const targetLimit = customLimit || (limits as Record<string, number>)[modelType] || 75;
+  private optimizeTokens(prompt: string, tokenLimit: number): { text: string; token_count: number; compressed: boolean } {
     const estimatedTokens = this.estimateTokens(prompt);
     
-    console.log('🔧 Token optimization:', {
-      modelType,
-      originalTokens: estimatedTokens,
-      targetLimit,
-      customLimitUsed: !!customLimit,
-      needsOptimization: estimatedTokens > targetLimit
-    });
-    
-    if (estimatedTokens > targetLimit) {
-      // Improved token optimization - character-based truncation with meaning preservation
-      const avgCharsPerToken = 4; // More accurate than word-based estimation
-      const targetChars = Math.floor(targetLimit * avgCharsPerToken);
-      
-      if (prompt.length > targetChars) {
-        // Find last complete sentence or phrase before limit
-        let cutoff = targetChars;
-        const lastComma = prompt.lastIndexOf(',', cutoff);
-        const lastPeriod = prompt.lastIndexOf('.', cutoff);
-        const lastSpace = prompt.lastIndexOf(' ', cutoff);
-        
-        // Prefer natural break points
-        if (lastComma > cutoff * 0.8) {
-          cutoff = lastComma;
-        } else if (lastPeriod > cutoff * 0.8) {
-          cutoff = lastPeriod + 1;
-        } else if (lastSpace > cutoff * 0.9) {
-          cutoff = lastSpace;
-        }
-        
-        optimized = prompt.substring(0, cutoff).trim();
-        compressed = true;
-        
-        console.log('✂️ Token optimization applied:', {
-          originalLength: prompt.length,
-          optimizedLength: optimized.length,
-          cutoffPosition: cutoff,
-          preservedMeaning: cutoff > targetChars * 0.8
-        });
-      }
+    if (estimatedTokens <= tokenLimit) {
+      return { text: prompt, token_count: estimatedTokens, compressed: false };
     }
+
+    // Truncate at natural break points
+    const avgCharsPerToken = 4;
+    const targetChars = Math.floor(tokenLimit * avgCharsPerToken);
     
+    if (prompt.length <= targetChars) {
+      return { text: prompt, token_count: estimatedTokens, compressed: false };
+    }
+
+    let cutoff = targetChars;
+    const lastComma = prompt.lastIndexOf(',', cutoff);
+    const lastPeriod = prompt.lastIndexOf('.', cutoff);
+    const lastSpace = prompt.lastIndexOf(' ', cutoff);
+    
+    if (lastComma > cutoff * 0.8) {
+      cutoff = lastComma;
+    } else if (lastPeriod > cutoff * 0.8) {
+      cutoff = lastPeriod + 1;
+    } else if (lastSpace > cutoff * 0.9) {
+      cutoff = lastSpace;
+    }
+
+    const optimized = prompt.substring(0, cutoff).trim();
+    console.log('✂️ Token optimization applied:', {
+      originalTokens: estimatedTokens,
+      targetLimit: tokenLimit,
+      originalLength: prompt.length,
+      optimizedLength: optimized.length
+    });
+
     return {
-      enhanced_prompt: optimized,
+      text: optimized,
       token_count: this.estimateTokens(optimized),
-      compressed: compressed,
-      original_tokens: estimatedTokens,
-      target_limit: targetLimit
+      compressed: true
     };
   }
 
   /**
-   * Estimate token count from text - IMPROVED character-based approximation
+   * Estimate token count (character-based approximation).
    */
   private estimateTokens(text: string): number {
     if (!text || typeof text !== 'string') return 0;
-    
-    // Character-based estimation more accurate for CLIP tokenizer
-    // Average: 4.2 characters per token (accounts for punctuation and special chars)
     return Math.ceil(text.length / 4.2);
   }
 
   /**
-   * Map job type to category for database lookup
+   * Map job type to category for template lookup.
    */
   private mapJobTypeToCategory(jobType: string): string {
-    if (!jobType || typeof jobType !== 'string') {
-      console.warn('⚠️ Invalid job type provided:', jobType)
-      return 'image'
-    }
-    
-    if (jobType.includes('video')) {
-      return 'video'
-    } else if (jobType.includes('image') || jobType.includes('sdxl')) {
-      return 'image'
-    }
-    
-    console.log('🔄 Job type mapping:', { originalJobType: jobType, mappedCategory: 'image' })
-    return 'image' // Default fallback
+    if (!jobType || typeof jobType !== 'string') return 'image';
+    if (jobType.includes('video')) return 'video';
+    if (jobType.includes('image') || jobType.includes('sdxl')) return 'image';
+    return 'image';
   }
 
   /**
-   * Get model type from job type with enhanced mapping
+   * Fallback model key when model_id is not provided.
+   * Maps generic job types to a default target_model for template lookup.
    */
-  private getModelTypeFromJobType(jobType: string): string {
+  private fallbackModelKey(jobType: string): string {
+    if (jobType?.includes('video') || jobType?.includes('wan')) return 'wan';
     if (jobType?.includes('sdxl')) return 'sdxl';
-    if (jobType?.includes('wan') || jobType?.includes('video')) return 'wan';
-    if (jobType?.includes('qwen_instruct')) return 'qwen_instruct';
-    if (jobType?.includes('qwen_base')) return 'qwen_base';
-    
-    // Default fallback
+    // Default: generic sdxl for image jobs
     return 'sdxl';
   }
 
   /**
-   * Simplified content detection using cached terms
+   * Simple keyword-based content mode detection.
    */
-  private async detectContentMode(prompt: string): Promise<'sfw' | 'nsfw'> {
-    // Simple keyword-based detection
+  private detectContentMode(prompt: string): 'sfw' | 'nsfw' {
     const nsfwKeywords = [
-      'nude', 'naked', 'explicit', 'sexual', 'adult', 'intimate', 'erotic', 
+      'nude', 'naked', 'explicit', 'sexual', 'adult', 'intimate', 'erotic',
       'sensual', 'topless', 'lingerie', 'underwear', 'seductive', 'provocative'
     ];
     
     const promptLower = prompt.toLowerCase();
-    const hasNsfwContent = nsfwKeywords.some(keyword => promptLower.includes(keyword));
-    
-    return hasNsfwContent ? 'nsfw' : 'sfw';
-  }
-
-  // Removed getDynamicTemplate and getCachedTemplate methods
-  // These are now handled by getDatabaseTemplate and getTemplateFromCache from cache-utils
-
-  /**
-   * Select worker type based on model and user preference
-   */
-  private selectWorkerType(modelType: string, userPreference?: string): 'chat' | 'wan' {
-    console.log('🔧 Worker selection:', { modelType, userPreference })
-    
-    // Priority 1: User preference is the definitive source
-    if (userPreference === 'qwen_instruct') {
-      console.log('👤 User selected qwen_instruct -> chat worker')
-      return 'chat'
-    }
-    if (userPreference === 'qwen_base') {
-      console.log('👤 User selected qwen_base -> wan worker')  
-      return 'wan'
-    }
-    
-    // Priority 2: Model type fallback (when no explicit user preference)
-    if (modelType === 'sdxl') {
-      console.log('🤖 Model sdxl -> default qwen_instruct -> chat worker')
-      return 'chat'
-    }
-    if (modelType === 'wan' || modelType === 'video') {
-      console.log('🤖 Model wan/video -> default qwen_base -> wan worker')
-      return 'wan'
-    }
-    
-    // Priority 3: Final fallback based on efficiency
-    console.log('🔄 Default fallback -> chat worker (qwen_instruct)')
-    return 'chat'
-  }
-
-  /**
-   * FIXED: Get chat worker URL with enhanced error handling
-   */
-  private async getChatWorkerUrl(): Promise<string | null> {
-    try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-
-      const { data, error } = await supabase.functions.invoke('get-active-worker-url', {
-        body: { worker_type: 'chat' }
-      });
-
-      if (error) {
-        console.error('❌ Failed to get chat worker URL:', error);
-        return null;
-      }
-
-      const workerUrl = data?.worker_url || data?.workerUrl;
-      
-      if (!workerUrl) {
-        console.error('❌ No chat worker URL returned from get-active-worker-url');
-        return null;
-      }
-
-      console.log('✅ Chat worker URL retrieved:', workerUrl);
-      return workerUrl;
-
-    } catch (error) {
-      console.error('❌ Exception getting chat worker URL:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Get WAN worker URL with enhanced error handling
-   */
-  private async getWanWorkerUrl(): Promise<string | null> {
-    try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-
-      const { data, error } = await supabase.functions.invoke('get-active-worker-url', {
-        body: { worker_type: 'wan' }
-      });
-
-      if (error) {
-        console.error('❌ Failed to get WAN worker URL:', error);
-        return null;
-      }
-
-      const workerUrl = data?.worker_url || data?.workerUrl;
-      
-      if (!workerUrl) {
-        console.error('❌ No WAN worker URL returned from get-active-worker-url');
-        return null;
-      }
-
-      console.log('✅ WAN worker URL retrieved:', workerUrl);
-      return workerUrl;
-
-    } catch (error) {
-      console.error('❌ Exception getting WAN worker URL:', error);
-      return null;
-    }
+    return nsfwKeywords.some(keyword => promptLower.includes(keyword)) ? 'nsfw' : 'sfw';
   }
 }
