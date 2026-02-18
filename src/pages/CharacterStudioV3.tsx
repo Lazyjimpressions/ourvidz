@@ -115,7 +115,7 @@ export default function CharacterStudioV3() {
   // Enhancement handler
   const handleEnhancePrompt = useCallback(async (prompt: string, modelId: string): Promise<string | null> => {
     const { data, error } = await supabase.functions.invoke('enhance-prompt', {
-      body: { prompt, targetModelId: modelId, jobType: 'image', contentRating: character.content_rating }
+      body: { prompt, model_id: modelId, jobType: 'image', contentRating: character.content_rating }
     });
     const enhanced = data?.enhancedPrompt || data?.enhanced_prompt;
     if (error || !enhanced) {
