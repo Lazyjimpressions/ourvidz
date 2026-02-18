@@ -1,53 +1,95 @@
 
+# Intelligent Prompt Mode: T2I vs I2I Auto-Detection
 
-# Fix: Vision Task + Truncated Response Handling
+## Core Insight
 
-## Issue 1: "vision" still not in dropdowns
+The user's workflow has two distinct phases, and the system should automatically adapt without requiring a toggle:
 
-The database CHECK constraint `api_models_task_check` still only allows 7 values. The previous migration was never applied.
+**Phase 1 -- Brainstorming (T2I or early I2I):** User is exploring looks. Style boilerplate helps here because there's no locked identity yet.
 
-**Changes needed:**
+**Phase 2 -- Directing (I2I with Style Lock):** User has locked a look and now wants to direct the character: outfits, scenes, poses, companions. The prompt should ONLY describe what changes. Style boilerplate actively hurts because it fights the reference image.
 
-1. **Database migration**: Drop old constraint, add new one including `'vision'`
-2. **`src/components/admin/ApiModelsTab.tsx`** (line 54-65):
-   - Add `vision: 'VIS'` to `TASK_ABBREVIATIONS`
-   - Add `'vision'` to the `TASKS` array
-3. **`src/hooks/useApiModels.ts`** (line 11):
-   - Add `'vision'` to the task type union
+The presence of a reference image IS the signal. No toggle needed.
 
-## Issue 2: Truncated JSON returned as description
+## What Changes
 
-The logs reveal what happened:
+### 1. Edge function: Stop injecting style boilerplate during I2I
 
-```
-contentLength: 299
-preview: " ```json\n{\n  \"gender\": \"female\",\n  \"description\": \"She radiates a dreamy, tropical allure with her upward gaze suggesting quiet confidence and wanderl..."
-```
+**File: `supabase/functions/character-portrait/index.ts`**
 
-The model returned only 299 characters -- it hit `max_tokens` and cut off mid-sentence. The JSON parser correctly failed (`Unterminated string at position 290`), but the **fallback behavior** put the entire raw string (including the ` ```json` prefix) into `description`. The frontend then saved this broken JSON blob as the character description.
+Current prompt build (lines 151-189) always injects:
+- `masterpiece, best quality, photorealistic` (line 151)
+- `1girl, beautiful woman, portrait` (lines 155-161)
+- `maintain same character identity, consistent features` (line 185)
+- `studio photography, professional lighting, sharp focus, detailed face` (line 189)
 
-**Root cause**: `max_tokens: 800` is too low for the structured JSON response, especially with Kimi K2.5 which may use tokens on `<think>` reasoning before outputting.
+New behavior based on mode:
 
-**Fixes:**
+**T2I (no reference image):** Keep all style tags. They establish quality when there's no visual anchor.
 
-### Edge function (`describe-image/index.ts`):
-- Increase `max_tokens` default from `800` to `2048` for structured mode (the thinking tokens + JSON output need room)
-- When `rawContent` is empty or when JSON parsing fails, return `success: false` with an error message instead of a fallback object that looks like success
-- The fallback at line 192 currently returns `{ description: content.trim() }` which puts broken JSON into the description field -- this must stop
+**I2I (reference image present):** Strip ALL style boilerplate. Build prompt as:
+- Gender tag only if helpful for model routing (e.g., `1girl`)
+- Appearance tags (identity descriptors -- hair color, eye color, etc.)
+- User's `promptOverride` text (the directorial instruction)
+- Nothing else. No `masterpiece`, no `studio photography`, no `maintain same character identity` (the reference image handles identity).
 
-### Frontend (`CharacterStudioV3.tsx`):
-- After receiving the response, also check if `data.success === false` and show an error toast
-- Add a guard: if `data.data.description` contains ` ```json` or starts with `{`, treat it as a failed parse and show error instead of saving
+Also: when I2I and `referenceStrength` is not explicitly set, default to **0.75** instead of 0.65 to give the reference more weight during directed generation.
+
+### 2. Prompt bar: Context-aware placeholder text
+
+**File: `src/components/character-studio/CharacterStudioPromptBar.tsx`**
+
+Change the placeholder dynamically based on whether a reference is locked:
+
+- **No reference:** `"Describe the character you want to generate..."`
+- **Reference locked:** `"Describe changes: outfit, scene, pose, companions..."`
+
+This guides the user to write directorial prompts ("wearing a red dress in a park with her boyfriend") instead of re-describing identity.
+
+### 3. Prompt bar: Smart Sparkle adapts to I2I context
+
+**File: `src/components/character-studio/CharacterStudioPromptBar.tsx`**
+
+Update the auto-fill behavior (the Sparkle button, first click) when a reference is locked:
+
+- **No reference (current):** Assembles `"Portrait of Tammy, female, long blonde hair, blue eyes..."`
+- **Reference locked (new):** Assembles a shorter directorial seed: `"Tammy, casual outfit, natural pose"` -- just enough to start, without re-describing identity traits that the reference already encodes.
+
+### 4. Edge function: Pass mode metadata for logging
+
+Store `generation_intent: 'explore' | 'direct'` in the job metadata so we can track how often each mode is used and correlate with quality ratings.
 
 ---
+
+## User Experience After Changes
+
+```text
+Phase 1: Brainstorming
+  User types: "anime girl with silver hair and red eyes"
+  No ref locked -> T2I mode
+  Edge function adds style tags -> high quality base generation
+  User iterates, finds a look they like
+  User clicks Lock icon on the portrait
+
+Phase 2: Directing (ref locked)
+  Placeholder now reads: "Describe changes: outfit, scene, pose..."
+  User types: "wearing a black cocktail dress at a rooftop bar"
+  Edge function sends ONLY: "1girl, silver hair, red eyes, wearing a black cocktail dress at a rooftop bar"
+  Reference image (0.75 strength) preserves face/style
+  Result: same character, new outfit and scene
+
+  User types: "walking in a park with a tall man holding hands"
+  Same clean prompt, reference dominates identity
+  Result: character with companion in new scene
+```
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| Database | New migration: update CHECK constraint to include `'vision'` |
-| `src/components/admin/ApiModelsTab.tsx` | Add `'vision'` to `TASKS` and `TASK_ABBREVIATIONS` |
-| `src/hooks/useApiModels.ts` | Add `'vision'` to task type union |
-| `supabase/functions/describe-image/index.ts` | Increase max_tokens to 2048; return `success: false` on empty/failed parse instead of fallback |
-| `src/pages/CharacterStudioV3.tsx` | Validate response data before saving; show error toast on bad data |
+| `supabase/functions/character-portrait/index.ts` | Conditional prompt build: T2I gets style tags, I2I gets clean directorial prompt only |
+| `src/components/character-studio/CharacterStudioPromptBar.tsx` | Dynamic placeholder based on ref state; adjusted Sparkle auto-fill for I2I context |
 
+## Why No Toggle
+
+The PRD Column C "Generation Driver" says the prompt "describes pose, outfit, environment, framing" and "does not redefine identity." This is exactly I2I behavior -- the reference IS the identity. A toggle would add cognitive load for something the system can infer automatically. If a reference is locked, the user is directing. If not, they're exploring. The system should just know.
