@@ -30,10 +30,13 @@ export default function CharacterStudioV3() {
   const studio = useCharacterStudio({ characterId, defaultRole });
   const {
     character, updateCharacter, isNewCharacter, isDirty, isLoading, isSaving,
-    savedCharacterId, saveCharacter, portraits, primaryPortrait, setPrimaryPortrait,
+    savedCharacterId, saveCharacter, clearSuggestions, portraits, primaryPortrait, setPrimaryPortrait,
     deletePortrait, scenes, isGenerating, generationProgress, generatePortrait,
     selectItem, selectedItemId, selectedItemType
   } = studio;
+
+  // Prevent auto-save retry loop after failure
+  const saveFailedRef = useRef(false);
 
   // Image models
   const hasReferenceImage = !!character.reference_image_url;
@@ -62,10 +65,20 @@ export default function CharacterStudioV3() {
     if (defaultModel && !selectedImageModel) setSelectedImageModel(defaultModel.value);
   }, [defaultModel, selectedImageModel]);
 
-  // Auto-save on dirty (2s debounce)
+  // Reset saveFailedRef when user makes a new edit
   useEffect(() => {
-    if (!isDirty || isNewCharacter) return;
-    const t = setTimeout(() => saveCharacter({ silent: true }), 2000);
+    if (isDirty) saveFailedRef.current = false;
+  }, [character]);
+
+  // Auto-save on dirty (2s debounce) - skip if last silent save failed
+  useEffect(() => {
+    if (!isDirty || isNewCharacter || saveFailedRef.current) return;
+    const t = setTimeout(async () => {
+      const result = await saveCharacter({ silent: true });
+      if (result === null && isDirty) {
+        saveFailedRef.current = true;
+      }
+    }, 2000);
     return () => clearTimeout(t);
   }, [isDirty, isNewCharacter, character, saveCharacter]);
 
@@ -121,7 +134,7 @@ export default function CharacterStudioV3() {
     selectedImageModel, onImageModelChange: setSelectedImageModel, imageModelOptions,
     onOpenImagePicker: () => setShowImagePicker(true),
     onGenerate: handleGenerate, onSave: saveCharacter, primaryPortraitUrl: primaryPortrait?.image_url,
-    entryMode,
+    entryMode, onClearSuggestions: clearSuggestions,
   };
 
   // Shared workspace props

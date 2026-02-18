@@ -181,6 +181,20 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     setIsDirty(true);
   }, []);
 
+  // Clear AI suggestion fields
+  const clearSuggestions = useCallback(() => {
+    setCharacter(prev => ({
+      ...prev,
+      traits: '',
+      persona: '',
+      voice_tone: 'warm',
+      mood: 'friendly',
+      appearance_tags: [],
+      description: '',
+    }));
+    setIsDirty(true);
+  }, []);
+
   // Save character
   // Options: { silent?: boolean } - when true, suppresses success toast (useful for auto-save during generation)
   const saveCharacter = useCallback(async (options?: { silent?: boolean }): Promise<string | null> => {
@@ -486,7 +500,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
   // Check if this is a new character (not yet saved)
   const isNewCharacter = !savedCharacterId;
 
-  return {
+    return {
     // Character data
     character,
     updateCharacter,
@@ -498,6 +512,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     
     // Actions
     saveCharacter,
+    clearSuggestions,
     publishCharacter,
     loadCharacter,
     
