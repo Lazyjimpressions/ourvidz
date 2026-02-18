@@ -60,7 +60,7 @@ export function CharacterStudioPromptBar({
   onGenerate,
   isGenerating,
   isDisabled,
-  placeholder = 'Describe the portrait you want to generate...',
+  placeholder,
   selectedImageModel,
   onImageModelChange,
   imageModelOptions,
@@ -83,6 +83,13 @@ export function CharacterStudioPromptBar({
   const setPrompt = onValueChange || setInternalPrompt;
 
   const selectedModelData = imageModelOptions.find((m) => m.value === selectedImageModel);
+
+  // Context-aware placeholder: guide user toward directorial prompts when ref is locked
+  const dynamicPlaceholder = placeholder || (
+    referenceImageUrl
+      ? 'Describe changes: outfit, scene, pose, companions...'
+      : 'Describe the character you want to generate...'
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,14 +114,27 @@ export function CharacterStudioPromptBar({
     // Stage 1: If prompt is empty, auto-fill from character data (no LLM call)
     if (!prompt.trim() && characterData) {
       const parts: string[] = [];
-      if (characterData.name) parts.push(`Portrait of ${characterData.name}`);
-      if (characterData.gender && characterData.gender !== 'unspecified') parts.push(characterData.gender);
-      if (characterData.traits) parts.push(characterData.traits);
-      if (characterData.appearance_tags?.length > 0) parts.push(characterData.appearance_tags.join(', '));
-      const assembled = parts.filter(Boolean).join(', ');
-      if (assembled) {
-        setPrompt(assembled);
-        toast({ title: 'Prompt filled', description: 'Click ✨ again to enhance for selected model.' });
+
+      if (referenceImageUrl) {
+        // I2I Directing mode: short directorial seed, no identity re-description
+        if (characterData.name) parts.push(characterData.name);
+        parts.push('casual outfit', 'natural pose');
+        const assembled = parts.filter(Boolean).join(', ');
+        if (assembled) {
+          setPrompt(assembled);
+          toast({ title: 'Directorial seed filled', description: 'Describe outfit, scene, or pose. Click ✨ again to enhance.' });
+        }
+      } else {
+        // T2I Exploration mode: full identity description
+        if (characterData.name) parts.push(`Portrait of ${characterData.name}`);
+        if (characterData.gender && characterData.gender !== 'unspecified') parts.push(characterData.gender);
+        if (characterData.traits) parts.push(characterData.traits);
+        if (characterData.appearance_tags?.length > 0) parts.push(characterData.appearance_tags.join(', '));
+        const assembled = parts.filter(Boolean).join(', ');
+        if (assembled) {
+          setPrompt(assembled);
+          toast({ title: 'Prompt filled', description: 'Click ✨ again to enhance for selected model.' });
+        }
       }
       return;
     }
@@ -142,7 +162,7 @@ export function CharacterStudioPromptBar({
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={dynamicPlaceholder}
           disabled={isDisabled || isGenerating}
           className={cn('min-h-[44px] max-h-[100px] resize-none text-sm w-full')}
           rows={1}
