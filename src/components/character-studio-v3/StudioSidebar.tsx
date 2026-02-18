@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
-  ChevronDown, Loader2, Sparkles, Upload, Library, X, User, Undo2, Eraser
+  ChevronDown, Loader2, Sparkles, Upload, Library, X, User, Undo2, Eraser, Eye
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
@@ -41,6 +41,8 @@ interface StudioSidebarProps {
   onClearSuggestions?: () => void;
   referenceStrength?: number;
   onReferenceStrengthChange?: (value: number) => void;
+  onDescribeImage?: () => void;
+  isDescribingImage?: boolean;
 }
 
 export function StudioSidebar({
@@ -48,6 +50,7 @@ export function StudioSidebar({
   selectedImageModel, onImageModelChange, imageModelOptions, onOpenImagePicker,
   onSave, primaryPortraitUrl, entryMode, onClearSuggestions,
   referenceStrength, onReferenceStrengthChange,
+  onDescribeImage, isDescribingImage,
 }: StudioSidebarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -285,6 +288,9 @@ export function StudioSidebar({
                       <div className="flex-1 min-w-0">
                         <Badge variant="secondary" className="text-[10px] h-4 px-1 mb-1">Style Locked {Math.round((referenceStrength ?? 0.65) * 100)}%</Badge>
                         <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px] gap-0.5" onClick={onDescribeImage} disabled={isDescribingImage}>
+                            {isDescribingImage ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Eye className="w-2.5 h-2.5" />}Describe
+                          </Button>
                           <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={handleUploadRef}>Replace</Button>
                           <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px] text-destructive" onClick={() => updateCharacter({ reference_image_url: null })}>Remove</Button>
                         </div>

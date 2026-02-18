@@ -58,6 +58,9 @@ export default function CharacterStudioV3() {
   const [promptText, setPromptText] = useState('');
   // Reference strength for I2I (0.1–1.0, default 0.65)
   const [referenceStrength, setReferenceStrength] = useState(0.65);
+  // Describe image state
+  const [isDescribingImage, setIsDescribingImage] = useState(false);
+  const describeTriggeredRef = useRef(false);
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -98,6 +101,44 @@ export default function CharacterStudioV3() {
     }
     prevHasRef.current = hasReferenceImage;
   }, [hasReferenceImage, imageModelOptions, selectedImageModel, toast]);
+
+  // Describe image handler
+  const handleDescribeImage = useCallback(async () => {
+    if (!character.reference_image_url || isDescribingImage) return;
+    setIsDescribingImage(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('describe-image', {
+        body: {
+          imageUrl: character.reference_image_url,
+          outputMode: 'structured',
+          contentRating: character.content_rating,
+        },
+      });
+      if (error) throw error;
+      if (data?.success && data.data) {
+        const d = data.data;
+        const updates: Partial<typeof character> = {};
+        if (d.traits) updates.traits = d.traits;
+        if (d.description) updates.description = d.description;
+        if (d.gender && d.gender !== 'unspecified') updates.gender = Array.isArray(d.gender) ? d.gender[0] : d.gender;
+        if (d.appearance_tags && Array.isArray(d.appearance_tags)) updates.appearance_tags = d.appearance_tags;
+        updateCharacter(updates);
+        toast({ title: 'Image Analyzed', description: `Traits extracted via ${data.model_display_name || 'vision model'}` });
+      }
+    } catch (err) {
+      toast({ title: 'Analysis failed', description: err instanceof Error ? err.message : 'Could not analyze image', variant: 'destructive' });
+    } finally {
+      setIsDescribingImage(false);
+    }
+  }, [character.reference_image_url, character.content_rating, isDescribingImage, updateCharacter, toast]);
+
+  // Auto-trigger describe for from-image entry mode
+  useEffect(() => {
+    if (entryMode === 'from-image' && character.reference_image_url && !describeTriggeredRef.current) {
+      describeTriggeredRef.current = true;
+      handleDescribeImage();
+    }
+  }, [entryMode, character.reference_image_url, handleDescribeImage]);
 
   // Resize handler
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -154,6 +195,7 @@ export default function CharacterStudioV3() {
     onSave: saveCharacter, primaryPortraitUrl: primaryPortrait?.image_url,
     entryMode, onClearSuggestions: clearSuggestions,
     referenceStrength, onReferenceStrengthChange: setReferenceStrength,
+    onDescribeImage: handleDescribeImage, isDescribingImage,
   };
 
   // Shared workspace props
