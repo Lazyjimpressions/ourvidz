@@ -88,12 +88,13 @@
  export const useGroupedModels = () => {
    const { data: models, isLoading, error } = usePlaygroundModels();
  
-   const grouped = {
-     chat: models?.filter(m => m.modality === 'chat') || [],
-     image: models?.filter(m => m.modality === 'image' && m.task === 'generation') || [],
-     video: models?.filter(m => m.modality === 'video') || [],
-     i2i: models?.filter(m => m.modality === 'image' && (m.task === 'style_transfer' || m.task === 'enhancement')) || [],
-   };
+  const grouped = {
+    chat: models?.filter(m => m.modality === 'chat' && m.task !== 'enhancement') || [],
+    image: models?.filter(m => m.modality === 'image' && m.task === 'generation') || [],
+    video: models?.filter(m => m.modality === 'video') || [],
+    i2i: models?.filter(m => m.modality === 'image' && (m.task === 'style_transfer' || m.task === 'enhancement')) || [],
+    enhancement: models?.filter(m => m.modality === 'chat' && m.task === 'enhancement') || [],
+  };
  
    return { grouped, isLoading, error };
  };

@@ -101,27 +101,50 @@
                  </Select>
                </div>
  
-               {/* I2I Model */}
-               <div className="flex items-center gap-2">
-                 <Label className="text-xs w-12 shrink-0">I2I</Label>
-                 <Select
-                   value={settings.i2iModel}
-                   onValueChange={(v) => onSettingsChange({ i2iModel: v })}
-                 >
-                   <SelectTrigger className="h-7 text-xs flex-1">
-                     <SelectValue placeholder="Select..." />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {grouped.i2i.filter(m => m.model_key).map((m) => (
-                       <SelectItem key={m.id} value={m.model_key} className="text-xs">
-                         {m.display_name}
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-               </div>
- 
-               <div className="border-t border-border pt-2 mt-2">
+                {/* I2I Model */}
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs w-12 shrink-0">I2I</Label>
+                  <Select
+                    value={settings.i2iModel}
+                    onValueChange={(v) => onSettingsChange({ i2iModel: v })}
+                  >
+                    <SelectTrigger className="h-7 text-xs flex-1">
+                      <SelectValue placeholder="Select..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {grouped.i2i.filter(m => m.model_key).map((m) => (
+                        <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                          {m.display_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Enhancement Model */}
+                {grouped.enhancement.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs w-12 shrink-0">Enhance</Label>
+                    <Select
+                      value={settings.enhancementModel || 'auto'}
+                      onValueChange={(v) => onSettingsChange({ enhancementModel: v === 'auto' ? '' : v })}
+                    >
+                      <SelectTrigger className="h-7 text-xs flex-1">
+                        <SelectValue placeholder="Auto (default)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto" className="text-xs">Auto (default)</SelectItem>
+                        {grouped.enhancement.filter(m => m.model_key).map((m) => (
+                          <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                            {m.display_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="border-t border-border pt-2 mt-2">
                  {/* Template */}
                  <div className="flex items-center gap-2">
                    <Label className="text-xs w-12 shrink-0">Template</Label>
