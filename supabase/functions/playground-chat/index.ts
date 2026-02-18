@@ -437,12 +437,15 @@ You say: ...`;
       roleplay_settings,
       participants,
     long_response = false,
-    model_provider = '',
-    model_variant,
+    model_provider: raw_model_provider = '',
+    model_variant: raw_model_variant,
     context_type: requestedContextType,
     prompt_template_id,
     system_prompt_override
     } = body;
+
+    let model_provider = raw_model_provider;
+    let model_variant = raw_model_variant;
 
     if (!conversation_id || !message) {
       throw new Error('Missing required fields: conversation_id and message');
