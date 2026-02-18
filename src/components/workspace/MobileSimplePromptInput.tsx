@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Loader2 } from 'lucide-react';
+import { Sparkles, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
 import { supabase } from '@/integrations/supabase/client';
@@ -404,14 +404,25 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             className="min-h-[60px] max-h-[120px] resize-none text-base pr-10"
             disabled={isGenerating}
           />
-          <button
-            type="button"
-            onClick={handleEnhance}
-            disabled={!prompt.trim() || isEnhancing || isGenerating}
-            className="absolute right-2 top-2 text-muted-foreground hover:text-primary p-1 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            {isEnhancing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-          </button>
+          <div className="absolute right-2 top-2 flex items-center gap-1">
+            {prompt.trim() && (
+              <button
+                type="button"
+                onClick={() => onPromptChange('')}
+                className="text-muted-foreground hover:text-primary p-1 rounded transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleEnhance}
+              disabled={!prompt.trim() || isEnhancing || isGenerating}
+              className="text-muted-foreground hover:text-primary p-1 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              {isEnhancing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+            </button>
+          </div>
         </div>
         
         <Button

@@ -997,6 +997,24 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   }} 
                 />
                 <div className="absolute right-0.5 top-0.5 flex items-center gap-0.5">
+                  {prompt.trim() && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => onPromptChange('')}
+                            className="text-muted-foreground hover:text-primary p-0.5 rounded transition-colors"
+                          >
+                            <X size={12} />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          Clear prompt
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
