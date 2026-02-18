@@ -431,7 +431,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
 
         // The edge function inserts into character_portraits table
         // Refresh portraits to show the new one
-        await fetchPortraits();
+        await fetchPortraits(charId);
 
         // Update local character state to show the new image immediately in profile holder
         updateCharacter({ image_url: data.imageUrl });
