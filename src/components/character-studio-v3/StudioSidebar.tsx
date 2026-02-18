@@ -270,14 +270,15 @@ export function StudioSidebar({
 
               {/* Reference Image */}
               <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">Reference Image</Label>
+                <Label className="text-[10px] text-muted-foreground">Style Lock</Label>
+                <span className="text-[9px] text-muted-foreground">Portraits will match this face/style</span>
                 {character.reference_image_url ? (
                   <div className="flex items-center gap-2">
                     <div className="w-12 h-12 rounded overflow-hidden border border-border flex-shrink-0">
                       <img src={character.reference_image_url} alt="Reference" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <Badge variant="secondary" className="text-[10px] h-4 px-1 mb-1">Image Match Mode</Badge>
+                      <Badge variant="secondary" className="text-[10px] h-4 px-1 mb-1">Style Locked</Badge>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={handleUploadRef}>Replace</Button>
                         <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px] text-destructive" onClick={() => updateCharacter({ reference_image_url: null })}>Remove</Button>

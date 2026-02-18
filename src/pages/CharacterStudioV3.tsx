@@ -56,8 +56,6 @@ export default function CharacterStudioV3() {
   const [workspaceTab, setWorkspaceTab] = useState<'portraits' | 'scenes'>('portraits');
   // Prompt text
   const [promptText, setPromptText] = useState('');
-  const promptAutoPopulatedRef = useRef(true);
-  const lastAutoPromptRef = useRef('');
 
   // Resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -113,25 +111,6 @@ export default function CharacterStudioV3() {
     return () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
   }, []);
 
-  // Auto-populate prompt bar from character fields
-  useEffect(() => {
-    const parts: string[] = [];
-    if (character.name) parts.push(`Portrait of ${character.name}`);
-    if (character.gender && character.gender !== 'unspecified') parts.push(character.gender);
-    if (character.traits) parts.push(character.traits);
-    if (character.appearance_tags?.length > 0) parts.push(character.appearance_tags.join(', '));
-    const assembled = parts.join(', ') || '';
-    lastAutoPromptRef.current = assembled;
-    if (promptAutoPopulatedRef.current && assembled) {
-      setPromptText(assembled);
-    }
-  }, [character.name, character.gender, character.traits, character.appearance_tags]);
-
-  // Track manual edits to prompt
-  const handlePromptTextChange = useCallback((v: string) => {
-    setPromptText(v);
-    promptAutoPopulatedRef.current = v === lastAutoPromptRef.current;
-  }, []);
 
   // Enhancement handler
   const handleEnhancePrompt = useCallback(async (prompt: string, modelId: string): Promise<string | null> => {
@@ -179,7 +158,7 @@ export default function CharacterStudioV3() {
     selectedItemId, selectedItemType, selectItem, character,
     updateCharacter, selectedImageModel, onImageModelChange: setSelectedImageModel,
     imageModelOptions, onOpenImagePicker: () => setShowImagePicker(true),
-    onGenerate: handleGenerate, promptText, setPromptText: handlePromptTextChange,
+    onGenerate: handleGenerate, promptText, setPromptText,
     onUseAsReference: handleUseAsReference,
     onEditScene: (s: CharacterScene) => { setSceneToEdit(s); setShowSceneModal(true); },
     onDeleteScene: async (id: string) => { console.log('Delete scene:', id); },
@@ -189,6 +168,7 @@ export default function CharacterStudioV3() {
     characterAppearanceTags: character.appearance_tags || [],
     onRegenerate: (prompt: string, refUrl: string) => { updateCharacter({ reference_image_url: refUrl }); handleGenerate(prompt, refUrl, selectedImageModel); },
     onEnhancePrompt: handleEnhancePrompt,
+    characterData: { name: character.name, gender: character.gender, traits: character.traits, appearance_tags: character.appearance_tags || [] },
   };
 
   // MOBILE
