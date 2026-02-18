@@ -69,3 +69,47 @@ export const useImageModels = () => {
 export const useVideoModels = () => {
   return useApiModels('video', 'generation');
 };
+
+/** Fetches all visual models: T2I (image/generation), I2I (image/style_transfer), I2V (video/generation) */
+export const useAllVisualModels = () => {
+  return useQuery({
+    queryKey: ['api-models', 'all-visual'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('api_models')
+        .select(`
+          id,
+          display_name,
+          model_key,
+          version,
+          modality,
+          task,
+          model_family,
+          is_default,
+          priority,
+          capabilities,
+          input_defaults,
+          api_providers!inner(name, display_name)
+        `)
+        .eq('is_active', true)
+        .or('modality.eq.image,modality.eq.video')
+        .in('task', ['generation', 'style_transfer'])
+        .order('priority', { ascending: false })
+        .order('display_name', { ascending: true });
+
+      if (error) throw error;
+
+      const models = data as ApiModel[];
+
+      // Group by category
+      const t2i = models.filter(m => m.modality === 'image' && m.task === 'generation');
+      const i2i = models.filter(m => m.modality === 'image' && m.task === 'style_transfer');
+      const i2v = models.filter(m => m.modality === 'video' &&
+        (m.model_key.includes('i2v') || m.model_key.includes('image-to-video')));
+
+      return { all: models, t2i, i2i, i2v };
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+};
