@@ -59,10 +59,11 @@ const TASK_ABBREVIATIONS: Record<string, string> = {
   reasoning: 'RSN',
   enhancement: 'ENH',
   embedding: 'EMB',
+  vision: 'VIS',
 };
 
 const MODALITIES = ['image', 'video', 'chat'] as const;
-const TASKS = ['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding'] as const;
+const TASKS = ['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding', 'vision'] as const;
 
 const formatResponseTime = (ms: number | null | undefined) => {
   if (ms === null || ms === undefined || ms === 0) return '--';

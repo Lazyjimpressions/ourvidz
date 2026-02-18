@@ -1,0 +1,2 @@
+ALTER TABLE public.api_models DROP CONSTRAINT IF EXISTS api_models_task_check;
+ALTER TABLE public.api_models ADD CONSTRAINT api_models_task_check CHECK (task IN ('generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding', 'vision'));
