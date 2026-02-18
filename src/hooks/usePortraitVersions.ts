@@ -30,9 +30,10 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
   const [error, setError] = useState<Error | null>(null);
   const { toast } = useToast();
 
-  // Fetch portraits for this character
-  const fetchPortraits = useCallback(async () => {
-    if (!characterId || !enabled) return;
+  // Fetch portraits for this character (accepts optional override for freshly-saved characters)
+  const fetchPortraits = useCallback(async (overrideCharacterId?: string) => {
+    const targetId = overrideCharacterId || characterId;
+    if (!targetId) return;
     
     setIsLoading(true);
     setError(null);
@@ -41,7 +42,7 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
       const { data, error: fetchError } = await supabase
         .from('character_portraits')
         .select('*')
-        .eq('character_id', characterId)
+        .eq('character_id', targetId)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false });
       
@@ -54,7 +55,7 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     } finally {
       setIsLoading(false);
     }
-  }, [characterId, enabled]);
+  }, [characterId]);
 
   // Set a portrait as primary
   const setPrimaryPortrait = useCallback(async (portraitId: string) => {
