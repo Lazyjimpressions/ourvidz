@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, ChevronDown, Check, AlertCircle, MessageSquare, Users } from 'lucide-react';
+import { ArrowLeft, Loader2, ChevronDown, Check, AlertCircle, MessageSquare, Users, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -181,10 +181,10 @@ export default function CharacterStudioV3() {
       <div className="h-screen w-full flex flex-col bg-background overflow-x-hidden">
         {/* Header */}
         <header className="h-11 border-b border-border flex items-center justify-between px-3 bg-card">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="p-1.5"><ArrowLeft className="w-4 h-4" /></Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="p-1.5"><Home className="w-4 h-4" /></Button>
           <CharacterSelector
             onSelect={(id) => navigate(`/character-studio/${id}`)}
-            onCreateNew={() => navigate('/character-studio')}
+            onCreateNew={() => { navigate('/character-studio'); window.location.reload(); }}
             trigger={
               <button className="flex items-center gap-1 text-xs font-medium text-foreground">
                 <span className="truncate max-w-[120px]">{isNewCharacter ? 'New Character' : character.name || 'Character'}</span>
@@ -240,13 +240,13 @@ export default function CharacterStudioV3() {
       {/* Header */}
       <header className="h-11 border-b border-border flex items-center justify-between px-4 bg-card">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="h-7 px-2 text-xs gap-1">
-            <ArrowLeft className="w-3 h-3" />Back
+          <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="h-7 px-2 text-xs gap-1">
+            <Home className="w-3 h-3" />Dashboard
           </Button>
           <div className="h-3 w-px bg-border" />
           <CharacterSelector
             onSelect={(id) => navigate(`/character-studio/${id}`)}
-            onCreateNew={() => navigate('/character-studio')}
+            onCreateNew={() => { navigate('/character-studio'); window.location.reload(); }}
             trigger={
               <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">
                 <Users className="w-3 h-3" />

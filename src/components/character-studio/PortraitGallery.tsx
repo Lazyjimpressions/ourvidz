@@ -257,7 +257,7 @@ export function PortraitGallery({
                             <DropdownMenuSeparator />
                           </>
                         )}
-                        <DropdownMenuItem onClick={() => onUseAsReference(portrait)}>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onUseAsReference(portrait); }}>
                           <Lock className="w-4 h-4 mr-2" />
                           Use as Reference
                         </DropdownMenuItem>
