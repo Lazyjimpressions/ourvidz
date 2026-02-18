@@ -337,3 +337,6 @@ verify_jwt = false
 
 [functions.character-portrait]
 verify_jwt = false
+
+[functions.describe-image]
+verify_jwt = false
