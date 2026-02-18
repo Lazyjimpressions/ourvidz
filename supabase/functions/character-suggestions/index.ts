@@ -94,8 +94,8 @@ async function getModelConfig(modelId?: string, modelKey?: string): Promise<Mode
     } else if (modelKey) {
       query = query.eq('model_key', modelKey);
     } else {
-      // Get the default model
-      query = query.eq('is_default', true);
+      // Get the default model for roleplay
+      query = query.contains('default_for_tasks', ['roleplay']);
     }
 
     const { data, error } = await query.limit(1).single();

@@ -342,7 +342,7 @@ serve(async (req) => {
         `)
         .eq('modality', isVideo ? 'video' : 'image')
         .eq('is_active', true)
-        .eq('is_default', true)
+        .contains('default_for_tasks', ['generation'])
         .eq('api_providers.name', 'fal')
         .single();
 

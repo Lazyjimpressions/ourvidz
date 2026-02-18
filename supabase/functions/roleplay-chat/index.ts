@@ -892,7 +892,7 @@ async function getDefaultOpenRouterModel(supabase: any): Promise<string> {
       .select('model_key, api_providers!inner(name)')
       .eq('modality', 'roleplay')
       .eq('is_active', true)
-      .eq('is_default', true)
+      .contains('default_for_tasks', ['roleplay'])
       .eq('api_providers.name', 'openrouter')
       .maybeSingle();
 
@@ -3073,9 +3073,8 @@ const sceneContext = analyzeSceneContent(response);
         .from('api_models')
         .select('id, model_key, display_name, task, api_providers!inner(name)')
         .eq('is_active', true)
-        .eq('is_default', true)
+        .contains('default_for_tasks', [requiredTask])
         .eq('modality', 'image')
-        .eq('task', requiredTask)  // ✅ FIX: Filter by task type
         .limit(1);
 
       if (defaultModels && defaultModels.length > 0) {
@@ -3672,7 +3671,7 @@ RULES:
               .select('model_key, display_name')
               .eq('task', 'style_transfer')
               .eq('is_active', true)
-              .eq('is_default', true)
+              .contains('default_for_tasks', ['style_transfer'])
               .order('priority', { ascending: true })
               .limit(1)
               .single();

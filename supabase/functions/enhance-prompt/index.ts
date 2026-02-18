@@ -675,9 +675,8 @@ class TableDrivenEnhancementOrchestrator {
         .from('api_models')
         .select('model_key')
         .eq('modality', 'chat')
-        .eq('task', 'enhancement')
-        .eq('is_default', true)
         .eq('is_active', true)
+        .contains('default_for_tasks', ['enhancement'])
         .limit(1)
         .single();
 
