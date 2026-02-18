@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
-  ChevronDown, Wand2, Loader2, Sparkles, Upload, Library, X, User
+  ChevronDown, Wand2, Loader2, Sparkles, Upload, Library, X, User, Undo2, Eraser
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
@@ -38,12 +38,13 @@ interface StudioSidebarProps {
   onSave: () => Promise<string | null>;
   primaryPortraitUrl?: string | null;
   entryMode?: string | null;
+  onClearSuggestions?: () => void;
 }
 
 export function StudioSidebar({
   character, updateCharacter, isNewCharacter, isDirty, isSaving, isGenerating,
   selectedImageModel, onImageModelChange, imageModelOptions, onOpenImagePicker,
-  onGenerate, onSave, primaryPortraitUrl, entryMode,
+  onGenerate, onSave, primaryPortraitUrl, entryMode, onClearSuggestions,
 }: StudioSidebarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -58,6 +59,8 @@ export function StudioSidebar({
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState<SuggestionType | null>(null);
   const [newTag, setNewTag] = useState('');
   const [isUploadingRef, setIsUploadingRef] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const preSuggestionSnapshot = useRef<Partial<CharacterData> | null>(null);
 
   const { allModelOptions: roleplayModels, defaultModel: defaultRoleplayModel } = useRoleplayModels();
   const [selectedRoleplayModel, setSelectedRoleplayModel] = useState('');
@@ -119,6 +122,15 @@ export function StudioSidebar({
 
   // AI Suggestions
   const fetchSuggestions = useCallback(async (type: SuggestionType) => {
+    // Snapshot before applying suggestions
+    preSuggestionSnapshot.current = {
+      description: character.description,
+      traits: character.traits,
+      persona: character.persona,
+      voice_tone: character.voice_tone,
+      mood: character.mood,
+      appearance_tags: [...character.appearance_tags],
+    };
     setIsLoadingSuggestion(type);
     try {
       const { data, error } = await supabase.functions.invoke('character-suggestions', {
@@ -141,12 +153,22 @@ export function StudioSidebar({
         if (type === 'description' && s.suggestedDescription) updateCharacter({ description: s.suggestedDescription });
         if (type === 'persona' && s.suggestedPersona) updateCharacter({ persona: s.suggestedPersona });
         if (type === 'all') updateCharacter({ description: s.suggestedDescription || character.description, traits: s.suggestedTraits?.join(', ') || character.traits, voice_tone: s.suggestedVoiceTone || character.voice_tone, persona: s.suggestedPersona || character.persona, appearance_tags: s.suggestedAppearance || character.appearance_tags });
+        setCanUndo(true);
         toast({ title: type === 'all' ? 'Character Enhanced' : 'Suggestion Applied' });
       }
     } catch {
       toast({ title: 'Suggestion Failed', variant: 'destructive' });
     } finally { setIsLoadingSuggestion(null); }
   }, [character, toast, selectedRoleplayModel, defaultRoleplayModel, updateCharacter]);
+
+  const handleUndoSuggestion = useCallback(() => {
+    if (preSuggestionSnapshot.current) {
+      updateCharacter(preSuggestionSnapshot.current);
+      preSuggestionSnapshot.current = null;
+      setCanUndo(false);
+      toast({ title: 'Suggestions Undone' });
+    }
+  }, [updateCharacter, toast]);
 
   return (
     <div className="h-full flex flex-col bg-card border-r border-border">
@@ -164,7 +186,19 @@ export function StudioSidebar({
             </div>
             <div className="flex-1 min-w-0">
               <span className="text-xs font-medium text-foreground block truncate">{character.name || 'New Character'}</span>
-              <SuggestButton type="all" onClick={() => fetchSuggestions('all')} isLoading={isLoadingSuggestion !== null} loadingType={isLoadingSuggestion} disabled={!character.name} variant="text" className="mt-0.5" />
+              <div className="flex items-center gap-1 mt-0.5">
+                <SuggestButton type="all" onClick={() => fetchSuggestions('all')} isLoading={isLoadingSuggestion !== null} loadingType={isLoadingSuggestion} disabled={!character.name} variant="text" />
+                {canUndo && (
+                  <button onClick={handleUndoSuggestion} className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-0.5 transition-colors">
+                    <Undo2 className="w-2.5 h-2.5" />Undo
+                  </button>
+                )}
+                {onClearSuggestions && (
+                  <button onClick={() => { onClearSuggestions(); setCanUndo(false); preSuggestionSnapshot.current = null; }} className="text-[10px] text-muted-foreground hover:text-destructive flex items-center gap-0.5 transition-colors">
+                    <Eraser className="w-2.5 h-2.5" />Clear
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -306,21 +340,11 @@ export function StudioSidebar({
               <div className="grid grid-cols-2 gap-1.5">
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">Voice Tone</Label>
-                  <Select value={character.voice_tone} onValueChange={v => updateCharacter({ voice_tone: v })}>
-                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent className="z-[100] bg-popover">
-                      {['warm', 'playful', 'seductive', 'commanding', 'soft', 'sarcastic', 'cold'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Input value={character.voice_tone} onChange={e => updateCharacter({ voice_tone: e.target.value })} placeholder="warm, playful..." className="h-7 text-xs" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">Mood</Label>
-                  <Select value={character.mood} onValueChange={v => updateCharacter({ mood: v })}>
-                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent className="z-[100] bg-popover">
-                      {['friendly', 'flirty', 'mysterious', 'energetic', 'calm', 'intense', 'shy'].map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Input value={character.mood} onChange={e => updateCharacter({ mood: e.target.value })} placeholder="friendly, mysterious..." className="h-7 text-xs" />
                 </div>
               </div>
               <div className="space-y-1">
