@@ -174,6 +174,8 @@ function buildUserContent(imageUrl: string, outputMode: OutputMode, originalProm
 
 function parseStructuredResponse(content: string): Record<string, unknown> {
   let jsonStr = content.trim();
+  // Strip <think>...</think> blocks from thinking models
+  jsonStr = jsonStr.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
   if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
   else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
   if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
