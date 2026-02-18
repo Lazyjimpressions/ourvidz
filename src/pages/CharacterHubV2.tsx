@@ -104,7 +104,7 @@ export default function CharacterHubV2() {
     };
 
     const handleEdit = (id: string) => {
-        navigate(`/character-studio-v2/${id}`);
+        navigate(`/character-studio/${id}`);
     };
 
     const handleDelete = async (id: string) => {
@@ -171,7 +171,7 @@ export default function CharacterHubV2() {
                 <Button
                     size="sm"
                     className="bg-primary hover:bg-primary/90 text-xs h-7 gap-1"
-                    onClick={() => navigate('/character-studio-v2?mode=create')}
+                    onClick={() => navigate('/character-studio')}
                 >
                     <Plus className="w-3 h-3" />
                     Create Character
@@ -218,9 +218,9 @@ export default function CharacterHubV2() {
                                         : "No characters match your filters."}
                                 </p>
                                 {characters?.length === 0 && (
-                                    <Button
+                                     <Button
                                         size="sm"
-                                        onClick={() => navigate('/character-studio-v2?mode=create')}
+                                        onClick={() => navigate('/character-studio')}
                                     >
                                         <Plus className="w-3 h-3 mr-1" />
                                         Create Character
@@ -242,7 +242,7 @@ export default function CharacterHubV2() {
                                             onEdit={() => handleEdit(character.id)}
                                             onDelete={() => handleDelete(character.id)}
                                             onDuplicate={() => handleDuplicate(character)}
-                                            onGenerate={() => navigate(`/character-studio-v2/${character.id}`)}
+                                            onGenerate={() => navigate(`/character-studio/${character.id}`)}
                                         />
                                     </div>
                                 ))}

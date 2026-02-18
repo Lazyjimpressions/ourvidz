@@ -21,9 +21,8 @@ import Playground from "@/pages/Playground";
 import MobileRoleplayDashboard from "@/pages/MobileRoleplayDashboard";
 import MobileRoleplayChat from "@/pages/MobileRoleplayChat";
 import CreateCharacter from "@/pages/CreateCharacter";
-import CharacterStudio from "@/pages/CharacterStudio";
+import CharacterStudioV3 from "@/pages/CharacterStudioV3";
 import CharacterHubV2 from "@/pages/CharacterHubV2";
-import CharacterStudioV2 from "@/pages/CharacterStudioV2";
 import StyleGuide from "@/pages/StyleGuide";
 
 import NotFound from "@/pages/NotFound";
@@ -65,13 +64,11 @@ function App() {
                 <Route path="/roleplay/chat/:characterId/scene/:sceneId" element={<ProtectedRoute><MobileRoleplayChat /></ProtectedRoute>} />
                 <Route path="/create-character" element={<ProtectedRoute><CreateCharacter /></ProtectedRoute>} />
                 <Route path="/edit-character/:id" element={<ProtectedRoute><CreateCharacter /></ProtectedRoute>} />
-                <Route path="/character-studio" element={<ProtectedRoute><CharacterStudio /></ProtectedRoute>} />
-                <Route path="/character-studio/:id" element={<ProtectedRoute><CharacterStudio /></ProtectedRoute>} />
+                <Route path="/character-studio" element={<ProtectedRoute><CharacterStudioV3 /></ProtectedRoute>} />
+                <Route path="/character-studio/:id" element={<ProtectedRoute><CharacterStudioV3 /></ProtectedRoute>} />
 
-                {/* Character Hub V2 & Studio V2 */}
+                {/* Character Hub V2 */}
                 <Route path="/character-hub-v2" element={<ProtectedRoute><CharacterHubV2 /></ProtectedRoute>} />
-                <Route path="/character-studio-v2" element={<ProtectedRoute><CharacterStudioV2 /></ProtectedRoute>} />
-                <Route path="/character-studio-v2/:id" element={<ProtectedRoute><CharacterStudioV2 /></ProtectedRoute>} />
 
                 {/* Admin Tools */}
                 <Route path="/style-guide" element={<ProtectedRoute><StyleGuide /></ProtectedRoute>} />
