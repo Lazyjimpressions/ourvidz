@@ -1,65 +1,100 @@
 
-# Character Studio: Reference Strength Control
 
-## Problem
-When a Style Lock image is active, the I2I strength is hardcoded to 0.7. This makes it impossible to make significant visual changes (aging, different hairstyle, body type) because the reference image dominates too heavily. Users have no way to control how much creative freedom the prompt gets vs. how closely the output matches the reference.
+# Describe Image: Vision Pipeline with Kimi K2.5
 
-## Solution
-Add a **Reference Strength slider** to the Character Studio that lets users control the balance between their reference image and their prompt.
+## Database Change (Data Update Only -- No Migration)
 
----
+Update the **existing** Kimi K2.5 row (`82e0b6e3-0a64-4396-9d5b-24d609c24b77`) to add `'vision'` to its `default_for_tasks` array:
 
-## How It Works
+```sql
+UPDATE api_models 
+SET default_for_tasks = array_append(default_for_tasks, 'vision')
+WHERE id = '82e0b6e3-0a64-4396-9d5b-24d609c24b77';
+```
 
-- **Slider range:** 0.1 to 1.0 (displayed as percentage: 10%–100%)
-- **Default:** 0.65 (slightly lower than current 0.7 for better prompt responsiveness)
-- **Only visible when Style Lock is active** (no reference = T2I, slider irrelevant)
-
-### Strength Guide (shown as helper text):
-- Low (0.3–0.5): "Major changes — aging, restyling, different look"
-- Medium (0.5–0.7): "Outfit and expression changes"  
-- High (0.7–0.9): "Minor tweaks — lighting, pose, background"
+No new row. No schema change. Just a multi-task assignment on the existing model, exactly like how other models serve multiple roles.
 
 ---
 
-## Technical Changes
+## Edge Function: `describe-image`
 
-### 1. Frontend: Character Studio Sidebar
-**File:** `src/pages/CharacterStudioV3.tsx` (or the sidebar component)
+**File**: `supabase/functions/describe-image/index.ts` (new)
 
-- Add `referenceStrength` state (default 0.65)
-- Render a Slider component below the Style Lock image preview, only when a reference image is active
-- Show current value as percentage label
-- Include a small hint label that changes based on the range
+### Model Resolution (standard priority chain)
+1. Explicit `modelId` (UUID) from request body
+2. Explicit `modelKey` from request body
+3. DB default: `.contains('default_for_tasks', ['vision'])` on active chat models
+4. Hardcoded fallback: `moonshotai/kimi-k2.5`
 
-### 2. Frontend: Pass Strength to Generation
-**File:** `src/hooks/useCharacterStudio.ts`
+This is the same pattern used by `character-suggestions`, `enhance-prompt`, `roleplay-chat`, etc.
 
-- Accept `referenceStrength` in the `generatePortrait` options
-- Pass it through to the `character-portrait` edge function body
+### Input
+```text
+{ imageUrl, contentRating?, outputMode?, modelId?, modelKey?, originalPrompt? }
+```
+- `outputMode`: `'caption'` | `'detailed'` | `'structured'` (default: `'structured'`)
 
-### 3. Edge Function: Use Strength Value
-**File:** `supabase/functions/character-portrait/index.ts`
+### Processing
+- Resolve model + provider from DB
+- Look up provider's `base_url`, `secret_name`, and `auth_scheme`
+- Build OpenRouter-compatible chat completion with image content block:
+  ```text
+  messages: [
+    { role: "system", content: "<structured extraction prompt>" },
+    { role: "user", content: [
+      { type: "image_url", image_url: { url: imageUrl } },
+      { type: "text", text: "Describe this character" }
+    ]}
+  ]
+  ```
+- Parse response into structured JSON
 
-- Accept `referenceStrength` from the request body
-- When building fal.ai model input for I2I, set `prompt_strength` (or the model's equivalent key) to `1 - referenceStrength`
-  - Note: fal.ai Seedream uses `prompt_strength` where higher = more prompt influence, which is the inverse of "reference strength"
-  - So a user-facing "Reference Strength" of 0.8 maps to a fal.ai `prompt_strength` of 0.2
-- Fallback to current behavior (0.7 equivalent) if not provided
+### Output Modes
+- **caption**: Single sentence description
+- **detailed**: Narrative paragraph
+- **structured**: JSON mapping 1:1 to character table fields:
+  ```text
+  { gender, description, appearance_tags, physical_traits, traits, suggested_names }
+  ```
+- When `originalPrompt` is provided, also returns a quality score
 
-### 4. Prompt Bar Badge Update
-**File:** `src/components/character-studio/CharacterStudioPromptBar.tsx`
-
-- Update the "Style Locked" badge to show the current strength percentage, e.g., "Style Locked 65%"
-- Gives quick visual feedback without opening the sidebar
+### Config
+Add to `supabase/config.toml`:
+```toml
+[functions.describe-image]
+verify_jwt = false
+```
 
 ---
 
-## Files to Modify
-1. `src/pages/CharacterStudioV3.tsx` — add state + slider UI in sidebar
-2. `src/hooks/useCharacterStudio.ts` — pass strength to edge function
-3. `supabase/functions/character-portrait/index.ts` — apply strength to fal.ai input
-4. `src/components/character-studio/CharacterStudioPromptBar.tsx` — badge update
+## Frontend Integration
 
-## No New Dependencies
-Uses the existing `@radix-ui/react-slider` (already installed via shadcn Slider component).
+### `StudioSidebar.tsx`
+- Add a "Describe Image" button below the Style Lock preview (visible when reference image is set)
+- On click: invoke `describe-image` with `outputMode: 'structured'`
+- Map response fields to `updateCharacter()`:
+  - `description` -> `traits`
+  - `appearance_tags` -> `appearance_tags`
+  - `gender` -> `gender`
+  - `physical_traits` -> `physical_traits`
+- Show loading state during analysis, toast on completion
+
+### `CharacterStudioV3.tsx`
+- When `entryMode === 'from-image'` and a reference image is set, auto-trigger the describe flow (no manual button click needed)
+
+---
+
+## Files Summary
+
+| File | Action |
+|------|--------|
+| `api_models` table | UPDATE existing Kimi K2.5 row: add `'vision'` to `default_for_tasks` |
+| `supabase/functions/describe-image/index.ts` | Create new edge function |
+| `supabase/config.toml` | Add `[functions.describe-image]` entry |
+| `src/components/character-studio-v3/StudioSidebar.tsx` | Add "Describe Image" button + handler |
+| `src/pages/CharacterStudioV3.tsx` | Auto-trigger for `from-image` entry mode |
+
+## No New Dependencies or Secrets
+- Uses existing OpenRouter provider + `OpenRouter_Roleplay_API_KEY` secret
+- No new npm packages
+
