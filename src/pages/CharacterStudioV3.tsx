@@ -117,11 +117,12 @@ export default function CharacterStudioV3() {
     const { data, error } = await supabase.functions.invoke('enhance-prompt', {
       body: { prompt, targetModelId: modelId, jobType: 'image', contentRating: character.content_rating }
     });
-    if (error || !data?.enhancedPrompt) {
+    const enhanced = data?.enhancedPrompt || data?.enhanced_prompt;
+    if (error || !enhanced) {
       toast({ title: 'Enhancement failed', description: error?.message || 'Could not enhance prompt', variant: 'destructive' });
       return null;
     }
-    return data.enhancedPrompt;
+    return enhanced;
   }, [character.content_rating, toast]);
 
   // Handlers
