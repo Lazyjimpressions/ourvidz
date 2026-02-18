@@ -23,8 +23,9 @@ serve(async (req) => {
       referenceImageUrl, 
       contentRating,
       apiModelId,
-      characterData, // For new characters not yet saved
-      promptOverride // User-typed prompt from Character Studio prompt bar
+      characterData,
+      promptOverride,
+      referenceStrength // 0.1–1.0, controls how much the reference image influences output
     } = body;
     
     console.log('📥 character-portrait request:', {
@@ -246,8 +247,14 @@ serve(async (req) => {
     // Safety checker based on content
     modelInput.enable_safety_checker = effectiveContentRating !== 'nsfw';
 
-    // I2I: Add reference image
+    // I2I: Add reference image and strength
     if (isI2I && referenceImageUrl) {
+      // Map user-facing referenceStrength to fal.ai prompt_strength (inverse)
+      // referenceStrength 0.8 = strong ref = low prompt influence = prompt_strength 0.2
+      const effectiveRefStrength = typeof referenceStrength === 'number' ? referenceStrength : 0.65;
+      const promptStrength = Math.round((1 - effectiveRefStrength) * 100) / 100;
+      modelInput.prompt_strength = promptStrength;
+      console.log(`🎛️ Reference strength: ${effectiveRefStrength} → prompt_strength: ${promptStrength}`);
       let finalImageUrl = referenceImageUrl;
 
       // Sign if it's a storage path

@@ -18,6 +18,7 @@ import { CharacterData } from '@/hooks/useCharacterStudio';
 import { SuggestButton, SuggestionType } from '@/components/character-studio/SuggestButton';
 import { ModelSelector } from '@/components/character-studio/ModelSelector';
 import { ImageModelOption } from '@/hooks/useImageModels';
+import { Slider } from '@/components/ui/slider';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,12 +39,15 @@ interface StudioSidebarProps {
   primaryPortraitUrl?: string | null;
   entryMode?: string | null;
   onClearSuggestions?: () => void;
+  referenceStrength?: number;
+  onReferenceStrengthChange?: (value: number) => void;
 }
 
 export function StudioSidebar({
   character, updateCharacter, isNewCharacter, isDirty, isSaving, isGenerating,
   selectedImageModel, onImageModelChange, imageModelOptions, onOpenImagePicker,
   onSave, primaryPortraitUrl, entryMode, onClearSuggestions,
+  referenceStrength, onReferenceStrengthChange,
 }: StudioSidebarProps) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -273,18 +277,43 @@ export function StudioSidebar({
                 <Label className="text-[10px] text-muted-foreground">Style Lock</Label>
                 <span className="text-[9px] text-muted-foreground">Portraits will match this face/style</span>
                 {character.reference_image_url ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-12 h-12 rounded overflow-hidden border border-border flex-shrink-0">
-                      <img src={character.reference_image_url} alt="Reference" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <Badge variant="secondary" className="text-[10px] h-4 px-1 mb-1">Style Locked</Badge>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={handleUploadRef}>Replace</Button>
-                        <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px] text-destructive" onClick={() => updateCharacter({ reference_image_url: null })}>Remove</Button>
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="w-12 h-12 rounded overflow-hidden border border-border flex-shrink-0">
+                        <img src={character.reference_image_url} alt="Reference" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1 mb-1">Style Locked {Math.round((referenceStrength ?? 0.65) * 100)}%</Badge>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" onClick={handleUploadRef}>Replace</Button>
+                          <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px] text-destructive" onClick={() => updateCharacter({ reference_image_url: null })}>Remove</Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                    {/* Reference Strength Slider */}
+                    <div className="space-y-1 pt-1">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] text-muted-foreground">Reference Strength</Label>
+                        <span className="text-[10px] font-medium text-foreground">{Math.round((referenceStrength ?? 0.65) * 100)}%</span>
+                      </div>
+                      <Slider
+                        value={[referenceStrength ?? 0.65]}
+                        onValueChange={([v]) => onReferenceStrengthChange?.(v)}
+                        min={0.1}
+                        max={1.0}
+                        step={0.05}
+                        size="xs"
+                        className="w-full"
+                      />
+                      <p className="text-[9px] text-muted-foreground">
+                        {(referenceStrength ?? 0.65) <= 0.5
+                          ? 'Major changes — aging, restyling, different look'
+                          : (referenceStrength ?? 0.65) <= 0.7
+                            ? 'Outfit and expression changes'
+                            : 'Minor tweaks — lighting, pose, background'}
+                      </p>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex gap-1">
                     <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1 flex-1" onClick={handleUploadRef} disabled={isUploadingRef}>

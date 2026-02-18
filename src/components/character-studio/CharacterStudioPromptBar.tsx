@@ -35,6 +35,9 @@ interface CharacterStudioPromptBarProps {
   referenceImageUrl?: string | null;
   onReferenceImageChange?: (url: string | null) => void;
 
+  /** Current reference strength (0.1–1.0) for badge display */
+  referenceStrength?: number;
+
   /** Generation progress state */
   generationProgress?: {
     percent: number;
@@ -64,6 +67,7 @@ export function CharacterStudioPromptBar({
   onOpenImagePicker,
   referenceImageUrl,
   onReferenceImageChange,
+  referenceStrength,
   generationProgress,
   value,
   onValueChange,
@@ -165,7 +169,7 @@ export function CharacterStudioPromptBar({
                   <div className="w-8 h-8 rounded overflow-hidden border border-border flex-shrink-0">
                     <img src={referenceImageUrl} alt="Ref" className="w-full h-full object-cover" />
                   </div>
-                  <span className="text-xs text-muted-foreground">Style Locked</span>
+                  <span className="text-xs text-muted-foreground">Style Locked {referenceStrength != null ? `${Math.round(referenceStrength * 100)}%` : ''}</span>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => onReferenceImageChange?.(null)} className="text-destructive">
