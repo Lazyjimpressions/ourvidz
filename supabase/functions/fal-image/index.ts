@@ -587,13 +587,17 @@ serve(async (req) => {
       ...apiModel.input_defaults
     };
 
-    // Handle safety checker based on content mode
-    // fal.ai uses `enable_safety_checker` (not disable_safety_checker)
-    if (contentMode === 'nsfw') {
-      modelInput.enable_safety_checker = false;
-      console.log('🔓 Safety checker disabled for NSFW content');
+    // Handle safety parameter based on model capabilities (table-driven)
+    const safetyParam = capabilities?.safety_checker_param || 'enable_safety_checker';
+
+    if (safetyParam === 'safety_tolerance') {
+      // Kontext-style: use safety_tolerance (string '1'-'6', 6 = most permissive)
+      modelInput.safety_tolerance = contentMode === 'nsfw' ? '6' : (inputDefaults?.safety_tolerance || '6');
+      console.log(`🔓 Safety tolerance set to ${modelInput.safety_tolerance} (Kontext-style)`);
     } else {
-      modelInput.enable_safety_checker = true;
+      // Standard: enable_safety_checker (boolean) — default OFF for adult platform
+      modelInput.enable_safety_checker = inputDefaults?.enable_safety_checker ?? false;
+      console.log(`🔓 Safety checker: ${modelInput.enable_safety_checker} (from input_defaults)`);
     }
 
     // I2I specific: reference image and strength (must be handled BEFORE other input overrides)
@@ -893,7 +897,7 @@ serve(async (req) => {
     const schemaKeys = Object.keys(inputSchema);
     if (schemaKeys.length > 0) {
       // Always-allowed keys (not in schema but always valid)
-      const alwaysAllowed = new Set(['prompt', 'enable_safety_checker', 'image_url', 'image_urls', 'video']);
+      const alwaysAllowed = new Set(['prompt', 'image_url', 'image_urls', 'video']);
       const removedParams: string[] = [];
       
       for (const key of Object.keys(modelInput)) {
@@ -908,20 +912,42 @@ serve(async (req) => {
       }
     }
 
-    // Map aspect ratio to dimensions if not explicitly provided
+    // Map aspect ratio based on model's input_schema (table-driven)
     // Skip for extend models using video conditioning (they don't need image_size)
     const hasVideoConditioningFinal = !!(modelInput.video && typeof modelInput.video === 'object');
-    if (!modelInput.image_size && body.metadata?.aspectRatio && !hasVideoConditioningFinal) {
+    if (body.metadata?.aspectRatio && !hasVideoConditioningFinal) {
       const aspectRatio = body.metadata.aspectRatio;
-      const aspectRatioMap: Record<string, { width: number; height: number }> = {
-        '1:1': { width: 1024, height: 1024 },
-        '16:9': { width: 1344, height: 768 },
-        '9:16': { width: 768, height: 1344 }
-      };
 
-      if (aspectRatioMap[aspectRatio]) {
-        modelInput.image_size = aspectRatioMap[aspectRatio];
-        console.log(`📐 Mapped aspect ratio ${aspectRatio} to ${modelInput.image_size.width}x${modelInput.image_size.height}`);
+      if (inputSchema.aspect_ratio && !inputSchema.image_size) {
+        // Model uses aspect_ratio enum directly (Kontext-style)
+        if (!modelInput.aspect_ratio) {
+          modelInput.aspect_ratio = aspectRatio;
+          console.log(`📐 Set aspect_ratio enum: ${aspectRatio}`);
+        }
+      } else if (inputSchema.image_size?.type === 'enum') {
+        // Model uses image_size string enum (Flux-2 style)
+        if (!modelInput.image_size) {
+          const enumMap: Record<string, string> = {
+            '1:1': 'square_hd',
+            '16:9': 'landscape_16_9',
+            '9:16': 'portrait_16_9',
+            '4:3': 'landscape_4_3',
+            '3:4': 'portrait_4_3',
+          };
+          modelInput.image_size = enumMap[aspectRatio] || 'landscape_4_3';
+          console.log(`📐 Mapped aspect ratio ${aspectRatio} to image_size enum: ${modelInput.image_size}`);
+        }
+      } else if (!modelInput.image_size) {
+        // Legacy: convert to {width, height} object
+        const dimMap: Record<string, { width: number; height: number }> = {
+          '1:1': { width: 1024, height: 1024 },
+          '16:9': { width: 1344, height: 768 },
+          '9:16': { width: 768, height: 1344 },
+        };
+        if (dimMap[aspectRatio]) {
+          modelInput.image_size = dimMap[aspectRatio];
+          console.log(`📐 Mapped aspect ratio ${aspectRatio} to ${(modelInput.image_size as any).width}x${(modelInput.image_size as any).height}`);
+        }
       }
     }
 
