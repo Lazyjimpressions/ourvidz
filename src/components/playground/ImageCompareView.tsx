@@ -252,7 +252,9 @@ export const ImageCompareView: React.FC = () => {
   const wasBAutoSynced = useRef(true);
 
   useEffect(() => {
-    if (!panelNeedsRef(panelB)) return;
+    const modelB = getModelById(panelB.modelId);
+    const bNeedsRef = modelB ? modelNeedsRef(modelB) : false;
+    if (!bNeedsRef) return;
     if (panelA.referenceImages.length === 0) return;
     if (panelB.referenceImages.length === 0 || wasBAutoSynced.current) {
       const copied = panelA.referenceImages.map(img => ({
@@ -263,7 +265,7 @@ export const ImageCompareView: React.FC = () => {
       wasBAutoSynced.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelA.referenceImages]);
+  }, [panelA.referenceImages, panelB.modelId]);
 
   // When Panel B's model changes to one needing refs, re-sync if empty
   // Clear ref images when model changes to one that doesn't need them

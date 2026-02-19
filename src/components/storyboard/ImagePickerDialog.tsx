@@ -88,9 +88,12 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     assetsToSign.forEach((asset) => loadingRef.current.add(asset.id));
     setLoadingUrls(new Set(loadingRef.current));
 
+    let cancelled = false;
+
     const signBatch = async () => {
       const batchSize = 6;
       for (let i = 0; i < assetsToSign.length; i += batchSize) {
+        if (cancelled) return;
         const batch = assetsToSign.slice(i, i + batchSize);
         const results = await Promise.allSettled(
           batch.map(async (asset) => {
@@ -104,8 +107,9 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           })
         );
 
+        if (cancelled) return;
+
         // Update ref + state for signed URLs
-        const newSigned = new Map(signedRef.current.size === 0 ? [] : undefined);
         results.forEach((result) => {
           if (result.status === 'fulfilled' && result.value.url) {
             signedRef.current.add(result.value.id);
@@ -129,6 +133,8 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     };
 
     signBatch();
+
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredAssetIds, isOpen]);
 
