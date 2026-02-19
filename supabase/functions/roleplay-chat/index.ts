@@ -2309,6 +2309,10 @@ function stripCharacterFromScenePrompt(prompt: string, characterName: string): s
   // Replace remaining character name mentions with generic reference
   const nameGlobal = new RegExp(characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   cleaned = cleaned.replace(nameGlobal, 'the character');
+  // Remove first-person action phrases (I smile, My eyes, I sigh, etc.)
+  cleaned = cleaned.replace(/\b(I|My|Me)\s+\w+[^.]*\./gi, '');
+  // Remove character dialogue/emotes wrapped in asterisks
+  cleaned = cleaned.replace(/\*[^*]+\*/g, '');
   // Remove "Recent context: ..." block (dialogue belongs in ACTION, not SETTING)
   cleaned = cleaned.replace(/Recent context:.*$/s, '').trim();
   // Clean leading punctuation/whitespace
@@ -2814,11 +2818,11 @@ const sceneContext = analyzeSceneContent(response);
       console.log('✅ Using template scene prompt (first scene) with character visual description:', scenePrompt.substring(0, 150) + '...');
     } else if (sceneContext?.actions?.length > 0) {
       // ⚡ EFFICIENCY: Skip narrative LLM call when actions are already extracted (~7s saved)
-      const actionsSummary = sceneContext.actions.slice(0, 3).join('. ');
       const setting = sceneContext.setting || 'the scene';
       const mood = sceneContext.mood || 'engaging';
       const visuals = sceneContext.visualElements?.slice(0, 3).join(', ') || '';
-      scenePrompt = `${setting}. ${actionsSummary}. ${visuals ? `Visual details: ${visuals}.` : ''} The mood is ${mood}.`;
+      // SETTING only -- actions go into the ACTION block of Figure template
+      scenePrompt = `${setting}. ${visuals ? `Visual details: ${visuals}.` : ''} The mood is ${mood}.`;
       sceneTemplateName = 'Direct action extraction (no narrative LLM)';
       console.log('⚡ EFFICIENCY: Skipped narrative LLM call, using extracted actions directly:', scenePrompt.substring(0, 150));
     } else {
@@ -3121,7 +3125,7 @@ CHARACTER 1 (Figure 2): ${sceneCharacter.name}, ${characterAppearance}
 
 CHARACTER 2 (Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 
-ACTION: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}`;
+ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Characters interacting naturally'}`;
       console.log('🎭 Both characters I2I: Figure notation');
     } else if (sceneStyle === 'pov') {
       const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
@@ -3131,7 +3135,7 @@ SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}, looking at viewer
 
-ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
+ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene naturally'}`;
       console.log('🎬 POV I2I: Figure notation (setting stripped of character)');
     } else {
       const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
@@ -3141,7 +3145,7 @@ SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}
 
-ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
+ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene naturally'}`;
       console.log('🎬 Character-only I2I: Figure notation (setting stripped of character)');
     }
 
