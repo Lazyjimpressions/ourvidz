@@ -180,7 +180,7 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-background border-border text-foreground max-w-2xl max-h-[85vh] overflow-y-auto pt-10 sm:pt-6 mt-[env(safe-area-inset-top)] sm:mt-0">
         <DialogHeader>
           <DialogTitle className="text-lg flex items-center gap-2">
             <Edit className="w-5 h-5" />
