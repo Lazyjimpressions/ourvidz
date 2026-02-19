@@ -25,7 +25,8 @@ serve(async (req) => {
       apiModelId,
       characterData,
       promptOverride,
-      referenceStrength // 0.1–1.0, controls how much the reference image influences output
+      referenceStrength, // 0.1–1.0, controls how much the reference image influences output
+      numImages // 1-4, batch generation count (default 1)
     } = body;
     
     console.log('📥 character-portrait request:', {
@@ -34,7 +35,8 @@ serve(async (req) => {
       hasReferenceImage: !!referenceImageUrl,
       apiModelId,
       hasCharacterData: !!characterData,
-      promptOverrideLength: promptOverride?.length || 0
+      promptOverrideLength: promptOverride?.length || 0,
+      numImages: numImages || 1
     });
 
     // Get authenticated user
@@ -270,6 +272,16 @@ serve(async (req) => {
       ...(apiModel.input_defaults || {})
     };
 
+    // Determine batch count: cap against model's max from input_schema
+    const capabilities = apiModel.capabilities as Record<string, any> || {};
+    const inputSchema = capabilities.input_schema || {};
+    const modelMaxImages = inputSchema?.num_images?.max || 1;
+    const requestedImages = Math.min(Math.max(1, numImages || 1), 4, modelMaxImages);
+    if (requestedImages > 1 && modelMaxImages > 1) {
+      modelInput.num_images = requestedImages;
+      console.log(`📸 Batch generation: ${requestedImages} images (model max: ${modelMaxImages})`);
+    }
+
     // Force 3:4 portrait aspect ratio to match frontend display containers
     // Seedream v4.5 requires preset strings for sizes under 2560x1440 pixels
     // "portrait_4_3" generates 4:3 portrait orientation (closest to 3:4 UI tiles)
@@ -370,11 +382,19 @@ serve(async (req) => {
     const result = await falResponse.json();
     console.log('📥 Result received:', JSON.stringify(result).substring(0, 300));
 
-    // Extract image URL (handle both array and object formats)
-    // fal.ai returns: { images: [{ url, content_type, ... }], seed }
-    const imageUrl = result.images?.[0]?.url || result.image?.url || result.output?.url;
+    // Extract all image URLs from response
+    const allImages: string[] = [];
+    if (result.images && Array.isArray(result.images)) {
+      for (const img of result.images) {
+        if (img?.url) allImages.push(img.url);
+      }
+    } else if (result.image?.url) {
+      allImages.push(result.image.url);
+    } else if (result.output?.url) {
+      allImages.push(result.output.url);
+    }
 
-    if (!imageUrl) {
+    if (allImages.length === 0) {
       console.error('❌ No image URL in response. Keys:', Object.keys(result));
 
       await supabase
@@ -392,94 +412,135 @@ serve(async (req) => {
       );
     }
 
-    console.log('🖼️ Image URL extracted:', imageUrl.substring(0, 80) + '...');
+    console.log(`🖼️ ${allImages.length} image(s) extracted from response`);
 
-    // ========== PHASE 1: UPLOAD TO USER-LIBRARY BUCKET ==========
-    console.log('📦 Downloading image from fal.ai for storage...');
-    
-    let storagePath: string | null = null;
-    let libraryImageUrl: string | null = null;
-    
-    try {
-      // Download image from fal.ai
-      const imageResponse = await fetch(imageUrl);
-      if (!imageResponse.ok) {
-        throw new Error(`Failed to download image: ${imageResponse.status}`);
-      }
-      
-      const imageBlob = await imageResponse.blob();
-      const imageBuffer = await imageBlob.arrayBuffer();
-      const imageBytes = new Uint8Array(imageBuffer);
-      
-      console.log(`📥 Downloaded image: ${imageBytes.length} bytes`);
-      
-      // Generate storage path
-      const timestamp = Date.now();
-      const charIdPart = characterId || 'new';
-      storagePath = `${user.id}/portraits/${charIdPart}_${timestamp}.png`;
-      
-      // Upload to user-library bucket
-      const { error: uploadError } = await supabase.storage
-        .from('user-library')
-        .upload(storagePath, imageBytes, {
-          contentType: 'image/png',
-          upsert: false
-        });
-      
-      if (uploadError) {
-        console.error('⚠️ Storage upload failed:', uploadError);
-        // Continue with fal.ai URL if upload fails
-      } else {
-        console.log('✅ Uploaded to user-library:', storagePath);
+    // Process each image: upload to storage + insert records
+    const processedImages: Array<{ imageUrl: string; storagePath: string | null; portraitId: string | null; batchIndex: number }> = [];
+
+    for (let batchIndex = 0; batchIndex < allImages.length; batchIndex++) {
+      const imageUrl = allImages[batchIndex];
+      let storagePath: string | null = null;
+      let libraryImageUrl: string | null = null;
+
+      // ========== UPLOAD TO USER-LIBRARY BUCKET ==========
+      try {
+        const imageResponse = await fetch(imageUrl);
+        if (!imageResponse.ok) throw new Error(`Failed to download image: ${imageResponse.status}`);
         
-        // Generate signed URL for the stored image
-        const { data: signedData } = await supabase.storage
+        const imageBlob = await imageResponse.blob();
+        const imageBuffer = await imageBlob.arrayBuffer();
+        const imageBytes = new Uint8Array(imageBuffer);
+        
+        const timestamp = Date.now();
+        const charIdPart = characterId || 'new';
+        storagePath = `${user.id}/portraits/${charIdPart}_${timestamp}_${batchIndex}.png`;
+        
+        const { error: uploadError } = await supabase.storage
           .from('user-library')
-          .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1 year
+          .upload(storagePath, imageBytes, {
+            contentType: 'image/png',
+            upsert: false
+          });
         
-        if (signedData?.signedUrl) {
-          libraryImageUrl = signedData.signedUrl;
-          console.log('🔗 Signed URL generated');
+        if (uploadError) {
+          console.error(`⚠️ Storage upload failed for batch ${batchIndex}:`, uploadError);
+        } else {
+          const { data: signedData } = await supabase.storage
+            .from('user-library')
+            .createSignedUrl(storagePath, 60 * 60 * 24 * 365);
+          
+          if (signedData?.signedUrl) {
+            libraryImageUrl = signedData.signedUrl;
+          }
+        }
+      } catch (downloadError) {
+        console.error(`⚠️ Image download/upload failed for batch ${batchIndex}:`, downloadError);
+      }
+
+      const finalImageUrl = libraryImageUrl || imageUrl;
+
+      // ========== INSERT INTO USER_LIBRARY TABLE ==========
+      if (storagePath) {
+        const { error: libraryError } = await supabase
+          .from('user_library')
+          .insert({
+            user_id: user.id,
+            asset_type: 'image',
+            storage_path: storagePath,
+            original_prompt: prompt,
+            model_used: apiModel.display_name,
+            file_size_bytes: 0,
+            mime_type: 'image/png',
+            tags: ['character', 'portrait', character.name].filter(Boolean),
+            content_category: 'character',
+            roleplay_metadata: {
+              character_id: characterId,
+              character_name: character.name,
+              type: 'character_portrait',
+              generation_mode: isI2I ? 'i2i' : 'txt2img',
+              job_id: jobData.id,
+              batch_index: batchIndex
+            }
+          });
+        
+        if (libraryError) {
+          console.error(`⚠️ user_library insert failed for batch ${batchIndex}:`, libraryError);
         }
       }
-    } catch (downloadError) {
-      console.error('⚠️ Image download/upload failed:', downloadError);
-      // Continue with fal.ai URL
-    }
-    
-    // Use library URL if available, otherwise fall back to fal.ai URL
-    const finalImageUrl = libraryImageUrl || imageUrl;
 
-    // ========== PHASE 2: INSERT INTO USER_LIBRARY TABLE ==========
-    if (storagePath) {
-      console.log('💾 Inserting into user_library table...');
-      
-      const { error: libraryError } = await supabase
-        .from('user_library')
-        .insert({
-          user_id: user.id,
-          asset_type: 'image',
-          storage_path: storagePath,
-          original_prompt: prompt,
-          model_used: apiModel.display_name,
-          file_size_bytes: 0, // Will be updated if we know the size
-          mime_type: 'image/png',
-          tags: ['character', 'portrait', character.name].filter(Boolean),
-          content_category: 'character',
-          roleplay_metadata: {
+      // ========== INSERT INTO CHARACTER_PORTRAITS TABLE ==========
+      let portraitId: string | null = null;
+      if (characterId) {
+        const { count } = await supabase
+          .from('character_portraits')
+          .select('*', { count: 'exact', head: true })
+          .eq('character_id', characterId);
+
+        const isFirstPortrait = (count || 0) === 0 && batchIndex === 0;
+
+        const { data: portraitData, error: portraitError } = await supabase
+          .from('character_portraits')
+          .insert({
             character_id: characterId,
-            character_name: character.name,
-            type: 'character_portrait',
-            generation_mode: isI2I ? 'i2i' : 'txt2img',
-            job_id: jobData.id
-          }
-        });
-      
-      if (libraryError) {
-        console.error('⚠️ user_library insert failed:', libraryError);
-      } else {
-        console.log('✅ Inserted into user_library');
+            image_url: finalImageUrl,
+            prompt: prompt,
+            enhanced_prompt: prompt,
+            is_primary: isFirstPortrait,
+            sort_order: (count || 0) + batchIndex,
+            generation_metadata: {
+              model: apiModel.display_name,
+              model_key: apiModel.model_key,
+              generation_mode: isI2I ? 'i2i' : 'txt2img',
+              generation_time_ms: generationTime,
+              presets,
+              job_id: jobData.id,
+              storage_path: storagePath,
+              batch_index: batchIndex,
+              batch_total: allImages.length
+            }
+          })
+          .select()
+          .single();
+
+        if (portraitError) {
+          console.error(`❌ Failed to insert portrait batch ${batchIndex}:`, JSON.stringify(portraitError));
+        } else {
+          portraitId = portraitData.id;
+        }
       }
+
+      processedImages.push({ imageUrl: finalImageUrl, storagePath, portraitId, batchIndex });
+    }
+
+    // Update character image_url to the first generated image
+    if (characterId && processedImages.length > 0) {
+      await supabase
+        .from('characters')
+        .update({
+          image_url: processedImages[0].imageUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', characterId);
     }
 
     // Update job as completed
@@ -492,82 +553,25 @@ serve(async (req) => {
           ...jobData.metadata,
           generation_time_ms: generationTime,
           generation_intent: generationIntent,
-          result_url: finalImageUrl,
-          storage_path: storagePath
+          result_url: processedImages[0]?.imageUrl,
+          storage_path: processedImages[0]?.storagePath,
+          batch_count: processedImages.length
         }
       })
       .eq('id', jobData.id);
 
-    console.log('✅ Job updated to completed');
-
-    // Insert into character_portraits table
-    let portraitId: string | null = null;
-    if (characterId) {
-      console.log('💾 Inserting into character_portraits...');
-      
-      // Check if this is the first portrait for this character
-      const { count } = await supabase
-        .from('character_portraits')
-        .select('*', { count: 'exact', head: true })
-        .eq('character_id', characterId);
-
-      const isFirstPortrait = (count || 0) === 0;
-
-      const { data: portraitData, error: portraitError } = await supabase
-        .from('character_portraits')
-        .insert({
-          character_id: characterId,
-          image_url: finalImageUrl,
-          prompt: prompt,
-          enhanced_prompt: prompt,
-          is_primary: isFirstPortrait, // First portrait becomes primary
-          sort_order: count || 0,
-          generation_metadata: {
-            model: apiModel.display_name,
-            model_key: apiModel.model_key,
-            generation_mode: isI2I ? 'i2i' : 'txt2img',
-            generation_time_ms: generationTime,
-            presets,
-            job_id: jobData.id,
-            storage_path: storagePath
-          }
-        })
-        .select()
-        .single();
-
-      if (portraitError) {
-        console.error('❌ Failed to insert portrait:', JSON.stringify(portraitError));
-      } else {
-        portraitId = portraitData.id;
-        console.log('✅ Portrait inserted:', portraitId, 'isPrimary:', isFirstPortrait);
-      }
-
-      // Always update character image_url to show latest generated portrait
-      // This ensures the profile image holder reflects the newest generation for validation
-      const { error: updateError } = await supabase
-        .from('characters')
-        .update({
-          image_url: finalImageUrl,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', characterId);
-
-      if (updateError) {
-        console.error('⚠️ Failed to update character image:', updateError);
-      } else {
-        console.log('✅ Character image updated to latest portrait');
-      }
-    }
-
-    console.log('🎉 Character portrait generation complete!');
+    console.log(`🎉 Character portrait generation complete! ${processedImages.length} image(s)`);
 
     return new Response(JSON.stringify({
       success: true,
-      imageUrl: finalImageUrl,
+      imageUrl: processedImages[0]?.imageUrl,
+      imageUrls: processedImages.map(p => p.imageUrl),
       jobId: jobData.id,
-      portraitId,
+      portraitId: processedImages[0]?.portraitId,
+      portraitIds: processedImages.map(p => p.portraitId).filter(Boolean),
       generationTimeMs: generationTime,
-      storagePath
+      storagePath: processedImages[0]?.storagePath,
+      batchCount: processedImages.length
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

@@ -36,6 +36,7 @@ export interface ImageModelOption {
   avg_generation_time?: number;
   cost_per_use?: number;
   capabilities?: ImageModel['capabilities'];
+  maxImages?: number; // Max batch size supported by this model
 }
 
 export const useImageModels = (hasReferenceImage?: boolean) => {
@@ -118,6 +119,7 @@ export const useImageModels = (hasReferenceImage?: boolean) => {
       isAvailable: sdxlWorker.isAvailable,
       avg_generation_time: 6,  // ~6 seconds
       cost_per_use: 0,         // Free
+      maxImages: 1,            // Local SDXL: single image only
       capabilities: {
         nsfw: true,
         speed: 'fast',
@@ -130,15 +132,21 @@ export const useImageModels = (hasReferenceImage?: boolean) => {
     }
   ];
 
-  const apiModelOptions: ImageModelOption[] = imageModels.map(model => ({
-    value: model.id,
-    label: `${model.display_name} (${model.provider_display_name})`,
-    type: 'api',
-    isAvailable: true, // API models are always available
-    avg_generation_time: model.avg_generation_time,
-    cost_per_use: model.cost_per_use,
-    capabilities: (model.capabilities || {}) as ImageModel['capabilities']
-  }));
+  const apiModelOptions: ImageModelOption[] = imageModels.map(model => {
+    const caps = (model.capabilities || {}) as Record<string, any>;
+    const inputSchema = caps.input_schema || {};
+    const maxImages = inputSchema?.num_images?.max || 1;
+    return {
+      value: model.id,
+      label: `${model.display_name} (${model.provider_display_name})`,
+      type: 'api' as const,
+      isAvailable: true,
+      avg_generation_time: model.avg_generation_time,
+      cost_per_use: model.cost_per_use,
+      capabilities: caps as ImageModel['capabilities'],
+      maxImages
+    };
+  });
 
   const modelOptions: ImageModelOption[] = [...localModelOptions, ...apiModelOptions];
 

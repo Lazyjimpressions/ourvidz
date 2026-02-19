@@ -206,10 +206,11 @@ export default function CharacterStudio() {
   }, []);
 
   // Handle portrait generation from prompt bar
-  const handleGenerateFromPrompt = async (prompt: string, referenceImageUrl?: string, modelId?: string) => {
+  const handleGenerateFromPrompt = async (prompt: string, referenceImageUrl?: string, modelId?: string, numImages?: number) => {
     await generatePortrait(prompt, { 
       referenceImageUrl: referenceImageUrl || character.reference_image_url || undefined,
-      model: modelId || selectedImageModel 
+      model: modelId || selectedImageModel,
+      numImages
     });
   };
 
@@ -797,10 +798,11 @@ function MobileCharacterStudio({
 
             {/* Prompt Bar for mobile portraits tab */}
             <CharacterStudioPromptBar
-              onGenerate={(prompt, refUrl, modelId) =>
+              onGenerate={(prompt, refUrl, modelId, numImages) =>
                 generatePortrait(prompt, {
                   referenceImageUrl: refUrl || character.reference_image_url || undefined,
-                  model: modelId || selectedImageModel
+                  model: modelId || selectedImageModel,
+                  numImages
                 })
               }
               isGenerating={isGenerating}
