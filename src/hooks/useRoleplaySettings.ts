@@ -26,7 +26,7 @@ const DEFAULT_CONSISTENCY_SETTINGS: ConsistencySettings = {
 const DEFAULT_SETTINGS: RoleplaySettings = {
   memoryTier: 'conversation',
   // Start safe while models load; edge function will fall back to OpenRouter if local worker is unhealthy
-  modelProvider: 'chat_worker',
+  modelProvider: '',
   selectedImageModel: '',
   consistencySettings: DEFAULT_CONSISTENCY_SETTINGS,
   userCharacterId: null,

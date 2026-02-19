@@ -34,7 +34,7 @@ import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { Character, Message, CharacterScene, SceneStyle, ScenarioSessionPayload, ImageGenerationMode } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
-import { ModelRoutingService } from '@/lib/services/ModelRoutingService';
+// ModelRoutingService import removed — no hardcoded model keys
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
@@ -168,7 +168,7 @@ const MobileRoleplayChat: React.FC = () => {
         // If local model was saved but is now unavailable, fall back to API
         const effectiveChatModel = isValidChatModel
           ? savedChatModel
-          : (defaultChatModel?.value || ModelRoutingService.getDefaultChatModelKey());
+          : (defaultChatModel?.value || '');
 
         const effectiveImageModel = isValidImageModel
           ? savedImageModel
@@ -194,7 +194,7 @@ const MobileRoleplayChat: React.FC = () => {
 
     // Use defaults from hooks (always non-local API models for reliability)
     return {
-      modelProvider: defaultChatModel?.value || ModelRoutingService.getDefaultChatModelKey(),
+      modelProvider: defaultChatModel?.value || '',
       selectedImageModel: defaultImageModel?.value || '',
       consistencySettings: {
         method: 'hybrid',
@@ -917,7 +917,7 @@ const MobileRoleplayChat: React.FC = () => {
           sceneStyle?: 'character_only' | 'pov' | 'both_characters';
           imageGenerationMode?: string;
         } | null;
-        const effectiveChatModel = modelState?.selectedChatModel || modelProvider || ModelRoutingService.getDefaultChatModelKey();
+        const effectiveChatModel = modelState?.selectedChatModel || modelProvider || '';
         const effectiveImageModel = modelState?.selectedImageModel || getValidImageModel();
         const effectiveSceneStyle = modelState?.sceneStyle || sceneStyle;
         const effectiveImageGenMode = modelState?.imageGenerationMode || imageGenerationMode;
@@ -1504,7 +1504,7 @@ const MobileRoleplayChat: React.FC = () => {
           message: content.trim(),
           conversation_id: conversationId,
           character_id: character.id,
-          model_provider: modelProvider || ModelRoutingService.getDefaultChatModelKey(),
+          model_provider: modelProvider || '',
           memory_tier: memoryTier,
           content_tier: contentTier, // ✅ DYNAMIC CONTENT TIER
           scene_generation: shouldGenerateScene, // ✅ Respects imageGenerationMode
@@ -1682,7 +1682,7 @@ const MobileRoleplayChat: React.FC = () => {
           message: 'Generate a scene based on our current conversation context.',
           conversation_id: conversationId,
           character_id: character.id,
-          model_provider: modelProvider || ModelRoutingService.getDefaultChatModelKey(),
+          model_provider: modelProvider || '',
           memory_tier: memoryTier,
           content_tier: contentTier,
           scene_generation: true, // ✅ Enable scene generation
@@ -1876,7 +1876,7 @@ const MobileRoleplayChat: React.FC = () => {
           message: `Generate a scene image for this moment: ${targetMessage.content.substring(0, 500)}`,
           conversation_id: conversationId,
           character_id: character.id,
-          model_provider: modelProvider || ModelRoutingService.getDefaultChatModelKey(),
+          model_provider: modelProvider || '',
           memory_tier: memoryTier,
           content_tier: contentTier,
           scene_generation: true,
@@ -2007,7 +2007,7 @@ const MobileRoleplayChat: React.FC = () => {
           message: isI2IModification ? 'Modify scene.' : 'Regenerate scene.',
           conversation_id: conversationId,
           character_id: character.id,
-          model_provider: modelProvider || ModelRoutingService.getDefaultChatModelKey(),
+          model_provider: modelProvider || '',
           memory_tier: memoryTier,
           content_tier: contentTier,
           scene_generation: true,
@@ -2157,7 +2157,7 @@ const MobileRoleplayChat: React.FC = () => {
           kickoff: true,
           conversation_id: conversationId,
           character_id: characterId,
-          model_provider: modelProvider || ModelRoutingService.getDefaultChatModelKey(),
+          model_provider: modelProvider || '',
           memory_tier: memoryTier,
           content_tier: contentTier,
           scene_generation: true, // ✅ Enable auto scene generation on kickoff retry
@@ -2306,7 +2306,7 @@ const MobileRoleplayChat: React.FC = () => {
           kickoff: true,
           conversation_id: newConversation.id,
           character_id: characterId,
-          model_provider: modelProvider || ModelRoutingService.getDefaultChatModelKey(),
+          model_provider: modelProvider || '',
           memory_tier: memoryTier,
           content_tier: contentTier,
           scene_generation: true, // ✅ Enable auto scene generation on kickoff

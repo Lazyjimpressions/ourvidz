@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useLocalModelHealth } from './useLocalModelHealth';
-import { ModelRoutingService, DEFAULT_CHAT_MODELS } from '@/lib/services/ModelRoutingService';
 
 export interface RoleplayModel {
   id: string;
@@ -143,50 +142,17 @@ export const useRoleplayModels = () => {
     };
   });
 
-  // If no database models, use hardcoded DEFAULT_CHAT_MODELS as fallback
-  const fallbackModelOptions: ModelOption[] = DEFAULT_CHAT_MODELS.map((model, index) => ({
-    value: model.modelKey,
-    label: model.displayName,
-    description: model.description,
-    provider: 'OpenRouter',
-    isLocal: false,
-    isAvailable: true,
-    capabilities: {
-      speed: 'medium' as const,
-      cost: model.tier === 'free' ? 'free' as const : 'medium' as const,
-      nsfw: true,
-      quality: 'high' as const
-    },
-    metadata: {
-      priority: index + 1,
-      is_default: index === 0
-    }
-  }));
-
-  // Use database models if available, otherwise use fallback
-  const apiModelOptions: ModelOption[] = databaseModelOptions.length > 0
-    ? databaseModelOptions
-    : fallbackModelOptions;
+  // API model options come exclusively from the database — no hardcoded fallbacks
+  const apiModelOptions: ModelOption[] = databaseModelOptions;
 
   // Combine local and API models
   // Local models are included but may be marked unavailable
   const allModelOptions = [...localModels, ...apiModelOptions];
 
   // Default model is ALWAYS a non-local (API) model to ensure reliability
-  // This is the model that should be used when no valid selection is made
-  const defaultModel: ModelOption = apiModelOptions.find(m => m.metadata?.is_default)
-    || apiModelOptions[0]
-    || {
-      // Ultimate fallback using ModelRoutingService defaults
-      value: ModelRoutingService.getDefaultChatModelKey(),
-      label: DEFAULT_CHAT_MODELS[0].displayName,
-      description: DEFAULT_CHAT_MODELS[0].description,
-      provider: 'OpenRouter',
-      isLocal: false,
-      isAvailable: true,
-      capabilities: { speed: 'medium', cost: 'free', nsfw: true, quality: 'high' },
-      metadata: { is_default: true }
-    };
+  // Resolved from DB only — if no DB models exist, defaultModel is undefined
+  const defaultModel: ModelOption | undefined = apiModelOptions.find(m => m.metadata?.is_default)
+    || apiModelOptions[0];
 
   return {
     localModels,
