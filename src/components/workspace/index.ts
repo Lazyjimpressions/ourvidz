@@ -5,7 +5,3 @@ export { MobileSettingsSheet } from './MobileSettingsSheet';
 export { MobileQuickBar } from './MobileQuickBar';
 
 export { OptimizedDeleteModal } from './OptimizedDeleteModal';
-export { WorkspaceGridVirtualized } from './WorkspaceGridVirtualized';
-
-// Export types
-export type { WorkspaceGridVirtualizedProps } from './WorkspaceGridVirtualized';
