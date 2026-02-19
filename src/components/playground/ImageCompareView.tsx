@@ -248,6 +248,24 @@ export const ImageCompareView: React.FC = () => {
     setPanel(prev => ({ ...prev, generations: [], referenceImages: [] }));
   };
 
+  // Auto-sync: copy Panel A's ref images to Panel B
+  const wasBAutoSynced = useRef(true);
+
+  useEffect(() => {
+    if (!panelNeedsRef(panelB)) return;
+    if (panelA.referenceImages.length === 0) return;
+    if (panelB.referenceImages.length === 0 || wasBAutoSynced.current) {
+      const copied = panelA.referenceImages.map(img => ({
+        ...img,
+        id: crypto.randomUUID(),
+      }));
+      setPanelB(prev => ({ ...prev, referenceImages: copied }));
+      wasBAutoSynced.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelA.referenceImages]);
+
+  // When Panel B's model changes to one needing refs, re-sync if empty
   // Clear ref images when model changes to one that doesn't need them
   const handleModelChange = (
     modelId: string,
@@ -262,6 +280,27 @@ export const ImageCompareView: React.FC = () => {
         referenceImages: needsRef ? prev.referenceImages : [],
       };
     });
+
+    // If Panel B just changed to a model needing refs, re-sync from A
+    if (setPanel === setPanelB) {
+      const model = getModelById(modelId);
+      if (model && modelNeedsRef(model)) {
+        wasBAutoSynced.current = true;
+        if (panelA.referenceImages.length > 0) {
+          const copied = panelA.referenceImages.map(img => ({
+            ...img,
+            id: crypto.randomUUID(),
+          }));
+          setPanelB(prev => ({ ...prev, referenceImages: copied }));
+        }
+      }
+    }
+  };
+
+  // Wrap Panel B's ref image onChange to detect manual edits
+  const handlePanelBRefChange = (imgs: ReferenceImage[]) => {
+    wasBAutoSynced.current = false;
+    setPanelB(prev => ({ ...prev, referenceImages: imgs }));
   };
 
   // Group templates by use_case
@@ -320,7 +359,8 @@ export const ImageCompareView: React.FC = () => {
     panel: PanelState,
     setPanel: React.Dispatch<React.SetStateAction<PanelState>>,
     label: string,
-    scrollRef: React.RefObject<HTMLDivElement>
+    scrollRef: React.RefObject<HTMLDivElement>,
+    refChangeOverride?: (imgs: ReferenceImage[]) => void
   ) => {
     const isActive = panelIsActive(panel);
     const model = getModelById(panel.modelId);
@@ -383,7 +423,7 @@ export const ImageCompareView: React.FC = () => {
           {isActive && needsRef && (
             <ReferenceImageSlots
               images={panel.referenceImages}
-              onChange={(imgs) => setPanel(prev => ({ ...prev, referenceImages: imgs }))}
+              onChange={refChangeOverride || ((imgs) => setPanel(prev => ({ ...prev, referenceImages: imgs })))}
               maxSlots={maxSlots}
               required
             />
@@ -466,7 +506,7 @@ export const ImageCompareView: React.FC = () => {
     <div className="h-full flex flex-col">
       <div className="flex-1 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border overflow-hidden">
         {renderPanel(panelA, setPanelA, 'A', scrollRefA)}
-        {renderPanel(panelB, setPanelB, 'B', scrollRefB)}
+        {renderPanel(panelB, setPanelB, 'B', scrollRefB, handlePanelBRefChange)}
       </div>
 
       {/* Shared prompt input */}
