@@ -24,15 +24,12 @@ interface QuickSettingsDrawerProps {
   // Settings values
   modelProvider: string;
   onModelProviderChange: (value: string) => void;
-  selectedImageModel: string;
-  onSelectedImageModelChange: (value: string) => void;
   selectedI2IModel: string;
   onSelectedI2IModelChange: (value: string) => void;
   sceneStyle: SceneStyle;
   onSceneStyleChange: (value: SceneStyle) => void;
   // Model options
   chatModels: Array<{ value: string; label: string; isAvailable: boolean; isLocal: boolean }>;
-  imageModels: Array<{ value: string; label: string; isAvailable: boolean; type: string }>;
   i2iModels: I2IModelOption[];
   chatWorkerHealthy: boolean;
   sdxlWorkerHealthy: boolean;
@@ -46,14 +43,11 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
   onAdvancedSettingsClick,
   modelProvider,
   onModelProviderChange,
-  selectedImageModel,
-  onSelectedImageModelChange,
   selectedI2IModel,
   onSelectedI2IModelChange,
   sceneStyle,
   onSceneStyleChange,
   chatModels,
-  imageModels,
   i2iModels,
   chatWorkerHealthy,
   sdxlWorkerHealthy,
@@ -104,49 +98,6 @@ export const QuickSettingsDrawer: React.FC<QuickSettingsDrawerProps> = ({
                       ) : (
                         <Badge variant="outline" className="text-xs text-blue-400 border-blue-400 ml-auto">
                           <Cloud className="w-3 h-3 mr-1" />
-                          API
-                        </Badge>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* T2I Model */}
-          <div className="space-y-1.5">
-            <div>
-              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">T2I Model</span>
-              <p className="text-[10px] text-muted-foreground">Text-to-Image</p>
-            </div>
-            <Select value={selectedImageModel} onValueChange={onSelectedImageModelChange}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="Select model..." />
-              </SelectTrigger>
-              <SelectContent>
-                {imageModels.filter(model => model.value).map((model) => (
-                  <SelectItem
-                    key={model.value}
-                    value={model.value}
-                    disabled={!model.isAvailable}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={!model.isAvailable ? 'opacity-50' : ''}>
-                        {model.label}
-                      </span>
-                      {model.type === 'local' ? (
-                        model.isAvailable ? (
-                          <Badge variant="outline" className="text-xs text-green-400 border-green-400 ml-auto">
-                            Local
-                          </Badge>
-                        ) : (
-                          <Badge variant="destructive" className="text-xs ml-auto">
-                            Offline
-                          </Badge>
-                        )
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-blue-400 border-blue-400 ml-auto">
                           API
                         </Badge>
                       )}

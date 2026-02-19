@@ -345,6 +345,11 @@ serve(async (req) => {
       current_scene_image_url
     } = requestBody!;
 
+    // Create Supabase client early — needed for model resolution below
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
+
     // Resolve model_provider: if empty, look up DB default
     let model_provider = model_provider_raw;
     if (!model_provider) {
@@ -391,10 +396,7 @@ serve(async (req) => {
       scene_system_prompt_preview: scene_system_prompt ? scene_system_prompt.substring(0, 50) + '...' : 'none'
     });
 
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
+    // supabase client already created above (before model resolution)
 
     // Get character information
     const dbReadStart = Date.now();
@@ -2361,6 +2363,148 @@ function buildCharacterVisualDescription(character: any): string {
   return visualDescription;
 }
 
+// Generate scene narrative using OpenRouter (same model as roleplay)
+// ✅ EXTRACTED TO MODULE SCOPE to avoid TDZ issues in Deno
+async function generateSceneNarrativeWithOpenRouter(
+  character: any,
+  sceneContext: any,
+  conversationHistory: string[],
+  characterVisualDescription: string,
+  modelKey: string,
+  contentTier: string,
+  modelConfig: any,
+  supabase: any,
+  useI2IIteration: boolean = false,
+  previousSceneId?: string,
+  characterResponse?: string,
+  currentLocation?: string
+): Promise<{ scenePrompt: string; templateId: string; templateName: string; templateUseCase: string; templateContentMode: string }> {
+  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
+  if (!openRouterKey) {
+    throw new Error('OpenRouter API key not configured');
+  }
+
+  const templateName = useI2IIteration
+    ? (contentTier === 'nsfw' ? 'Scene Iteration - NSFW' : 'Scene Iteration - SFW')
+    : (contentTier === 'nsfw' ? 'Scene Narrative - NSFW' : 'Scene Narrative - SFW');
+
+  console.log('📝 Scene narrative template selection:', {
+    useI2IIteration,
+    contentTier,
+    templateName,
+    generation_mode: useI2IIteration ? 'i2i' : 't2i'
+  });
+
+  const { data: template, error: templateError } = await supabase
+    .from('prompt_templates')
+    .select('id, template_name, system_prompt, use_case, content_mode')
+    .eq('template_name', templateName)
+    .eq('is_active', true)
+    .single();
+
+  if (templateError || !template) {
+    throw new Error(`Scene narrative template not found: ${templateName}`);
+  }
+
+  // Build scene generation prompt using template
+  // Fetch previous scene context if we have a previous scene ID
+  let previousSceneSetting = '';
+  let previousSceneDescription = '';
+  if (previousSceneId) {
+    const { data: prevScene } = await supabase
+      .from('character_scenes')
+      .select('scene_prompt, scene_description')
+      .eq('id', previousSceneId)
+      .single();
+    if (prevScene) {
+      previousSceneSetting = prevScene.scene_description || '';
+      previousSceneDescription = prevScene.scene_prompt || '';
+    }
+  }
+
+  // Get storyline location from conversation
+  const storylineLocation = currentLocation || sceneContext?.setting || 'an intimate setting';
+
+  const conversationContext = conversationHistory.slice(-10).join('\n');
+
+  const scenePrompt = template.system_prompt
+    + `\n\nCHARACTER VISUAL DESCRIPTION:\n${characterVisualDescription}\n\n`
+    + `REQUIRED SCENE CONTEXT:\n`
+    + `Setting: ${sceneContext?.setting || 'an intimate setting'}\n`
+    + `Mood: ${sceneContext?.mood || 'engaging'}\n`
+    + `Actions: ${(sceneContext?.actions || []).join(', ') || 'interacting naturally'}\n`
+    + `Visual Elements: ${(sceneContext?.visualElements || []).join(', ') || 'natural lighting'}\n`
+    + `Positioning: ${(sceneContext?.positioning || []).join(', ') || 'natural pose'}\n`
+    + (characterResponse ? `\nCHARACTER'S LATEST RESPONSE (extract scene details from this):\n${characterResponse.substring(0, 500)}\n` : '')
+    + (previousSceneDescription ? `\nPREVIOUS SCENE (for continuity):\n${previousSceneDescription.substring(0, 300)}\n` : '')
+    + `\nRECENT CONVERSATION (last 10 exchanges - for reference only, DO NOT include dialogue):\n${conversationContext}\n\n`
+    + `⚠️ FINAL INSTRUCTION: Generate ONLY the scene description text using the REQUIRED SCENE CONTEXT above. ${useI2IIteration && previousSceneSetting ? `The scene MUST remain in the SAME LOCATION: ${previousSceneSetting}. Only describe what changes in the scene, not the location or environment.` : `The scene MUST be set in: ${sceneContext.setting} at location: ${storylineLocation}. DO NOT change the location or setting.`} Start directly with the description of the scene. DO NOT include character dialogue, thoughts, or first-person narration. DO NOT invent new locations like rooftops, cityscapes, or other settings not mentioned in the context.`;
+
+  console.log('🎬 Scene generation prompt built, calling OpenRouter with model:', modelKey);
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openRouterKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://ulmdmzhcdwfadbvfpckt.supabase.co',
+      'X-Title': 'OurVidz Roleplay Scene Generation'
+    },
+    body: JSON.stringify({
+      model: modelKey,
+      messages: [
+        { role: 'system', content: scenePrompt },
+        { role: 'user', content: 'Generate the scene description now.' }
+      ],
+      max_tokens: 200,
+      temperature: 0.5,
+      top_p: 0.9,
+      frequency_penalty: 0.3,
+      presence_penalty: 0.2
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`❌ OpenRouter scene generation error ${response.status}:`, errorText);
+    throw new Error(`OpenRouter scene generation failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  let narrative = data.choices?.[0]?.message?.content?.trim();
+
+  if (!narrative) {
+    throw new Error('No scene narrative generated by OpenRouter');
+  }
+
+  narrative = validateSceneNarrative(narrative, useI2IIteration, character.name, sceneContext?.setting || 'an intimate setting', sceneContext?.mood || 'engaging');
+  
+  const originalNarrativeLength = data.choices?.[0]?.message?.content?.trim().length || narrative.length;
+  if (!narrative || narrative.trim().length < 20) {
+    console.error('❌ CRITICAL: Scene narrative is too short or empty after cleanup! Using fallback.');
+    const fallbackNarrative = `A scene showing ${character.name} in ${sceneContext?.setting || 'an intimate setting'}, ${sceneContext?.mood || 'engaging'}.`;
+    console.warn('⚠️ Using fallback narrative:', fallbackNarrative);
+    narrative = fallbackNarrative;
+  }
+  
+  const reductionPercent = originalNarrativeLength > 0 
+    ? ((originalNarrativeLength - narrative.length) / originalNarrativeLength) * 100 
+    : 0;
+  if (reductionPercent > 30) {
+    console.warn(`⚠️ WARNING: Scene narrative was heavily modified (${reductionPercent.toFixed(1)}% reduction). Some details may be lost.`);
+  }
+
+  console.log('✅ Scene narrative generated via OpenRouter:', narrative.substring(0, 100) + '...');
+  
+  return {
+    scenePrompt: narrative,
+    templateId: template.id,
+    templateName: template.template_name,
+    templateUseCase: template.use_case,
+    templateContentMode: template.content_mode
+  };
+}
+
 async function generateScene(
   supabase: any,
   characterId: string,
@@ -2612,246 +2756,6 @@ async function generateScene(
       console.error('🎬❌ Character not found for scene generation:', characterId);
       return { success: false };
     }
-
-// Generate scene narrative using OpenRouter (same model as roleplay)
-// ✅ ADMIN: Returns template info along with scene prompt
-async function generateSceneNarrativeWithOpenRouter(
-  character: any,
-  sceneContext: any,
-  conversationHistory: string[],
-  characterVisualDescription: string,
-  modelKey: string,
-  contentTier: string,
-  modelConfig: any,
-  supabase: any,
-  useI2IIteration: boolean = false,  // ✅ FIX 3.1: ADD I2I FLAG PARAMETER
-  previousSceneId?: string,  // ✅ FIX: Add previous scene ID to fetch previous scene context
-  characterResponse?: string,  // ✅ FIX: Add character response for direct scene description extraction
-  currentLocation?: string  // ✅ FIX #3: Current location from database for scene grounding
-): Promise<{ scenePrompt: string; templateId: string; templateName: string; templateUseCase: string; templateContentMode: string }> {
-  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
-  if (!openRouterKey) {
-    throw new Error('OpenRouter API key not configured');
-  }
-
-  // ✅ FIX 3.2: Use Scene Iteration template for I2I, Scene Narrative for T2I
-  const templateName = useI2IIteration
-    ? (contentTier === 'nsfw' ? 'Scene Iteration - NSFW' : 'Scene Iteration - SFW')
-    : (contentTier === 'nsfw' ? 'Scene Narrative - NSFW' : 'Scene Narrative - SFW');
-
-  console.log('📝 Scene narrative template selection:', {
-    useI2IIteration,
-    contentTier,
-    templateName,
-    generation_mode: useI2IIteration ? 'i2i' : 't2i'
-  });
-  // ✅ ADMIN: Select template ID and name along with system_prompt
-  const { data: template, error: templateError } = await supabase
-    .from('prompt_templates')
-    .select('id, template_name, system_prompt, use_case, content_mode')
-    .eq('template_name', templateName)
-    .eq('is_active', true)
-    .single();
-
-  if (templateError || !template) {
-    throw new Error(`Scene narrative template not found: ${templateName}`);
-  }
-
-  // Build scene generation prompt using template
-  // ✅ ENHANCED: Use more conversation history (10 messages) for better storyline context
-  const conversationContext = conversationHistory.slice(-10).join(' | ');
-
-  // ✅ FIX: For I2I, get location/setting from previous scene to maintain continuity
-  let previousSceneContext: any = null;
-  let previousSceneSetting: string | null = null;
-  let previousSceneTemplatePrompt: string | null = null; // ✅ CRITICAL FIX: Store template prompt for reference
-  
-  if (useI2IIteration && previousSceneId) {
-    try {
-      const { data: prevScene, error: prevSceneError } = await supabase
-        .from('character_scenes')
-        .select('generation_metadata, scene_prompt')
-        .eq('id', previousSceneId)
-        .single();
-      
-      if (!prevSceneError && prevScene) {
-        previousSceneContext = prevScene.generation_metadata?.scene_context 
-          ? (typeof prevScene.generation_metadata.scene_context === 'string' 
-              ? JSON.parse(prevScene.generation_metadata.scene_context) 
-              : prevScene.generation_metadata.scene_context)
-          : null;
-        
-        // ✅ CRITICAL FIX: Get template prompt from previous scene metadata
-        previousSceneTemplatePrompt = prevScene.generation_metadata?.scene_template_prompt || null;
-        
-        // Extract setting from previous scene context or prompt
-        if (previousSceneContext?.setting) {
-          previousSceneSetting = previousSceneContext.setting;
-        } else if (prevScene.scene_prompt) {
-          // Try to extract location from previous scene prompt
-          const locationMatch = prevScene.scene_prompt.match(/(?:in|at|inside|within)\s+(?:the\s+)?([^,\.]+?)(?:,|\.|$)/i);
-          if (locationMatch) {
-            previousSceneSetting = locationMatch[1].trim();
-          }
-        }
-        
-        console.log('🔄 I2I: Retrieved previous scene context:', {
-          previousSceneId,
-          previousSceneSetting,
-          hasContext: !!previousSceneContext,
-          hasTemplatePrompt: !!previousSceneTemplatePrompt
-        });
-      }
-    } catch (error) {
-      console.warn('⚠️ Failed to fetch previous scene context:', error);
-    }
-  }
-
-  // ✅ ENHANCED: Extract storyline elements from full conversation
-  const storylineContext = extractStorylineContext(conversationHistory);
-
-  // ✅ FIX #3: Prioritize locations for scene grounding
-  // Priority: 1. currentLocation (from DB), 2. previousSceneSetting (I2I), 3. conversation history
-  const storylineLocation = currentLocation  // Highest priority: DB location
-    ? currentLocation
-    : (useI2IIteration && previousSceneSetting
-        ? previousSceneSetting  // Use previous scene's location for continuity
-        : (storylineContext.locations.length > 0
-            ? storylineContext.locations[storylineContext.locations.length - 1] // Most recent location from conversation
-            : sceneContext.setting));
-
-  // ✅ FIX #3: Log location priority for scene grounding
-  console.log('📍 Scene location grounding:', {
-    source: currentLocation ? 'database' : (useI2IIteration && previousSceneSetting ? 'previous_scene' : (storylineContext.locations.length > 0 ? 'conversation' : 'scene_context')),
-    location: storylineLocation,
-    currentLocation,
-    previousSceneSetting,
-    conversationLocations: storylineContext.locations
-  });
-
-  // ✅ PHASE 1: Enhanced template with stronger constraints
-  const basePrompt = template.system_prompt
-    .replace(/\{\{character_name\}\}/g, character.name)
-    .replace(/\{\{character_description\}\}/g, characterVisualDescription)
-    .replace(/\{\{character_personality\}\}/g, character.persona || character.traits || 'engaging');
-  
-  // Add critical constraints to prevent first-person, dialogue, verbosity
-  const criticalConstraints = `\n\nCRITICAL RULES (MUST FOLLOW):
-1. Write ONLY in third-person (never first-person, no "I", no "Hello")
-2. NO character dialogue or speech (no quotes, no greetings, no "I said")
-3. NO internal monologue or character thoughts (no "I thought", "I felt", "you know")
-4. Focus ONLY on visual elements: setting, lighting, positioning, clothing, expressions
-5. Length: EXACTLY 2-3 sentences, 40-60 words total
-6. Start directly with the scene description (no "A scene showing..." prefix)
-
-OUTPUT FORMAT:
-[Character name] [action/position] in [setting]. [Lighting/atmosphere details]. [Clothing/appearance state]. [Expression/interaction if applicable].`;
-
-  // ✅ CRITICAL FIX: Extract direct scene description from character response if present
-  const directSceneDescription = characterResponse ? extractDirectSceneDescription(characterResponse) : null;
-  
-  // ✅ CRITICAL FIX: Restructure prompt to emphasize context FIRST
-  const scenePrompt = basePrompt
-    + criticalConstraints
-    + `\n\n⚠️ CRITICAL: YOU MUST USE THE SCENE CONTEXT PROVIDED BELOW. DO NOT INVENT NEW LOCATIONS OR SETTINGS.\n\n`
-    + `REQUIRED SCENE CONTEXT (YOU MUST USE THIS):\n`
-    + `Setting: ${sceneContext.setting}\n`
-    + `Location: ${storylineLocation}\n`
-    + `Mood: ${sceneContext.mood}\n`
-    + `Actions: ${sceneContext.actions.join(', ') || 'none specified'}\n`
-    + `Visual Elements: ${sceneContext.visualElements.join(', ') || 'none specified'}\n`
-    + `Positioning: ${sceneContext.positioning.join(', ') || 'none specified'}\n`
-    + (directSceneDescription 
-        ? `\nDIRECT SCENE DESCRIPTION FROM DIALOGUE (USE THIS AS PRIMARY REFERENCE):\n${directSceneDescription}\n`
-        : '')
-    + (useI2IIteration && previousSceneContext 
-        ? `\nPREVIOUS SCENE CONTEXT (for continuity):\n`
-        + `Previous Setting: ${previousSceneSetting || previousSceneContext.setting || 'same location'}\n`
-        + `Previous Mood: ${previousSceneContext.mood || sceneContext.mood}\n`
-        + (previousSceneTemplatePrompt 
-            ? `Original Template Context: ${previousSceneTemplatePrompt.substring(0, 150)}...\n`
-            : '')
-        + `IMPORTANT: The scene must remain in the SAME LOCATION as the previous scene (${previousSceneSetting || previousSceneContext.setting || storylineLocation}). Only describe what changes, not the location.\n`
-        : '')
-    + `\nSTORYLINE CONTEXT (for reference only, DO NOT include dialogue):\n`
-    + `Key Events: ${storylineContext.keyEvents.join(', ') || 'conversation'}\n`
-    + `Relationship Tone: ${storylineContext.relationshipProgression}\n`
-    + `Current Activity: ${storylineContext.currentActivity}\n`
-    + `\nRECENT CONVERSATION (last 10 exchanges - for reference only, DO NOT include dialogue):\n${conversationContext}\n\n`
-    + `⚠️ FINAL INSTRUCTION: Generate ONLY the scene description text using the REQUIRED SCENE CONTEXT above. ${useI2IIteration && previousSceneSetting ? `The scene MUST remain in the SAME LOCATION: ${previousSceneSetting}. Only describe what changes in the scene, not the location or environment.` : `The scene MUST be set in: ${sceneContext.setting} at location: ${storylineLocation}. DO NOT change the location or setting.`} Start directly with the description of the scene. DO NOT include character dialogue, thoughts, or first-person narration. DO NOT invent new locations like rooftops, cityscapes, or other settings not mentioned in the context.`;
-
-  console.log('🎬 Scene generation prompt built, calling OpenRouter with model:', modelKey);
-
-  // ✅ PHASE 1: Improved generation parameters for better quality
-  // Reduced max_tokens and temperature for more focused output
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openRouterKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://ulmdmzhcdwfadbvfpckt.supabase.co',
-      'X-Title': 'OurVidz Roleplay Scene Generation'
-    },
-    body: JSON.stringify({
-      model: modelKey,
-      messages: [
-        { role: 'system', content: scenePrompt },
-        { role: 'user', content: 'Generate the scene description now.' }
-      ],
-      max_tokens: 200, // ✅ Increased from 80 - prevents mid-word truncation while keeping narratives concise
-      temperature: 0.5, // ✅ Reduced from 0.7 - more focused, less creative
-      top_p: 0.9, // ✅ Slightly tighter sampling
-      frequency_penalty: 0.3, // ✅ Increased from 0.1 - discourage repetition
-      presence_penalty: 0.2 // ✅ Increased from 0.1 - encourage conciseness
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`❌ OpenRouter scene generation error ${response.status}:`, errorText);
-    throw new Error(`OpenRouter scene generation failed: ${response.status}`);
-  }
-
-  const data = await response.json();
-  let narrative = data.choices?.[0]?.message?.content?.trim();
-
-  if (!narrative) {
-    throw new Error('No scene narrative generated by OpenRouter');
-  }
-
-  // ✅ PHASE 1: Enhanced post-processing validation function
-  // Validates and cleans narrative to ensure third-person, no dialogue, proper length
-  narrative = validateSceneNarrative(narrative, useI2IIteration, character.name, sceneContext?.setting || 'an intimate setting', sceneContext?.mood || 'engaging');
-  
-  // ✅ SAFEGUARD: Ensure narrative is not empty or too short after cleanup
-  const originalNarrativeLength = data.choices?.[0]?.message?.content?.trim().length || narrative.length;
-  if (!narrative || narrative.trim().length < 20) {
-    console.error('❌ CRITICAL: Scene narrative is too short or empty after cleanup! Using fallback.');
-    // Fallback to basic scene description
-    const fallbackNarrative = `A scene showing ${character.name} in ${sceneContext?.setting || 'an intimate setting'}, ${sceneContext?.mood || 'engaging'}.`;
-    console.warn('⚠️ Using fallback narrative:', fallbackNarrative);
-    narrative = fallbackNarrative;
-  }
-  
-  // ✅ SAFEGUARD: Warn if narrative was heavily modified (more than 30% reduction)
-  const reductionPercent = originalNarrativeLength > 0 
-    ? ((originalNarrativeLength - narrative.length) / originalNarrativeLength) * 100 
-    : 0;
-  if (reductionPercent > 30) {
-    console.warn(`⚠️ WARNING: Scene narrative was heavily modified (${reductionPercent.toFixed(1)}% reduction). Some details may be lost.`);
-  }
-
-  console.log('✅ Scene narrative generated via OpenRouter:', narrative.substring(0, 100) + '...');
-  
-  // ✅ ADMIN: Return template info along with narrative
-  return {
-    scenePrompt: narrative,
-    templateId: template.id,
-    templateName: template.template_name,
-    templateUseCase: template.use_case,
-    templateContentMode: template.content_mode
-  };
-}
 
     // ✅ Extract consistency settings from UI with defaults
     const refStrength = consistencySettings?.reference_strength ?? 0.65;
