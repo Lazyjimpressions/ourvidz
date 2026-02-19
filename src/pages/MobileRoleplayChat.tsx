@@ -22,7 +22,7 @@ import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { MobileChatHeader } from '@/components/roleplay/MobileChatHeader';
-import { ChatBottomNav } from '@/components/roleplay/ChatBottomNav';
+
 import { CharacterInfoDrawer } from '@/components/roleplay/CharacterInfoDrawer';
 import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsModal';
 import { QuickSettingsDrawer } from '@/components/roleplay/QuickSettingsDrawer';
@@ -2551,7 +2551,7 @@ const MobileRoleplayChat: React.FC = () => {
           )}
           style={{
             paddingBottom: isMobile 
-              ? (isKeyboardVisible ? '20px' : '140px') // Account for input + bottom nav
+              ? (isKeyboardVisible ? '20px' : '80px') // Account for input bar + safe area
               : undefined
           }}
         >
@@ -2587,7 +2587,7 @@ const MobileRoleplayChat: React.FC = () => {
         {/* Input Area - Fixed on mobile to prevent footer overlap */}
         {isMobile ? (
           <div 
-            className="fixed bottom-14 left-0 right-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border"
+            className="fixed bottom-0 left-0 right-0 z-30 bg-card/95 backdrop-blur-sm border-t border-border"
             style={{
               paddingBottom: 'env(safe-area-inset-bottom, 0px)',
               boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)'
@@ -2705,14 +2705,6 @@ const MobileRoleplayChat: React.FC = () => {
           hasUserCharacter={!!selectedUserCharacterId && !!selectedUserCharacter?.reference_image_url}
         />
 
-        {/* Bottom Navigation (Mobile) */}
-        {isMobile && (
-          <ChatBottomNav
-            onCharacterInfoClick={() => setShowCharacterInfo(true)}
-            onSettingsClick={() => setShowQuickSettings(true)}
-            isVisible={!isKeyboardVisible}
-          />
-        )}
 
         {/* Context Menu */}
         <ContextMenu

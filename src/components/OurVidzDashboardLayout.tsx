@@ -206,7 +206,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - Compact on mobile workspace */}
-        <header className={`bg-[#111111] border-b border-gray-800 ${isCompactRoute ? 'px-3 py-2 md:px-6 md:py-4' : 'px-6 py-4'}`}>
+        <header className={`bg-[#111111] border-b border-gray-800 ${isChatRoute ? 'hidden md:block md:px-6 md:py-4' : isCompactRoute ? 'px-3 py-2 md:px-6 md:py-4' : 'px-6 py-4'}`}>
           <div className="flex justify-between items-center">
             {/* Mobile Back Button - Only show on compact routes (small screens) */}
             {isCompactRoute && (
