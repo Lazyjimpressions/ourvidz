@@ -2498,61 +2498,35 @@ async function generateScene(
     const isPromptOverride = !!scenePromptOverride;
     const hasCurrentSceneImage = !!currentSceneImageUrl;
 
-    // ✅ CRITICAL: I2I mode REQUIRES a valid previous scene image
-    // If no previous scene image, force T2I mode even if continuity is enabled
-    // NOTE: canUseI2I covers CONTINUATION mode only (scene 2+). First-scene template
-    // I2I uses a separate branch below (isFirstScene && templatePreviewImageUrl).
-    // Both result in generationMode='i2i' but with different reference images.
-    const canUseI2I = sceneContinuityEnabled && !isFirstScene && !!verifiedPreviousSceneImageUrl;
-
-    if (sceneContinuityEnabled && !verifiedPreviousSceneImageUrl) {
-      console.warn('⚠️ Scene continuity enabled but no previous scene image - falling back to T2I mode');
-    }
-
-    // Calculate generation mode and settings
-    // Priority: modification > fresh > continuation > first scene
-    let useI2IIteration: boolean;
-    let generationMode: 't2i' | 'i2i' | 'modification';
+    // ✅ ALWAYS-I2I: Roleplay NEVER uses T2I. There is always a scene image,
+    // character image, and user image available. Resolve scene environment
+    // using priority chain: modification > continuation > template > character avatar.
+    let useI2IIteration = true;
+    let generationMode: 'i2i' | 'modification' = 'i2i';
     let effectiveReferenceImageUrl: string | undefined;
 
     if (isPromptOverride && hasCurrentSceneImage) {
       // Modification mode: I2I on current scene with user-edited prompt
-      useI2IIteration = true;
       generationMode = 'modification';
       effectiveReferenceImageUrl = currentSceneImageUrl;
       console.log('🎬 Modification mode: I2I with current scene image');
-    } else if (isPromptOverride && !hasCurrentSceneImage) {
-      // Fresh generation mode: T2I with user-edited prompt (explicitly NO I2I)
-      // User requested fresh generation from character reference - skip scene continuity
-      useI2IIteration = false;
-      generationMode = 't2i';
-      effectiveReferenceImageUrl = undefined; // Will use character reference
-      console.log('🎬 Fresh generation mode: T2I from character reference (ignoring scene continuity)');
-    } else if (canUseI2I) {
-      // ✅ Continuation mode: I2I on previous scene (only if we have verified previous scene image)
-      useI2IIteration = true;
-      generationMode = 'i2i';
+    } else if (verifiedPreviousSceneImageUrl) {
+      // Continuation mode: I2I on previous scene
       effectiveReferenceImageUrl = verifiedPreviousSceneImageUrl;
       console.log('🎬 Continuation mode: I2I from previous scene', {
         previous_scene_id: resolvedPreviousSceneId,
-        has_verified_image: !!verifiedPreviousSceneImageUrl
+        has_verified_image: true
       });
-    } else if (isFirstScene && templatePreviewImageUrl) {
-      // ✅ First scene from template: I2I using template's preview image (not T2I)
-      // Ensures kickoff scene reflects template setting and obeys scene style (character_only, pov, both_characters)
-      useI2IIteration = true;
-      generationMode = 'i2i';
+    } else if (templatePreviewImageUrl) {
+      // First scene from template: I2I using template's preview image
       effectiveReferenceImageUrl = templatePreviewImageUrl;
-      console.log('🎬 First scene from template: I2I from template preview image', {
-        template_preview_preview: templatePreviewImageUrl.substring(0, 80) + '...'
-      });
+      console.log('🎬 First scene from template: I2I from template preview image');
     } else {
-      // First scene without template image, or T2I fallback
-      useI2IIteration = false;
-      generationMode = 't2i';
-      effectiveReferenceImageUrl = undefined; // Will use character reference
-      console.log('🎬 First scene mode: T2I initial generation', {
-        reason: isFirstScene ? 'no_previous_scene_or_template_image' : 'continuity_disabled_or_no_image'
+      // Absolute fallback: use character reference/avatar as scene base
+      effectiveReferenceImageUrl = character.reference_image_url || character.image_url || undefined;
+      console.log('🎬 Fallback: I2I from character reference/avatar', {
+        has_reference: !!character.reference_image_url,
+        has_avatar: !!character.image_url
       });
     }
 
@@ -2928,66 +2902,11 @@ const sceneContext = analyzeSceneContent(response);
       // This is the scene template's carefully crafted prompt from scenes table
       console.log('🎬 Using scene template prompt for first scene:', sceneTemplatePrompt.substring(0, 100) + '...');
       
-      // ✅ CRITICAL FIX: Replace generic character descriptions with actual character visual description
-      // Template might contain generic terms like "busty secretary", "attractive woman", etc.
-      // We need to replace these with the actual character's visual description
-      let processedPrompt = sceneTemplatePrompt;
-      
-      // Check if template already includes character name
-      const hasCharacterName = processedPrompt.toLowerCase().includes(character.name.toLowerCase());
-      
-      // Replace common generic character descriptions with actual character visual description
-      const genericCharacterPatterns = [
-        /\b(busty|curvy|attractive|beautiful|sexy|hot|gorgeous)\s+(secretary|woman|girl|person|character|individual)\b/gi,
-        /\b(secretary|woman|girl|person|character|individual)\s+(in|with|wearing|dressed)\b/gi,
-        /\b(professional|business|office)\s+(woman|girl|person|character|individual)\b/gi
-      ];
-      
-      // Replace generic descriptions with actual character visual description
-      for (const pattern of genericCharacterPatterns) {
-        if (pattern.test(processedPrompt)) {
-          // Replace with character name and visual description
-          processedPrompt = processedPrompt.replace(pattern, (match) => {
-            // If character name already in prompt, just replace the generic description with visual description
-            if (hasCharacterName) {
-              return characterVisualDescription;
-            }
-            // Otherwise replace with character name + visual description
-            return `${character.name} (${characterVisualDescription})`;
-          });
-          break; // Only replace first match to avoid over-replacement
-        }
-      }
-      
-      // If template doesn't include character name, add it at the beginning
-      if (!hasCharacterName) {
-        // Check if prompt starts with a generic character reference
-        const startsWithGeneric = /^(A|An|The)\s+(busty|curvy|attractive|beautiful|secretary|woman|girl|person|character)/i.test(processedPrompt);
-        if (startsWithGeneric) {
-          // Replace generic start with character name
-          processedPrompt = processedPrompt.replace(/^(A|An|The)\s+(busty|curvy|attractive|beautiful|secretary|woman|girl|person|character)[\s,]/i, 
-            `${character.name} (${characterVisualDescription}), `);
-        } else {
-          // Prepend character name and visual description
-          processedPrompt = `${character.name} (${characterVisualDescription}), ${processedPrompt}`;
-        }
-      } else {
-        // Character name exists, but ensure visual description is included
-        // Check if visual description is already present
-        if (!processedPrompt.includes(characterVisualDescription.substring(0, 30))) {
-          // Add visual description after character name
-          processedPrompt = processedPrompt.replace(
-            new RegExp(`(${character.name})`, 'i'),
-            `$1 (${characterVisualDescription})`
-          );
-        }
-      }
-      
-      // Clean up the prompt (remove any dialogue markers, ensure third-person)
-      scenePrompt = processedPrompt
-        .replace(/^["']|["']$/g, '') // Remove quotes
-        .replace(/^(Hello|Hi|Hey),?\s+/i, '') // Remove greetings
-        .replace(/\s+/g, ' ') // Normalize whitespace
+      // Use template prompt directly - Figure notation handles character identity via reference images
+      scenePrompt = sceneTemplatePrompt
+        .replace(/^["']|["']$/g, '')
+        .replace(/^(Hello|Hi|Hey),?\s+/i, '')
+        .replace(/\s+/g, ' ')
         .trim();
       
       // ✅ ADMIN: Set template label so debug panel shows "Scene template (first scene)"
@@ -3061,12 +2980,9 @@ const sceneContext = analyzeSceneContent(response);
     if (!effectiveImageModel || effectiveImageModel.trim() === '') {
       console.log('📸 No image model specified, fetching default image model from database...');
 
-      // ✅ FIX: First scene with template preview uses I2I → default to I2I model (style_transfer).
-      // First scene without template preview uses T2I → default to T2I model (generation).
-      // Subsequent scenes use I2I → default to I2I model.
-      const useI2IForFirstScene = !!(isFirstScene && templatePreviewImageUrl);
-      const requiredTask = (isFirstScene && !templatePreviewImageUrl) ? 'generation' : 'style_transfer';
-      console.log(`🎯 Looking for default ${requiredTask === 'style_transfer' ? 'I2I' : 'T2I'} model (task='${requiredTask}')`, useI2IForFirstScene ? '(first scene I2I from template preview)' : '');
+      // ✅ ALWAYS I2I: Roleplay always uses style_transfer (I2I) models
+      const requiredTask = 'style_transfer';
+      console.log('🎯 Looking for default I2I model (task=style_transfer) - roleplay always uses I2I');
 
       // First, look for the default model (is_default = true)
       const { data: defaultModels } = await supabase
@@ -3293,71 +3209,33 @@ const sceneContext = analyzeSceneContent(response);
       );
       const userAppearanceFinal = userAppearance || userVisualFallback;
 
-      if (canUseMultiReference) {
-        // Figure notation for multi-reference I2I
-        enhancedScenePrompt = `In the setting from Figure 1, show two people together.
-
-SCENE SETTING (from Figure 1): ${scenePrompt}
-
-CHARACTER 1 - AI CHARACTER (appearance from Figure 2): ${character.name}, ${characterAppearance}
-
-CHARACTER 2 - USER (appearance from Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
-
-ACTION/POSE: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}
-
-COMPOSITION RULES:
-- Maintain the exact environment, lighting, and atmosphere from Figure 1
-- Preserve Character 1's facial features, hair, and body type from Figure 2
-- Preserve Character 2's facial features, hair, and body type from Figure 3
-- Characters should be interacting naturally within the scene
-- Photorealistic, cinematic lighting, shallow depth of field`;
-        console.log('🎭 Multi-reference I2I: Using Figure notation for both_characters');
-      } else {
-        // Two-character scene without multi-reference
-        enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2.
+      enhancedScenePrompt = `In the setting from Figure 1, show two people together.
 
 SCENE (Figure 1): ${scenePrompt}
 
-CHARACTER (from Figure 2): ${briefCharacterIdentity} with ${userCharacter.name}, ${userAppearanceFinal}
+CHARACTER 1 (Figure 2): ${character.name}, ${characterAppearance}
 
-ACTION: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}
+CHARACTER 2 (Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 
-RULES:
-- Maintain the exact environment from Figure 1
-- Preserve the character's appearance from Figure 2
-- Photorealistic, cinematic lighting, shallow depth of field`;
-        console.log('🎬 Both characters I2I: Figure notation without multi-reference');
-      }
+ACTION: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}`;
+      console.log('🎭 Both characters I2I: Figure notation');
     } else if (sceneStyle === 'pov') {
-      // POV scene - first person view looking at character
-      enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2 from a first-person perspective, looking at the character.
+      enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2, from a first-person POV.
 
 SCENE (Figure 1): ${scenePrompt}
 
-CHARACTER (from Figure 2): ${briefCharacterIdentity}, looking at viewer
+CHARACTER (Figure 2): ${briefCharacterIdentity}, looking at viewer
 
-ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}
-
-RULES:
-- Maintain the exact environment from Figure 1
-- Preserve the character's appearance from Figure 2
-- POV camera angle, first person perspective
-- Photorealistic, cinematic lighting, shallow depth of field`;
+ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
       console.log('🎬 POV I2I: Figure notation');
     } else {
-      // Character only (default) - standard I2I with Figure notation
       enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2.
 
 SCENE (Figure 1): ${scenePrompt}
 
-CHARACTER (from Figure 2): ${briefCharacterIdentity}
+CHARACTER (Figure 2): ${briefCharacterIdentity}
 
-ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}
-
-RULES:
-- Maintain the exact environment from Figure 1
-- Preserve the character's appearance from Figure 2
-- Photorealistic, cinematic lighting, shallow depth of field`;
+ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
       console.log('🎬 Character-only I2I: Figure notation');
     }
 
@@ -3411,41 +3289,7 @@ RULES:
       consistencyMethod
     });
     
-    if (useSDXL) {
-      // Use queue-job for SDXL worker with enhanced metadata and character consistency
-      const headers: Record<string, string> = {};
-      if (authHeader) {
-        headers['authorization'] = authHeader;
-      }
-      
-      imageResponse = await supabase.functions.invoke('queue-job', {
-        headers,
-        body: {
-          prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
-          job_type: 'sdxl_image_high',
-          // NOTE: No seed specified - use random for scene variety while reference_image maintains character consistency
-          reference_image_url: character.reference_image_url,
-          metadata: {
-            destination: 'roleplay_scene',
-            character_id: characterId,
-            character_name: character.name,
-            scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
-            conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
-            scene_type: 'chat_scene',
-            consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
-            reference_strength: refStrength,
-            denoise_strength: denoiseStrength,
-            skip_enhancement: false,
-            reference_mode: 'modify',
-            seed_locked: seedLocked,
-            seed: seedLocked, // Pass seed for seed_locked method
-            contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
-            scene_context: JSON.stringify(sceneContext)
-          }
-        }
-      });
-      console.log('🎬 SDXL scene generation queued with random seed for variety:', imageResponse);
-    } else if (!useSDXL && effectiveImageModel) {
+    if (effectiveImageModel) {
       // ✅ ENHANCED: Use API model for scene generation
       console.log('🎨 Using API model for scene generation:', effectiveImageModel);
       
@@ -3454,33 +3298,7 @@ RULES:
       
       if (!modelConfig) {
         console.error('🎨❌ API model not found:', effectiveImageModel);
-        // Fallback to SDXL
-        imageResponse = await supabase.functions.invoke('queue-job', {
-          body: {
-            prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
-            job_type: 'sdxl_image_high',
-            // No seed - use random for scene variety
-            reference_image_url: character.reference_image_url,
-            metadata: {
-              destination: 'roleplay_scene',
-              character_id: characterId,
-              character_name: character.name,
-              scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
-              conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
-              scene_type: 'chat_scene',
-              consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
-              reference_strength: refStrength,
-              denoise_strength: denoiseStrength,
-              skip_enhancement: false,
-              reference_mode: 'modify',
-              seed_locked: seedLocked,
-              seed: seedLocked,
-              contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
-              scene_context: JSON.stringify(sceneContext),
-              fallback_reason: 'api_model_not_found'
-            }
-          }
-        });
+        return { success: false, error: 'Image model not found: ' + effectiveImageModel };
       } else {
         // Get provider information
         const { data: provider, error: providerError } = await supabase
@@ -3491,37 +3309,7 @@ RULES:
         
         if (providerError || !provider) {
           console.error('🎨❌ Provider not found for model:', modelConfig.provider_id);
-          // Fallback to SDXL
-          imageResponse = await supabase.functions.invoke('queue-job', {
-            body: {
-              prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
-              job_type: 'sdxl_image_high',
-              // No seed - use random for scene variety
-              reference_image_url: character.reference_image_url,
-              metadata: {
-                destination: 'roleplay_scene',
-                character_id: characterId,
-                character_name: character.name,
-                scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
-                conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
-                scene_type: 'chat_scene',
-                consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
-                reference_strength: refStrength,
-                denoise_strength: denoiseStrength,
-                skip_enhancement: false,
-                reference_mode: 'modify',
-                seed_locked: seedLocked,
-                seed: seedLocked,
-                model_used: 'sdxl',
-                model_display_name: 'SDXL (Fallback)',
-                provider_name: 'local',
-                contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
-                scene_context: JSON.stringify(sceneContext),
-                character_visual_description: characterVisualDescription,
-                fallback_reason: 'provider_not_found'
-              }
-            }
-          });
+          return { success: false, error: 'Provider not found for model: ' + modelConfig.provider_id };
         } else {
           // Use API model for generation
           const providerName = provider.name;
@@ -3766,98 +3554,63 @@ RULES:
             preview: sanitizedPrompt.substring(0, 150) + '...'
           });
 
-          // ✅ MULTI-REFERENCE: Build image_urls array for v4.5/edit multi-source composition
-          // Uses canUseMultiReference determined earlier for prompt building
-          let multiReferenceImageUrls: string[] | undefined = undefined;
-          let useMultiReference = false;
+          // ✅ ALWAYS-I2I: Build image_urls array for ALL scene styles (never single image_url)
+          // Every scene generation call sends an image_urls array to maintain character consistency
+          const imageUrlsArray: string[] = [];
 
-          if (canUseMultiReference && (userCharacter?.reference_image_url || userCharacter?.image_url) && (character.reference_image_url || character.image_url)) {
-            const imageUrlsArray: string[] = [];
+          // Figure 1: Scene environment (already resolved by effectiveReferenceImageUrl)
+          if (effectiveReferenceImageUrl) {
+            imageUrlsArray.push(effectiveReferenceImageUrl);
+            console.log('📸 Figure 1 (Scene):', effectiveReferenceImageUrl.substring(0, 60) + '...');
+          }
 
-            // Figure 1: Scene environment. Priority: template preview (first scene) > previous chat scene > character ref fallback
-            if (templatePreviewImageUrl && isFirstScene) {
-              imageUrlsArray.push(templatePreviewImageUrl);
-              console.log('📸 Multi-ref Figure 1 (Scene): Using template preview image (first scene I2I)');
-            } else if (verifiedPreviousSceneImageUrl) {
-              imageUrlsArray.push(verifiedPreviousSceneImageUrl);
-              console.log('📸 Multi-ref Figure 1 (Scene): Using previous scene image');
-            } else if (character.reference_image_url || character.image_url) {
-              imageUrlsArray.push((character.reference_image_url || character.image_url)!);
-              console.log('📸 Multi-ref Figure 1 (Scene): Using character reference as base');
-            }
+          // Figure 2: AI Character reference (ALWAYS included as anchor to prevent drift)
+          const charRef = (character.reference_image_url || character.image_url);
+          if (charRef) {
+            imageUrlsArray.push(charRef);
+            console.log('📸 Figure 2 (Character):', character.name);
+          }
 
-            // Figure 2: AI Character reference (falls back to avatar image_url)
-            imageUrlsArray.push((character.reference_image_url || character.image_url)!);
-            console.log('📸 Multi-ref Figure 2 (Character):', character.name);
-
-            // Figure 3: User Character reference (falls back to avatar image_url)
-            imageUrlsArray.push((userCharacter.reference_image_url || userCharacter.image_url)!);
-            console.log('📸 Multi-ref Figure 3 (User):', userCharacter.name);
-
-            if (imageUrlsArray.length >= 2) {
-              multiReferenceImageUrls = imageUrlsArray;
-              useMultiReference = true;
-
-              // Force I2I model for multi-reference (v4.5/edit)
-              if (!effectiveI2IModelOverride) {
-                effectiveI2IModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
-              }
-
-              console.log('🎭 MULTI-REFERENCE MODE ENABLED:', {
-                scene_style: sceneStyle,
-                image_count: imageUrlsArray.length,
-                figure_1: imageUrlsArray[0]?.substring(0, 50) + '...',
-                figure_2: imageUrlsArray[1]?.substring(0, 50) + '...',
-                figure_3: imageUrlsArray[2]?.substring(0, 50) + '...',
-                model_override: effectiveI2IModelOverride
-              });
+          // Figure 3: User Character reference (only for both_characters)
+          if (sceneStyle === 'both_characters' && userCharacter) {
+            const userRef = (userCharacter.reference_image_url || userCharacter.image_url);
+            if (userRef) {
+              imageUrlsArray.push(userRef);
+              console.log('📸 Figure 3 (User):', userCharacter.name);
             }
           }
 
-          // ✅ FIRST-SCENE I2I for character_only/pov: Build 2-image array [scene, character]
-          if (!useMultiReference && isFirstScene && templatePreviewImageUrl 
-              && (character.reference_image_url || character.image_url)) {
-            const firstSceneImageUrls = [
-              templatePreviewImageUrl,  // Figure 1: Scene environment
-              (character.reference_image_url || character.image_url)!  // Figure 2: Character
-            ];
-            multiReferenceImageUrls = firstSceneImageUrls;
-            useMultiReference = true;
-            if (!effectiveI2IModelOverride) {
-              effectiveI2IModelOverride = 'fal-ai/bytedance/seedream/v4.5/edit';
-            }
-            console.log('📸 FIRST-SCENE I2I (character_only/pov): Built 2-image array', {
-              scene_style: sceneStyle,
-              figure_1: templatePreviewImageUrl.substring(0, 60),
-              figure_2: firstSceneImageUrls[1].substring(0, 60),
-              model_override: effectiveI2IModelOverride
-            });
+          // Force I2I model (v4.5/edit) for multi-reference composition
+          if (!effectiveI2IModelOverride && imageUrlsArray.length >= 2) {
+            effectiveI2IModelOverride = await getI2IModelKey() || 'fal-ai/bytedance/seedream/v4.5/edit';
           }
 
-          // Build fal.ai-specific request body
+          console.log('🎭 ALWAYS-I2I IMAGE ARRAY:', {
+            scene_style: sceneStyle,
+            image_count: imageUrlsArray.length,
+            figures: imageUrlsArray.map((url, i) => `Figure ${i + 1}: ${url.substring(0, 50)}...`),
+            model_override: effectiveI2IModelOverride
+          });
+
+          // Build fal.ai-specific request body - ALWAYS uses image_urls array
           const falRequestBody = {
-            prompt: sanitizedPrompt, // ✅ Use sanitized prompt for fal.ai compliance
+            prompt: sanitizedPrompt,
             apiModelId: modelConfig.id,
-            // Override model_key for I2I iteration or multi-reference
             model_key_override: effectiveI2IModelOverride || undefined,
             job_type: 'fal_image',
             quality: 'high',
             input: {
-              image_size: 'portrait_4_3', // 4:3 portrait preset to match UI containers (Seedream v4.5 preset)
+              image_size: 'portrait_4_3',
               num_inference_steps: 30,
               guidance_scale: 7.5,
               seed: seedLocked ?? undefined,
-              // ✅ MULTI-REFERENCE: Use image_urls array for v4.5/edit multi-source composition
-              // Otherwise fall back to single image_url for standard I2I
-              ...(useMultiReference && multiReferenceImageUrls && multiReferenceImageUrls.length >= 2 ? {
-                // v4.5/edit uses image_urls ARRAY (not image_url string)
-                // Note: v4.5/edit does NOT use strength parameter
-                image_urls: multiReferenceImageUrls
-              } : (i2iReferenceImage && i2iReferenceImage.trim() !== '' ? {
-                // Standard single-reference I2I
-                image_url: i2iReferenceImage,
+              // ✅ ALWAYS use image_urls array (never single image_url)
+              ...(imageUrlsArray.length >= 2 ? {
+                image_urls: imageUrlsArray
+              } : imageUrlsArray.length === 1 ? {
+                image_url: imageUrlsArray[0],
                 strength: i2iStrength
-              } : {}))
+              } : {})
             },
             metadata: {
               destination: 'roleplay_scene',
@@ -3883,8 +3636,8 @@ RULES:
               previous_scene_id: resolvedPreviousSceneId || null,
               has_previous_scene_image: !!resolvedPreviousSceneImageUrl,
               // ✅ Multi-reference tracking
-              use_multi_reference: useMultiReference,
-              multi_reference_image_count: multiReferenceImageUrls?.length || 0,
+              use_multi_reference: imageUrlsArray.length >= 2,
+              multi_reference_image_count: imageUrlsArray.length,
               // ✅ ADMIN: Include scene prompt template info
               scene_template_id: sceneTemplateId,
               scene_template_name: sceneTemplateName
@@ -3909,77 +3662,18 @@ RULES:
             body: falRequestBody
           });
         } else {
-          // Other API providers are not supported - fallback to SDXL
-          console.warn('🎨⚠️ Unsupported API provider, falling back to SDXL:', providerName);
-          const headers: Record<string, string> = {};
-          if (authHeader) {
-            headers['authorization'] = authHeader;
-          }
-          
-          imageResponse = await supabase.functions.invoke('queue-job', {
-            headers,
-            body: {
-              prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
-              job_type: 'sdxl_image_high',
-              // No seed - use random for scene variety
-              reference_image_url: character.reference_image_url,
-              metadata: {
-                destination: 'roleplay_scene',
-                character_id: characterId,
-                character_name: character.name,
-                scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
-                conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
-                scene_type: 'chat_scene',
-                consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
-                reference_strength: refStrength,
-                denoise_strength: denoiseStrength,
-                skip_enhancement: false,
-                reference_mode: 'modify',
-                seed_locked: seedLocked,
-                seed: seedLocked,
-                model_used: 'sdxl',
-                model_display_name: 'SDXL (Fallback)',
-                provider_name: 'local',
-                contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
-                scene_context: JSON.stringify(sceneContext),
-                character_visual_description: characterVisualDescription,
-                fallback_reason: 'unsupported_provider'
-              }
-            }
-          });
+          // Other API providers not supported for roleplay
+          console.error('🎨❌ Unsupported provider for roleplay:', providerName);
+          return { success: false, error: 'Unsupported image provider: ' + providerName };
         }
         }
       }
       
       console.log('🎨 API model scene generation queued:', imageResponse);
     } else {
-      // Fallback to SDXL if no model selected
-      console.log('🎨 No image model selected, using SDXL fallback');
-      imageResponse = await supabase.functions.invoke('queue-job', {
-        body: {
-          prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
-          job_type: 'sdxl_image_high',
-          // No seed - use random for scene variety
-          reference_image_url: character.reference_image_url,
-          metadata: {
-            destination: 'roleplay_scene',
-            character_id: characterId,
-            character_name: character.name,
-            scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
-            conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
-            scene_type: 'chat_scene',
-            consistency_method: consistencyMethod,
-            model_used: 'sdxl',
-            model_display_name: 'SDXL (Default)',
-            provider_name: 'local',
-            contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
-            scene_context: JSON.stringify(sceneContext),
-            character_visual_description: characterVisualDescription,
-            seed_locked: false
-          }
-        }
-      });
-      console.log('🎬 SDXL fallback scene generation queued:', imageResponse);
+      // No image model available - error out (roleplay requires an I2I model)
+      console.error('🎨❌ No image model available for scene generation');
+      return { success: false, error: 'No image model available for scene generation' };
     }
 
     console.log('🎬 Scene generation response received, validating...');
