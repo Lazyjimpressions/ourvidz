@@ -7,7 +7,8 @@ import { looksLikeImage } from '@/utils/imageTypeDetection';
 import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
 import { MobileDebugPanel } from '@/components/workspace/MobileDebugPanel';
 import { SharedGrid } from '@/components/shared/SharedGrid';
-import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
+import { WorkspaceAssetActions } from '@/components/shared/LightboxActions';
+import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
@@ -591,50 +592,65 @@ const MobileSimplifiedWorkspace = () => {
 
         {/* Lightbox */}
         {lightboxIndex !== null && (sharedAssets.length || 0) > 0 && (
-          <SharedLightbox
-            assets={sharedAssets}
+          <UnifiedLightbox
+            items={sharedAssets.map((a: any) => ({
+              id: a.id,
+              url: a.thumbUrl || a.url || '',
+              type: a.type || 'image',
+              title: a.title,
+              prompt: a.prompt,
+              originalPath: a.originalPath,
+              metadata: a.metadata,
+              width: a.width,
+              height: a.height,
+              modelType: a.modelType,
+              mimeType: a.mimeType,
+            } as LightboxItem))}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
-            onRequireOriginalUrl={async (asset) => {
-              // Use signOriginal if available, otherwise fallback to url
-              if ((asset as any).signOriginal) {
+            onRequireOriginalUrl={async (item) => {
+              const asset = sharedAssets.find((a: any) => a.id === item.id);
+              if (asset && (asset as any).signOriginal) {
                 return (asset as any).signOriginal();
               }
-              return (asset as any).thumbUrl || (asset as any).originalPath || '';
+              return (asset as any)?.thumbUrl || item.url;
             }}
-            actionsSlot={(asset) => (
-              <WorkspaceAssetActions
-                asset={asset}
-                onSave={() => handleSaveToLibrary(asset)}
-                onDiscard={() => handleDiscard(asset)}
-                onUseAsReference={() => handleUseAsReference(asset)}
-                onDownload={async () => {
-                  try {
-                    // Use the same logic as onRequireOriginalUrl
-                    let url: string;
-                    if ((asset as any).signOriginal) {
-                      url = await (asset as any).signOriginal();
-                    } else {
-                      url = (asset as any).thumbUrl || (asset as any).originalPath || '';
+            actionsSlot={(item) => {
+              const asset = sharedAssets.find((a: any) => a.id === item.id);
+              if (!asset) return null;
+              return (
+                <WorkspaceAssetActions
+                  asset={asset as any}
+                  onSave={() => handleSaveToLibrary(asset)}
+                  onDiscard={() => handleDiscard(asset)}
+                  onUseAsReference={() => handleUseAsReference(asset)}
+                  onDownload={async () => {
+                    try {
+                      let url: string;
+                      if ((asset as any).signOriginal) {
+                        url = await (asset as any).signOriginal();
+                      } else {
+                        url = (asset as any).thumbUrl || (asset as any).originalPath || '';
+                      }
+                      const res = await fetch(url);
+                      const blob = await res.blob();
+                      const objectUrl = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = objectUrl;
+                      a.download = `${asset.title || asset.id}.${asset.format === 'video' ? 'mp4' : 'jpg'}`;
+                      document.body.appendChild(a);
+                      a.click();
+                      URL.revokeObjectURL(objectUrl);
+                      document.body.removeChild(a);
+                      toast.success('Download started');
+                    } catch (e) {
+                      console.error('Download failed:', e);
+                      toast.error('Download failed');
                     }
-                    const res = await fetch(url);
-                    const blob = await res.blob();
-                    const objectUrl = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = objectUrl;
-                    a.download = `${asset.title || asset.id}.${asset.format === 'video' ? 'mp4' : 'jpg'}`;
-                    document.body.appendChild(a);
-                    a.click();
-                    URL.revokeObjectURL(objectUrl);
-                    document.body.removeChild(a);
-                    toast.success('Download started');
-                  } catch (e) {
-                    console.error('Download failed:', e);
-                    toast.error('Download failed');
-                  }
-                }}
-              />
-            )}
+                  }}
+                />
+              );
+            }}
           />
         )}
       </div>

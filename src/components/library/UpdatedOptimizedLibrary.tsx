@@ -3,7 +3,8 @@ import { useLibraryAssets } from '@/hooks/useLibraryAssets';
 import { toSharedFromLibrary } from '@/lib/services/AssetMappers';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { SharedGrid } from '@/components/shared/SharedGrid';
-import { SharedLightbox, LibraryAssetActions } from '@/components/shared/SharedLightbox';
+import { LibraryAssetActions } from '@/components/shared/LightboxActions';
+import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
 import { OurVidzDashboardLayout } from '../OurVidzDashboardLayout';
 import { CompactLibraryHeader } from './CompactLibraryHeader';
 import { CompactLibraryFilters } from './CompactLibraryFilters';
@@ -437,22 +438,44 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
       
       {/* Lightbox */}
       {lightboxIndex !== null && filteredAssets.length > 0 && (
-        <SharedLightbox
-          assets={filteredAssets as any}
+        <UnifiedLightbox
+          items={filteredAssets.map((a: any) => ({
+            id: a.id,
+            url: a.thumbUrl || a.url || '',
+            type: a.type || 'image',
+            title: a.title,
+            prompt: a.prompt,
+            originalPath: a.originalPath,
+            metadata: a.metadata,
+            width: a.width,
+            height: a.height,
+            modelType: a.modelType,
+            mimeType: a.mimeType,
+          } as LightboxItem))}
           startIndex={lightboxIndex}
           onClose={() => {
             setLightboxIndex(null);
             setLastLightboxClose(Date.now());
           }}
-          onRequireOriginalUrl={handleRequireOriginalUrl}
-          actionsSlot={(asset) => (
-            <LibraryAssetActions
-              asset={asset}
-              onDelete={() => handleDelete(asset)}
-              onDownload={() => handleDownload(asset)}
-              onUseAsReference={() => handleUseAsReference(asset)}
-            />
-          )}
+          onRequireOriginalUrl={async (item) => {
+            const asset = filteredAssets.find((a: any) => a.id === item.id);
+            if (asset && (asset as any).signOriginal) {
+              return (asset as any).signOriginal();
+            }
+            return item.url;
+          }}
+          actionsSlot={(item) => {
+            const asset = filteredAssets.find((a: any) => a.id === item.id);
+            if (!asset) return null;
+            return (
+              <LibraryAssetActions
+                asset={asset as any}
+                onDelete={() => handleDelete(asset as any)}
+                onDownload={() => handleDownload(asset as any)}
+                onUseAsReference={() => handleUseAsReference(asset as any)}
+              />
+            );
+          }}
         />
       )}
     </>

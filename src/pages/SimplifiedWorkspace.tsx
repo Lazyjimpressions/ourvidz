@@ -7,7 +7,8 @@ import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { SharedGrid } from '@/components/shared/SharedGrid';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
-import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
+import { WorkspaceAssetActions } from '@/components/shared/LightboxActions';
+import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
@@ -613,26 +614,42 @@ export const SimplifiedWorkspace: React.FC = () => {
       
       {/* Lightbox */}
       {lightboxIndex !== null && signedAssets.length > 0 && (
-        <SharedLightbox
-          assets={signedAssets}
+        <UnifiedLightbox
+          items={signedAssets.map((a: any) => ({
+            id: a.id,
+            url: a.thumbUrl || a.url || '',
+            type: a.type || 'image',
+            title: a.title,
+            prompt: a.prompt,
+            originalPath: a.originalPath,
+            metadata: a.metadata,
+            width: a.width,
+            height: a.height,
+            modelType: a.modelType,
+            mimeType: a.mimeType,
+          } as LightboxItem))}
           startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
-          onRequireOriginalUrl={async (asset: any) => {
-            // Use signOriginal function if available, otherwise fallback to url
-            if ((asset as any).signOriginal) {
+          onRequireOriginalUrl={async (item) => {
+            const asset = signedAssets.find((a: any) => a.id === item.id);
+            if (asset && (asset as any).signOriginal) {
               return (asset as any).signOriginal();
             }
-            return (asset as any).url || asset.url;
+            return item.url;
           }}
-          actionsSlot={(asset: any) => (
-            <WorkspaceAssetActions
-              asset={asset}
-              onSave={() => handleSaveItem(asset as UnifiedAsset)}
-              onDiscard={() => handleDeleteItem(asset as UnifiedAsset)}
-              onDownload={() => handleDownloadItem(asset as UnifiedAsset)}
-              onUseAsReference={() => handleUseAsReference(asset as UnifiedAsset)}
-            />
-          )}
+          actionsSlot={(item) => {
+            const asset = signedAssets.find((a: any) => a.id === item.id);
+            if (!asset) return null;
+            return (
+              <WorkspaceAssetActions
+                asset={asset as any}
+                onSave={() => handleSaveItem(asset as any)}
+                onDiscard={() => handleDeleteItem(asset as any)}
+                onDownload={() => handleDownloadItem(asset as any)}
+                onUseAsReference={() => handleUseAsReference(asset as any)}
+              />
+            );
+          }}
         />
       )}
     </>
