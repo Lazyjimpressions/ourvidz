@@ -2060,71 +2060,52 @@ const MobileRoleplayChat: React.FC = () => {
 
       if (error) throw error;
 
-      // ✅ FIX: Check scene_job_id first (primary field from roleplay-chat edge function)
+      // ✅ FIX: Check scene_job_id first, then fall back to async subscription
       const newJobId = data?.scene_job_id || data?.job_id || data?.data?.jobId || data?.data?.job_id || data?.jobId;
       
-      console.log('🔍 Regeneration Job ID extraction:', {
-        'data?.scene_job_id': data?.scene_job_id,
-        'data?.job_id': data?.job_id,
-        'data?.jobId': data?.jobId,
-        extracted: newJobId,
+      console.log('🔍 Regeneration response:', {
+        hasJobId: !!newJobId,
+        scene_generating_async: data?.scene_generating_async,
         fullDataKeys: data ? Object.keys(data) : []
       });
 
-      if (newJobId) {
-        // Add placeholder message for regenerated scene
-        const placeholderMessage: Message = {
-          id: Date.now().toString(),
-          content: isI2IModification
-            ? `Modifying scene${strengthOverride ? ` (${Math.round(strengthOverride * 100)}% intensity)` : ''}...`
-            : 'Generating fresh scene from character reference...',
-          sender: 'character',
-          timestamp: new Date().toISOString(),
-          metadata: {
-            scene_generated: true,
-            job_id: newJobId,
-            consistency_method: consistencySettings.method,
-            is_regeneration: true,
-            generation_mode: isI2IModification ? 'modification' : 't2i'
-          }
-        };
-        setMessages(prev => [...prev, placeholderMessage]);
+      // Add placeholder message for regenerated scene
+      const placeholderMessage: Message = {
+        id: Date.now().toString(),
+        content: isI2IModification
+          ? `Modifying scene${strengthOverride ? ` (${Math.round(strengthOverride * 100)}% intensity)` : ''}...`
+          : 'Generating fresh scene from character reference...',
+        sender: 'character',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          scene_generated: true,
+          job_id: newJobId || 'pending',
+          consistency_method: consistencySettings.method,
+          is_regeneration: true,
+          generation_mode: isI2IModification ? 'modification' : 't2i'
+        }
+      };
+      setMessages(prev => [...prev, placeholderMessage]);
 
-        // Start polling for job completion
+      if (newJobId) {
+        // Direct job ID available - subscribe to job completion
         console.log(`🔧 Starting polling for scene ${isI2IModification ? 'modification' : 'fresh generation'} job:`, newJobId);
         subscribeToJobCompletion(newJobId, placeholderMessage.id);
-
-        toast({
-          title: isI2IModification ? 'Scene modification started' : 'Fresh scene generation started',
-          description: isI2IModification
-            ? `Modifying with ${Math.round((strengthOverride || 0.5) * 100)}% intensity`
-            : 'Generating new scene from character reference'
-        });
+      } else if (data?.scene_generating_async && conversationId) {
+        // ✅ ASYNC SCENE: Scene generates in background via EdgeRuntime.waitUntil()
+        // Subscribe to character_scenes realtime to pick up the result
+        console.log('🎬 Scene regeneration async - subscribing to character_scenes for:', conversationId);
+        subscribeToConversationScenes(conversationId, placeholderMessage.id);
       } else {
-        // ✅ ENHANCED: Provide detailed error instead of throwing
-        console.error('❌ No job ID found for regeneration. Full response:', JSON.stringify({ data, error }, null, 2));
-        setSceneJobStatus('failed');
-        
-        const errorMessage: Message = {
-          id: Date.now().toString(),
-          content: 'Scene regeneration failed. Please try again.',
-          sender: 'character',
-          timestamp: new Date().toISOString(),
-          metadata: { 
-            sceneError: true,
-            canRetryScene: true,
-            errorDetails: 'No job ID returned from scene regeneration request'
-          }
-        };
-        setMessages(prev => [...prev, errorMessage]);
-        
-        toast({
-          title: 'Scene regeneration failed',
-          description: 'Could not start scene regeneration. Please try again.',
-          variant: 'destructive'
-        });
-        return; // Exit early instead of throwing
+        console.warn('⚠️ No job ID and no async flag - scene generation may have been skipped');
       }
+
+      toast({
+        title: isI2IModification ? 'Scene modification started' : 'Fresh scene generation started',
+        description: isI2IModification
+          ? `Modifying with ${Math.round((strengthOverride || 0.5) * 100)}% intensity`
+          : 'Generating new scene from character reference'
+      });
     } catch (error) {
       console.error('Error regenerating scene:', error);
       setSceneJobStatus('failed');
