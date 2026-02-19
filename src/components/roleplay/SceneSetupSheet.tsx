@@ -30,7 +30,7 @@ import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useImageModels } from '@/hooks/useImageModels';
+import { useI2IModels } from '@/hooks/useI2IModels';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { SceneTemplate, ContentRating, SceneStyle, ImageGenerationMode } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
@@ -92,8 +92,8 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
 }) => {
   const { characters: publicCharacters, isLoading: isLoadingPublicCharacters } = usePublicCharacters();
   const { characters: userCreatedCharacters, userPersonas, defaultCharacterId, isLoading: isLoadingUserCharacters } = useUserCharacters();
-  // No hasReferenceImage: show all image models (T2I + I2I) so user can pick e.g. Seedream v4.5 Edit for first-scene I2I
-  const { modelOptions: imageModelOptions, isLoading: imageModelsLoading, defaultModel: defaultImageModel } = useImageModels();
+  // Only show I2I models for scene iteration (roleplay is always-I2I)
+  const { modelOptions: imageModelOptions, isLoading: imageModelsLoading, defaultModel: defaultImageModel } = useI2IModels();
   const { allModelOptions: chatModelOptions, isLoading: chatModelsLoading, defaultModel: defaultChatModel } = useRoleplayModels();
   const hasOptions = Boolean(onImageModelChange || onChatModelChange || onSceneStyleChange || onImageGenerationModeChange);
 
@@ -482,7 +482,7 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
                   <div className="grid grid-cols-2 gap-x-3 gap-y-2 pt-1">
                     {onImageModelChange && (
                       <div className="space-y-0.5">
-                        <Label className="text-[10px] text-muted-foreground">Image</Label>
+                        <Label className="text-[10px] text-muted-foreground">I2I Model</Label>
                         {imageModelsLoading ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
                         ) : (

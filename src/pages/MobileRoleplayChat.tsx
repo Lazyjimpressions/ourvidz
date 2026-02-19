@@ -2671,15 +2671,6 @@ const MobileRoleplayChat: React.FC = () => {
             settings.modelProvider = value;
             localStorage.setItem('roleplay-settings', JSON.stringify(settings));
           }}
-          selectedImageModel={selectedImageModel}
-          onSelectedImageModelChange={(value) => {
-            setSelectedImageModel(value);
-            // Auto-save to localStorage
-            const savedSettings = localStorage.getItem('roleplay-settings');
-            const settings = savedSettings ? JSON.parse(savedSettings) : {};
-            settings.selectedImageModel = value;
-            localStorage.setItem('roleplay-settings', JSON.stringify(settings));
-          }}
           selectedI2IModel={selectedI2IModel}
           onSelectedI2IModelChange={(value) => {
             setSelectedI2IModel(value);
@@ -2698,7 +2689,6 @@ const MobileRoleplayChat: React.FC = () => {
             localStorage.setItem('roleplay-settings', JSON.stringify(settings));
           }}
           chatModels={roleplayModelOptions}
-          imageModels={imageModelOptions}
           i2iModels={i2iModelOptions}
           chatWorkerHealthy={chatWorkerHealthy}
           sdxlWorkerHealthy={false}
