@@ -1359,14 +1359,14 @@ serve(async (req) => {
         .update({
           status: 'completed',
           completed_at: new Date().toISOString(),
-          result_url: storagePath, // Use storage path for consistency
           metadata: {
             ...jobData.metadata,
             result_type: resultType,
             fal_response: falResult,
             input_used: modelInput,
-            original_fal_url: resultUrl, // Keep original for reference
-            thumbnail_path: thumbnailPath // Store thumbnail path in job metadata
+            original_fal_url: resultUrl,
+            storage_path: storagePath,
+            thumbnail_path: thumbnailPath
           }
         })
         .eq('id', jobData.id);
