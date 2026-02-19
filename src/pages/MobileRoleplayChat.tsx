@@ -1386,8 +1386,38 @@ const MobileRoleplayChat: React.FC = () => {
     
     activeChannelsRef.current.add(channel);
     
+    // Poll every 5 seconds as fallback (in case Realtime misses the event)
+    const pollInterval = setInterval(async () => {
+      const { data: scenes } = await supabase
+        .from('character_scenes')
+        .select('id, job_id')
+        .eq('conversation_id', convId)
+        .not('job_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
+        
+      if (scenes?.[0]?.job_id) {
+        console.log('🔄 Polling fallback found scene with job_id:', scenes[0].job_id);
+        clearInterval(pollInterval);
+        messageSceneIdsRef.current.set(messageId, scenes[0].id);
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === messageId) {
+            return {
+              ...msg,
+              metadata: { ...msg.metadata, scene_generated: true, job_id: scenes[0].job_id, scene_id: scenes[0].id }
+            };
+          }
+          return msg;
+        }));
+        subscribeToJobCompletion(scenes[0].job_id, messageId);
+        supabase.removeChannel(channel);
+        activeChannelsRef.current.delete(channel);
+      }
+    }, 5000);
+
     // Cleanup after 3 minutes
     setTimeout(() => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
       activeChannelsRef.current.delete(channel);
     }, 180000);
