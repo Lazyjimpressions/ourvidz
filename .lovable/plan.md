@@ -1,41 +1,45 @@
 
+# Fix Image Compare: Auto-Sync Reference Images + Fix Freeze Bug
 
-# Fix: iOS Safari Image Zoom on Studio Cards
+## Overview
 
-## Root Cause (Confirmed)
+Keep the per-panel reference image slots as they are today, but auto-populate Panel B's reference images from Panel A whenever Panel A's images change. Users can then modify Panel B's images independently if they want to test a different image on the same model.
 
-The `AssetTile` component is identical everywhere. The difference is **how URLs are delivered**:
+Also fix the page-freeze bug in `ImagePickerDialog`.
 
-- **Workspace/Library**: `useSignedAssets()` batch-signs URLs before rendering. Cards get a signed `thumbUrl` on first mount -- single render pass.
-- **Studio portraits**: Each `SignedPortraitTile` calls `useSignedUrl()`, which initializes with `signedUrl = ''`, then asynchronously resolves the signed URL -- **two render passes**.
+## Changes
 
-On iOS Safari, when the `img` tag re-renders inside an `aspect-ratio` container using `w-full h-full`, the browser miscalculates `h-full` (100% of parent height) during the re-render. It uses the image's intrinsic pixel height (1024px) instead of the container's computed height (~240px). Combined with `object-cover`, this produces the extreme zoom.
+### File 1: `src/components/storyboard/ImagePickerDialog.tsx` -- Fix Freeze
 
-Workspace/Library avoids this because there is no re-render -- the signed URL is already available on the first paint.
+The `useEffect` on lines 66-118 creates an infinite loop because `filteredAssets` gets a new array reference every render and `signedUrls`/`loadingUrls` (which are updated inside the effect) are also dependencies.
 
-## Fix
+**Fix:**
+- Memoize `filteredAssets` with `useMemo`
+- Track signed/loading state in a `useRef` instead of depending on `signedUrls` and `loadingUrls` state in the effect
+- Keep `signedUrls` as state for rendering, but remove it from the effect dependency array
+- Use a stable key (comma-joined asset IDs + `isOpen`) as the effect dependency instead of object references
 
-One line change in `AssetTile.tsx` -- add `absolute inset-0` to the `img` tag:
+### File 2: `src/components/playground/ImageCompareView.tsx` -- Auto-Sync Ref Images
 
-**File:** `src/components/shared/AssetTile.tsx`, line 79
+**Add a `useEffect`** that watches `panelA.referenceImages`. When Panel A's reference images change and Panel B currently has no images (or still matches the previous sync), auto-populate Panel B with Panel A's images.
 
-**Before:**
-```tsx
-className="w-full h-full object-cover"
-```
+Logic:
+- When Panel A's `referenceImages` array changes and Panel B's model needs references (`panelNeedsRef`), copy Panel A's images into Panel B (assigning new IDs so they are independent copies)
+- Only auto-sync if Panel B's images are empty or were previously auto-synced (track with a ref flag `wasBAutoSynced`)
+- If the user manually changes Panel B's images (adds/removes), set `wasBAutoSynced = false` so future Panel A changes no longer overwrite
+- When Panel B's model changes to one that needs refs and Panel B has no images, re-sync from Panel A
 
-**After:**
-```tsx
-className="absolute inset-0 w-full h-full object-cover"
-```
-
-The parent `div` already has `relative` in its className. With `absolute inset-0`, the image dimensions are derived from the container's actual rendered bounds (top=0, right=0, bottom=0, left=0), completely bypassing the `h-full` resolution bug. This is the standard pattern used by Next.js Image, Tailwind UI, and most responsive image frameworks.
-
-This fixes all consumers (Studio, Workspace, Library, Character Hub) in one change, and is safe because `{children}` overlays already use absolute positioning.
+Implementation detail:
+- Add `const wasBAutoSynced = useRef(true)` 
+- Add `useEffect` watching `panelA.referenceImages`:
+  - If `panelB` needs ref and (`panelB.referenceImages.length === 0` or `wasBAutoSynced.current`):
+    - Copy Panel A images with new UUIDs into Panel B
+    - Set `wasBAutoSynced.current = true`
+- Wrap Panel B's `onChange` for `ReferenceImageSlots` to set `wasBAutoSynced.current = false` when the user manually edits
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/shared/AssetTile.tsx` | Add `absolute inset-0` to img className (line 79) |
-
+| `src/components/storyboard/ImagePickerDialog.tsx` | Fix infinite re-render loop by memoizing filteredAssets and using ref-based sign tracking |
+| `src/components/playground/ImageCompareView.tsx` | Add useEffect to auto-sync Panel A reference images to Panel B; track manual edits with a ref |
