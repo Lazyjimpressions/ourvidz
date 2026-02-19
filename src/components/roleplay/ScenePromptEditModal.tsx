@@ -312,7 +312,7 @@ export const ScenePromptEditModal: React.FC<ScenePromptEditModalProps> = ({
                 value={editedPrompt}
                 onChange={(e) => setEditedPrompt(e.target.value)}
                 placeholder="Describe the scene you want to generate..."
-                className="min-h-[200px] text-sm font-mono"
+                className="min-h-[300px] text-sm font-mono"
               />
               <p className="text-xs text-muted-foreground mt-1">
                 {editedPrompt.length} characters

@@ -2293,6 +2293,38 @@ function sanitizePromptForFalAI(prompt: string): string {
   return sanitized;
 }
 
+/**
+ * Strips character identity from scene prompt so Figure 1 is setting-only.
+ * Figure 2 handles character description — duplicating it in Figure 1 causes
+ * the image model to render two copies of the same person.
+ */
+function stripCharacterFromScenePrompt(prompt: string, characterName: string): string {
+  let cleaned = prompt;
+  // Remove "A scene showing <name> at..." -> "At..."
+  const namePattern = new RegExp(
+    `A scene showing\\s+${characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(at|in|on|near|by)`,
+    'gi'
+  );
+  cleaned = cleaned.replace(namePattern, '$1');
+  // Replace remaining character name mentions with generic reference
+  const nameGlobal = new RegExp(characterName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  cleaned = cleaned.replace(nameGlobal, 'the character');
+  // Remove "Recent context: ..." block (dialogue belongs in ACTION, not SETTING)
+  cleaned = cleaned.replace(/Recent context:.*$/s, '').trim();
+  // Clean leading punctuation/whitespace
+  cleaned = cleaned.replace(/^[,.\s]+/, '').trim();
+  // Capitalize first letter
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  if (!cleaned || cleaned.length < 10) {
+    // If stripping removed too much, extract a minimal setting description
+    const settingMatch = prompt.match(/at\s+(\w[\w\s]+?)(?:[,.]|\s+the\s)/i);
+    return settingMatch ? settingMatch[1].trim() : 'the current scene';
+  }
+  return cleaned;
+}
+
 
 // Build comprehensive character visual description for scene generation
 function buildCharacterVisualDescription(character: any): string {
@@ -2829,7 +2861,11 @@ const sceneContext = analyzeSceneContent(response);
           : 'intimate setting';
 
         if (!extractedScene) {
-          scenePrompt = `A scene showing ${sceneCharacter.name} at ${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-5).join(' | ')}`;
+          scenePrompt = `${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-2).join(' | ')}`;
+          // Cap fallback prompt length to avoid verbose dialogue in image prompts
+          if (scenePrompt.length > 500) {
+            scenePrompt = scenePrompt.substring(0, 497) + '...';
+          }
         } else {
           scenePrompt = `${extractedScene}. Location: ${fallbackLocation}.`;
         }
@@ -3088,23 +3124,25 @@ CHARACTER 2 (Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 ACTION: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}`;
       console.log('🎭 Both characters I2I: Figure notation');
     } else if (sceneStyle === 'pov') {
+      const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
       enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2, from a first-person POV.
 
-SCENE (Figure 1): ${scenePrompt}
+SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}, looking at viewer
 
 ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
-      console.log('🎬 POV I2I: Figure notation');
+      console.log('🎬 POV I2I: Figure notation (setting stripped of character)');
     } else {
+      const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
       enhancedScenePrompt = `In the setting from Figure 1, show the character from Figure 2.
 
-SCENE (Figure 1): ${scenePrompt}
+SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}
 
 ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
-      console.log('🎬 Character-only I2I: Figure notation');
+      console.log('🎬 Character-only I2I: Figure notation (setting stripped of character)');
     }
 
     console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
