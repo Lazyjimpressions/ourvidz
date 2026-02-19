@@ -2653,6 +2653,31 @@ async function generateScene(
     const isPromptOverride = !!scenePromptOverride;
     const hasCurrentSceneImage = !!currentSceneImageUrl;
 
+    // ✅ ENHANCED: Load character data with comprehensive visual information
+    // Moved BEFORE reference image resolution so sceneCharacter is available for fallback
+    const { data: sceneCharacter, error: charError } = await supabase
+      .from('characters')
+      .select(`
+        seed_locked, 
+        reference_image_url, 
+        consistency_method, 
+        name,
+        description,
+        appearance_tags,
+        image_url,
+        preview_image_url,
+        base_prompt,
+        traits,
+        persona
+      `)
+      .eq('id', characterId)
+      .single();
+
+    if (charError || !sceneCharacter) {
+      console.error('🎬❌ Character not found for scene generation:', characterId);
+      return { success: false };
+    }
+
     // ✅ ALWAYS-I2I: Roleplay NEVER uses T2I. There is always a scene image,
     // character image, and user image available. Resolve scene environment
     // using priority chain: modification > continuation > template > character avatar.
@@ -2678,83 +2703,11 @@ async function generateScene(
       console.log('🎬 First scene from template: I2I from template preview image');
     } else {
       // Absolute fallback: use character reference/avatar as scene base
-      effectiveReferenceImageUrl = character.reference_image_url || character.image_url || undefined;
+      effectiveReferenceImageUrl = sceneCharacter?.reference_image_url || sceneCharacter?.image_url || undefined;
       console.log('🎬 Fallback: I2I from character reference/avatar', {
-        has_reference: !!character.reference_image_url,
-        has_avatar: !!character.image_url
+        has_reference: !!sceneCharacter?.reference_image_url,
+        has_avatar: !!sceneCharacter?.image_url
       });
-    }
-
-    // ✅ CRITICAL DEBUG LOGGING: Track scene continuity for I2I
-    console.log('📸 SCENE_CONTINUITY_DEBUG:', {
-      // Request info (what frontend sent)
-      requestedPreviousSceneId: previousSceneId || null,
-      requestedPreviousSceneImageUrl: previousSceneImageUrl ? previousSceneImageUrl.substring(0, 80) + '...' : null,
-      // Resolved values (after server-side fallback)
-      resolvedPreviousSceneId: resolvedPreviousSceneId || null,
-      resolvedPreviousSceneImageUrl: resolvedPreviousSceneImageUrl ? resolvedPreviousSceneImageUrl.substring(0, 80) + '...' : null,
-      usedServerFallback: resolvedPreviousSceneId !== previousSceneId,
-      templatePreviewImageUrl: templatePreviewImageUrl ? templatePreviewImageUrl.substring(0, 80) + '...' : null,
-      sceneContinuityEnabled,
-      // Verification results
-      isFirstScene,
-      verifiedPreviousSceneImageUrl: verifiedPreviousSceneImageUrl ? verifiedPreviousSceneImageUrl.substring(0, 80) + '...' : null,
-      // Mode decisions
-      useI2IIteration, // always true in always-I2I architecture
-      generationMode,
-      useI2IIteration,
-      // Effective values for generation
-      effectiveReferenceImageUrl: effectiveReferenceImageUrl ? effectiveReferenceImageUrl.substring(0, 80) + '...' : null,
-      // Additional context
-      isPromptOverride,
-      hasCurrentSceneImage,
-      characterId,
-      conversationId: conversationId || null
-    });
-
-    console.log('🎬 Starting scene generation:', {
-      characterId,
-      responseLength: response.length,
-      consistencyMethod,
-      selectedImageModel,
-      conversationHistoryLength: conversationHistory.length,
-      sceneStyle,
-      hasUserCharacter: !!userCharacter,
-      // Scene continuity info
-      sceneContinuityEnabled,
-      isFirstScene,
-      useI2IIteration,
-      generationMode,
-      previousSceneId: previousSceneId || null,
-      hasPreviousSceneImage: !!previousSceneImageUrl,
-      hasVerifiedPreviousSceneImage: !!verifiedPreviousSceneImageUrl,
-      // Regeneration/modification detection
-      isPromptOverride,
-      hasCurrentSceneImage
-    });
-    
-    // ✅ ENHANCED: Load character data with comprehensive visual information
-    const { data: sceneCharacter, error: charError } = await supabase
-      .from('characters')
-      .select(`
-        seed_locked, 
-        reference_image_url, 
-        consistency_method, 
-        name,
-        description,
-        appearance_tags,
-        image_url,
-        preview_image_url,
-        base_prompt,
-        traits,
-        persona
-      `)
-      .eq('id', characterId)
-      .single();
-
-    if (charError || !sceneCharacter) {
-      console.error('🎬❌ Character not found for scene generation:', characterId);
-      return { success: false };
     }
 
     // ✅ Extract consistency settings from UI with defaults
