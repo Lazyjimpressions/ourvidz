@@ -153,12 +153,14 @@ export const ReferenceImageSlots: React.FC<ReferenceImageSlotsProps> = ({
         onChange={handleFileUpload}
       />
 
-      <ImagePickerDialog
-        isOpen={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={handlePickerSelect}
-        title={`Select from ${pendingSource}`}
-      />
+      {pickerOpen && (
+        <ImagePickerDialog
+          isOpen={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onSelect={handlePickerSelect}
+          title={`Select from ${pendingSource}`}
+        />
+      )}
     </div>
   );
 };
