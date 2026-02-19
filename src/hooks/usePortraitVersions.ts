@@ -109,15 +109,30 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     }
   }, [characterId, portraits, toast]);
 
-  // Delete a portrait
+  // Delete a portrait and its corresponding library entry
   const deletePortrait = useCallback(async (portraitId: string) => {
     try {
+      // Find the portrait first so we can match it in user_library
+      const portrait = portraits.find(p => p.id === portraitId);
+      
       const { error: deleteError } = await supabase
         .from('character_portraits')
         .delete()
         .eq('id', portraitId);
       
       if (deleteError) throw deleteError;
+      
+      // Also delete from user_library if the image_url matches a storage_path
+      if (portrait?.image_url) {
+        const { error: libError } = await supabase
+          .from('user_library')
+          .delete()
+          .eq('storage_path', portrait.image_url);
+        
+        if (libError) {
+          console.warn('⚠️ Could not delete library entry:', libError);
+        }
+      }
       
       setPortraits(prev => prev.filter(p => p.id !== portraitId));
       
@@ -133,7 +148,7 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
         variant: "destructive"
       });
     }
-  }, [toast]);
+  }, [portraits, toast]);
 
   // Add a new portrait
   const addPortrait = useCallback(async (portrait: Omit<CharacterPortrait, 'id' | 'created_at' | 'updated_at'>) => {
