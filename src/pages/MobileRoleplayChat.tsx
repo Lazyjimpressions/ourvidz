@@ -1755,18 +1755,28 @@ const MobileRoleplayChat: React.FC = () => {
           title: 'Scene requested',
           description: "I'll post it here when it's ready."
         });
-      } else {
-        // ✅ ENHANCED: Provide detailed error with response structure
-        console.error('❌ No job ID found. Full response:', JSON.stringify({ data, error }, null, 2));
-        console.error('❌ Response structure analysis:', {
-          hasData: !!data,
-          dataKeys: data ? Object.keys(data) : [],
-          hasSceneGenerated: data?.scene_generated,
-          hasError: !!error,
-          errorMessage: error?.message || error
+      } else if (data?.scene_generating_async && conversationId) {
+        // Scene is generating asynchronously - subscribe to realtime updates
+        console.log('🎬 Scene generating async, subscribing to conversation scenes');
+        const placeholderMessage: Message = {
+          id: Date.now().toString(),
+          content: 'Generating scene...',
+          sender: 'character',
+          timestamp: new Date().toISOString(),
+          metadata: {
+            scene_generated: true,
+            consistency_method: consistencySettings.method
+          }
+        };
+        setMessages(prev => [...prev, placeholderMessage]);
+        subscribeToConversationScenes(conversationId, placeholderMessage.id);
+        toast({
+          title: 'Scene requested',
+          description: "Generating in background..."
         });
-        
-        // Don't throw - show user-friendly error message instead
+      } else {
+        // Genuine error: no job ID and not async
+        console.error('❌ No job ID found. Full response:', JSON.stringify({ data, error }, null, 2));
         setSceneJobStatus('failed');
         const errorMessage: Message = {
           id: Date.now().toString(),
@@ -1780,13 +1790,12 @@ const MobileRoleplayChat: React.FC = () => {
           }
         };
         setMessages(prev => [...prev, errorMessage]);
-        
         toast({
           title: 'Scene generation failed',
-          description: 'The chat message was sent, but scene generation could not be started. You can try generating a scene again.',
+          description: 'The chat message was sent, but scene generation could not be started.',
           variant: 'destructive'
         });
-        return; // Exit early instead of throwing
+        return;
       }
     } catch (error) {
       console.error('Error generating scene:', error);
@@ -1910,6 +1919,19 @@ const MobileRoleplayChat: React.FC = () => {
         toast({
           title: 'Generating scene...',
           description: 'Your scene image is being created.'
+        });
+      } else if (data?.scene_generating_async && conversationId) {
+        // Scene generating asynchronously - subscribe to realtime updates
+        console.log('🎬 Scene for message generating async, subscribing to conversation scenes');
+        setMessages(prev => prev.map(msg =>
+          msg.id === messageId
+            ? { ...msg, metadata: { ...msg.metadata, scene_generated: true } }
+            : msg
+        ));
+        subscribeToConversationScenes(conversationId, messageId);
+        toast({
+          title: 'Generating scene...',
+          description: 'Image is being created in the background.'
         });
       } else {
         throw new Error('No job ID returned');
