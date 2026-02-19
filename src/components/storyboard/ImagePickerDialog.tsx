@@ -5,7 +5,7 @@
  * Used in storyboard for selecting reference images for video clip generation.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -39,6 +39,10 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
 
+  // Refs to track signing state without triggering re-renders
+  const signedRef = useRef<Set<string>>(new Set());
+  const loadingRef = useRef<Set<string>>(new Set());
+
   const { data: paginatedData, isLoading } = useLibraryAssets();
 
   // Flatten paginated data and filter to only show images (not videos)
@@ -47,38 +51,44 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     return paginatedData.pages.flatMap(page => page.assets);
   }, [paginatedData]);
 
-  const imageAssets = libraryAssets.filter(
-    (asset) => asset.type === 'image' && asset.status === 'completed'
+  const imageAssets = useMemo(() =>
+    libraryAssets.filter(
+      (asset) => asset.type === 'image' && asset.status === 'completed'
+    ), [libraryAssets]);
+
+  // Filter by search query (memoized to avoid new refs each render)
+  const filteredAssets = useMemo(() =>
+    imageAssets.filter((asset) => {
+      if (!searchQuery.trim()) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        asset.prompt?.toLowerCase().includes(query) ||
+        asset.customTitle?.toLowerCase().includes(query) ||
+        asset.tags?.some((tag) => tag.toLowerCase().includes(query))
+      );
+    }), [imageAssets, searchQuery]);
+
+  // Stable key for the signing effect
+  const filteredAssetIds = useMemo(
+    () => filteredAssets.map(a => a.id).join(','),
+    [filteredAssets]
   );
 
-  // Filter by search query
-  const filteredAssets = imageAssets.filter((asset) => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      asset.prompt?.toLowerCase().includes(query) ||
-      asset.customTitle?.toLowerCase().includes(query) ||
-      asset.tags?.some((tag) => tag.toLowerCase().includes(query))
-    );
-  });
-
-  // Sign URLs for visible assets
+  // Sign URLs for visible assets — uses refs to avoid dependency loops
   useEffect(() => {
-    const signUrls = async () => {
-      const assetsToSign = filteredAssets.filter(
-        (asset) => asset.storagePath && !signedUrls.has(asset.id) && !loadingUrls.has(asset.id)
-      );
+    if (!isOpen) return;
 
-      if (assetsToSign.length === 0) return;
+    const assetsToSign = filteredAssets.filter(
+      (asset) => asset.storagePath && !signedRef.current.has(asset.id) && !loadingRef.current.has(asset.id)
+    );
 
-      // Mark as loading
-      setLoadingUrls((prev) => {
-        const next = new Set(prev);
-        assetsToSign.forEach((asset) => next.add(asset.id));
-        return next;
-      });
+    if (assetsToSign.length === 0) return;
 
-      // Sign URLs in parallel (limit to 6 at a time)
+    // Mark as loading in ref + state
+    assetsToSign.forEach((asset) => loadingRef.current.add(asset.id));
+    setLoadingUrls(new Set(loadingRef.current));
+
+    const signBatch = async () => {
       const batchSize = 6;
       for (let i = 0; i < assetsToSign.length; i += batchSize) {
         const batch = assetsToSign.slice(i, i + batchSize);
@@ -94,6 +104,14 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           })
         );
 
+        // Update ref + state for signed URLs
+        const newSigned = new Map(signedRef.current.size === 0 ? [] : undefined);
+        results.forEach((result) => {
+          if (result.status === 'fulfilled' && result.value.url) {
+            signedRef.current.add(result.value.id);
+          }
+        });
+
         setSignedUrls((prev) => {
           const next = new Map(prev);
           results.forEach((result) => {
@@ -104,24 +122,26 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           return next;
         });
 
-        setLoadingUrls((prev) => {
-          const next = new Set(prev);
-          batch.forEach((asset) => next.delete(asset.id));
-          return next;
-        });
+        // Update ref + state for loading
+        batch.forEach((asset) => loadingRef.current.delete(asset.id));
+        setLoadingUrls(new Set(loadingRef.current));
       }
     };
 
-    if (isOpen) {
-      signUrls();
-    }
-  }, [filteredAssets, isOpen, signedUrls, loadingUrls]);
+    signBatch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredAssetIds, isOpen]);
 
   // Reset state when dialog closes
   useEffect(() => {
     if (!isOpen) {
       setSelectedAsset(null);
       setSearchQuery('');
+      // Clear signing caches so fresh signs happen on next open
+      signedRef.current.clear();
+      loadingRef.current.clear();
+      setSignedUrls(new Map());
+      setLoadingUrls(new Set());
     }
   }, [isOpen]);
 
