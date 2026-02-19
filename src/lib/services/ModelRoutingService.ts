@@ -33,79 +33,14 @@ export interface ModelRoute {
 }
 
 /**
- * Default OpenRouter chat models (in priority order)
- */
-export const DEFAULT_CHAT_MODELS = [
-  {
-    modelKey: 'cognitivecomputations/dolphin3.0-r1-mistral-24b:free',
-    displayName: 'Dolphin 3.0 R1 Mistral 24B (Free)',
-    tier: 'free',
-    description: 'Advanced uncensored reasoning model with strong roleplay capabilities'
-  },
-  {
-    modelKey: 'cognitivecomputations/dolphin3.0-mistral-24b:free',
-    displayName: 'Dolphin 3.0 Mistral 24B (Free)',
-    tier: 'free',
-    description: 'General-purpose uncensored instruct model'
-  },
-  {
-    modelKey: 'gryphe/mythomax-l2-13b',
-    displayName: 'MythoMax 13B',
-    tier: 'free',
-    description: 'Creative roleplay model with excellent storytelling'
-  },
-  {
-    modelKey: 'nothingiisreal/mn-celeste-12b',
-    displayName: 'Mistral Nemo 12B Celeste (Free)',
-    tier: 'free',
-    description: 'Lightweight creative writing model'
-  },
-  {
-    modelKey: 'neversleep/llama-3-lumimaid-70b',
-    displayName: 'Llama 3 Lumimaid 70B (Premium)',
-    tier: 'paid',
-    description: 'NeverSleep roleplay finetune'
-  }
-];
-
-/**
  * Centralized service for model routing decisions
  * Handles fallback logic, health checks, and default model selection
+ *
+ * NOTE: There are NO hardcoded model keys. All defaults come from the
+ * `api_models` table via hooks (client) or direct DB query (edge functions).
+ * If `model_provider` is empty, the edge function resolves the default server-side.
  */
 export class ModelRoutingService {
-  /**
-   * Get the default chat model (always returns a non-local OpenRouter model)
-   * This ensures chat always works even when local workers are down
-   */
-  static getDefaultChatModelKey(): string {
-    return DEFAULT_CHAT_MODELS[0].modelKey;
-  }
-
-  /**
-   * Get the default chat model with full info
-   */
-  static getDefaultChatModel(): UnifiedModel {
-    const defaultModel = DEFAULT_CHAT_MODELS[0];
-    return {
-      id: defaultModel.modelKey,
-      modelKey: defaultModel.modelKey,
-      displayName: defaultModel.displayName,
-      provider: 'openrouter',
-      providerDisplayName: 'OpenRouter',
-      modality: 'roleplay',
-      isLocal: false,
-      isAvailable: true,
-      isDefault: true,
-      priority: 0,
-      capabilities: {
-        speed: 'medium',
-        cost: 'free',
-        nsfw: true,
-        quality: 'high'
-      }
-    };
-  }
-
   /**
    * Get the default image model from database
    * Returns first active Replicate model, or null if none configured
@@ -168,13 +103,14 @@ export class ModelRoutingService {
     localHealthy: boolean,
     availableModels: UnifiedModel[]
   ): ModelRoute {
-    // If no model selected, use default
+    // If no model selected, return null primary — edge function will resolve default
     if (!selectedModelKey) {
+      const fallbackModel = availableModels.find(m => !m.isLocal) || null;
       return {
-        primary: this.getDefaultChatModel(),
+        primary: fallbackModel,
         fallback: null,
         useFallback: false,
-        reason: 'No model selected, using default'
+        reason: 'No model selected, edge function will resolve DB default'
       };
     }
 
@@ -184,7 +120,7 @@ export class ModelRoutingService {
     if (isLocalModel) {
       if (localHealthy) {
         // Local model available, but still provide fallback
-        const fallbackModel = availableModels.find(m => !m.isLocal) || this.getDefaultChatModel();
+        const fallbackModel = availableModels.find(m => !m.isLocal) || null;
         return {
           primary: {
             id: 'qwen-local',
@@ -204,7 +140,7 @@ export class ModelRoutingService {
         };
       } else {
         // Local model NOT available, use fallback
-        const fallbackModel = availableModels.find(m => !m.isLocal) || this.getDefaultChatModel();
+        const fallbackModel = availableModels.find(m => !m.isLocal) || null;
         return {
           primary: null,
           fallback: fallbackModel,
@@ -219,17 +155,18 @@ export class ModelRoutingService {
     if (selectedModel) {
       return {
         primary: selectedModel,
-        fallback: this.getDefaultChatModel(),
+        fallback: availableModels.find(m => !m.isLocal && m.modelKey !== selectedModelKey) || null,
         useFallback: false
       };
     }
 
-    // Selected model not found, use default
+    // Selected model not found — edge function will resolve default
+    const fallbackModel = availableModels.find(m => !m.isLocal) || null;
     return {
-      primary: this.getDefaultChatModel(),
+      primary: fallbackModel,
       fallback: null,
       useFallback: false,
-      reason: `Model '${selectedModelKey}' not found, using default`
+      reason: `Model '${selectedModelKey}' not found, edge function will resolve DB default`
     };
   }
 

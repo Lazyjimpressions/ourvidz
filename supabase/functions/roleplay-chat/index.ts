@@ -318,7 +318,7 @@ serve(async (req) => {
       message,
       conversation_id,
       character_id,
-      model_provider,
+      model_provider: model_provider_raw,
       model_variant,
       memory_tier,
       content_tier,
@@ -344,6 +344,15 @@ serve(async (req) => {
       scene_prompt_override,
       current_scene_image_url
     } = requestBody!;
+
+    // Resolve model_provider: if empty, look up DB default
+    let model_provider = model_provider_raw;
+    if (!model_provider) {
+      model_provider = await getDefaultOpenRouterModel(supabase);
+      if (model_provider) {
+        console.log('📌 Resolved empty model_provider to DB default:', model_provider);
+      }
+    }
 
     // Detect regeneration/modification mode
     const isSceneRegeneration = !!scene_prompt_override;
@@ -884,13 +893,14 @@ async function checkLocalChatWorkerHealth(supabase: any): Promise<boolean> {
 }
 
 // Get default OpenRouter model from database (preferred) with safe fallback
-async function getDefaultOpenRouterModel(supabase: any): Promise<string> {
+async function getDefaultOpenRouterModel(supabase: any): Promise<string | null> {
   try {
-    // Prefer an explicit default OpenRouter model
+    // Prefer an explicit default OpenRouter model for the 'roleplay' task
     const { data: defaultRow } = await supabase
       .from('api_models')
       .select('model_key, api_providers!inner(name)')
-      .eq('modality', 'roleplay')
+      .eq('modality', 'chat')
+      .eq('task', 'roleplay')
       .eq('is_active', true)
       .contains('default_for_tasks', ['roleplay'])
       .eq('api_providers.name', 'openrouter')
@@ -898,11 +908,12 @@ async function getDefaultOpenRouterModel(supabase: any): Promise<string> {
 
     if (defaultRow?.model_key) return defaultRow.model_key;
 
-    // Otherwise pick the highest-priority active OpenRouter roleplay model
+    // Otherwise pick the highest-priority active OpenRouter chat/roleplay model
     const { data: fallbackRows } = await supabase
       .from('api_models')
       .select('model_key, api_providers!inner(name)')
-      .eq('modality', 'roleplay')
+      .eq('modality', 'chat')
+      .eq('task', 'roleplay')
       .eq('is_active', true)
       .eq('api_providers.name', 'openrouter')
       .order('priority', { ascending: true })
@@ -910,11 +921,11 @@ async function getDefaultOpenRouterModel(supabase: any): Promise<string> {
 
     if (fallbackRows?.[0]?.model_key) return fallbackRows[0].model_key;
   } catch (error) {
-    console.log('⚠️ Could not load default OpenRouter model from database, using hardcoded fallback');
+    console.log('⚠️ Could not load default OpenRouter model from database');
   }
 
-  // Hardcoded fallback (must be a real, known-good OpenRouter model key)
-  return 'cognitivecomputations/dolphin3.0-r1-mistral-24b:free';
+  // No hardcoded fallback — if DB has no models, return null
+  return null;
 }
 
 // Get model configuration from api_models table
