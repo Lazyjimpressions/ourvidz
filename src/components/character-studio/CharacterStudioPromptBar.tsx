@@ -85,6 +85,20 @@ export function CharacterStudioPromptBar({
 
   const selectedModelData = imageModelOptions.find((m) => m.value === selectedImageModel);
   const maxImages = selectedModelData?.maxImages || 1;
+  
+  // Debug: log batch capability
+  React.useEffect(() => {
+    if (selectedModelData) {
+      console.log('🔢 Batch capability:', {
+        model: selectedModelData.label,
+        maxImages: selectedModelData.maxImages,
+        resolvedMax: maxImages,
+        selectedId: selectedImageModel,
+        optionCount: imageModelOptions.length,
+        allMaxImages: imageModelOptions.map(m => ({ label: m.label, maxImages: m.maxImages }))
+      });
+    }
+  }, [selectedModelData, maxImages, selectedImageModel, imageModelOptions]);
 
   // Context-aware placeholder: guide user toward directorial prompts when ref is locked
   const dynamicPlaceholder = placeholder || (
