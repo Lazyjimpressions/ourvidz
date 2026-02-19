@@ -1,40 +1,82 @@
 
 
-# Fix: Remaining `character` Reference in `generateScene` Causes Crash
+# Fix: Scene Images Not Displaying -- Realtime Publication Missing + Client Robustness
 
 ## Root Cause
 
-Inside `generateScene()`, at line 2681, the code references `character.reference_image_url` and `character.image_url`. But `character` does not exist in this function's scope -- it only exists in the main request handler. The local equivalent, `sceneCharacter`, is not declared until line 2737, which is 56 lines later. This causes a `ReferenceError: character is not defined` crash every time the fallback branch is hit (which is every first scene without a template).
+**`character_scenes` table is NOT in the Supabase Realtime publication.**
 
-## Fix
+The delivery chain for scene images works as follows:
 
-Move the `sceneCharacter` database fetch (currently at lines 2737-2758) to **before** line 2660, so it is available when the reference image fallback logic runs at line 2681. Then update lines 2681-2685 to use `sceneCharacter` instead of `character`.
+1. Edge function returns dialogue immediately with `scene_generating_async: true` (no job_id yet)
+2. Client subscribes to `character_scenes` table via Supabase Realtime to detect when a scene record gets a `job_id`
+3. Edge function's background task generates the scene, creates a `character_scenes` record, calls `fal-image`, gets a `job_id`, and updates the scene record
+4. Client should receive the UPDATE notification with `job_id`
+5. Client then subscribes to `workspace_assets` for that `job_id` to get the final image
 
-### Specific changes in `supabase/functions/roleplay-chat/index.ts`:
+**Step 4 never fires** because `character_scenes` is not in the `supabase_realtime` publication. Only `jobs` and `workspace_assets` are currently published. The client subscribes but never receives any events, so it stays stuck on "generating scene" forever.
 
-1. **Move the character fetch block** (lines 2737-2758) to right after line 2654 (after `hasCurrentSceneImage`), before the I2I mode decision logic starts at line 2656.
+The backend is working perfectly -- logs confirm scenes complete successfully with job_ids. The images exist in storage. The client just never learns about them.
 
-2. **Update lines 2681-2685** to reference `sceneCharacter` instead of `character`:
-   ```
-   // Before:
-   effectiveReferenceImageUrl = character.reference_image_url || character.image_url || undefined;
-   ...has_reference: !!character.reference_image_url,
-   ...has_avatar: !!character.image_url
+## Fix Strategy
 
-   // After:
-   effectiveReferenceImageUrl = sceneCharacter?.reference_image_url || sceneCharacter?.image_url || undefined;
-   ...has_reference: !!sceneCharacter?.reference_image_url,
-   ...has_avatar: !!sceneCharacter?.image_url
-   ```
+Two-part fix: enable Realtime for the table AND add a polling fallback for robustness.
 
-3. **Remove the duplicate fetch** at the original location (lines 2737-2758) since it will have been moved earlier.
+### Part 1: Database Migration -- Add `character_scenes` to Realtime publication
+
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE character_scenes;
+```
+
+This is the primary fix. Once `character_scenes` is in the publication, the existing client subscription code will work as designed.
+
+### Part 2: Client-side polling fallback (robustness)
+
+Even with Realtime enabled, subscriptions can occasionally miss events (network glitches, cold starts). Add a polling fallback inside `subscribeToConversationScenes` that periodically checks for completed scenes.
+
+**File: `src/pages/MobileRoleplayChat.tsx`**
+
+In the `subscribeToConversationScenes` function (around line 1324), add a periodic poll alongside the Realtime subscription:
+
+```typescript
+// Poll every 5 seconds as fallback (in case Realtime misses the event)
+const pollInterval = setInterval(async () => {
+  const { data: scenes } = await supabase
+    .from('character_scenes')
+    .select('id, job_id')
+    .eq('conversation_id', convId)
+    .not('job_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1);
+    
+  if (scenes?.[0]?.job_id) {
+    clearInterval(pollInterval);
+    // Same logic as the Realtime handler: update message, subscribe to job completion
+    messageSceneIdsRef.current.set(messageId, scenes[0].id);
+    subscribeToJobCompletion(scenes[0].job_id, messageId);
+    supabase.removeChannel(channel);
+    activeChannelsRef.current.delete(channel);
+  }
+}, 5000);
+
+// Clear poll on channel cleanup
+setTimeout(() => {
+  clearInterval(pollInterval);
+  supabase.removeChannel(channel);
+  activeChannelsRef.current.delete(channel);
+}, 180000);
+```
+
+This ensures that even if Realtime has issues, the client will detect scene completion within 5 seconds.
 
 ## Files Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/roleplay-chat/index.ts` | Move `sceneCharacter` fetch before reference image resolution; fix `character` to `sceneCharacter` |
+| Database migration | `ALTER PUBLICATION supabase_realtime ADD TABLE character_scenes;` |
+| `src/pages/MobileRoleplayChat.tsx` | Add polling fallback to `subscribeToConversationScenes` |
 
-## Redeploy
+## No Edge Function Changes
 
-The `roleplay-chat` edge function will need to be redeployed after this change.
+The edge function is working correctly. The scenes complete successfully. This is purely a client-side delivery problem caused by missing Realtime configuration.
+
