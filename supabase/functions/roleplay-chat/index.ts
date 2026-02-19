@@ -2700,7 +2700,7 @@ async function generateScene(
       isFirstScene,
       verifiedPreviousSceneImageUrl: verifiedPreviousSceneImageUrl ? verifiedPreviousSceneImageUrl.substring(0, 80) + '...' : null,
       // Mode decisions
-      canUseI2I,
+      useI2IIteration, // always true in always-I2I architecture
       generationMode,
       useI2IIteration,
       // Effective values for generation
@@ -2734,7 +2734,7 @@ async function generateScene(
     });
     
     // ✅ ENHANCED: Load character data with comprehensive visual information
-    const { data: character, error: charError } = await supabase
+    const { data: sceneCharacter, error: charError } = await supabase
       .from('characters')
       .select(`
         seed_locked, 
@@ -2752,7 +2752,7 @@ async function generateScene(
       .eq('id', characterId)
       .single();
 
-    if (charError || !character) {
+    if (charError || !sceneCharacter) {
       console.error('🎬❌ Character not found for scene generation:', characterId);
       return { success: false };
     }
@@ -2763,7 +2763,7 @@ async function generateScene(
     // ✅ FIX: Hybrid mode also needs seed - extract for both seed_locked and hybrid methods
     const finalConsistencyMethod = consistencySettings?.method || consistencyMethod;
     const seedLocked = (finalConsistencyMethod === 'seed_locked' || finalConsistencyMethod === 'hybrid') 
-      ? (consistencySettings?.seed_value ?? character.seed_locked) 
+      ? (consistencySettings?.seed_value ?? sceneCharacter.seed_locked) 
       : null;
 
     console.log('🎬 Using consistency settings from UI:', {
@@ -2788,13 +2788,13 @@ const sceneContext = analyzeSceneContent(response);
     });
     
     // ✅ ENHANCED: Build comprehensive character visual context
-    const characterVisualDescription = buildCharacterVisualDescription(character);
+    const characterVisualDescription = buildCharacterVisualDescription(sceneCharacter);
     sceneContext.characters = [{
-      name: character.name,
+      name: sceneCharacter.name,
       visualDescription: characterVisualDescription,
       role: 'main_character',
-      appearanceTags: character.appearance_tags || [],
-      referenceImage: character.reference_image_url || character.image_url || character.preview_image_url
+      appearanceTags: sceneCharacter.appearance_tags || [],
+      referenceImage: sceneCharacter.reference_image_url || sceneCharacter.image_url || sceneCharacter.preview_image_url
     }];
 
     // ✅ CRITICAL FIX: isFirstScene is already determined earlier in the function (line 2188)
@@ -2838,7 +2838,7 @@ const sceneContext = analyzeSceneContent(response);
       console.log('⚡ EFFICIENCY: Skipped narrative LLM call, using extracted actions directly:', scenePrompt.substring(0, 150));
     } else {
       // Generate AI-powered scene narrative using OpenRouter (fallback when no actions extracted)
-      console.log('🎬 Generating scene narrative for character:', character.name);
+      console.log('🎬 Generating scene narrative for character:', sceneCharacter.name);
 
       try {
         const roleplayModel = await getDefaultOpenRouterModel(supabase);
@@ -2847,7 +2847,7 @@ const sceneContext = analyzeSceneContent(response);
         if (modelConfig && modelConfig.provider_name === 'openrouter') {
           const effectiveContentTier = contentTier || (sceneContext.isNSFW ? 'nsfw' : 'sfw');
           const narrativeResult = await generateSceneNarrativeWithOpenRouter(
-            character,
+            sceneCharacter,
             sceneContext,
             conversationHistory,
             characterVisualDescription,
@@ -2876,15 +2876,15 @@ const sceneContext = analyzeSceneContent(response);
           : 'intimate setting';
 
         if (!extractedScene) {
-          scenePrompt = `A scene showing ${character.name} at ${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-5).join(' | ')}`;
+          scenePrompt = `A scene showing ${sceneCharacter.name} at ${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-5).join(' | ')}`;
         } else {
           scenePrompt = `${extractedScene}. Location: ${fallbackLocation}.`;
         }
       }
     }
 
-    console.log('🎬 Generating scene for character:', character.name, 'with enhanced prompt');
-    console.log('🎬 Using character seed:', character.seed_locked, 'and reference image:', character.reference_image_url);
+    console.log('🎬 Generating scene for character:', sceneCharacter.name, 'with enhanced prompt');
+    console.log('🎬 Using character seed:', sceneCharacter.seed_locked, 'and reference image:', sceneCharacter.reference_image_url);
 
     // ✅ FIX: Determine effective image model early (before scene record creation)
     // Default to Replicate API models (not local SDXL) when no model specified
@@ -3099,22 +3099,22 @@ const sceneContext = analyzeSceneContent(response);
     // ✅ MULTI-REFERENCE DETECTION: Check if we can use Figure notation for both_characters
     // Multi-reference requires: both_characters style + character reference + user character reference
     const canUseMultiReference = sceneStyle === 'both_characters' &&
-                                  !!(character.reference_image_url || character.image_url) &&
+                                  !!(sceneCharacter.reference_image_url || sceneCharacter.image_url) &&
                                   !!(userCharacter?.reference_image_url || userCharacter?.image_url);
 
     if (canUseMultiReference) {
       console.log('🎭 Multi-reference eligible:', {
         scene_style: sceneStyle,
-        has_character_ref: !!character.reference_image_url,
+        has_character_ref: !!sceneCharacter.reference_image_url,
         has_user_ref: !!userCharacter?.reference_image_url,
-        character_name: character.name,
+        character_name: sceneCharacter.name,
         user_name: userCharacter?.name
       });
     }
 
     // Build character identity with fallback to characterVisualDescription when appearance_tags is empty
-    const characterAppearance = (character.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription;
-    const briefCharacterIdentity = `${character.name}, ${characterAppearance}`;
+    const characterAppearance = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription;
+    const briefCharacterIdentity = `${sceneCharacter.name}, ${characterAppearance}`;
 
     if (sceneStyle === 'both_characters' && userCharacter) {
       const userAppearance = (userCharacter.appearance_tags || []).slice(0, 5).join(', ');
@@ -3128,7 +3128,7 @@ const sceneContext = analyzeSceneContent(response);
 
 SCENE (Figure 1): ${scenePrompt}
 
-CHARACTER 1 (Figure 2): ${character.name}, ${characterAppearance}
+CHARACTER 1 (Figure 2): ${sceneCharacter.name}, ${characterAppearance}
 
 CHARACTER 2 (Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 
@@ -3268,13 +3268,13 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
           }
           
           // Add image and strength if method requires i2i
-          if (requiresI2I && character.reference_image_url) {
-            input.image = character.reference_image_url;
+          if (requiresI2I && sceneCharacter.reference_image_url) {
+            input.image = sceneCharacter.reference_image_url;
             // Map reference_strength to strength (Replicate uses strength, not denoise_strength)
             // Strength is inverse of denoise: higher reference_strength = lower strength
             input.strength = refStrength !== undefined ? refStrength : 0.7;
             console.log('🖼️ I2I method: passing reference image and strength to Replicate input:', {
-              image: character.reference_image_url.substring(0, 50) + '...',
+              image: sceneCharacter.reference_image_url.substring(0, 50) + '...',
               strength: input.strength
             });
           }
@@ -3284,12 +3284,12 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
             prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt (77 token limit)
             apiModelId: modelConfig.id,
             jobType: replicateJobType,
-            reference_image_url: character.reference_image_url, // Top level for detection
+            reference_image_url: sceneCharacter.reference_image_url, // Top level for detection
             input: Object.keys(input).length > 0 ? input : undefined, // Only include if not empty
             metadata: {
               destination: 'roleplay_scene',
               character_id: characterId,
-              character_name: character.name,
+              character_name: sceneCharacter.name,
               scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
               conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
               scene_type: 'chat_scene',
@@ -3319,7 +3319,7 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
             requiresSeed,
             requiresI2I,
             input_object: input,
-            has_reference_image: !!character.reference_image_url,
+            has_reference_image: !!sceneCharacter.reference_image_url,
             reference_strength: refStrength,
             denoise_strength: denoiseStrength,
             seed_locked: seedLocked,
@@ -3427,7 +3427,7 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
             });
           } else if (sceneContinuityEnabled && !effectiveReferenceImageUrl) {
             // ✅ First scene in conversation with continuity enabled - use character reference
-            i2iReferenceImage = character.reference_image_url || undefined;
+            i2iReferenceImage = sceneCharacter.reference_image_url || undefined;
             i2iStrength = refStrength ?? 0.7;
             
             // FIX: If character has reference image, switch to I2I model (v4.5/edit)
@@ -3447,7 +3447,7 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
             }
           } else {
             // T2I fallback mode - only when no reference available
-            i2iReferenceImage = character.reference_image_url || undefined;
+            i2iReferenceImage = sceneCharacter.reference_image_url || undefined;
             i2iStrength = refStrength ?? 0.7;
             
             // FIX: Also switch to I2I if character has reference
@@ -3480,10 +3480,10 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
           }
 
           // Figure 2: AI Character reference (ALWAYS included as anchor to prevent drift)
-          const charRef = (character.reference_image_url || character.image_url);
+          const charRef = (sceneCharacter.reference_image_url || sceneCharacter.image_url);
           if (charRef) {
             imageUrlsArray.push(charRef);
-            console.log('📸 Figure 2 (Character):', character.name);
+            console.log('📸 Figure 2 (Character):', sceneCharacter.name);
           }
 
           // Figure 3: User Character reference (only for both_characters)
@@ -3530,7 +3530,7 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
             metadata: {
               destination: 'roleplay_scene',
               character_id: characterId,
-              character_name: character.name,
+              character_name: sceneCharacter.name,
               scene_id: sceneId,
               conversation_id: conversationId || null,
               scene_type: 'chat_scene',
@@ -3665,7 +3665,7 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
 
     return {
       success: true,
-      consistency_score: character.reference_image_url ? 0.8 : 0.6, // Consistency via reference image, random seed for variety
+      consistency_score: sceneCharacter.reference_image_url ? 0.8 : 0.6, // Consistency via reference image, random seed for variety
       job_id: jobId,
       scene_id: sceneId || undefined, // ✅ FIX: Return scene_id for reference (convert null to undefined)
       // ✅ FIX: Return scene template info directly (already available in scope)
