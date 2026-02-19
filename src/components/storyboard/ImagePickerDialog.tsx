@@ -75,6 +75,8 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   );
 
   // Sign URLs for visible assets — uses refs to avoid dependency loops
+  // CRITICAL: All results are collected and flushed in ONE state update to prevent
+  // per-batch re-renders that freeze mobile Safari (40+ tiles × 14 updates = lock).
   useEffect(() => {
     if (!isOpen) return;
 
@@ -84,14 +86,18 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
 
     if (assetsToSign.length === 0) return;
 
-    // Mark as loading in ref + state
+    // Mark as loading in ref only — skip state update to avoid initial re-render
     assetsToSign.forEach((asset) => loadingRef.current.add(asset.id));
+    // Single loading state update
     setLoadingUrls(new Set(loadingRef.current));
 
     let cancelled = false;
 
-    const signBatch = async () => {
+    const signAll = async () => {
+      // Sign all assets concurrently (limited to 6 parallel requests via Promise pool)
+      const allResults: Array<{ id: string; url: string | null }> = [];
       const batchSize = 6;
+
       for (let i = 0; i < assetsToSign.length; i += batchSize) {
         if (cancelled) return;
         const batch = assetsToSign.slice(i, i + batchSize);
@@ -109,30 +115,30 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
 
         if (cancelled) return;
 
-        // Update ref + state for signed URLs
+        // Collect results — NO state update per batch
         results.forEach((result) => {
           if (result.status === 'fulfilled' && result.value.url) {
             signedRef.current.add(result.value.id);
+            allResults.push(result.value);
           }
         });
-
-        setSignedUrls((prev) => {
-          const next = new Map(prev);
-          results.forEach((result) => {
-            if (result.status === 'fulfilled' && result.value.url) {
-              next.set(result.value.id, result.value.url);
-            }
-          });
-          return next;
-        });
-
-        // Update ref + state for loading
         batch.forEach((asset) => loadingRef.current.delete(asset.id));
-        setLoadingUrls(new Set(loadingRef.current));
       }
+
+      if (cancelled) return;
+
+      // === SINGLE state flush for all batches ===
+      setSignedUrls((prev) => {
+        const next = new Map(prev);
+        allResults.forEach(({ id, url }) => {
+          if (url) next.set(id, url);
+        });
+        return next;
+      });
+      setLoadingUrls(new Set(loadingRef.current));
     };
 
-    signBatch();
+    signAll();
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
