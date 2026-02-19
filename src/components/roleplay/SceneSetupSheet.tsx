@@ -415,9 +415,9 @@ export const SceneSetupSheet: React.FC<SceneSetupSheetProps> = ({
                 </SelectTrigger>
                 <SelectContent>
                   {isLoadingUserCharacters ? (
-                    <SelectItem value="" disabled>Loading characters...</SelectItem>
+                    <SelectItem value="__loading__" disabled>Loading characters...</SelectItem>
                   ) : userPersonas.length === 0 ? (
-                    <SelectItem value="" disabled>No user profiles created yet</SelectItem>
+                    <SelectItem value="__empty__" disabled>No user profiles created yet</SelectItem>
                   ) : (
                     userPersonas.map((char) => (
                       <SelectItem key={char.id} value={char.id}>
