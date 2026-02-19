@@ -22,7 +22,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 
 interface CharacterStudioPromptBarProps {
-  onGenerate: (prompt: string, referenceImageUrl?: string, modelId?: string) => void;
+  onGenerate: (prompt: string, referenceImageUrl?: string, modelId?: string, numImages?: number) => void;
   isGenerating: boolean;
   isDisabled: boolean;
   placeholder?: string;
@@ -77,12 +77,14 @@ export function CharacterStudioPromptBar({
   const { toast } = useToast();
   const [internalPrompt, setInternalPrompt] = React.useState('');
   const [isEnhancing, setIsEnhancing] = React.useState(false);
+  const [batchCount, setBatchCount] = React.useState(1);
 
   // Use controlled value if provided, otherwise use internal state
   const prompt = value !== undefined ? value : internalPrompt;
   const setPrompt = onValueChange || setInternalPrompt;
 
   const selectedModelData = imageModelOptions.find((m) => m.value === selectedImageModel);
+  const maxImages = selectedModelData?.maxImages || 1;
 
   // Context-aware placeholder: guide user toward directorial prompts when ref is locked
   const dynamicPlaceholder = placeholder || (
@@ -95,7 +97,7 @@ export function CharacterStudioPromptBar({
     e.preventDefault();
     if (!prompt.trim() || isGenerating || isDisabled) return;
 
-    onGenerate(prompt.trim(), referenceImageUrl || undefined, selectedImageModel);
+    onGenerate(prompt.trim(), referenceImageUrl || undefined, selectedImageModel, batchCount > 1 ? batchCount : undefined);
     setPrompt('');
   };
 
@@ -260,6 +262,28 @@ export function CharacterStudioPromptBar({
 
           {/* Spacer */}
           <div className="flex-1" />
+
+          {/* Batch count selector - only when model supports multi-image */}
+          {maxImages > 1 && (
+            <div className="flex items-center gap-0.5">
+              {[1, 2, 4].filter(n => n <= maxImages).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setBatchCount(n)}
+                  disabled={isDisabled || isGenerating}
+                  className={cn(
+                    'h-7 px-1.5 rounded text-[11px] font-medium transition-colors',
+                    batchCount === n
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-accent'
+                  )}
+                >
+                  ×{n}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Generate Button - compact with inline progress */}
           <Button

@@ -328,6 +328,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     referenceImageUrl?: string;
     model?: string; // This is the api_models.id from database
     referenceStrength?: number; // 0.1–1.0, controls how much the reference image influences output
+    numImages?: number; // 1-4, batch generation count
   }) => {
     // Auto-save if new character or dirty state
     let charId = savedCharacterId;
@@ -414,7 +415,8 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
           presets: {},
           characterData: null,
           promptOverride: prompt || undefined,
-          referenceStrength: options?.referenceStrength || undefined
+          referenceStrength: options?.referenceStrength || undefined,
+          numImages: options?.numImages || undefined
         }
       });
       
