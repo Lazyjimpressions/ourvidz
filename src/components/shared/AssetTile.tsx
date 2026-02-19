@@ -76,7 +76,7 @@ export const AssetTile: React.FC<AssetTileProps> = ({
         <img
           src={src}
           alt={alt}
-          className="w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover"
           loading={loading}
           decoding="async"
         />
