@@ -2,10 +2,10 @@
  * ImagePickerDialog Component
  *
  * A dialog that allows users to browse and select images from their library.
- * Used in storyboard for selecting reference images for video clip generation.
+ * Uses the shared useSignedAssets hook for cached, deduplicated URL signing.
  */
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -15,10 +15,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, Image as ImageIcon, Library, Loader2, Check } from 'lucide-react';
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
-import { LibraryAssetService, UnifiedLibraryAsset } from '@/lib/services/LibraryAssetService';
+import { toSharedFromLibrary } from '@/lib/services/AssetMappers';
+import { useSignedAssets, SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { cn } from '@/lib/utils';
 
 interface ImagePickerDialogProps {
@@ -35,28 +35,20 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   title = 'Select Reference Image',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedAsset, setSelectedAsset] = useState<UnifiedLibraryAsset | null>(null);
-  const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
-  const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
-
-  // Refs to track signing state without triggering re-renders
-  const signedRef = useRef<Set<string>>(new Set());
-  const loadingRef = useRef<Set<string>>(new Set());
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
 
   const { data: paginatedData, isLoading } = useLibraryAssets();
 
-  // Flatten paginated data and filter to only show images (not videos)
-  const libraryAssets = useMemo(() => {
+  // Flatten paginated data and filter to only images
+  const imageAssets = useMemo(() => {
     if (!paginatedData?.pages) return [];
-    return paginatedData.pages.flatMap(page => page.assets);
+    return paginatedData.pages
+      .flatMap(page => page.assets)
+      .filter(asset => asset.type === 'image' && asset.status === 'completed');
   }, [paginatedData]);
 
-  const imageAssets = useMemo(() =>
-    libraryAssets.filter(
-      (asset) => asset.type === 'image' && asset.status === 'completed'
-    ), [libraryAssets]);
-
-  // Filter by search query (memoized to avoid new refs each render)
+  // Filter by search query
   const filteredAssets = useMemo(() =>
     imageAssets.filter((asset) => {
       if (!searchQuery.trim()) return true;
@@ -68,111 +60,49 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       );
     }), [imageAssets, searchQuery]);
 
-  // Stable key for the signing effect
-  const filteredAssetIds = useMemo(
-    () => filteredAssets.map(a => a.id).join(','),
+  // Convert to SharedAsset format for the signing hook
+  const sharedAssets = useMemo(
+    () => filteredAssets.map(toSharedFromLibrary),
     [filteredAssets]
   );
 
-  // Sign URLs for visible assets — uses refs to avoid dependency loops
-  // CRITICAL: All results are collected and flushed in ONE state update to prevent
-  // per-batch re-renders that freeze mobile Safari (40+ tiles × 14 updates = lock).
-  useEffect(() => {
-    if (!isOpen) return;
+  // Use the shared signing hook — cached, deduplicated, concurrency-limited
+  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'user-library', {
+    enabled: isOpen,
+  });
 
-    const assetsToSign = filteredAssets.filter(
-      (asset) => asset.storagePath && !signedRef.current.has(asset.id) && !loadingRef.current.has(asset.id)
-    );
+  const handleSelect = async () => {
+    if (!selectedAssetId) return;
+    const signed = signedAssets.find(a => a.id === selectedAssetId);
+    if (!signed) return;
 
-    if (assetsToSign.length === 0) return;
-
-    // Mark as loading in ref only — skip state update to avoid initial re-render
-    assetsToSign.forEach((asset) => loadingRef.current.add(asset.id));
-    // Single loading state update
-    setLoadingUrls(new Set(loadingRef.current));
-
-    let cancelled = false;
-
-    const signAll = async () => {
-      // Sign all assets concurrently (limited to 6 parallel requests via Promise pool)
-      const allResults: Array<{ id: string; url: string | null }> = [];
-      const batchSize = 6;
-
-      for (let i = 0; i < assetsToSign.length; i += batchSize) {
-        if (cancelled) return;
-        const batch = assetsToSign.slice(i, i + batchSize);
-        const results = await Promise.allSettled(
-          batch.map(async (asset) => {
-            const rawAsset = {
-              id: asset.id,
-              storage_path: asset.storagePath,
-              asset_type: asset.type,
-            };
-            const signedUrl = await LibraryAssetService.generateSignedUrl(rawAsset as any);
-            return { id: asset.id, url: signedUrl };
-          })
-        );
-
-        if (cancelled) return;
-
-        // Collect results — NO state update per batch
-        results.forEach((result) => {
-          if (result.status === 'fulfilled' && result.value.url) {
-            signedRef.current.add(result.value.id);
-            allResults.push(result.value);
-          }
-        });
-        batch.forEach((asset) => loadingRef.current.delete(asset.id));
-      }
-
-      if (cancelled) return;
-
-      // === SINGLE state flush for all batches ===
-      setSignedUrls((prev) => {
-        const next = new Map(prev);
-        allResults.forEach(({ id, url }) => {
-          if (url) next.set(id, url);
-        });
-        return next;
-      });
-      setLoadingUrls(new Set(loadingRef.current));
-    };
-
-    signAll();
-
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredAssetIds, isOpen]);
-
-  // Reset state when dialog closes
-  useEffect(() => {
-    if (!isOpen) {
-      setSelectedAsset(null);
-      setSearchQuery('');
-      // Clear signing caches so fresh signs happen on next open
-      signedRef.current.clear();
-      loadingRef.current.clear();
-      setSignedUrls(new Map());
-      setLoadingUrls(new Set());
+    setIsSelecting(true);
+    try {
+      const fullUrl = await signed.signOriginal();
+      onSelect(fullUrl, 'library');
+      onClose();
+    } catch (e) {
+      console.error('❌ Failed to sign original for selection:', e);
+    } finally {
+      setIsSelecting(false);
     }
-  }, [isOpen]);
+  };
 
-  const handleSelect = () => {
-    if (!selectedAsset) return;
+  const handleAssetClick = (id: string) => {
+    setSelectedAssetId(prev => prev === id ? null : id);
+  };
 
-    const signedUrl = signedUrls.get(selectedAsset.id);
-    if (signedUrl) {
-      onSelect(signedUrl, 'library');
+  // Reset on close
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      setSelectedAssetId(null);
+      setSearchQuery('');
       onClose();
     }
   };
 
-  const handleAssetClick = (asset: UnifiedLibraryAsset) => {
-    setSelectedAsset(asset.id === selectedAsset?.id ? null : asset);
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] bg-gray-950 border-gray-800">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
@@ -201,7 +131,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                   <Skeleton key={i} className="aspect-square rounded-lg" />
                 ))}
               </div>
-            ) : filteredAssets.length === 0 ? (
+            ) : signedAssets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <ImageIcon className="w-10 h-10 text-gray-600 mb-3" />
                 <p className="text-sm text-gray-400">
@@ -213,15 +143,13 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-2">
-                {filteredAssets.map((asset) => {
-                  const signedUrl = signedUrls.get(asset.id);
-                  const isSelected = selectedAsset?.id === asset.id;
-                  const isLoadingUrl = loadingUrls.has(asset.id);
+                {signedAssets.map((asset) => {
+                  const isSelected = selectedAssetId === asset.id;
 
                   return (
                     <button
                       key={asset.id}
-                      onClick={() => handleAssetClick(asset)}
+                      onClick={() => handleAssetClick(asset.id)}
                       className={cn(
                         'relative aspect-square rounded-lg overflow-hidden',
                         'border-2 transition-all duration-150',
@@ -231,14 +159,14 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                           : 'border-transparent hover:border-gray-600'
                       )}
                     >
-                      {isLoadingUrl || !signedUrl ? (
+                      {!asset.thumbUrl ? (
                         <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
                           <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
                         </div>
                       ) : (
                         <img
-                          src={signedUrl}
-                          alt={asset.customTitle || asset.prompt || 'Library image'}
+                          src={asset.thumbUrl}
+                          alt={asset.title || asset.prompt || 'Library image'}
                           className="w-full h-full object-cover"
                           loading="lazy"
                         />
@@ -257,7 +185,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity">
                         <div className="absolute bottom-0 left-0 right-0 p-2">
                           <p className="text-[10px] text-white/80 line-clamp-2">
-                            {asset.customTitle || asset.prompt || 'Untitled'}
+                            {asset.title || asset.prompt || 'Untitled'}
                           </p>
                         </div>
                       </div>
@@ -271,7 +199,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           {/* Footer */}
           <div className="flex items-center justify-between pt-2 border-t border-gray-800">
             <p className="text-xs text-gray-500">
-              {filteredAssets.length} image{filteredAssets.length !== 1 ? 's' : ''} available
+              {signedAssets.length} image{signedAssets.length !== 1 ? 's' : ''} available
             </p>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>
@@ -280,8 +208,9 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
               <Button
                 size="sm"
                 onClick={handleSelect}
-                disabled={!selectedAsset || !signedUrls.has(selectedAsset.id)}
+                disabled={!selectedAssetId || isSelecting}
               >
+                {isSelecting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                 Use Selected
               </Button>
             </div>
