@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -191,39 +191,121 @@ export const UnifiedLightbox: React.FC<UnifiedLightboxProps> = ({
     return () => clearTimeout(timer);
   }, [currentIndex, items, loadOriginalUrl]);
 
-  // Touch handling
+  // ─── Pinch-to-zoom + swipe state ───
+  const [scale, setScale] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const pinchRef = useRef({ initialDistance: 0, initialScale: 1 });
+  const panRef = useRef({ startX: 0, startY: 0, startTranslateX: 0, startTranslateY: 0 });
+  const isZoomed = scale > 1.05;
+
+  // Reset zoom on image change
+  useEffect(() => {
+    setScale(1);
+    setTranslate({ x: 0, y: 0 });
+  }, [currentIndex]);
+
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [touchEndY, setTouchEndY] = useState<number | null>(null);
+  const [isPinching, setIsPinching] = useState(false);
+
+  const getDistance = (t1: React.Touch, t2: React.Touch) =>
+    Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+  const getMidpoint = (t1: React.Touch, t2: React.Touch) => ({
+    x: (t1.clientX + t2.clientX) / 2,
+    y: (t1.clientY + t2.clientY) / 2,
+  });
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchEndX(null);
-    setTouchEndY(null);
-    setTouchStartX(e.targetTouches[0].clientX);
-    setTouchStartY(e.targetTouches[0].clientY);
+    if (e.touches.length === 2) {
+      setIsPinching(true);
+      pinchRef.current.initialDistance = getDistance(e.touches[0], e.touches[1]);
+      pinchRef.current.initialScale = scale;
+      panRef.current.startTranslateX = translate.x;
+      panRef.current.startTranslateY = translate.y;
+      const mid = getMidpoint(e.touches[0], e.touches[1]);
+      panRef.current.startX = mid.x;
+      panRef.current.startY = mid.y;
+    } else if (e.touches.length === 1) {
+      setIsPinching(false);
+      if (isZoomed) {
+        panRef.current.startX = e.touches[0].clientX;
+        panRef.current.startY = e.touches[0].clientY;
+        panRef.current.startTranslateX = translate.x;
+        panRef.current.startTranslateY = translate.y;
+      } else {
+        setTouchEndX(null);
+        setTouchEndY(null);
+        setTouchStartX(e.targetTouches[0].clientX);
+        setTouchStartY(e.targetTouches[0].clientY);
+      }
+    }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEndX(e.targetTouches[0].clientX);
-    setTouchEndY(e.targetTouches[0].clientY);
+    if (e.touches.length === 2) {
+      const dist = getDistance(e.touches[0], e.touches[1]);
+      const newScale = Math.min(5, Math.max(1, pinchRef.current.initialScale * (dist / pinchRef.current.initialDistance)));
+      setScale(newScale);
+      const mid = getMidpoint(e.touches[0], e.touches[1]);
+      setTranslate({
+        x: panRef.current.startTranslateX + (mid.x - panRef.current.startX),
+        y: panRef.current.startTranslateY + (mid.y - panRef.current.startY),
+      });
+    } else if (e.touches.length === 1) {
+      if (isZoomed) {
+        const dx = e.touches[0].clientX - panRef.current.startX;
+        const dy = e.touches[0].clientY - panRef.current.startY;
+        setTranslate({
+          x: panRef.current.startTranslateX + dx,
+          y: panRef.current.startTranslateY + dy,
+        });
+      } else if (!isPinching) {
+        setTouchEndX(e.targetTouches[0].clientX);
+        setTouchEndY(e.targetTouches[0].clientY);
+      }
+    }
   };
 
   const handleTouchEnd = () => {
-    if (!touchStartX || !touchEndX || !touchStartY || !touchEndY) return;
+    if (isPinching) {
+      setIsPinching(false);
+      if (scale < 1.1) {
+        setScale(1);
+        setTranslate({ x: 0, y: 0 });
+      }
+      return;
+    }
+    if (isZoomed) return;
 
+    if (!touchStartX || !touchEndX || !touchStartY || !touchEndY) return;
     const distanceX = touchStartX - touchEndX;
     const distanceY = touchStartY - touchEndY;
 
     if (Math.abs(distanceX) > Math.abs(distanceY)) {
-      // Horizontal swipe — navigation
       if (distanceX > 50 && currentIndex < items.length - 1) goToNext();
       if (distanceX < -50 && currentIndex > 0) goToPrevious();
     } else if (enableSwipeClose) {
-      // Vertical swipe down — close
       if (distanceY < -80) onClose();
     }
   };
+
+  // Double-tap to toggle zoom on mobile
+  const lastTapRef = useRef(0);
+  const handleDoubleTapZoom = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      if (isZoomed) {
+        setScale(1);
+        setTranslate({ x: 0, y: 0 });
+      } else {
+        setScale(2.5);
+      }
+    }
+    lastTapRef.current = now;
+  }, [isZoomed]);
 
   if (!currentItem) return null;
 
@@ -358,11 +440,18 @@ export const UnifiedLightbox: React.FC<UnifiedLightboxProps> = ({
 
           {/* ─── Main content area ─── */}
           <div
-            className={`flex items-center justify-center flex-1 ${isFullscreen ? 'w-full h-[100dvh]' : ''}`}
+            className={`flex items-center justify-center flex-1 overflow-hidden touch-none ${isFullscreen ? 'w-full h-[100dvh]' : ''}`}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            onClick={toggleUiVisibility}
+            onClick={(e) => {
+              if (!isZoomed) {
+                handleDoubleTapZoom();
+                toggleUiVisibility();
+              } else {
+                handleDoubleTapZoom();
+              }
+            }}
             onDoubleClick={!isVideo ? toggleImageFitMode : undefined}
           >
             {isLoading && !displayUrl ? (
@@ -376,6 +465,10 @@ export const UnifiedLightbox: React.FC<UnifiedLightboxProps> = ({
                     ? 'w-full h-full flex items-center justify-center'
                     : 'max-w-[90vw] max-h-[90vh] flex items-center justify-center'
                 }
+                style={{
+                  transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+                  transition: isPinching || isZoomed ? 'none' : 'transform 0.2s ease-out',
+                }}
               >
                 {isVideo ? (
                   <video
@@ -393,6 +486,7 @@ export const UnifiedLightbox: React.FC<UnifiedLightboxProps> = ({
                   <img
                     src={displayUrl}
                     alt={currentItem.title || ''}
+                    draggable={false}
                     className={
                       isFullscreen
                         ? `w-full h-full ${imageFitMode === 'contain' ? 'object-contain' : 'object-cover'}`
