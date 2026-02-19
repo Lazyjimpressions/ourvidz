@@ -79,7 +79,19 @@ export const MobileChatHeader: React.FC<MobileChatHeaderProps> = ({
         )}
       </button>
 
-      {/* Right Section - Menu */}
+      {/* Right Section - Settings + Menu */}
+      <div className="flex items-center">
+        {onSettingsClick && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSettingsClick}
+            className="h-10 w-10 p-0 text-muted-foreground hover:text-foreground min-w-[44px] min-h-[44px]"
+            aria-label="Quick settings"
+          >
+            <Settings className="w-5 h-5" />
+          </Button>
+        )}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={true}>
         <DropdownMenuTrigger asChild>
           <Button
@@ -135,6 +147,7 @@ export const MobileChatHeader: React.FC<MobileChatHeaderProps> = ({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+      </div>
     </header>
   );
 };

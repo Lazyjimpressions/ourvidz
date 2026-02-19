@@ -494,7 +494,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                         alt="Generated scene"
                         className={cn(
                           "w-full h-auto object-contain rounded-t-xl transition-opacity duration-300",
-                          isMobile ? "max-h-[60vh]" : "max-h-96",
+                          isMobile ? "max-h-[70vh]" : "max-h-96",
                           sceneImageLoading ? "opacity-0 h-0" : "opacity-100",
                           onSceneRegenerate && "cursor-pointer"
                         )}
