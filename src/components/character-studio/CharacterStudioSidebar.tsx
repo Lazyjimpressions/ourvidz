@@ -31,8 +31,15 @@ import {
   Library,
   Plus,
   Upload,
-  X
+  X,
+  FolderOpen
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { CharacterData } from '@/hooks/useCharacterStudio';
@@ -69,7 +76,7 @@ interface CharacterStudioSidebarProps {
   selectedImageModel: string;
   onImageModelChange: (modelId: string) => void;
   imageModelOptions: ImageModelOption[];
-  onOpenImagePicker: () => void;
+  onOpenImagePicker: (source?: 'workspace' | 'library') => void;
 }
 
 export function CharacterStudioSidebar({
@@ -561,15 +568,25 @@ export function CharacterStudioSidebar({
                   )}
                   {isUploadingRef ? 'Uploading...' : 'Upload'}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onOpenImagePicker}
-                  className="flex-1 gap-2"
-                >
-                  <Library className="w-4 h-4" />
-                  Library
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex-1 gap-2">
+                      <Library className="w-4 h-4" />
+                      Browse
+                      <ChevronDown className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="z-[100] bg-popover border border-border">
+                    <DropdownMenuItem onSelect={() => onOpenImagePicker('workspace')}>
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      Workspace (Recent)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onOpenImagePicker('library')}>
+                      <Library className="w-4 h-4 mr-2" />
+                      Library (Saved)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {/* Image Model Selector */}

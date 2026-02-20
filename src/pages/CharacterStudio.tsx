@@ -73,7 +73,7 @@ export default function CharacterStudio() {
   const [selectedImageModel, setSelectedImageModel] = useState<string>('');
   
   // Image picker state
-  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [imagePickerState, setImagePickerState] = useState<{ open: boolean; source: 'workspace' | 'library' }>({ open: false, source: 'library' });
 
   // Template selector state
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
@@ -217,7 +217,12 @@ export default function CharacterStudio() {
   // Handle image picker selection
   const handleImagePickerSelect = (imageUrl: string) => {
     updateCharacter({ reference_image_url: imageUrl });
-    setShowImagePicker(false);
+    setImagePickerState({ open: false, source: 'library' });
+  };
+
+  // Handle opening image picker with source
+  const handleOpenImagePicker = (source?: 'workspace' | 'library') => {
+    setImagePickerState({ open: true, source: source || 'library' });
   };
 
   // Handle template selection
@@ -315,19 +320,20 @@ export default function CharacterStudio() {
           selectedImageModel={selectedImageModel}
           onImageModelChange={setSelectedImageModel}
           imageModelOptions={imageModelOptions}
-          onOpenImagePicker={() => setShowImagePicker(true)}
-          isPersonaMode={isPersonaMode}
-          onEditScene={handleEditScene}
-          onDeleteScene={handleDeleteScene}
-          onAddScene={() => setShowSceneModal(true)}
-          onStartChatWithScene={handleStartChatWithScene}
-        />
+            onOpenImagePicker={handleOpenImagePicker}
+            isPersonaMode={isPersonaMode}
+            onEditScene={handleEditScene}
+            onDeleteScene={handleDeleteScene}
+            onAddScene={() => setShowSceneModal(true)}
+            onStartChatWithScene={handleStartChatWithScene}
+          />
         
         {/* Image Picker Dialog */}
         <ImagePickerDialog
-          isOpen={showImagePicker}
-          onClose={() => setShowImagePicker(false)}
+          isOpen={imagePickerState.open}
+          onClose={() => setImagePickerState(prev => ({ ...prev, open: false }))}
           onSelect={handleImagePickerSelect}
+          source={imagePickerState.source}
         />
       </>
     );
@@ -461,7 +467,7 @@ export default function CharacterStudio() {
               selectedImageModel={selectedImageModel}
               onImageModelChange={setSelectedImageModel}
               imageModelOptions={imageModelOptions}
-              onOpenImagePicker={() => setShowImagePicker(true)}
+              onOpenImagePicker={handleOpenImagePicker}
             />
           </div>
           {/* Resize Handle */}
@@ -554,7 +560,7 @@ export default function CharacterStudio() {
                 selectedImageModel={selectedImageModel}
                 onImageModelChange={setSelectedImageModel}
                 imageModelOptions={imageModelOptions}
-                onOpenImagePicker={() => setShowImagePicker(true)}
+                onOpenImagePicker={() => handleOpenImagePicker()}
                 referenceImageUrl={character.reference_image_url}
                 onReferenceImageChange={(url) => updateCharacter({ reference_image_url: url })}
                 value={promptText}
@@ -596,9 +602,10 @@ export default function CharacterStudio() {
 
       {/* Image Picker Dialog */}
       <ImagePickerDialog
-        isOpen={showImagePicker}
-        onClose={() => setShowImagePicker(false)}
+        isOpen={imagePickerState.open}
+        onClose={() => setImagePickerState(prev => ({ ...prev, open: false }))}
         onSelect={handleImagePickerSelect}
+        source={imagePickerState.source}
       />
 
       {/* Character Template Selector */}

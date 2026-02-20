@@ -28,7 +28,7 @@ interface StudioWorkspaceProps {
   selectedImageModel: string;
   onImageModelChange: (id: string) => void;
   imageModelOptions: ImageModelOption[];
-  onOpenImagePicker: () => void;
+  onOpenImagePicker: (source?: 'workspace' | 'library') => void;
   onGenerate: (prompt: string, refUrl?: string, modelId?: string, numImages?: number) => void;
   promptText: string;
   setPromptText: (v: string) => void;
