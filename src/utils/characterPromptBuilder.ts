@@ -6,6 +6,7 @@ interface Character {
   persona?: string;
   traits?: string;
   appearance_tags: string[];
+  clothing_tags?: string[];
   gender?: string;
 }
 
@@ -43,12 +44,20 @@ export const buildCharacterPortraitPrompt = (
     characterTokens.push(...presetTags);
   }
   
-  // Add appearance tags if available
+  // Add appearance tags (physical) if available
   if (character.appearance_tags && character.appearance_tags.length > 0) {
     const cleanTags = character.appearance_tags
       .filter(tag => tag.trim().length > 2)
       .slice(0, 6);
     characterTokens.push(...cleanTags);
+  }
+  
+  // Add clothing tags if available (for portraits, include both)
+  if (character.clothing_tags && character.clothing_tags.length > 0) {
+    const cleanClothingTags = character.clothing_tags
+      .filter(tag => tag.trim().length > 2)
+      .slice(0, 4);
+    characterTokens.push(...cleanClothingTags);
   }
   
   // Add description-based tokens

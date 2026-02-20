@@ -426,6 +426,7 @@ serve(async (req) => {
           name,
           gender,
           appearance_tags,
+          clothing_tags,
           persona,
           image_url,
           reference_image_url
@@ -3105,8 +3106,12 @@ const sceneContext = analyzeSceneContent(response);
       });
     }
 
-    // Build character identity with fallback to characterVisualDescription when appearance_tags is empty
-    const characterAppearance = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription;
+    // Build character identity: physical tags for identity, clothing from scene context or defaults
+    const physicalAppearance = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription;
+    const outfitTags = sceneContext?.clothing || ((sceneCharacter as any).clothing_tags || []).join(', ');
+    const characterAppearance = outfitTags
+      ? `${physicalAppearance}, wearing ${outfitTags}`
+      : physicalAppearance;
     const briefCharacterIdentity = `${sceneCharacter.name}, ${characterAppearance}`;
 
     if (sceneStyle === 'both_characters' && userCharacter) {
