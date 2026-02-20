@@ -2,7 +2,7 @@
  * ImagePickerDialog Component
  *
  * A dialog that allows users to browse and select images from their library or workspace.
- * Uses the shared useSignedAssets hook for cached, deduplicated URL signing.
+ * Uses direct Supabase storage signing (no useSignedAssets hook) for reliable dialog-context signing.
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -19,7 +19,7 @@ import { Search, Image as ImageIcon, Library, Loader2, Check, FolderOpen, ImageO
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
 import { toSharedFromLibrary, toSharedFromWorkspace } from '@/lib/services/AssetMappers';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
-import { useSignedAssets, SignedAsset } from '@/lib/hooks/useSignedAssets';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 
@@ -42,6 +42,11 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [activeSource, setActiveSource] = useState<'workspace' | 'library'>(source);
+
+  // Direct signing state
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
+  const [signing, setSigning] = useState(false);
 
   // Sync activeSource when prop changes
   useEffect(() => {
@@ -78,7 +83,6 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       .filter(asset => asset.type === 'image' && asset.status === 'completed');
   }, [paginatedData]);
 
-  // Choose data source based on active tab
   const isLoading = activeSource === 'library' ? libraryLoading : workspaceLoading;
 
   // Filter by search query
@@ -88,17 +92,17 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase();
       const prompt = asset.prompt || asset.originalPrompt || '';
-      const title = asset.customTitle || asset.title || '';
+      const assetTitle = asset.customTitle || asset.title || '';
       const tags = asset.tags || [];
       return (
         prompt.toLowerCase().includes(query) ||
-        title.toLowerCase().includes(query) ||
+        assetTitle.toLowerCase().includes(query) ||
         tags.some((tag: string) => tag.toLowerCase().includes(query))
       );
     });
   }, [activeSource, libraryImageAssets, workspaceAssets, searchQuery]);
 
-  // Convert to SharedAsset format for the signing hook
+  // Convert to SharedAsset format
   const sharedAssets: SharedAsset[] = useMemo(() => {
     if (activeSource === 'library') {
       return filteredAssets.map(toSharedFromLibrary);
@@ -108,25 +112,79 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
 
   const bucket = activeSource === 'workspace' ? 'workspace-temp' : 'user-library';
 
-  // Use the shared signing hook — cached, deduplicated, concurrency-limited
-  const { signedAssets, isSigning, refresh } = useSignedAssets(sharedAssets, bucket, {
-    enabled: isOpen,
-  });
-
-  // Clear signed state when switching source tabs
+  // Direct signing effect — signs all thumbnails when assets/bucket/dialog state changes
   useEffect(() => {
-    refresh();
-  }, [activeSource]);
+    if (!isOpen || sharedAssets.length === 0) {
+      setThumbUrls({});
+      setFailedIds(new Set());
+      setSigning(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSigning(true);
+    setThumbUrls({});
+    setFailedIds(new Set());
+
+    const signAll = async () => {
+      for (const asset of sharedAssets) {
+        if (cancelled) break;
+        const path = asset.thumbPath || asset.originalPath;
+        if (!path) {
+          if (!cancelled) setFailedIds(prev => new Set(prev).add(asset.id));
+          continue;
+        }
+        // Skip if path is already a full URL (e.g. public bucket)
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+          if (!cancelled) setThumbUrls(prev => ({ ...prev, [asset.id]: path }));
+          continue;
+        }
+        try {
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .createSignedUrl(path, 3600);
+          if (cancelled) break;
+          if (error || !data?.signedUrl) {
+            console.warn('⚠️ Sign failed for', asset.id, path, error?.message);
+            setFailedIds(prev => new Set(prev).add(asset.id));
+          } else {
+            setThumbUrls(prev => ({ ...prev, [asset.id]: data.signedUrl }));
+          }
+        } catch (e) {
+          if (!cancelled) {
+            console.warn('⚠️ Sign error for', asset.id, e);
+            setFailedIds(prev => new Set(prev).add(asset.id));
+          }
+        }
+      }
+      if (!cancelled) setSigning(false);
+    };
+
+    signAll();
+    return () => { cancelled = true; };
+  }, [sharedAssets, bucket, isOpen]);
 
   const handleSelect = async () => {
     if (!selectedAssetId) return;
-    const signed = signedAssets.find(a => a.id === selectedAssetId);
-    if (!signed) return;
+    const asset = sharedAssets.find(a => a.id === selectedAssetId);
+    if (!asset) return;
 
     setIsSelecting(true);
     try {
-      const fullUrl = await signed.signOriginal();
-      onSelect(fullUrl, activeSource);
+      const path = asset.originalPath;
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        onSelect(path, activeSource);
+        onClose();
+        return;
+      }
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, 3600);
+      if (error || !data?.signedUrl) {
+        console.error('❌ Failed to sign original for selection:', error);
+        return;
+      }
+      onSelect(data.signedUrl, activeSource);
       onClose();
     } catch (e) {
       console.error('❌ Failed to sign original for selection:', e);
@@ -147,6 +205,8 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       onClose();
     }
   };
+
+  const totalReady = Object.keys(thumbUrls).length;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -206,7 +266,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                   <Skeleton key={i} className="aspect-square rounded-lg" />
                 ))}
               </div>
-            ) : signedAssets.length === 0 ? (
+            ) : sharedAssets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <ImageIcon className="w-10 h-10 text-gray-600 mb-3" />
                 <p className="text-sm text-gray-400">
@@ -222,10 +282,11 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-2">
-                {signedAssets.map((asset) => {
+                {sharedAssets.map((asset) => {
                   const isSelected = selectedAssetId === asset.id;
-                  const isFailed = asset.thumbUrl === 'SIGNING_FAILED';
-                  const isStillLoading = !asset.thumbUrl;
+                  const isFailed = failedIds.has(asset.id);
+                  const signedUrl = thumbUrls[asset.id];
+                  const isStillLoading = !signedUrl && !isFailed;
 
                   return (
                     <button
@@ -251,12 +312,11 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                         </div>
                       ) : (
                         <img
-                          src={asset.thumbUrl!}
+                          src={signedUrl}
                           alt={asset.title || asset.prompt || 'Image'}
                           className="w-full h-full object-cover"
                           loading="lazy"
                           onError={(e) => {
-                            // Replace broken image with fallback
                             const target = e.currentTarget;
                             target.style.display = 'none';
                             const parent = target.parentElement;
@@ -299,7 +359,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           {/* Footer */}
           <div className="flex items-center justify-between pt-2 border-t border-gray-800">
             <p className="text-xs text-gray-500">
-              {signedAssets.length} image{signedAssets.length !== 1 ? 's' : ''} available
+              {totalReady} of {sharedAssets.length} image{sharedAssets.length !== 1 ? 's' : ''} loaded
             </p>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>
