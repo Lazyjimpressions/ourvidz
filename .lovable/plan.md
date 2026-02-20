@@ -1,88 +1,81 @@
 
-# Fix: Scenes Returning Same Image Every Time
+# Fix: Images on Generate Page Only Resolve After Visiting Library
 
 ## Root Cause
 
-Three issues compound to produce identical images on every generation:
+There are two compounding issues that cause images not to resolve on the Generate Images page unless the library page was visited first.
 
-### Issue 1: Broken I2I Chain (PRIMARY CAUSE)
-The `previous_scene_image_url` is `null` on the 4 most recent scenes. When the server-side fallback query (line 2657) runs, the previous scene's `image_url` hasn't been written yet (async generation). This causes `effectiveReferenceImageUrl` to fall through to the **character reference image** (line 2801). Result: Figure 1 = character portrait, Figure 2 = character portrait -- the model receives the **same image twice** and produces nearly identical output every time.
+### Issue 1: `SessionCache.currentUserId` is never set on the Generate page
 
-### Issue 2: Garbage Scene Extraction
-The regex-based `analyzeSceneContent()` produces broken settings like "Inside.", "Spa.", "At the.", "in the" -- too vague to differentiate scenes. The ACTION block contains first-person internal monologue ("I feel my heart pounding") that the image model cannot render.
+`SessionCache` is a singleton with `currentUserId = null` by default. Its `getCachedSignedUrl` and `cacheSignedUrl` methods silently return `null` when `currentUserId` is not set. The only place `initializeSession(userId)` is called is inside `useOptimizedWorkspaceUrls` — but the Generate page (`SimplifiedWorkspace`) only calls `useOptimizedWorkspaceUrls` **after** `useLibraryFirstWorkspace` initializes, and the `initializeSession` call inside it is an async `useEffect` that fires after render. Meanwhile, `useLazyAssetsV3` checks the session cache first, gets `null` back, and proceeds to the IntersectionObserver path.
 
-### Issue 3: Same CHARACTER Block Every Time
-Every scene sends identical appearance tags including scene-specific ones ("tropical beach aesthetic", "colorful swimwear") that contradict the actual setting.
+### Issue 2: IntersectionObserver race condition in `useLazyAssetsV3`
 
----
+The IntersectionObserver in `useLazyAssetsV3` is set up in a `useEffect` that runs **after** the initial render. The `loadAssetUrls` callback is **not** a dependency of the observer effect (intentionally removed to prevent loops). This means:
 
-## Fix Plan
+1. Assets render with raw (unsigned) storage paths as their `url`
+2. The `IntersectionObserver` triggers entries for visible assets  
+3. It calls `loadAssetUrls` from the closure — but this is the **stale closure version** that doesn't include newly-added assets
+4. The batch queue fires but `lazyAssets` in `processBatchQueue` is the old empty array
 
-### Fix 1: Ensure I2I Chain Never Breaks (Critical)
+When the library page is visited first, `UrlSigningService`'s **in-memory cache** gets populated (because `useSignedAssets` eagerly signs all paths in a `useEffect` batch). When you then navigate to the Generate page, `UrlSigningService.getSignedUrl()` returns immediately from its cache — bypassing the stale closure issue entirely.
 
-**File: `supabase/functions/roleplay-chat/index.ts`**
+## The Fix
 
-The server-side fallback query at line 2657 only looks for scenes with non-null `image_url`. But due to async generation, the most recent scene may not have its image yet. 
+### Fix 1: Initialize `SessionCache` at the app level (root cause fix)
 
-**Changes:**
-- Expand the fallback query to also check for scenes that are still generating (have a `job_id` but no `image_url` yet) -- skip those and find the **last completed** scene instead
-- Add a secondary fallback: if no completed scene exists, use the scene template's `preview_image_url` as Figure 1 instead of the character portrait
-- When `effectiveReferenceImageUrl` falls through to the character reference (line 2799-2806), **do NOT use it as Figure 1**. Instead, leave Figure 1 empty and only send the character reference as Figure 2. This prevents the "same image twice" problem
+Move `sessionCache.initializeSession(userId)` to the `AuthContext` or to `App.tsx` so it runs once when the user is authenticated — not lazily inside a specific page hook.
 
-The key logic change:
-```
-// BEFORE (broken): When no previous scene found, character ref becomes Figure 1 AND Figure 2
-effectiveReferenceImageUrl = sceneCharacter?.reference_image_url
+**File: `src/contexts/AuthContext.tsx`**
 
-// AFTER: When no previous scene found, skip Figure 1 entirely
-effectiveReferenceImageUrl = undefined; // No Figure 1
-// Figure 2 (character ref) still gets added at line 3541
-```
+Add a `useEffect` that calls `sessionCache.initializeSession(user.id)` whenever the auth user changes. This ensures the session cache is always ready before any page tries to use it.
 
-This means when the I2I chain breaks, the system falls back to a single-reference generation (character only as Figure 2) rather than sending duplicate images.
+### Fix 2: Eagerly sign workspace asset thumbnails on mount (parallel fix)
 
-### Fix 2: De-duplicate image_urls Array
+In `SimplifiedWorkspace.tsx`, the page already calls `useSignedAssets(sharedAssets, 'workspace-temp', ...)` which will eagerly batch-sign all thumbnail paths via the `UrlSigningService`. However, `sharedAssets` is derived from `workspaceAssets` which comes from `useAssetsWithDebounce`. The debounce is 2000ms — meaning the signing doesn't start for 2 seconds after mount.
 
-**File: `supabase/functions/roleplay-chat/index.ts`**
+The fix is to use `useSignedAssets` results (already computed in `SimplifiedWorkspace`) as the actual data passed to `SharedGrid` instead of falling through to the `useOptimizedWorkspaceUrls` / `useLazyAssetsV3` path. Currently the `signedAssets` variable is computed but **never actually used** — `SharedGrid` still receives the assets from `useLibraryFirstWorkspace` which go through the lazy IntersectionObserver path.
 
-Add a de-duplication check after building the `imageUrlsArray` (after line 3554). If Figure 1 and Figure 2 resolve to the same storage path, remove the duplicate. This is a safety net for the edge case where both point to the same character reference.
+**File: `src/pages/SimplifiedWorkspace.tsx`**
 
-```typescript
-// After building imageUrlsArray
-// De-duplicate: if Figure 1 and Figure 2 are the same image, keep only one
-const deduplicatedUrls = [...new Set(
-  imageUrlsArray.map(url => {
-    // Extract storage path (strip query params/tokens for comparison)
-    const match = url.match(/\/storage\/v1\/object\/(?:sign|public)\/(.+?)(?:\?|$)/);
-    return match ? match[1] : url;
-  })
-)];
-if (deduplicatedUrls.length < imageUrlsArray.length) {
-  console.warn('⚠️ Duplicate image URLs detected in array, de-duplicating');
-  // Keep only unique URLs (use the last occurrence which has the freshest token)
-  // ... trim imageUrlsArray
-}
-```
+Wire `signedAssets` (the output of `useSignedAssets`) into the `SharedGrid` component as the assets source instead of `workspaceAssets` from the hook. This makes the Generate page use the same eager-signing strategy as the Library page.
 
-### Fix 3: Improve Scene Extraction (Already Planned - P0)
+### Fix 3: Remove the `currentUserId` guard from SessionCache for URL caching
 
-This was already approved in the previous plan. The LLM-based structured extraction replaces the broken regex `analyzeSceneContent()` that produces "Inside.", "At the.", etc. This fix is separate but complementary.
+The `currentUserId` guard in `SessionCache.cacheSignedUrl` and `getCachedSignedUrl` silently drops all caching when not initialized. This makes failures silent and hard to debug.
 
-### Fix 4: Clothing Tags Separation (Already Implemented)
+**File: `src/lib/cache/SessionCache.ts`**
 
-The clothing/physical tag split was just deployed. This prevents "tropical beach aesthetic" and "colorful swimwear" from appearing in every scene prompt. Users can now move those to "Default Outfit" so they don't contaminate scenes set in offices, spas, etc.
-
----
+Use the user ID from `sessionStorage` as a fallback when `currentUserId` is not set, or simply remove the early-return guard from `getCachedSignedUrl` when a cached value exists but `currentUserId` is null (the isolation check already handles cross-user leakage).
 
 ## Technical Details
 
-### Files Modified
+### Files to Change
+
 | File | Change | Risk |
 |------|--------|------|
-| `supabase/functions/roleplay-chat/index.ts` | Fix fallback logic (line 2799-2806) to not use character ref as Figure 1 | Low |
-| `supabase/functions/roleplay-chat/index.ts` | Add image_urls de-duplication after line 3554 | Low |
+| `src/contexts/AuthContext.tsx` | Call `sessionCache.initializeSession(user.id)` on auth state change | Very Low |
+| `src/pages/SimplifiedWorkspace.tsx` | Pass `signedAssets` to `SharedGrid` instead of `workspaceAssets` | Low |
+| `src/pages/MobileSimplifiedWorkspace.tsx` | Same wiring fix for mobile | Low |
+| `src/lib/cache/SessionCache.ts` | Remove silent no-op when `currentUserId` is null | Low |
 
-### Expected Outcome
-- When I2I chain breaks, system sends 1 image (character ref as Figure 2 only) instead of 2 identical images
-- Different prompts with the same single reference will produce visually distinct images
-- Scene extraction improvements (separate task) will further differentiate outputs
+### Data Flow After Fix
+
+```text
+App mounts → AuthContext sets user → sessionCache.initializeSession() called immediately
+     ↓
+Navigate to Generate Images
+     ↓
+useAssetsWithDebounce loads assets (2s debounce)
+     ↓
+sharedAssets mapped → useSignedAssets eagerly signs all thumbs
+     ↓
+signedAssets (with thumbUrl set) passed to SharedGrid
+     ↓
+Images render immediately with signed URLs ✓
+```
+
+### No Changes Needed To
+- `useLazyAssetsV3` — the IntersectionObserver lazy-load path still works for large grids, just won't be the primary URL source for workspace thumbnails
+- `useOptimizedWorkspaceUrls` — still used for `signedUrls` Map and `registerAssetRef`
+- `UrlSigningService` — already works correctly once session is initialized
