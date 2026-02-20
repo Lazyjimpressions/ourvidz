@@ -2797,9 +2797,11 @@ async function generateScene(
       effectiveReferenceImageUrl = templatePreviewImageUrl;
       console.log('🎬 First scene from template: I2I from template preview image');
     } else {
-      // Absolute fallback: use character reference/avatar as scene base
-      effectiveReferenceImageUrl = sceneCharacter?.reference_image_url || sceneCharacter?.image_url || undefined;
-      console.log('🎬 Fallback: I2I from character reference/avatar', {
+      // ✅ FIX: Do NOT use character reference as Figure 1 (scene environment).
+      // This caused duplicate images (Figure 1 = portrait, Figure 2 = portrait = identical output).
+      // Instead, leave Figure 1 empty. Figure 2 (character ref) will still be added later.
+      effectiveReferenceImageUrl = undefined;
+      console.log('🎬 No scene environment available - skipping Figure 1 to avoid duplicate character ref', {
         has_reference: !!sceneCharacter?.reference_image_url,
         has_avatar: !!sceneCharacter?.image_url
       });
@@ -3550,6 +3552,20 @@ ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene n
             if (userRef) {
               imageUrlsArray.push(userRef);
               console.log('📸 Figure 3 (User):', userCharacter.name);
+            }
+          }
+
+          // ✅ De-duplicate: if Figure 1 and Figure 2 resolve to the same storage path, keep only one
+          const seenPaths = new Map<string, number>();
+          for (let i = 0; i < imageUrlsArray.length; i++) {
+            const pathMatch = imageUrlsArray[i].match(/\/storage\/v1\/object\/(?:sign|public)\/(.+?)(?:\?|$)/);
+            const key = pathMatch ? pathMatch[1] : imageUrlsArray[i];
+            if (seenPaths.has(key)) {
+              console.warn(`⚠️ Duplicate image detected at Figure ${i + 1} (same as Figure ${seenPaths.get(key)! + 1}), removing`);
+              imageUrlsArray.splice(i, 1);
+              i--;
+            } else {
+              seenPaths.set(key, i);
             }
           }
 
