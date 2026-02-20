@@ -49,13 +49,14 @@ export class SessionCache {
    * Cache signed URLs with user isolation
    */
   cacheSignedUrl(assetId: string, url: string): void {
-    if (!this.currentUserId) return;
+    const effectiveUserId = this.currentUserId || sessionStorage.getItem('cache-user-id');
+    if (!effectiveUserId) return;
     
     const key = `signed-url-${assetId}`;
     const cached: CachedItem<string> = {
       data: url,
       timestamp: Date.now(),
-      userId: this.currentUserId
+      userId: effectiveUserId
     };
     
     try {
@@ -71,7 +72,8 @@ export class SessionCache {
    * Get cached signed URL
    */
   getCachedSignedUrl(assetId: string): string | null {
-    if (!this.currentUserId) return null;
+    const effectiveUserId = this.currentUserId || sessionStorage.getItem('cache-user-id');
+    if (!effectiveUserId) return null;
     
     const key = `signed-url-${assetId}`;
     
@@ -82,7 +84,7 @@ export class SessionCache {
       const parsed: CachedItem<string> = JSON.parse(cached);
       
       // Check user isolation
-      if (parsed.userId !== this.currentUserId) {
+      if (parsed.userId !== effectiveUserId) {
         sessionStorage.removeItem(key);
         return null;
       }
@@ -106,13 +108,14 @@ export class SessionCache {
    * Cache asset metadata for quick loading
    */
   cacheAssetMetadata(cacheKey: string, metadata: any): void {
-    if (!this.currentUserId) return;
+    const effectiveUserId = this.currentUserId || sessionStorage.getItem('cache-user-id');
+    if (!effectiveUserId) return;
     
     const key = `metadata-${cacheKey}`;
     const cached: CachedItem<any> = {
       data: metadata,
       timestamp: Date.now(),
-      userId: this.currentUserId
+      userId: effectiveUserId
     };
     
     try {
@@ -128,7 +131,8 @@ export class SessionCache {
    * Get cached asset metadata
    */
   getCachedMetadata<T>(cacheKey: string): T | null {
-    if (!this.currentUserId) return null;
+    const effectiveUserId = this.currentUserId || sessionStorage.getItem('cache-user-id');
+    if (!effectiveUserId) return null;
     
     const key = `metadata-${cacheKey}`;
     
@@ -139,7 +143,7 @@ export class SessionCache {
       const parsed: CachedItem<T> = JSON.parse(cached);
       
       // Check user isolation
-      if (parsed.userId !== this.currentUserId) {
+      if (parsed.userId !== effectiveUserId) {
         sessionStorage.removeItem(key);
         return null;
       }
