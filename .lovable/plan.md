@@ -1,107 +1,88 @@
 
+# Fix: Scenes Returning Same Image Every Time
 
-# Split Appearance Tags into Physical + Clothing Sections
+## Root Cause
 
-## The Idea
+Three issues compound to produce identical images on every generation:
 
-Instead of a complex vision pipeline, simply split the existing "Appearance" section in the Character Studio sidebar into two clearly labeled subsections:
+### Issue 1: Broken I2I Chain (PRIMARY CAUSE)
+The `previous_scene_image_url` is `null` on the 4 most recent scenes. When the server-side fallback query (line 2657) runs, the previous scene's `image_url` hasn't been written yet (async generation). This causes `effectiveReferenceImageUrl` to fall through to the **character reference image** (line 2801). Result: Figure 1 = character portrait, Figure 2 = character portrait -- the model receives the **same image twice** and produces nearly identical output every time.
 
-1. **Physical Appearance** -- permanent traits (face, hair, eyes, body type)
-2. **Default Outfit** -- clothing and accessories (can be overridden per scene)
+### Issue 2: Garbage Scene Extraction
+The regex-based `analyzeSceneContent()` produces broken settings like "Inside.", "Spa.", "At the.", "in the" -- too vague to differentiate scenes. The ACTION block contains first-person internal monologue ("I feel my heart pounding") that the image model cannot render.
 
-This gives users one character they can place in any scenario. The scene prompt builder uses only the physical tags for identity and swaps clothing as needed.
+### Issue 3: Same CHARACTER Block Every Time
+Every scene sends identical appearance tags including scene-specific ones ("tropical beach aesthetic", "colorful swimwear") that contradict the actual setting.
 
-## What Changes
+---
 
-### 1. Database: New `clothing_tags` Column
+## Fix Plan
 
-Add `clothing_tags text[]` to the `characters` table (nullable, defaults to empty array). The existing `appearance_tags` column stays but becomes "physical only."
-
-### 2. Data Model: `CharacterData` Interface
-
-**File: `src/hooks/useCharacterStudio.ts`**
-
-- Add `clothing_tags: string[]` to `CharacterData`
-- Add to default data, save/load logic
-
-### 3. Sidebar UI: Split the Appearance Section
-
-**File: `src/components/character-studio-v3/StudioSidebar.tsx`**
-
-The current Appearance collapsible has:
-- Visual Description (textarea)
-- Tags (single chip input)
-- Style Lock (reference image)
-
-Replace "Tags" with two sub-sections:
-
-```
-Appearance (collapsible)
-  |-- Visual Description (textarea, unchanged)
-  |-- Physical Tags: "auburn hair, green eyes, athletic"
-  |     [chip input, same UX as current tags]
-  |-- Default Outfit: "leather jacket, jeans, boots"
-  |     [chip input, same UX]
-  |-- Style Lock (reference image, unchanged)
-```
-
-Both use the same chip input pattern already in place -- just duplicated with different state (`appearance_tags` vs `clothing_tags`).
-
-### 4. Scene Prompt Builder: Use Physical Only, Override Clothing
+### Fix 1: Ensure I2I Chain Never Breaks (Critical)
 
 **File: `supabase/functions/roleplay-chat/index.ts`**
 
-Line 3109 currently does:
-```typescript
-const characterAppearance = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ');
+The server-side fallback query at line 2657 only looks for scenes with non-null `image_url`. But due to async generation, the most recent scene may not have its image yet. 
+
+**Changes:**
+- Expand the fallback query to also check for scenes that are still generating (have a `job_id` but no `image_url` yet) -- skip those and find the **last completed** scene instead
+- Add a secondary fallback: if no completed scene exists, use the scene template's `preview_image_url` as Figure 1 instead of the character portrait
+- When `effectiveReferenceImageUrl` falls through to the character reference (line 2799-2806), **do NOT use it as Figure 1**. Instead, leave Figure 1 empty and only send the character reference as Figure 2. This prevents the "same image twice" problem
+
+The key logic change:
+```
+// BEFORE (broken): When no previous scene found, character ref becomes Figure 1 AND Figure 2
+effectiveReferenceImageUrl = sceneCharacter?.reference_image_url
+
+// AFTER: When no previous scene found, skip Figure 1 entirely
+effectiveReferenceImageUrl = undefined; // No Figure 1
+// Figure 2 (character ref) still gets added at line 3541
 ```
 
-Change to:
-```typescript
-const physicalTags = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ');
-const outfitTags = sceneContext.clothing || (sceneCharacter.clothing_tags || []).join(', ');
-const characterAppearance = outfitTags
-  ? `${physicalTags}, wearing ${outfitTags}`
-  : physicalTags;
-```
+This means when the I2I chain breaks, the system falls back to a single-reference generation (character only as Figure 2) rather than sending duplicate images.
 
-This means:
-- If the LLM scene extraction detects specific clothing in the narrative, use that
-- Otherwise fall back to the character's default outfit tags
-- Physical tags always included for identity
-
-### 5. Prompt Builder Utility
-
-**File: `src/utils/characterPromptBuilder.ts`**
-
-Update `buildCharacterVisualDescription()` to accept and separate `clothing_tags` from `appearance_tags` so portrait generation can still use both, while scene generation uses them selectively.
-
-### 6. AI Suggestion Integration
-
-**File: `src/components/character-studio-v3/StudioSidebar.tsx`**
-
-The "Suggest" button for appearance currently populates `appearance_tags`. Update the suggestion handler to split AI suggestions into physical vs. clothing categories. The `suggest-character` edge function already returns mixed tags -- we just need a simple client-side filter (keywords like "wearing", "dress", "shirt", "jacket", "boots" go to clothing; everything else to physical).
-
-### 7. Fetch Query Updates
+### Fix 2: De-duplicate image_urls Array
 
 **File: `supabase/functions/roleplay-chat/index.ts`**
 
-Add `clothing_tags` to the character SELECT query (line ~426) so it's available during scene prompt building.
+Add a de-duplication check after building the `imageUrlsArray` (after line 3554). If Figure 1 and Figure 2 resolve to the same storage path, remove the duplicate. This is a safety net for the edge case where both point to the same character reference.
 
-## Migration Strategy
+```typescript
+// After building imageUrlsArray
+// De-duplicate: if Figure 1 and Figure 2 are the same image, keep only one
+const deduplicatedUrls = [...new Set(
+  imageUrlsArray.map(url => {
+    // Extract storage path (strip query params/tokens for comparison)
+    const match = url.match(/\/storage\/v1\/object\/(?:sign|public)\/(.+?)(?:\?|$)/);
+    return match ? match[1] : url;
+  })
+)];
+if (deduplicatedUrls.length < imageUrlsArray.length) {
+  console.warn('⚠️ Duplicate image URLs detected in array, de-duplicating');
+  // Keep only unique URLs (use the last occurrence which has the freshest token)
+  // ... trim imageUrlsArray
+}
+```
 
-For existing characters that already have mixed tags in `appearance_tags`:
-- No automatic migration needed
-- Users can manually move clothing tags to the new section
-- Both sections work independently -- old characters with mixed tags still function, just less optimally
+### Fix 3: Improve Scene Extraction (Already Planned - P0)
 
-## Impact Summary
+This was already approved in the previous plan. The LLM-based structured extraction replaces the broken regex `analyzeSceneContent()` that produces "Inside.", "At the.", etc. This fix is separate but complementary.
 
-| Area | Change | Risk |
+### Fix 4: Clothing Tags Separation (Already Implemented)
+
+The clothing/physical tag split was just deployed. This prevents "tropical beach aesthetic" and "colorful swimwear" from appearing in every scene prompt. Users can now move those to "Default Outfit" so they don't contaminate scenes set in offices, spas, etc.
+
+---
+
+## Technical Details
+
+### Files Modified
+| File | Change | Risk |
 |------|--------|------|
-| DB | Add `clothing_tags` column | None (additive) |
-| Sidebar UI | Split tags into two chip inputs | Low |
-| Scene prompts | Use physical only + clothing override | Low |
-| Portrait prompts | Use both (unchanged behavior) | None |
-| AI suggestions | Client-side tag categorization | Low |
+| `supabase/functions/roleplay-chat/index.ts` | Fix fallback logic (line 2799-2806) to not use character ref as Figure 1 | Low |
+| `supabase/functions/roleplay-chat/index.ts` | Add image_urls de-duplication after line 3554 | Low |
 
+### Expected Outcome
+- When I2I chain breaks, system sends 1 image (character ref as Figure 2 only) instead of 2 identical images
+- Different prompts with the same single reference will produce visually distinct images
+- Scene extraction improvements (separate task) will further differentiate outputs
