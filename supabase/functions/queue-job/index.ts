@@ -615,7 +615,9 @@ serve(async (req) => {
       })
 
       if (!enqueueResponse.ok) {
-        throw new Error(`Redis enqueue failed: ${enqueueResponse.status}`)
+        const responseBody = await enqueueResponse.text()
+        console.error('❌ Redis RPUSH failed:', { status: enqueueResponse.status, body: responseBody, queueName, redisUrl: redisUrl?.substring(0, 40) })
+        throw new Error(`Redis enqueue failed: ${enqueueResponse.status} - ${responseBody}`)
       }
 
       console.log(`✅ Job ${job.id} enqueued to ${queueName}`)
