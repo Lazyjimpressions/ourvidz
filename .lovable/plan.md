@@ -1,67 +1,107 @@
 
-# Fix ImagePickerDialog Freeze -- Root Cause and Proper Solution
 
-## Root Cause (Why 4 Previous Fixes Failed)
+# Split Appearance Tags into Physical + Clothing Sections
 
-The previous fixes all focused on optimizing the signing loop inside `ImagePickerDialog` (batching, refs, single flush, etc.). But the actual problem is architectural:
+## The Idea
 
-**`ImagePickerDialog` uses `LibraryAssetService.generateSignedUrl()` which bypasses the caching layer entirely.** Every time the dialog opens, it makes 40+ fresh HTTP POST requests to Supabase Storage -- one per asset -- with no caching, no concurrency limiting, and 2 `console.log` calls per asset (80 logs total).
+Instead of a complex vision pipeline, simply split the existing "Appearance" section in the Character Studio sidebar into two clearly labeled subsections:
 
-Meanwhile, the rest of the app (Library page, Workspace, etc.) uses `urlSigningService` via the `useSignedAssets` hook, which provides:
-- In-memory URL cache (so previously signed URLs are instant)
-- Concurrency limiting (max 4 parallel requests)
-- Deduplication (prevents signing the same path twice)
-- Batch signing via `getSignedUrls()`
+1. **Physical Appearance** -- permanent traits (face, hair, eyes, body type)
+2. **Default Outfit** -- clothing and accessories (can be overridden per scene)
 
-If the user has visited the Library page before opening the picker, all those URLs are already cached in `urlSigningService` -- but `ImagePickerDialog` ignores that cache and makes 40 fresh network requests anyway, flooding the browser.
+This gives users one character they can place in any scenario. The scene prompt builder uses only the physical tags for identity and swaps clothing as needed.
 
-## Solution
+## What Changes
 
-Replace the entire custom signing implementation in `ImagePickerDialog` with the proven `useSignedAssets` hook pattern used by the Library and Workspace pages.
+### 1. Database: New `clothing_tags` Column
 
-## Technical Changes
+Add `clothing_tags text[]` to the `characters` table (nullable, defaults to empty array). The existing `appearance_tags` column stays but becomes "physical only."
 
-### File: `src/components/storyboard/ImagePickerDialog.tsx`
+### 2. Data Model: `CharacterData` Interface
 
-**Remove:**
-- `signedUrls` state (Map)
-- `loadingUrls` state (Set)
-- `signedRef` and `loadingRef` refs
-- `filteredAssetIds` memo
-- The entire signing `useEffect` (lines 80-145)
-- The cleanup `useEffect` that clears signing caches (lines 148-158)
+**File: `src/hooks/useCharacterStudio.ts`**
 
-**Add:**
-- Import `toSharedFromLibrary` from `AssetMappers`
-- Import `useSignedAssets` from `lib/hooks/useSignedAssets`
-- Map `filteredAssets` to `SharedAsset[]` using `toSharedFromLibrary` (or a lightweight inline mapper)
-- Pass the mapped assets to `useSignedAssets('user-library')`
-- Use `signedAssets[i].thumbUrl` for rendering thumbnails
-- On selection, call `signedAsset.signOriginal()` to get the full-res URL (single request, cached)
+- Add `clothing_tags: string[]` to `CharacterData`
+- Add to default data, save/load logic
 
-**Rendering changes:**
-- Replace `signedUrls.get(asset.id)` with `signedAsset.thumbUrl`
-- Replace `loadingUrls.has(asset.id)` with `!signedAsset.thumbUrl`
-- On "Use Selected" click, await `signOriginal()` to get the full URL before calling `onSelect()`
+### 3. Sidebar UI: Split the Appearance Section
 
-### File: `src/components/playground/ImageCompareView.tsx`
+**File: `src/components/character-studio-v3/StudioSidebar.tsx`**
 
-No changes needed -- the auto-sync logic from the previous fix is already in place.
+The current Appearance collapsible has:
+- Visual Description (textarea)
+- Tags (single chip input)
+- Style Lock (reference image)
 
-## Why This Works
+Replace "Tags" with two sub-sections:
 
-1. **Cache hits**: If the user visited the Library page, all thumbnail URLs are already cached in `urlSigningService`. Opening the picker will show images instantly with zero network requests.
+```
+Appearance (collapsible)
+  |-- Visual Description (textarea, unchanged)
+  |-- Physical Tags: "auburn hair, green eyes, athletic"
+  |     [chip input, same UX as current tags]
+  |-- Default Outfit: "leather jacket, jeans, boots"
+  |     [chip input, same UX]
+  |-- Style Lock (reference image, unchanged)
+```
 
-2. **Concurrency control**: `urlSigningService` limits to 4 parallel signing requests (vs the current 6-per-batch with no global limit). This prevents flooding.
+Both use the same chip input pattern already in place -- just duplicated with different state (`appearance_tags` vs `clothing_tags`).
 
-3. **Single state update**: `useSignedAssets` collects all results and does one state flush, which is already battle-tested on the Library page with 40+ assets.
+### 4. Scene Prompt Builder: Use Physical Only, Override Clothing
 
-4. **No re-render loops**: `useSignedAssets` uses `queuedIdsRef` to track what's been queued without re-triggering the effect -- the exact pattern that was attempted manually but kept breaking.
+**File: `supabase/functions/roleplay-chat/index.ts`**
 
-5. **Lazy original signing**: Thumbnails load fast (smaller files). The full-resolution URL is only signed when the user clicks "Use Selected", keeping the dialog snappy.
+Line 3109 currently does:
+```typescript
+const characterAppearance = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ');
+```
 
-## Files Changed
+Change to:
+```typescript
+const physicalTags = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ');
+const outfitTags = sceneContext.clothing || (sceneCharacter.clothing_tags || []).join(', ');
+const characterAppearance = outfitTags
+  ? `${physicalTags}, wearing ${outfitTags}`
+  : physicalTags;
+```
 
-| File | Change |
-|------|--------|
-| `src/components/storyboard/ImagePickerDialog.tsx` | Replace custom signing logic with `useSignedAssets` hook; remove all signing state/refs/effects |
+This means:
+- If the LLM scene extraction detects specific clothing in the narrative, use that
+- Otherwise fall back to the character's default outfit tags
+- Physical tags always included for identity
+
+### 5. Prompt Builder Utility
+
+**File: `src/utils/characterPromptBuilder.ts`**
+
+Update `buildCharacterVisualDescription()` to accept and separate `clothing_tags` from `appearance_tags` so portrait generation can still use both, while scene generation uses them selectively.
+
+### 6. AI Suggestion Integration
+
+**File: `src/components/character-studio-v3/StudioSidebar.tsx`**
+
+The "Suggest" button for appearance currently populates `appearance_tags`. Update the suggestion handler to split AI suggestions into physical vs. clothing categories. The `suggest-character` edge function already returns mixed tags -- we just need a simple client-side filter (keywords like "wearing", "dress", "shirt", "jacket", "boots" go to clothing; everything else to physical).
+
+### 7. Fetch Query Updates
+
+**File: `supabase/functions/roleplay-chat/index.ts`**
+
+Add `clothing_tags` to the character SELECT query (line ~426) so it's available during scene prompt building.
+
+## Migration Strategy
+
+For existing characters that already have mixed tags in `appearance_tags`:
+- No automatic migration needed
+- Users can manually move clothing tags to the new section
+- Both sections work independently -- old characters with mixed tags still function, just less optimally
+
+## Impact Summary
+
+| Area | Change | Risk |
+|------|--------|------|
+| DB | Add `clothing_tags` column | None (additive) |
+| Sidebar UI | Split tags into two chip inputs | Low |
+| Scene prompts | Use physical only + clothing override | Low |
+| Portrait prompts | Use both (unchanged behavior) | None |
+| AI suggestions | Client-side tag categorization | Low |
+
