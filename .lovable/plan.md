@@ -1,81 +1,102 @@
 
-# Fix: Images Spinning Forever in ImagePickerDialog
 
-## Root Cause
+# Fix: Image Picker Dialog - Complete Rewrite of Signing Logic
 
-The `queuedIdsRef` in `useSignedAssets.ts` (line 38) is a `useRef<Set<string>>` that tracks which asset IDs have been queued for signing. Once an ID is added (line 60), it is **never cleared** unless `refresh()` is explicitly called. This means:
+## Problem
 
-1. Dialog opens, workspace tab active -- 110 assets get queued, IDs added to `queuedIdsRef`
-2. Signing runs (or fails silently)
-3. User switches to Library tab -- new assets arrive, but their IDs may overlap or the ref still blocks re-evaluation
-4. Dialog closes and reopens -- `queuedIdsRef` still holds all old IDs since the hook instance persists (the Dialog component stays mounted)
-5. `pathsToSign` memo returns **empty arrays** because every asset ID is already in `queuedIdsRef`
-6. The signing `useEffect` never fires -- images spin forever
+The `ImagePickerDialog` uses `useSignedAssets`, a hook designed for always-mounted components (workspace grid, library page). It breaks in dialog contexts due to:
 
-The console logs confirm: **no signing requests are being made** (no `UrlSigningService` log lines). The workspace data loads successfully (110 assets), but the signing step is completely skipped.
+- A mutable ref (`queuedIdsRef`) modified inside `useMemo` (React anti-pattern -- memos must be pure)
+- Race conditions between `useEffect` (runs after render) clearing the ref and `useMemo` (runs during render) reading it
+- The `refresh()` call on tab switch introduces additional timing conflicts
+- Individual path signing failures are silently swallowed, leaving assets stuck in spinner state forever
 
-## Additional Issue
+This affects both the Character Studio and Playground image pickers since they share `ImagePickerDialog`.
 
-The `ImagePickerDialog` stays mounted even when closed (`isOpen=false`) because React keeps the component tree. The `useSignedAssets` hook's `enabled` flag correctly gates the effect, but `queuedIdsRef` accumulates IDs across open/close cycles without clearing.
+## Solution: Direct Signing in ImagePickerDialog
 
-## Fix Plan
+Remove the `useSignedAssets` dependency from `ImagePickerDialog` and sign URLs directly using `supabase.storage.from(bucket).createSignedUrl()` per asset. This is simpler, more debuggable, and eliminates all the ref/memo timing issues.
 
-### Fix 1: Clear `queuedIdsRef` when assets array identity changes
+### File: `src/components/storyboard/ImagePickerDialog.tsx`
 
-**File: `src/lib/hooks/useSignedAssets.ts`**
+**Remove**: `useSignedAssets` import and usage
 
-Add a `useEffect` that clears `queuedIdsRef` whenever the `assets` array reference changes. This ensures that when the user switches tabs (workspace to library) or when the dialog reopens with fresh data, all assets get re-queued for signing.
+**Add**: A self-contained signing approach inside the dialog:
 
-```typescript
-// After line 38 (queuedIdsRef declaration)
-// Reset queued tracking when assets change (e.g., tab switch, dialog reopen)
+1. After `sharedAssets` is computed, run a `useEffect` that:
+   - Takes the current `sharedAssets` array and `bucket`
+   - For each asset, calls `supabase.storage.from(bucket).createSignedUrl(path, 3600)`
+   - Stores results in a local `Record<string, string>` state mapping asset ID to signed thumb URL
+   - Tracks failed IDs in a separate `Set<string>` state
+   - Has proper cleanup via `cancelled` flag
+
+2. On `activeSource` change: the `sharedAssets` array identity changes, which naturally re-triggers the effect -- no manual `refresh()` needed
+
+3. Image rendering:
+   - If signed URL exists: show image with `onError` fallback
+   - If in failed set: show broken-image icon
+   - Otherwise: show spinner (with a 15-second timeout to auto-mark as failed)
+
+4. Selection: when user picks an image, sign the original path on-demand (same `createSignedUrl` call)
+
+**Key code structure:**
+
+```text
+// State
+const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
+const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
+const [signing, setSigning] = useState(false);
+
+// Effect: sign all thumbnails when assets or bucket change
 useEffect(() => {
-  queuedIdsRef.current.clear();
-}, [assets]);
+  if (!isOpen || sharedAssets.length === 0) return;
+  let cancelled = false;
+  setSigning(true);
+  setThumbUrls({});
+  setFailedIds(new Set());
+
+  const signAll = async () => {
+    for (const asset of sharedAssets) {
+      if (cancelled) break;
+      const path = asset.thumbPath || asset.originalPath;
+      if (!path) { mark failed; continue; }
+      try {
+        const { data } = await supabase.storage
+          .from(bucket).createSignedUrl(path, 3600);
+        if (!cancelled && data?.signedUrl) {
+          setThumbUrls(prev => ({ ...prev, [asset.id]: data.signedUrl }));
+        }
+      } catch {
+        if (!cancelled) setFailedIds(prev => new Set(prev).add(asset.id));
+      }
+    }
+    if (!cancelled) setSigning(false);
+  };
+  signAll();
+  return () => { cancelled = true; };
+}, [sharedAssets, bucket, isOpen]);
 ```
 
-### Fix 2: Also clear `queuedIdsRef` when `enabled` transitions from false to true
+This is intentionally simple -- no caching, no refs, no memos for signing state. The dialog is short-lived and the `UrlSigningService` cache handles deduplication at the service layer anyway.
 
-When the dialog reopens (`enabled` goes from `false` to `true`), the ref should be cleared so all assets get signed fresh.
+### File: `src/lib/hooks/useSignedAssets.ts`
 
-```typescript
-// Track previous enabled state
-const prevEnabledRef = useRef(enabled);
-useEffect(() => {
-  if (enabled && !prevEnabledRef.current) {
-    // Re-enabled: clear queued IDs so all assets get signed
-    queuedIdsRef.current.clear();
-  }
-  prevEnabledRef.current = enabled;
-}, [enabled]);
-```
+**No changes**. The hook continues to work fine for its intended use cases (always-mounted workspace/library grids). We just stop using it in the dialog.
 
-### Fix 3: Clear stale signed URLs when switching source tabs
+### File: `src/components/playground/ReferenceImageSlots.tsx`
 
-**File: `src/components/storyboard/ImagePickerDialog.tsx`**
+**No changes needed**. This component already uses `ImagePickerDialog`, so fixing the dialog fixes the Playground picker automatically. The `source` prop flows through correctly.
 
-The `useSignedAssets` hook receives different `sharedAssets` and `bucket` when switching tabs, but old `signedUrls` state may persist. Add a `refresh` call from the hook when the active source changes.
+## What This Fixes
 
-```typescript
-const { signedAssets, isSigning, refresh } = useSignedAssets(sharedAssets, bucket, {
-  enabled: isOpen,
-});
+- **Character Studio**: Browse dropdown (Workspace / Library) shows images that load and are selectable
+- **Playground**: Reference Image Slots "From library" and "From workspace" options show loadable images
+- **Error visibility**: Failed signings show a broken-image icon instead of spinning forever
+- **Tab switching**: Switching between Workspace and Library tabs cleanly resets and re-signs
 
-// Clear signed state when switching source tabs
-useEffect(() => {
-  refresh();
-}, [activeSource]);
-```
+## Files Changed
 
-## Files to Change
+| File | Change |
+|------|--------|
+| `src/components/storyboard/ImagePickerDialog.tsx` | Replace `useSignedAssets` with direct Supabase signing |
 
-| File | Change | Lines |
-|------|--------|-------|
-| `src/lib/hooks/useSignedAssets.ts` | Clear `queuedIdsRef` on assets change and enabled transition | After line 38 |
-| `src/components/storyboard/ImagePickerDialog.tsx` | Call `refresh()` when `activeSource` changes | After line 114 |
-
-## Why This Fixes Both Workspace AND Library
-
-- **Workspace**: Assets load (confirmed by console log showing 110 assets), but `queuedIdsRef` blocks signing. Clearing the ref on assets change allows signing to proceed.
-- **Library**: Same mechanism -- library assets are mapped to `SharedAsset[]` but signing is skipped because IDs are already in the ref from previous renders.
-- **Tab switching**: The `refresh()` call clears both `signedUrls` state and `queuedIdsRef`, ensuring a clean signing pass for the new source.
