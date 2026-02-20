@@ -603,13 +603,15 @@ serve(async (req) => {
     }
 
     try {
+      // Upstash Redis REST API: RPUSH expects body as JSON array [value]
+      // where value is the serialized string of the queue payload
       const enqueueResponse = await fetch(`${redisUrl}/rpush/${queueName}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${redisToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(queuePayload)
+        body: JSON.stringify([JSON.stringify(queuePayload)])
       })
 
       if (!enqueueResponse.ok) {
