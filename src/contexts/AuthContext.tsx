@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { debugAuthState } from '@/lib/authDebug';
+import { sessionCache } from '@/lib/cache/SessionCache';
 
 interface Profile {
   id: string;
@@ -239,6 +240,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(session?.user ?? null);
     
     if (session?.user && event !== 'TOKEN_REFRESHED') {
+      // Initialize session cache immediately so all pages can use it without visiting Library first
+      sessionCache.initializeSession(session.user.id);
       // Defer profile fetching to prevent deadlocks
       setTimeout(() => {
         fetchProfile(session.user.id);
@@ -289,7 +292,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setSession(session);
           setUser(session?.user ?? null);
           
-        if (session?.user) {
+          if (session?.user) {
+            // Initialize session cache immediately on app load so all pages work without visiting Library first
+            sessionCache.initializeSession(session.user.id);
             console.log('👤 User found, fetching profile...');
             await fetchProfile(session.user.id);
             // Run comprehensive auth debug
