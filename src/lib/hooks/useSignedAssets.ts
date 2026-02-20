@@ -30,6 +30,7 @@ export function useSignedAssets(
   } = opts;
 
   const [signedUrls, setSignedUrls] = useState<Record<string, { thumbUrl?: string; url?: string }>>({});
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [isSigning, setIsSigning] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   
@@ -92,6 +93,17 @@ export function useSignedAssets(
         });
       } catch (error) {
         console.error('Failed to sign thumbnails:', error);
+        // Mark all assets in this batch as failed so UI can show fallback
+        if (!cancelled) {
+          setFailedIds(prev => {
+            const next = new Set(prev);
+            for (const path of pathsToSign.thumbPaths) {
+              const assetId = pathsToSign.pathToAssetMap.get(path);
+              if (assetId) next.add(assetId);
+            }
+            return next;
+          });
+        }
       } finally {
         if (!cancelled) {
           setIsSigning(false);
@@ -138,6 +150,7 @@ export function useSignedAssets(
   const refresh = useCallback(() => {
     setRefreshKey(prev => prev + 1);
     setSignedUrls({});
+    setFailedIds(new Set());
     queuedIdsRef.current.clear();
   }, []);
 
@@ -145,8 +158,14 @@ export function useSignedAssets(
   const signedAssets = useMemo((): SignedAsset[] => {
     return assets.map(asset => {
       let thumbUrl = signedUrls[asset.id]?.thumbUrl || null;
+      const failed = failedIds.has(asset.id);
+      
       if (asset.type === 'video' && !thumbUrl && !asset.thumbPath) {
         thumbUrl = '/video-thumbnail-placeholder.svg';
+      }
+      // If signing failed, use a sentinel value so the UI can show a fallback
+      if (failed && !thumbUrl) {
+        thumbUrl = 'SIGNING_FAILED';
       }
       
       return {
@@ -156,7 +175,7 @@ export function useSignedAssets(
         signOriginal: () => signOriginal(asset)
       };
     });
-  }, [assets, signedUrls, signOriginal]);
+  }, [assets, signedUrls, failedIds, signOriginal]);
 
   return {
     signedAssets,
