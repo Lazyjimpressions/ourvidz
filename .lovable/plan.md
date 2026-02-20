@@ -1,166 +1,121 @@
 
-# Fix: queue-job Called for API Models + Model Hardcoding Audit
 
-## Confirmed: Model Is NOT Hardcoded — But Has Two Bugs
+# Fix Character Studio Image Picker: Dropdown Source + Spinning Images
 
-After reading the full flow, here is the confirmation of the model resolution chain and where the bugs lie.
+## Issue 1: Library Button Should Be a Dropdown (Workspace / Library)
 
-### How the Model is Resolved (Correct Architecture)
+The current "Library" button in `CharacterStudioSidebar.tsx` (line 564) is a plain button that opens `ImagePickerDialog`, which only fetches from the `user_library` table. The user wants a dropdown to choose between **Workspace** (recent generations in `workspace_assets`) and **Library** (saved assets in `user_library`).
 
-The model selection is fully dynamic and table-driven at every layer:
+### Changes
 
-**Client side (`useLibraryFirstWorkspace.ts`)**
-- On mount: reads `workspace-selected-model` from `localStorage` (full model object with `{id, type, display_name}`)
-- If absent: queries `api_models` for the model flagged `default_for_tasks @> ['generation']` — this is the database default, not a hardcoded value
-- `setSelectedModel()` persists the full object to `localStorage` so selection survives navigation
+**File: `src/components/character-studio/CharacterStudioSidebar.tsx`**
+- Replace the plain "Library" `<Button>` (lines 564-572) with a `<DropdownMenu>` containing two items:
+  - "Workspace" -- opens the picker in workspace mode
+  - "Library" -- opens the picker in library mode
+- Pass the selected source mode to the parent via a new callback or by extending `onOpenImagePicker` to accept a `source` parameter: `onOpenImagePicker(source: 'workspace' | 'library')`
 
-**Edge function (`fal-image/index.ts`)**
-- Receives `apiModelId` (a UUID) from the client payload
-- Queries `api_models` by that UUID to get `model_key`, `capabilities`, `input_defaults` etc.
-- If no `apiModelId` provided: queries for the `default_for_tasks @> ['generation']` model from the `fal` provider
-- ALL parameters (safety, aspect ratio, schema filtering) are derived from the database row — no hardcoding
+**File: `src/components/storyboard/ImagePickerDialog.tsx`**
+- Add a `source` prop: `'workspace' | 'library'` (default `'library'`)
+- When `source === 'workspace'`:
+  - Fetch from `WorkspaceAssetService.getUserWorkspaceAssets()` instead of `useLibraryAssets()`
+  - Map results via `toSharedFromWorkspace` instead of `toSharedFromLibrary`
+  - Sign URLs against the `'workspace-temp'` bucket instead of `'user-library'`
+- Add a tab/toggle at the top of the dialog so the user can switch between sources inline without closing
 
-**Conclusion: the model architecture is correct.** No hardcoded model keys are used in the routing or generation path.
+**File: `src/pages/CharacterStudio.tsx`**
+- Update `showImagePicker` state to also track the source: `useState<{ open: boolean; source: 'workspace' | 'library' }>({ open: false, source: 'library' })`
+- Pass `source` to `ImagePickerDialog`
 
----
+**File: `src/components/character-studio-v3/StudioWorkspace.tsx`**
+- Update the `onOpenImagePicker` prop type to accept a source parameter
 
-## Root Cause of the queue-job Bug
+## Issue 2: Library Images Spin Indefinitely
 
-The bug is **not** a hardcoded model. It's an **async initialization race** combined with a **wrong localStorage value being written for fal models**.
+### Root Cause
 
-### Bug 1: Async Race Window (Primary)
+The library assets in the database have `thumbnail_path = NULL`. The `useSignedAssets` hook falls back to signing the `originalPath` as the thumbnail. The storage paths (e.g., `3348b481-.../portraits/...png`) are paths within the `user-library` bucket. However, these portrait images were likely saved to the `user-library` bucket but may have file access issues (RLS, missing files, or path format mismatches).
 
-```
-Line 178: const [selectedModel, setSelectedModelInternal] = useState(
-            { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' }  // ← initial state
-          );
+The `useSignedAssets` hook silently catches signing errors (line 93: `console.error` only) and leaves `thumbUrl` as `null`, which causes the spinner to show forever with no error feedback.
 
-Line 181-241: useEffect(() => {
-  const initializeSelectedModel = async () => {   // ← async, runs AFTER first render
-    const savedModel = localStorage.getItem('workspace-selected-model');
-    // ... parse and setSelectedModelInternal(parsed)
-  };
-  initializeSelectedModel();
-}, []);
-```
+### Fix
 
-Between component mount and the async `useEffect` completing, `selectedModel.type` is `'sdxl'`. If `generate()` is triggered before the effect resolves (e.g., the user navigates from the Library page where generation was pending), the routing decision at line 1064 reads:
+**File: `src/lib/hooks/useSignedAssets.ts`**
+- Add a fallback state: if signing fails for an asset, set `thumbUrl` to a placeholder or error state instead of leaving it as `null` forever
+- Track failed asset IDs so the UI can show a broken-image icon instead of an infinite spinner
 
+**File: `src/components/storyboard/ImagePickerDialog.tsx`**
+- Add an `onError` handler on the `<img>` tag (line 167-172) to show a fallback broken-image icon if the signed URL fails to load
+- Add a timeout: if `thumbUrl` is still `null` after 10 seconds, show a fallback instead of spinning forever
+
+## Technical Details
+
+### Dropdown Implementation (Sidebar)
 ```typescript
-const edgeFunction = selectedModel?.type === 'fal'
-  ? 'fal-image'
-  : selectedModel?.type === 'replicate'
-    ? 'replicate-image'
-    : 'queue-job';  // ← selectedModel.type is 'sdxl' during the race window
+// CharacterStudioSidebar.tsx - Replace lines 564-572
+<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <Button variant="outline" size="sm" className="flex-1 gap-2">
+      <Library className="w-4 h-4" />
+      Browse
+      <ChevronDown className="w-3 h-3" />
+    </Button>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent className="z-[100] bg-popover border border-border">
+    <DropdownMenuItem onSelect={() => onOpenImagePicker('workspace')}>
+      Workspace (Recent)
+    </DropdownMenuItem>
+    <DropdownMenuItem onSelect={() => onOpenImagePicker('library')}>
+      Library (Saved)
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>
 ```
 
-### Bug 2: fal Models Saved as 'sdxl' in Legacy Key
-
+### ImagePickerDialog Source Switching
 ```typescript
-// Line 294 — setSelectedModel callback:
-const saveValue = newModel.type === 'replicate' ? 'replicate_rv51' : 'sdxl';
-// ↑ fal models get written as 'sdxl' to the old-format key
-localStorage.setItem('workspace-model-type', saveValue);
-```
-
-If `workspace-selected-model` is cleared (incognito, cache clear, new session), the old-format fallback at line 198-206 reads `'sdxl'` and restores SDXL instead of the fal model. This silently routes to `queue-job`.
-
----
-
-## Fix Plan
-
-### Fix 1: Initialize `selectedModel` State Synchronously
-
-**File: `src/hooks/useLibraryFirstWorkspace.ts` — line 178**
-
-Change the `useState` initializer from a hardcoded SDXL default to a function that reads `localStorage` synchronously. This eliminates the async race window entirely for returning users.
-
-```typescript
-// BEFORE (line 178):
-const [selectedModel, setSelectedModelInternal] = useState<...>({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
-
-// AFTER: lazy initializer reads localStorage synchronously
-const [selectedModel, setSelectedModelInternal] = useState<...>(() => {
-  const savedModel = localStorage.getItem('workspace-selected-model');
-  if (savedModel) {
-    try {
-      const parsed = JSON.parse(savedModel);
-      if (parsed.id && parsed.type && parsed.display_name) {
-        return parsed;
-      }
-    } catch (e) {}
-  }
-  return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
-});
-```
-
-The `useEffect` can still run for database-default lookup on first-ever load (when no localStorage entry exists).
-
-### Fix 2: Correctly Write fal Model to Legacy Key
-
-**File: `src/hooks/useLibraryFirstWorkspace.ts` — line 294**
-
-```typescript
-// BEFORE:
-const saveValue = newModel.type === 'replicate' ? 'replicate_rv51' : 'sdxl';
-
-// AFTER:
-const saveValue = newModel.type === 'replicate' ? 'replicate_rv51'
-                : newModel.type === 'fal' ? `fal_${newModel.id}`
-                : 'sdxl';
-```
-
-This ensures the old-format fallback key accurately represents fal models rather than silently mapping them to `'sdxl'`.
-
-### Fix 3: Add Pre-Generate Guard for UUID/Type Mismatch
-
-**File: `src/hooks/useLibraryFirstWorkspace.ts` — before line 1064 (routing decision)**
-
-Add a safety check that catches any remaining mismatch between the model ID (which looks like a UUID) and the type (which says `'sdxl'`):
-
-```typescript
-// Safety net: if selectedModel has a UUID id but type is 'sdxl', 
-// it means initialization hasn't completed — resolve from DB before routing
-let effectiveModel = selectedModel;
-const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedModel?.id || '');
-if (isUUID && selectedModel?.type === 'sdxl') {
-  const { data: modelRow } = await supabase
-    .from('api_models')
-    .select('id, model_key, display_name, api_providers!inner(name)')
-    .eq('id', selectedModel.id)
-    .single();
-  if (modelRow) {
-    const pName = (modelRow.api_providers as any)?.name || '';
-    const resolvedType = pName === 'fal' ? 'fal' : pName === 'replicate' ? 'replicate' : 'sdxl';
-    effectiveModel = { ...selectedModel, type: resolvedType };
-    // Persist fix
-    localStorage.setItem('workspace-selected-model', JSON.stringify(effectiveModel));
-  }
+// Add source prop and conditional data fetching
+interface ImagePickerDialogProps {
+  source?: 'workspace' | 'library';  // new prop
+  // ... existing props
 }
 
-// Use effectiveModel instead of selectedModel for routing
-const edgeFunction = effectiveModel?.type === 'fal'
-  ? 'fal-image'
-  : effectiveModel?.type === 'replicate'
-    ? 'replicate-image'
-    : 'queue-job';
+// Inside component: switch data source based on prop
+const { data: libraryData } = useLibraryAssets();  // existing
+const [workspaceData, setWorkspaceData] = useState([]);
+
+useEffect(() => {
+  if (source === 'workspace' && isOpen) {
+    WorkspaceAssetService.getUserWorkspaceAssets()
+      .then(assets => assets.filter(a => a.assetType === 'image'))
+      .then(setWorkspaceData);
+  }
+}, [source, isOpen]);
+
+const bucket = source === 'workspace' ? 'workspace-temp' : 'user-library';
 ```
 
----
+### Spinner Fix
+```typescript
+// ImagePickerDialog.tsx - img tag with error handling
+<img
+  src={asset.thumbUrl}
+  alt={asset.title || 'Image'}
+  className="w-full h-full object-cover"
+  loading="lazy"
+  onError={(e) => {
+    e.currentTarget.style.display = 'none';
+    // Show fallback broken-image icon
+  }}
+/>
+```
 
 ## Files to Change
 
-| File | Change | Risk |
-|------|--------|------|
-| `src/hooks/useLibraryFirstWorkspace.ts` | Sync `useState` initializer from `localStorage` (Fix 1) | Very Low |
-| `src/hooks/useLibraryFirstWorkspace.ts` | Fix fal model saved as `'sdxl'` in legacy key (Fix 2) | Very Low |
-| `src/hooks/useLibraryFirstWorkspace.ts` | Pre-generate UUID/type mismatch guard (Fix 3) | Low |
+| File | Change |
+|------|--------|
+| `src/components/character-studio/CharacterStudioSidebar.tsx` | Replace Library button with dropdown |
+| `src/components/storyboard/ImagePickerDialog.tsx` | Add `source` prop, workspace data fetching, spinner fallback |
+| `src/pages/CharacterStudio.tsx` | Track source in state, pass to dialog |
+| `src/components/character-studio-v3/StudioWorkspace.tsx` | Update `onOpenImagePicker` prop signature |
+| `src/lib/hooks/useSignedAssets.ts` | Add error state tracking for failed signings |
 
-No changes required to `fal-image/index.ts` or `queue-job/index.ts` — the edge functions resolve models correctly from the database using the UUID passed from the client.
-
-## Confirmation: No Hardcoded Model Keys in the Generation Path
-
-- `useLibraryFirstWorkspace.ts`: Model ID comes from UI state (user selection) or `api_models` database default
-- `fal-image/index.ts`: Resolves `model_key`, `capabilities`, `input_defaults` from `api_models` table by the UUID sent from client
-- `queue-job/index.ts`: SDXL-only path — only reached when `selectedModel.type === 'sdxl'`
-- The `api_models` table's `default_for_tasks` array column is the single source of truth for which model is the system default — no hardcoded fallback model keys exist beyond `'sdxl'` for the local worker path
