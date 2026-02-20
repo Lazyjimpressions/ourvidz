@@ -1,121 +1,81 @@
 
+# Fix: Images Spinning Forever in ImagePickerDialog
 
-# Fix Character Studio Image Picker: Dropdown Source + Spinning Images
+## Root Cause
 
-## Issue 1: Library Button Should Be a Dropdown (Workspace / Library)
+The `queuedIdsRef` in `useSignedAssets.ts` (line 38) is a `useRef<Set<string>>` that tracks which asset IDs have been queued for signing. Once an ID is added (line 60), it is **never cleared** unless `refresh()` is explicitly called. This means:
 
-The current "Library" button in `CharacterStudioSidebar.tsx` (line 564) is a plain button that opens `ImagePickerDialog`, which only fetches from the `user_library` table. The user wants a dropdown to choose between **Workspace** (recent generations in `workspace_assets`) and **Library** (saved assets in `user_library`).
+1. Dialog opens, workspace tab active -- 110 assets get queued, IDs added to `queuedIdsRef`
+2. Signing runs (or fails silently)
+3. User switches to Library tab -- new assets arrive, but their IDs may overlap or the ref still blocks re-evaluation
+4. Dialog closes and reopens -- `queuedIdsRef` still holds all old IDs since the hook instance persists (the Dialog component stays mounted)
+5. `pathsToSign` memo returns **empty arrays** because every asset ID is already in `queuedIdsRef`
+6. The signing `useEffect` never fires -- images spin forever
 
-### Changes
+The console logs confirm: **no signing requests are being made** (no `UrlSigningService` log lines). The workspace data loads successfully (110 assets), but the signing step is completely skipped.
 
-**File: `src/components/character-studio/CharacterStudioSidebar.tsx`**
-- Replace the plain "Library" `<Button>` (lines 564-572) with a `<DropdownMenu>` containing two items:
-  - "Workspace" -- opens the picker in workspace mode
-  - "Library" -- opens the picker in library mode
-- Pass the selected source mode to the parent via a new callback or by extending `onOpenImagePicker` to accept a `source` parameter: `onOpenImagePicker(source: 'workspace' | 'library')`
+## Additional Issue
 
-**File: `src/components/storyboard/ImagePickerDialog.tsx`**
-- Add a `source` prop: `'workspace' | 'library'` (default `'library'`)
-- When `source === 'workspace'`:
-  - Fetch from `WorkspaceAssetService.getUserWorkspaceAssets()` instead of `useLibraryAssets()`
-  - Map results via `toSharedFromWorkspace` instead of `toSharedFromLibrary`
-  - Sign URLs against the `'workspace-temp'` bucket instead of `'user-library'`
-- Add a tab/toggle at the top of the dialog so the user can switch between sources inline without closing
+The `ImagePickerDialog` stays mounted even when closed (`isOpen=false`) because React keeps the component tree. The `useSignedAssets` hook's `enabled` flag correctly gates the effect, but `queuedIdsRef` accumulates IDs across open/close cycles without clearing.
 
-**File: `src/pages/CharacterStudio.tsx`**
-- Update `showImagePicker` state to also track the source: `useState<{ open: boolean; source: 'workspace' | 'library' }>({ open: false, source: 'library' })`
-- Pass `source` to `ImagePickerDialog`
+## Fix Plan
 
-**File: `src/components/character-studio-v3/StudioWorkspace.tsx`**
-- Update the `onOpenImagePicker` prop type to accept a source parameter
-
-## Issue 2: Library Images Spin Indefinitely
-
-### Root Cause
-
-The library assets in the database have `thumbnail_path = NULL`. The `useSignedAssets` hook falls back to signing the `originalPath` as the thumbnail. The storage paths (e.g., `3348b481-.../portraits/...png`) are paths within the `user-library` bucket. However, these portrait images were likely saved to the `user-library` bucket but may have file access issues (RLS, missing files, or path format mismatches).
-
-The `useSignedAssets` hook silently catches signing errors (line 93: `console.error` only) and leaves `thumbUrl` as `null`, which causes the spinner to show forever with no error feedback.
-
-### Fix
+### Fix 1: Clear `queuedIdsRef` when assets array identity changes
 
 **File: `src/lib/hooks/useSignedAssets.ts`**
-- Add a fallback state: if signing fails for an asset, set `thumbUrl` to a placeholder or error state instead of leaving it as `null` forever
-- Track failed asset IDs so the UI can show a broken-image icon instead of an infinite spinner
+
+Add a `useEffect` that clears `queuedIdsRef` whenever the `assets` array reference changes. This ensures that when the user switches tabs (workspace to library) or when the dialog reopens with fresh data, all assets get re-queued for signing.
+
+```typescript
+// After line 38 (queuedIdsRef declaration)
+// Reset queued tracking when assets change (e.g., tab switch, dialog reopen)
+useEffect(() => {
+  queuedIdsRef.current.clear();
+}, [assets]);
+```
+
+### Fix 2: Also clear `queuedIdsRef` when `enabled` transitions from false to true
+
+When the dialog reopens (`enabled` goes from `false` to `true`), the ref should be cleared so all assets get signed fresh.
+
+```typescript
+// Track previous enabled state
+const prevEnabledRef = useRef(enabled);
+useEffect(() => {
+  if (enabled && !prevEnabledRef.current) {
+    // Re-enabled: clear queued IDs so all assets get signed
+    queuedIdsRef.current.clear();
+  }
+  prevEnabledRef.current = enabled;
+}, [enabled]);
+```
+
+### Fix 3: Clear stale signed URLs when switching source tabs
 
 **File: `src/components/storyboard/ImagePickerDialog.tsx`**
-- Add an `onError` handler on the `<img>` tag (line 167-172) to show a fallback broken-image icon if the signed URL fails to load
-- Add a timeout: if `thumbUrl` is still `null` after 10 seconds, show a fallback instead of spinning forever
 
-## Technical Details
+The `useSignedAssets` hook receives different `sharedAssets` and `bucket` when switching tabs, but old `signedUrls` state may persist. Add a `refresh` call from the hook when the active source changes.
 
-### Dropdown Implementation (Sidebar)
 ```typescript
-// CharacterStudioSidebar.tsx - Replace lines 564-572
-<DropdownMenu>
-  <DropdownMenuTrigger asChild>
-    <Button variant="outline" size="sm" className="flex-1 gap-2">
-      <Library className="w-4 h-4" />
-      Browse
-      <ChevronDown className="w-3 h-3" />
-    </Button>
-  </DropdownMenuTrigger>
-  <DropdownMenuContent className="z-[100] bg-popover border border-border">
-    <DropdownMenuItem onSelect={() => onOpenImagePicker('workspace')}>
-      Workspace (Recent)
-    </DropdownMenuItem>
-    <DropdownMenuItem onSelect={() => onOpenImagePicker('library')}>
-      Library (Saved)
-    </DropdownMenuItem>
-  </DropdownMenuContent>
-</DropdownMenu>
-```
+const { signedAssets, isSigning, refresh } = useSignedAssets(sharedAssets, bucket, {
+  enabled: isOpen,
+});
 
-### ImagePickerDialog Source Switching
-```typescript
-// Add source prop and conditional data fetching
-interface ImagePickerDialogProps {
-  source?: 'workspace' | 'library';  // new prop
-  // ... existing props
-}
-
-// Inside component: switch data source based on prop
-const { data: libraryData } = useLibraryAssets();  // existing
-const [workspaceData, setWorkspaceData] = useState([]);
-
+// Clear signed state when switching source tabs
 useEffect(() => {
-  if (source === 'workspace' && isOpen) {
-    WorkspaceAssetService.getUserWorkspaceAssets()
-      .then(assets => assets.filter(a => a.assetType === 'image'))
-      .then(setWorkspaceData);
-  }
-}, [source, isOpen]);
-
-const bucket = source === 'workspace' ? 'workspace-temp' : 'user-library';
-```
-
-### Spinner Fix
-```typescript
-// ImagePickerDialog.tsx - img tag with error handling
-<img
-  src={asset.thumbUrl}
-  alt={asset.title || 'Image'}
-  className="w-full h-full object-cover"
-  loading="lazy"
-  onError={(e) => {
-    e.currentTarget.style.display = 'none';
-    // Show fallback broken-image icon
-  }}
-/>
+  refresh();
+}, [activeSource]);
 ```
 
 ## Files to Change
 
-| File | Change |
-|------|--------|
-| `src/components/character-studio/CharacterStudioSidebar.tsx` | Replace Library button with dropdown |
-| `src/components/storyboard/ImagePickerDialog.tsx` | Add `source` prop, workspace data fetching, spinner fallback |
-| `src/pages/CharacterStudio.tsx` | Track source in state, pass to dialog |
-| `src/components/character-studio-v3/StudioWorkspace.tsx` | Update `onOpenImagePicker` prop signature |
-| `src/lib/hooks/useSignedAssets.ts` | Add error state tracking for failed signings |
+| File | Change | Lines |
+|------|--------|-------|
+| `src/lib/hooks/useSignedAssets.ts` | Clear `queuedIdsRef` on assets change and enabled transition | After line 38 |
+| `src/components/storyboard/ImagePickerDialog.tsx` | Call `refresh()` when `activeSource` changes | After line 114 |
 
+## Why This Fixes Both Workspace AND Library
+
+- **Workspace**: Assets load (confirmed by console log showing 110 assets), but `queuedIdsRef` blocks signing. Clearing the ref on assets change allows signing to proceed.
+- **Library**: Same mechanism -- library assets are mapped to `SharedAsset[]` but signing is skipped because IDs are already in the ref from previous renders.
+- **Tab switching**: The `refresh()` call clears both `signedUrls` state and `queuedIdsRef`, ensuring a clean signing pass for the new source.
