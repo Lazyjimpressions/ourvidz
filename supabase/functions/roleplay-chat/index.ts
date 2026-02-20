@@ -112,6 +112,64 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/**
+ * Re-sign a Supabase Storage signed URL if its token is expired or about to expire.
+ * Extracts the raw storage path from the URL and creates a fresh signed URL
+ * with a 1-hour TTL using the service-role client.
+ */
+async function ensureFreshSignedUrl(supabaseAdmin: any, url: string): Promise<string> {
+  if (!url) return url;
+  
+  // Only process Supabase storage signed URLs
+  if (!url.includes('/storage/v1/object/sign/')) return url;
+  
+  try {
+    // Check if token is expired by decoding the JWT payload
+    const tokenMatch = url.match(/[?&]token=([^&]+)/);
+    if (tokenMatch) {
+      const tokenPayload = tokenMatch[1].split('.')[1];
+      if (tokenPayload) {
+        const decoded = JSON.parse(atob(tokenPayload));
+        const expiresAt = decoded.exp * 1000; // Convert to ms
+        const now = Date.now();
+        const bufferMs = 5 * 60 * 1000; // 5 minute buffer
+        
+        if (expiresAt > now + bufferMs) {
+          // Token still valid, return as-is
+          return url;
+        }
+        console.log('🔄 Re-signing expired URL (expired', Math.round((now - expiresAt) / 60000), 'min ago)');
+      }
+    }
+    
+    // Extract bucket and path from the URL
+    // Format: .../storage/v1/object/sign/{bucket}/{path}?token=...
+    const signMatch = url.match(/\/storage\/v1\/object\/sign\/([^/]+)\/(.+?)(?:\?|$)/);
+    if (!signMatch) {
+      console.warn('⚠️ Could not parse storage URL for re-signing:', url.substring(0, 80));
+      return url;
+    }
+    
+    const bucket = signMatch[1];
+    const filePath = decodeURIComponent(signMatch[2]);
+    
+    const { data, error } = await supabaseAdmin.storage
+      .from(bucket)
+      .createSignedUrl(filePath, 3600); // 1 hour
+    
+    if (error || !data?.signedUrl) {
+      console.error('❌ Failed to re-sign URL:', error?.message || 'no data');
+      return url; // Return original as fallback
+    }
+    
+    console.log('✅ Re-signed URL for', bucket + '/' + filePath.substring(0, 40));
+    return data.signedUrl;
+  } catch (err) {
+    console.error('❌ Error re-signing URL:', err instanceof Error ? err.message : err);
+    return url;
+  }
+}
+
 // Module-level cache for system config to avoid frequent reads
 let cachedChatWorkerUrl: string | null = null;
 let cachedConfigFetchedAt = 0;
@@ -3493,6 +3551,11 @@ ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene n
               imageUrlsArray.push(userRef);
               console.log('📸 Figure 3 (User):', userCharacter.name);
             }
+          }
+
+          // ✅ Re-sign any expired signed URLs before sending to fal.ai
+          for (let i = 0; i < imageUrlsArray.length; i++) {
+            imageUrlsArray[i] = await ensureFreshSignedUrl(supabase, imageUrlsArray[i]);
           }
 
           // Force I2I model (v4.5/edit) for multi-reference composition
