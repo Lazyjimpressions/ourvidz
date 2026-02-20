@@ -109,9 +109,14 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   const bucket = activeSource === 'workspace' ? 'workspace-temp' : 'user-library';
 
   // Use the shared signing hook — cached, deduplicated, concurrency-limited
-  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, bucket, {
+  const { signedAssets, isSigning, refresh } = useSignedAssets(sharedAssets, bucket, {
     enabled: isOpen,
   });
+
+  // Clear signed state when switching source tabs
+  useEffect(() => {
+    refresh();
+  }, [activeSource]);
 
   const handleSelect = async () => {
     if (!selectedAssetId) return;

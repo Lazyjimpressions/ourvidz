@@ -36,6 +36,20 @@ export function useSignedAssets(
   
   // Track which asset IDs have been queued for signing to prevent dependency loops
   const queuedIdsRef = useRef<Set<string>>(new Set());
+  const prevEnabledRef = useRef(enabled);
+
+  // Reset queued tracking when assets change (e.g., tab switch, dialog reopen)
+  useEffect(() => {
+    queuedIdsRef.current.clear();
+  }, [assets]);
+
+  // Clear queued IDs when enabled transitions from false to true (dialog reopen)
+  useEffect(() => {
+    if (enabled && !prevEnabledRef.current) {
+      queuedIdsRef.current.clear();
+    }
+    prevEnabledRef.current = enabled;
+  }, [enabled]);
 
   // Extract unique paths that need signing - NO signedUrls dependency
   const pathsToSign = useMemo(() => {
