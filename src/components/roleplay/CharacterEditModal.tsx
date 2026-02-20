@@ -27,7 +27,6 @@ import { Switch } from '@/components/ui/switch';
 import { Edit3, Save, X, Plus, Wand2, Upload, Library, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
-import { useGeneration } from '@/hooks/useGeneration';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { uploadGeneratedImageToAvatars, uploadToAvatarsBucket } from '@/utils/avatarUtils';
 import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
@@ -99,13 +98,13 @@ export const CharacterEditModal = ({
   const [newTag, setNewTag] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const { updateUserCharacter, createUserCharacter, deleteUserCharacter } = useUserCharacters();
-  const { generateContent, isGenerating } = useGeneration();
   const { createScene } = useCharacterScenes(character?.id);
 
   const handleGeneratePortrait = async () => {
-    // In create mode, we can still generate but won't save to character_scenes yet
     const characterId = character?.id;
+    setIsGenerating(true);
 
     try {
       const prompt = buildCharacterPortraitPrompt({
@@ -116,13 +115,50 @@ export const CharacterEditModal = ({
         appearance_tags: formData.appearance_tags
       });
 
+      console.log('🎨 Character portrait prompt generated:', { character: formData.name, prompt });
+
+      // Resolve the default fal image model from api_models (table-driven, no hardcoding)
+      const { data: defaultModel } = await supabase
+        .from('api_models')
+        .select('id, model_key, display_name, api_providers!inner(name)')
+        .eq('modality', 'image')
+        .eq('is_active', true)
+        .contains('default_for_tasks', ['generation'])
+        .order('priority', { ascending: false })
+        .limit(1)
+        .single();
+
+      const providerName = (defaultModel?.api_providers as any)?.name || '';
+      const edgeFunction = providerName === 'replicate' ? 'replicate-image' : 'fal-image';
+
+      console.log('🚀 Routing character portrait to:', edgeFunction, 'model:', defaultModel?.display_name);
+
+      const { data, error } = await supabase.functions.invoke(edgeFunction, {
+        body: {
+          prompt,
+          apiModelId: defaultModel?.id,
+          contentType: 'sfw',
+          aspectRatio: '1:1',
+          metadata: {
+            source: 'character_portrait',
+            contentType: 'sfw',
+            character_name: formData.name
+          }
+        }
+      });
+
+      if (error) throw new Error(error.message);
+
+      const jobId = data?.jobId;
+      if (!jobId) throw new Error('No job ID returned');
+
+      // Listen for completion via realtime job polling
       const onComplete = async (e: any) => {
         const detail = e?.detail || {};
         if (detail.type !== 'image') return;
-        
+
         let imageUrl = detail.imageUrl;
-        
-        // If no imageUrl, fetch from workspace_assets using assetId
+
         if (!imageUrl && detail.assetId) {
           try {
             const { data: asset } = await supabase
@@ -130,102 +166,70 @@ export const CharacterEditModal = ({
               .select('temp_storage_path')
               .eq('id', detail.assetId)
               .single();
-            
-            if (asset?.temp_storage_path) {
-              imageUrl = asset.temp_storage_path;
-            }
-          } catch (error) {
-            console.error('Failed to fetch asset URL:', error);
-            toast({ title: 'Error', description: 'Could not load generated image', variant: 'destructive' });
-            window.removeEventListener('generation-completed', onComplete as any);
-            return;
+            if (asset?.temp_storage_path) imageUrl = asset.temp_storage_path;
+          } catch (err) {
+            console.error('Failed to fetch asset URL:', err);
           }
         }
-        
-        if (!imageUrl) {
-          console.error('No image URL available');
-          window.removeEventListener('generation-completed', onComplete as any);
-          return;
-        }
-        
-        // Ask user if they want to set as character image
-        const shouldSetAsAvatar = window.confirm(`Portrait generated successfully! Would you like to set this as ${formData.name}'s avatar image?`);
-        
+
+        window.removeEventListener('generation-completed', onComplete as any);
+        setIsGenerating(false);
+
+        if (!imageUrl) return;
+
+        const shouldSetAsAvatar = window.confirm(`Portrait generated! Set as ${formData.name}'s avatar?`);
         if (shouldSetAsAvatar) {
           try {
-            // Fetch the image and upload to avatars bucket
             const response = await fetch(imageUrl);
             const imageBlob = await response.blob();
-            
-            const avatarUrl = await uploadGeneratedImageToAvatars(
-              imageBlob, 
-              user?.id || '', 
-              formData.name,
-              'character'
-            );
-            
+            const avatarUrl = await uploadGeneratedImageToAvatars(imageBlob, user?.id || '', formData.name, 'character');
             setFormData(prev => ({ ...prev, image_url: avatarUrl }));
             toast({ title: 'Avatar updated', description: 'Saved to avatars bucket!' });
-          } catch (error) {
-            console.error('Failed to upload to avatars bucket:', error);
-            // Fallback to the temporary URL
+          } catch (err) {
             setFormData(prev => ({ ...prev, image_url: imageUrl }));
             toast({ title: 'Avatar updated', description: 'Using temporary URL' });
           }
         }
 
-        // Save to character scenes (only if we have an existing character)
         if (characterId) {
-          const payload: any = {
+          createScene({
             character_id: characterId,
             image_url: imageUrl,
             scene_prompt: `${formData.name} portrait`,
-            generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
-          };
-
-          createScene(payload)
-            .then(() => {
-              toast({
-                title: 'Portrait generated',
-                description: shouldSetAsAvatar ? 'Set as avatar and saved to scenes' : 'Saved to character scenes'
-              });
-            })
-            .catch((err) => console.error('Failed to save portrait scene', err))
-            .finally(() => {
-              window.removeEventListener('generation-completed', onComplete as any);
-            });
+            generation_metadata: { source: 'character_portrait', jobId, prompt }
+          } as any)
+            .then(() => toast({ title: 'Portrait generated', description: shouldSetAsAvatar ? 'Set as avatar and saved' : 'Saved to scenes' }))
+            .catch(err => console.error('Failed to save portrait scene', err));
         } else {
-          // In create mode, just show success toast
-          toast({
-            title: 'Portrait generated',
-            description: shouldSetAsAvatar ? 'Set as avatar' : 'Portrait ready to use'
-          });
-          window.removeEventListener('generation-completed', onComplete as any);
+          toast({ title: 'Portrait generated', description: shouldSetAsAvatar ? 'Set as avatar' : 'Portrait ready' });
         }
       };
 
       window.addEventListener('generation-completed', onComplete as any);
-      
-      // Add timeout to clear generating state if event doesn't fire
-      const timeout = setTimeout(() => {
-        window.removeEventListener('generation-completed', onComplete as any);
-        console.warn('Generation event timeout - clearing generating state');
-      }, 300000); // 5 minutes timeout
 
-      await generateContent({
-        format: 'sdxl_image_high',
-        prompt,
-        metadata: { 
-          source: 'character_portrait',
-          contentType: 'sfw',
-          character_name: formData.name
+      // Poll for job completion as fallback
+      const pollInterval = setInterval(async () => {
+        const { data: job } = await supabase.from('jobs').select('status, error_message').eq('id', jobId).single();
+        if (job?.status === 'completed' || job?.status === 'failed') {
+          clearInterval(pollInterval);
+          if (job.status === 'failed') {
+            setIsGenerating(false);
+            window.removeEventListener('generation-completed', onComplete as any);
+            toast({ title: 'Generation failed', description: job.error_message || 'Portrait generation failed', variant: 'destructive' });
+          }
         }
-      });
+      }, 5000);
 
-      // Clear timeout if generation starts successfully
-      setTimeout(() => clearTimeout(timeout), 1000);
+      // Timeout guard
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        window.removeEventListener('generation-completed', onComplete as any);
+        setIsGenerating(false);
+      }, 300000);
+
     } catch (err) {
       console.error('Portrait generation failed', err);
+      setIsGenerating(false);
       toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
     }
   };
