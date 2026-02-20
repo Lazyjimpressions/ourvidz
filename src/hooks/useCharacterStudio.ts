@@ -19,6 +19,7 @@ export interface CharacterData {
   image_url: string | null;
   reference_image_url: string | null;
   appearance_tags: string[];
+  clothing_tags: string[];
   voice_tone: string;
   mood: string;
   alternate_greetings: string[];
@@ -60,6 +61,7 @@ const defaultCharacterData: CharacterData = {
   image_url: null,
   reference_image_url: null,
   appearance_tags: [],
+  clothing_tags: [],
   voice_tone: 'warm',
   mood: 'friendly',
   alternate_greetings: [],
@@ -135,6 +137,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
           image_url: data.image_url,
           reference_image_url: data.reference_image_url,
           appearance_tags: data.appearance_tags || [],
+          clothing_tags: (data as any).clothing_tags || [],
           voice_tone: data.voice_tone || 'warm',
           mood: data.mood || 'friendly',
           alternate_greetings: Array.isArray(data.alternate_greetings) ? data.alternate_greetings as string[] : [],
@@ -190,6 +193,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
       voice_tone: 'warm',
       mood: 'friendly',
       appearance_tags: [],
+      clothing_tags: [],
       description: '',
     }));
     setIsDirty(true);
@@ -231,6 +235,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
         image_url: character.image_url,
         reference_image_url: character.reference_image_url,
         appearance_tags: character.appearance_tags,
+        clothing_tags: character.clothing_tags,
         voice_tone: character.voice_tone,
         mood: character.mood,
         alternate_greetings: character.alternate_greetings,

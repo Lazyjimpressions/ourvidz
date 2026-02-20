@@ -64,6 +64,7 @@ export function StudioSidebar({
 
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState<SuggestionType | null>(null);
   const [newTag, setNewTag] = useState('');
+  const [newClothingTag, setNewClothingTag] = useState('');
   const [isUploadingRef, setIsUploadingRef] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const preSuggestionSnapshot = useRef<Partial<CharacterData> | null>(null);
@@ -73,7 +74,7 @@ export function StudioSidebar({
 
   const toggle = (s: keyof typeof openSections) => setOpenSections(p => ({ ...p, [s]: !p[s] }));
 
-  // Tag management
+  // Physical tag management
   const addTag = () => {
     const tag = newTag.trim();
     if (tag && !character.appearance_tags.includes(tag)) {
@@ -82,6 +83,16 @@ export function StudioSidebar({
     }
   };
   const removeTag = (tag: string) => updateCharacter({ appearance_tags: character.appearance_tags.filter(t => t !== tag) });
+
+  // Clothing tag management
+  const addClothingTag = () => {
+    const tag = newClothingTag.trim();
+    if (tag && !(character.clothing_tags || []).includes(tag)) {
+      updateCharacter({ clothing_tags: [...(character.clothing_tags || []), tag] });
+      setNewClothingTag('');
+    }
+  };
+  const removeClothingTag = (tag: string) => updateCharacter({ clothing_tags: (character.clothing_tags || []).filter(t => t !== tag) });
 
   // Reference image upload
   const handleUploadRef = async () => {
@@ -122,6 +133,7 @@ export function StudioSidebar({
       voice_tone: character.voice_tone,
       mood: character.mood,
       appearance_tags: [...character.appearance_tags],
+      clothing_tags: [...(character.clothing_tags || [])],
     };
     setIsLoadingSuggestion(type);
     try {
@@ -141,7 +153,24 @@ export function StudioSidebar({
         const s = data.suggestions;
         if (type === 'traits' && s.suggestedTraits) { const cur = character.traits ? character.traits.split(',').map(t => t.trim()) : []; updateCharacter({ traits: [...new Set([...cur, ...s.suggestedTraits])].join(', ') }); }
         if (type === 'voice' && s.suggestedVoiceTone) updateCharacter({ voice_tone: s.suggestedVoiceTone, persona: s.suggestedPersona || character.persona });
-        if (type === 'appearance' && s.suggestedAppearance) updateCharacter({ appearance_tags: [...new Set([...character.appearance_tags, ...s.suggestedAppearance])] });
+        if (type === 'appearance' && s.suggestedAppearance) {
+          // Split AI suggestions into physical vs clothing
+          const clothingKeywords = ['wearing', 'dress', 'shirt', 'blouse', 'jacket', 'coat', 'pants', 'jeans', 'skirt', 'boots', 'shoes', 'heels', 'sneakers', 'hat', 'cap', 'glasses', 'sunglasses', 'necklace', 'bracelet', 'earrings', 'ring', 'watch', 'belt', 'scarf', 'tie', 'suit', 'uniform', 'bikini', 'swimwear', 'lingerie', 'stockings', 'socks', 'gloves', 'vest', 'hoodie', 'sweater', 'cardigan', 'outfit', 'attire', 'clothing', 'wardrobe'];
+          const physicalTags: string[] = [];
+          const clothingTags: string[] = [];
+          for (const tag of s.suggestedAppearance) {
+            const lower = tag.toLowerCase();
+            if (clothingKeywords.some(kw => lower.includes(kw))) {
+              clothingTags.push(tag);
+            } else {
+              physicalTags.push(tag);
+            }
+          }
+          updateCharacter({
+            appearance_tags: [...new Set([...character.appearance_tags, ...physicalTags])],
+            clothing_tags: [...new Set([...(character.clothing_tags || []), ...clothingTags])]
+          });
+        }
         if (type === 'description' && s.suggestedDescription) updateCharacter({ description: s.suggestedDescription });
         if (type === 'persona' && s.suggestedPersona) updateCharacter({ persona: s.suggestedPersona });
         if (type === 'all') updateCharacter({ description: s.suggestedDescription || character.description, traits: s.suggestedTraits?.join(', ') || character.traits, voice_tone: s.suggestedVoiceTone || character.voice_tone, persona: s.suggestedPersona || character.persona, appearance_tags: s.suggestedAppearance || character.appearance_tags });
@@ -255,10 +284,10 @@ export function StudioSidebar({
                 <Textarea value={character.traits} onChange={e => updateCharacter({ traits: e.target.value })} placeholder="auburn hair, green eyes, athletic build, leather jacket..." className="min-h-[48px] resize-none" />
               </div>
 
-              {/* Tags */}
+              {/* Physical Tags */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[10px] text-muted-foreground">Tags</Label>
+                  <Label className="text-[10px] text-muted-foreground">Physical Tags</Label>
                   <SuggestButton type="appearance" onClick={() => fetchSuggestions('appearance')} isLoading={isLoadingSuggestion !== null} loadingType={isLoadingSuggestion} disabled={!character.name} variant="text" />
                 </div>
                 <div className="flex gap-1 flex-wrap">
@@ -270,8 +299,25 @@ export function StudioSidebar({
                   ))}
                 </div>
                 <div className="flex gap-1">
-                  <Input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="Add tag..." className="h-6 text-[10px] flex-1" />
+                  <Input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTag())} placeholder="auburn hair, green eyes..." className="h-6 text-[10px] flex-1" />
                   <Button variant="ghost" size="sm" onClick={addTag} disabled={!newTag.trim()} className="h-6 px-1.5 text-[10px]">+</Button>
+                </div>
+              </div>
+
+              {/* Default Outfit */}
+              <div className="space-y-1">
+                <Label className="text-[10px] text-muted-foreground">Default Outfit</Label>
+                <div className="flex gap-1 flex-wrap">
+                  {(character.clothing_tags || []).map(tag => (
+                    <Badge key={tag} variant="outline" className="text-[10px] h-5 gap-0.5 px-1.5">
+                      {tag}
+                      <button onClick={() => removeClothingTag(tag)} className="ml-0.5 hover:text-destructive"><X className="w-2.5 h-2.5" /></button>
+                    </Badge>
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  <Input value={newClothingTag} onChange={e => setNewClothingTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addClothingTag())} placeholder="leather jacket, jeans..." className="h-6 text-[10px] flex-1" />
+                  <Button variant="ghost" size="sm" onClick={addClothingTag} disabled={!newClothingTag.trim()} className="h-6 px-1.5 text-[10px]">+</Button>
                 </div>
               </div>
 

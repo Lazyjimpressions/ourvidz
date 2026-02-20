@@ -717,6 +717,7 @@ export type Database = {
           base_prompt: string | null
           bio: string | null
           canon_spec: string | null
+          clothing_tags: string[] | null
           consistency_method: string | null
           content_rating: string
           created_at: string | null
@@ -767,6 +768,7 @@ export type Database = {
           base_prompt?: string | null
           bio?: string | null
           canon_spec?: string | null
+          clothing_tags?: string[] | null
           consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
@@ -817,6 +819,7 @@ export type Database = {
           base_prompt?: string | null
           bio?: string | null
           canon_spec?: string | null
+          clothing_tags?: string[] | null
           consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
