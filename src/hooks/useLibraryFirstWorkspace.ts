@@ -175,7 +175,19 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('nsfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('high');
   // Model Type Selection
-  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string; model_key?: string }>({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
+  // Fix 1: Synchronous lazy initializer — eliminates async race window for returning users
+  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string; model_key?: string }>(() => {
+    const savedModel = localStorage.getItem('workspace-selected-model');
+    if (savedModel) {
+      try {
+        const parsed = JSON.parse(savedModel);
+        if (parsed.id && parsed.type && parsed.display_name) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
+  });
   
   // Load default model on mount
   useEffect(() => {
@@ -290,8 +302,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     // Save full model object (new format) - do this synchronously first
     localStorage.setItem('workspace-selected-model', JSON.stringify(newModel));
     
-    // Keep old format for backwards compatibility 
-    const saveValue = newModel.type === 'replicate' ? 'replicate_rv51' : 'sdxl';
+    // Fix 2: Keep old format for backwards compatibility — correctly map fal types
+    const saveValue = newModel.type === 'replicate' ? 'replicate_rv51'
+                    : newModel.type === 'fal' ? `fal_${newModel.id}`
+                    : 'sdxl';
     localStorage.setItem('workspace-model-type', saveValue);
     
     // Update state immediately (synchronous)
@@ -1060,10 +1074,30 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       });
 
 
-      // STAGING-FIRST: Route strictly by selectedModel - Replicate/Fal go to respective edge functions, SDXL goes to queue-job
-      const edgeFunction = selectedModel?.type === 'fal'
+      // Fix 3: Pre-generate guard — if model ID is a UUID but type is 'sdxl', re-resolve from DB
+      // This catches any remaining async race or stale localStorage state
+      let effectiveModel = selectedModel;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedModel?.id || '');
+      if (isUUID && selectedModel?.type === 'sdxl') {
+        console.warn('⚠️ UUID model ID with sdxl type detected — re-resolving from DB');
+        const { data: modelRow } = await supabase
+          .from('api_models')
+          .select('id, model_key, display_name, api_providers!inner(name)')
+          .eq('id', selectedModel.id)
+          .single();
+        if (modelRow) {
+          const pName = (modelRow.api_providers as any)?.name || '';
+          const resolvedType = pName === 'fal' ? 'fal' : pName === 'replicate' ? 'replicate' : 'sdxl';
+          effectiveModel = { ...selectedModel, type: resolvedType };
+          console.log('✅ Re-resolved model type:', resolvedType, 'for provider:', pName);
+          localStorage.setItem('workspace-selected-model', JSON.stringify(effectiveModel));
+        }
+      }
+
+      // STAGING-FIRST: Route strictly by effectiveModel - Replicate/Fal go to respective edge functions, SDXL goes to queue-job
+      const edgeFunction = effectiveModel?.type === 'fal'
         ? 'fal-image'
-        : selectedModel?.type === 'replicate'
+        : effectiveModel?.type === 'replicate'
           ? 'replicate-image'
           : 'queue-job';
       
