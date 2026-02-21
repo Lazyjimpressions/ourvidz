@@ -1,101 +1,72 @@
 
 
-# Fix: Video Generation Results Not Appearing Without Refresh
+# Fix: Placeholder Count, Mobile Conformity, and Playground Scope
 
-## Root Cause
+## Scope Clarification
 
-The backend works perfectly -- all 3 video generations completed successfully via webhook. The problem is on the **client side**: the optimistic spinner tile disappears but the completed asset doesn't appear until manual page refresh.
+The **Playground page** (`/playground`) is a pure chat/AI interface -- it does not use the workspace generation pipeline, `useLibraryFirstWorkspace`, or any media tile rendering. There are no video/image generation features there to update. Items 1 and 3 are the actionable fixes.
 
-Two issues cause this:
+---
 
-1. **Optimistic placeholder removed before real data arrives**: When the `workspace_assets` INSERT realtime event fires, the code immediately removes the optimistic placeholder tile AND adds the refetch to a 2-second debounce queue. During that 2s window, there is nothing to display -- the placeholder is gone and the real data hasn't been fetched yet.
+## Issue: 3 Placeholder Tiles Always Appear
 
-2. **No polling fallback**: `useGenerationStatus` has `refetchInterval: false`, relying entirely on Supabase Realtime. If the realtime event is missed (network hiccup, cold channel), the UI never updates.
+**Root cause**: In `useLibraryFirstWorkspace.ts` line 402, `numImages` defaults to `3`. The optimistic placeholder logic on line 1477 uses this value directly:
 
-## Fix 1: Don't Remove Optimistic Placeholder Until Real Data Is in Cache
-
-In `useLibraryFirstWorkspace.ts` (line 504-506), the optimistic placeholder is removed immediately on the realtime INSERT event. Instead, defer removal until after the query cache has been updated with real data.
-
-```
-// BEFORE: Remove placeholder immediately (causes flash of empty)
-if (asset.job_id) {
-  setOptimisticAssets(prev => prev.filter(a => a.metadata?.job_id !== asset.job_id));
-}
-
-// AFTER: Remove placeholder only after cache is refreshed
-if (asset.job_id) {
-  const jobId = asset.job_id;
-  queryClient.invalidateQueries({ queryKey: ['assets', true] }).then(() => {
-    setOptimisticAssets(prev => prev.filter(a => a.metadata?.job_id !== jobId));
-  });
-}
+```text
+const count = mode === 'image' ? numImages : 1;
 ```
 
-This ensures the spinner stays visible until the real asset tile is ready to render.
+So even when a user has never touched the image count selector, or when they explicitly set it to 1, 3 placeholders appear because the default is 3. For videos, this is already correct (hardcoded to 1).
 
-## Fix 2: Add Polling Fallback for Active Jobs
+The real problem is the **default value** and the fact that the backend clamps batch sizes to `[1, 3, 6]` -- so if a user picks 2, they see 2 placeholders but get 3 images back (or vice versa).
 
-Add a safety-net polling interval in `useLibraryFirstWorkspace.ts` that checks for completed jobs when there are active optimistic placeholders. This catches cases where realtime events are missed.
+**Fix**: 
+- Change the default `numImages` from `3` to `1` (line 402) -- most generations are single-image
+- Align the placeholder count with the **clamped** value the backend will actually produce, so users see the correct number of spinners
 
-When `optimisticAssets.length > 0`, set up a 5-second interval that queries the `jobs` table for any optimistic job IDs. If a job is `completed`, invalidate the assets cache and remove the placeholder.
-
-This is a lightweight fallback (one query every 5s, only while generating) that guarantees delivery even if realtime fails.
-
-## Fix 3: Immediate Cache Invalidation (Remove Debounce for Inserts)
-
-The 2-second debounce on `localDebouncedInvalidate()` (line 486) is appropriate for batch operations but too slow for a single video completion. For INSERT events, invalidate immediately instead of debouncing.
-
+```text
+// Line 1477: Match backend clamping logic
+const clampedCount = numImages <= 1 ? 1 : (numImages <= 3 ? 3 : 6);
+const count = mode === 'image' ? clampedCount : 1;
 ```
-// For INSERTs: invalidate immediately (user is waiting)
-queryClient.invalidateQueries({ queryKey: ['assets', true] });
 
-// Keep debounce only for DELETE events (batch operations)
-```
+This way if a user picks "3", they see 3 placeholders and get 3 images. If they pick "1", they see 1 placeholder and get 1 image.
+
+---
+
+## Mobile Conformity
+
+`MobileSimplifiedWorkspace.tsx` uses `useLibraryFirstWorkspace` but does not expose `numImages` or `setNumImages` to the user. This means mobile always uses the default value.
+
+**Fix**: Since mobile doesn't have a num-images selector, the default change from 3 to 1 automatically fixes mobile -- users will see 1 placeholder per generation as expected.
+
+No additional mobile-specific changes are needed because:
+- The optimistic placeholder logic is in the shared hook (`useLibraryFirstWorkspace`)
+- The animated spinner fix from the previous change is in `SharedGrid.tsx` which is used by both desktop and mobile
+- The polling fallback is also in the shared hook
+
+---
 
 ## Files Changed
 
 1. **`src/hooks/useLibraryFirstWorkspace.ts`**:
-   - Defer optimistic placeholder removal until after cache refresh
-   - Remove debounce for INSERT-triggered invalidation
-   - Add polling fallback for active optimistic placeholders
+   - Line 402: Change `useState(3)` to `useState(1)` for `numImages` default
+   - Line 1477: Add clamping logic to match backend behavior so placeholder count equals actual output count
 
-No backend changes needed -- the webhook pipeline is working correctly.
+---
 
 ## Technical Details
 
-### Polling Fallback Implementation
-
-```
-useEffect(() => {
-  if (optimisticAssets.length === 0) return;
-
-  const interval = setInterval(async () => {
-    const jobIds = optimisticAssets
-      .map(a => a.metadata?.job_id)
-      .filter(Boolean);
-
-    if (jobIds.length === 0) return;
-
-    const { data: jobs } = await supabase
-      .from('jobs')
-      .select('id, status')
-      .in('id', jobIds);
-
-    const completedJobs = jobs?.filter(j => j.status === 'completed' || j.status === 'failed') || [];
-
-    if (completedJobs.length > 0) {
-      await queryClient.invalidateQueries({ queryKey: ['assets', true] });
-      setOptimisticAssets(prev =>
-        prev.filter(a => !completedJobs.some(j => j.id === a.metadata?.job_id))
-      );
-    }
-  }, 5000);
-
-  return () => clearInterval(interval);
-}, [optimisticAssets, queryClient]);
+### Backend Clamping Reference (queue-job, line 441-442)
+```text
+const batchCount = isImageJob ? (jobRequest.num_images || 1) : 1;
+const clampedBatchCount = batchCount <= 1 ? 1 : (batchCount <= 3 ? 3 : 6);
 ```
 
-### Why Not Just Fix Realtime?
+### Placeholder Clamping (new, useLibraryFirstWorkspace line 1477)
+```text
+const clampedCount = numImages <= 1 ? 1 : (numImages <= 3 ? 3 : 6);
+const count = mode === 'image' ? clampedCount : 1;
+```
 
-Realtime is already working -- the `workspace_assets` and `jobs` tables are both in the `supabase_realtime` publication. The issue is timing: the placeholder is removed before the refetch completes. The polling fallback is a safety net, not the primary delivery mechanism.
-
+This ensures the number of spinning tiles matches the number of images the backend will actually produce.
