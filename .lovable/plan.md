@@ -1,59 +1,101 @@
 
-# Fix: Webhook Status Bug + Generating Spinner Animation
 
-## Issue 1: Webhook Rejects Successful Results (Critical)
+# Fix: Video Generation Results Not Appearing Without Refresh
 
-**Root cause**: `fal-webhook` line 67-68 checks `if (falStatus !== "COMPLETED")` but fal.ai sends `"OK"` for success and `"ERROR"` for failure. The logs prove this:
+## Root Cause
+
+The backend works perfectly -- all 3 video generations completed successfully via webhook. The problem is on the **client side**: the optimistic spinner tile disappears but the completed asset doesn't appear until manual page refresh.
+
+Two issues cause this:
+
+1. **Optimistic placeholder removed before real data arrives**: When the `workspace_assets` INSERT realtime event fires, the code immediately removes the optimistic placeholder tile AND adds the refetch to a 2-second debounce queue. During that 2s window, there is nothing to display -- the placeholder is gone and the real data hasn't been fetched yet.
+
+2. **No polling fallback**: `useGenerationStatus` has `refetchInterval: false`, relying entirely on Supabase Realtime. If the realtime event is missed (network hiccup, cold channel), the UI never updates.
+
+## Fix 1: Don't Remove Optimistic Placeholder Until Real Data Is in Cache
+
+In `useLibraryFirstWorkspace.ts` (line 504-506), the optimistic placeholder is removed immediately on the realtime INSERT event. Instead, defer removal until after the query cache has been updated with real data.
 
 ```
-fal-webhook: status: "OK", has_video: true
-fal-webhook: "fal.ai generation failed: fal.ai returned status: OK"
+// BEFORE: Remove placeholder immediately (causes flash of empty)
+if (asset.job_id) {
+  setOptimisticAssets(prev => prev.filter(a => a.metadata?.job_id !== asset.job_id));
+}
+
+// AFTER: Remove placeholder only after cache is refreshed
+if (asset.job_id) {
+  const jobId = asset.job_id;
+  queryClient.invalidateQueries({ queryKey: ['assets', true] }).then(() => {
+    setOptimisticAssets(prev => prev.filter(a => a.metadata?.job_id !== jobId));
+  });
+}
 ```
 
-The video was generated successfully but the webhook marked the job as failed because it expected "COMPLETED" instead of "OK".
+This ensures the spinner stays visible until the real asset tile is ready to render.
 
-**Fix**: Change the status check to match fal.ai's actual API:
+## Fix 2: Add Polling Fallback for Active Jobs
+
+Add a safety-net polling interval in `useLibraryFirstWorkspace.ts` that checks for completed jobs when there are active optimistic placeholders. This catches cases where realtime events are missed.
+
+When `optimisticAssets.length > 0`, set up a 5-second interval that queries the `jobs` table for any optimistic job IDs. If a job is `completed`, invalidate the assets cache and remove the placeholder.
+
+This is a lightweight fallback (one query every 5s, only while generating) that guarantees delivery even if realtime fails.
+
+## Fix 3: Immediate Cache Invalidation (Remove Debounce for Inserts)
+
+The 2-second debounce on `localDebouncedInvalidate()` (line 486) is appropriate for batch operations but too slow for a single video completion. For INSERT events, invalidate immediately instead of debouncing.
 
 ```
-// BEFORE (wrong):
-if (falStatus !== "COMPLETED") { // treat as failure }
+// For INSERTs: invalidate immediately (user is waiting)
+queryClient.invalidateQueries({ queryKey: ['assets', true] });
 
-// AFTER (correct):
-if (falStatus === "ERROR") { // treat as failure }
-// Everything else (OK, COMPLETED, etc.) = success
+// Keep debounce only for DELETE events (batch operations)
 ```
-
-This is a one-line logic fix in `supabase/functions/fal-webhook/index.ts` line 68.
-
----
-
-## Issue 2: Static Spinner on Generating Tile
-
-**Current state**: Optimistic tiles show a plain `animate-spin` border spinner with no context. The user sees a tile stuck with a small spinner and no indication of what's happening.
-
-**Fix**: Replace the fallback spinner in `SharedGrid.tsx` with an animated generating state that includes:
-- A pulsing gradient background
-- A spinner with "Generating..." text
-- Different label for video vs image
-
-The change is in `SharedGrid.tsx` lines 365-370 where the `fallbackIcon` is set on the `AssetTile`.
-
----
 
 ## Files Changed
 
-1. **`supabase/functions/fal-webhook/index.ts`** -- Fix status check from `!== "COMPLETED"` to `=== "ERROR"`
-2. **`src/components/shared/SharedGrid.tsx`** -- Replace static spinner with animated generating state overlay
+1. **`src/hooks/useLibraryFirstWorkspace.ts`**:
+   - Defer optimistic placeholder removal until after cache refresh
+   - Remove debounce for INSERT-triggered invalidation
+   - Add polling fallback for active optimistic placeholders
+
+No backend changes needed -- the webhook pipeline is working correctly.
 
 ## Technical Details
 
-### Webhook fix (line 68)
-Change `falStatus !== "COMPLETED"` to `falStatus === "ERROR"`. Also remove the default fallback on line 67 (`|| "COMPLETED"`) since we want to check the actual status value -- if it's missing, treat as success (fal.ai docs say the payload is always present on success callbacks).
+### Polling Fallback Implementation
 
-### Spinner enhancement (SharedGrid.tsx lines 365-370)
-Replace the current `animate-spin` border div with a richer fallback that shows:
-- A pulsing shimmer background (using existing `animate-pulse` from Tailwind)
-- Centered spinner icon with "Generating..." or "Rendering video..." text
-- Uses the existing `Loader2` icon from lucide for a cleaner spin animation
+```
+useEffect(() => {
+  if (optimisticAssets.length === 0) return;
 
-No new dependencies or components needed.
+  const interval = setInterval(async () => {
+    const jobIds = optimisticAssets
+      .map(a => a.metadata?.job_id)
+      .filter(Boolean);
+
+    if (jobIds.length === 0) return;
+
+    const { data: jobs } = await supabase
+      .from('jobs')
+      .select('id, status')
+      .in('id', jobIds);
+
+    const completedJobs = jobs?.filter(j => j.status === 'completed' || j.status === 'failed') || [];
+
+    if (completedJobs.length > 0) {
+      await queryClient.invalidateQueries({ queryKey: ['assets', true] });
+      setOptimisticAssets(prev =>
+        prev.filter(a => !completedJobs.some(j => j.id === a.metadata?.job_id))
+      );
+    }
+  }, 5000);
+
+  return () => clearInterval(interval);
+}, [optimisticAssets, queryClient]);
+```
+
+### Why Not Just Fix Realtime?
+
+Realtime is already working -- the `workspace_assets` and `jobs` tables are both in the `supabase_realtime` publication. The issue is timing: the placeholder is removed before the refetch completes. The polling fallback is a safety net, not the primary delivery mechanism.
+
