@@ -452,25 +452,14 @@ export interface SimplePromptInputProps {
   onCompelWeightsChange?: (weights: string) => void;
   seed?: number | null;
   onSeedChange?: (seed: number | null) => void;
-  // Debug controls
-  onBypassEnhancement?: boolean;
-  onBypassEnhancementChange?: (enabled: boolean) => void;
-  onHardOverride?: boolean;
-  onHardOverrideChange?: (enabled: boolean) => void;
-  // Clothing Edit Mode
-  clothingEditMode?: boolean;
-  onClothingEditModeChange?: (enabled: boolean) => void;
-  lockHair?: boolean;
-  onLockHairChange?: (enabled: boolean) => void;
-  originalClothingColor?: string;
-  onOriginalClothingColorChange?: (color: string) => void;
-  targetGarments?: string[];
-  onTargetGarmentsChange?: (garments: string[]) => void;
   // Video Extend settings
   extendStrength?: number;
   onExtendStrengthChange?: (strength: number) => void;
   extendReverseVideo?: boolean;
   onExtendReverseVideoChange?: (reverse: boolean) => void;
+  // Workspace actions (moved from header)
+  onClearWorkspace?: () => void;
+  onDeleteAllWorkspace?: () => void;
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
@@ -544,22 +533,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onCompelWeightsChange,
   seed = null,
   onSeedChange,
-  onBypassEnhancement,
-  onBypassEnhancementChange,
-  onHardOverride,
-  onHardOverrideChange,
-  clothingEditMode = false,
-  onClothingEditModeChange,
-  lockHair = false,
-  onLockHairChange,
-  originalClothingColor = 'black',
-  onOriginalClothingColorChange,
-  targetGarments = [],
-  onTargetGarmentsChange,
   extendStrength = 1.0,
   onExtendStrengthChange,
   extendReverseVideo = false,
-  onExtendReverseVideoChange
+  onExtendReverseVideoChange,
+  onClearWorkspace,
+  onDeleteAllWorkspace
 }) => {
   // Fetch available image and video models from API
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(
@@ -1101,27 +1080,14 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               <div></div> {/* Empty space to align with reference tiles */}
               <div className="flex items-end gap-1 justify-end self-end pb-0.5">
                 {mode === 'image' ? (
-                  /* Image mode controls */
+                  /* Image mode controls - streamlined: Model, Content, Aspect, Batch */
                   <div className="flex items-center gap-1">
-                    {/* Quality Toggle */}
-                    <button 
-                      onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')} 
-                      className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                        quality === 'high' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      {quality === 'high' ? 'HIGH' : 'FAST'}
-                    </button>
-
                     {/* Model Selection */}
                     <div className="relative">
                       <button 
                         onClick={() => {
                           setShowModelPopup(!showModelPopup);
                           setShowEnhancePopup(false);
-                          setShowShotTypePopup(false);
-                          setShowAnglePopup(false);
-                          setShowStylePopup(false);
                         }}
                         className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
                       >
@@ -1130,7 +1096,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       </button>
                       {showModelPopup && (
                         <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[120px] max-h-32 overflow-y-auto">
-                          {/* Built-in SDXL option */}
                           <button 
                             onClick={() => {
                               onSelectedModelChange?.({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
@@ -1142,7 +1107,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                           >
                             SDXL
                           </button>
-                          {/* API models from database (replicate, fal, etc.) */}
                           {!modelsLoading && imageModels.map((model) => (
                             <button
                               key={model.id}
@@ -1186,133 +1150,21 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       {aspectRatio}
                     </button>
 
-                    {/* Enhancement Model Dropdown */}
-                    <div className="relative">
-                      <button 
-                        onClick={() => {
-                          setShowEnhancePopup(!showEnhancePopup);
-                          setShowShotTypePopup(false);
-                          setShowAnglePopup(false);
-                          setShowStylePopup(false);
-                        }}
-                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
-                      >
-                        {enhancementModel === 'qwen_instruct' ? 'INSTRUCT' : 
-                         enhancementModel === 'qwen_base' ? 'BASE' : 'NONE'}
-                        <ChevronDown size={8} />
-                      </button>
-                      {showEnhancePopup && (
-                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('qwen_instruct');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            INSTRUCT
-                          </button>
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('qwen_base');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            BASE
-                          </button>
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('none');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            NONE
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Shot Type */}
-                    <div className="relative">
-                      <button 
-                        onClick={handleShotTypeToggle} 
-                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
-                      >
-                        {shotType.toUpperCase()}
-                        <ChevronDown size={8} />
-                      </button>
-                      {showShotTypePopup && (
-                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-50 min-w-24">
-                          {shotTypeOptions.map(option => (
-                            <button 
-                              key={option.value} 
-                              onClick={() => handleShotTypeSelect(option.value as 'wide' | 'medium' | 'close')}
-                              className="w-full px-2 py-1 text-left text-[10px] hover:bg-muted transition-colors flex items-center gap-1"
-                            >
-                              <span>{option.icon}</span>
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Camera Angle */}
-                    <div className="relative">
-                      <button 
-                        onClick={handleCameraAngleToggle} 
-                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
-                      >
-                        {cameraAngle === 'none' ? 'ANGLE' : cameraAngle.replace('_', ' ').toUpperCase()}
-                        <ChevronDown size={8} />
-                      </button>
-                      {showAnglePopup && (
-                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-50 min-w-32">
-                          {cameraAngleOptions.map(option => (
-                            <button 
-                              key={option.value} 
-                              onClick={() => handleCameraAngleSelect(option.value as any)} 
-                              className="w-full px-2 py-1 text-left text-[10px] hover:bg-muted transition-colors flex items-center gap-1"
-                            >
-                              <span>{option.icon}</span>
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Style */}
-                    <div className="relative">
-                      <button 
-                        onClick={handleStyleToggle} 
-                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
-                      >
-                        <Palette size={8} />
-                        STYLE
-                        <ChevronDown size={8} />
-                      </button>
-                      {showStylePopup && (
-                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-50 min-w-32 max-h-48 overflow-y-auto">
-                          {stylePresets.map(preset => (
-                            <button 
-                              key={preset.name} 
-                              onClick={() => handleStyleSelect(preset.style)} 
-                              className="w-full px-2 py-1 text-left text-[10px] hover:bg-muted transition-colors"
-                            >
-                              {preset.name}
-                            </button>
-                          ))}
-                          <div className="border-t border-border mt-1 pt-1">
-                            <label className="block px-2 py-1 text-[10px] text-muted-foreground cursor-pointer hover:bg-muted">
-                              Upload Style Ref
-                              <input type="file" accept="image/*" onChange={handleStyleRefUpload} className="hidden" />
-                            </label>
-                          </div>
-                        </div>
-                      )}
+                    {/* Batch Size - Inline segmented */}
+                    <div className="flex">
+                      {[1, 3, 6].map((size) => (
+                        <button
+                          key={size}
+                          onClick={() => onNumImagesChange?.(size)}
+                          className={`px-1.5 py-1 text-[10px] font-medium transition-colors border border-border/30 ${
+                            size === 1 ? 'rounded-l' : size === 6 ? 'rounded-r' : ''
+                          } ${size !== 1 ? 'border-l-0' : ''} ${
+                            numImages === size ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                          }`}
+                        >
+                          {size}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ) : (
@@ -1427,54 +1279,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       {aspectRatio}
                     </button>
 
-                    {/* Enhancement Model Dropdown - Same as image mode */}
-                    <div className="relative">
-                      <button 
-                        onClick={() => {
-                          setShowEnhancePopup(!showEnhancePopup);
-                          setShowShotTypePopup(false);
-                          setShowAnglePopup(false);
-                          setShowStylePopup(false);
-                        }}
-                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
-                      >
-                        {enhancementModel === 'qwen_instruct' ? 'INSTRUCT' : 
-                         enhancementModel === 'qwen_base' ? 'BASE' : 'NONE'}
-                        <ChevronDown size={8} />
-                      </button>
-                      {showEnhancePopup && (
-                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('qwen_instruct');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            INSTRUCT
-                          </button>
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('qwen_base');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            BASE
-                          </button>
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('none');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            NONE
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
                     {/* Sound Toggle */}
                     <button 
                       onClick={() => onSoundToggle?.(!soundEnabled)} 
@@ -1491,429 +1295,264 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
             </div>
           </div>
 
-          {/* Advanced Settings Modal */}
+          {/* Advanced Settings Modal - Compact redesign */}
           {showAdvancedSettings && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-3 z-50 max-h-80 overflow-y-auto">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-foreground">Controls</h3>
-                <button onClick={() => setShowAdvancedSettings(false)} className="text-muted-foreground hover:text-foreground">
-                  <X size={14} />
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-2 z-50 max-h-[70vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-[11px] font-medium text-foreground">Controls</h3>
+                <button onClick={() => setShowAdvancedSettings(false)} className="text-muted-foreground hover:text-foreground p-0.5">
+                  <X size={12} />
                 </button>
               </div>
-              
-              {/* Video Extend Controls - shown when extend model is selected */}
-              {mode === 'video' && videoModelSettings?.settings?.referenceMode === 'video' && (
-                <div className="mb-4 p-2 bg-muted/20 rounded border border-border/30">
-                  <h4 className="text-xs font-medium text-foreground mb-2">Extend Settings</h4>
-                  
-                  {/* Strength slider */}
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-muted-foreground">Strength</label>
-                      <span className="text-[10px] font-mono text-muted-foreground">{extendStrength.toFixed(2)}</span>
+
+              {/* Secondary Controls Row - moved from Row 2 */}
+              <div className="flex flex-wrap gap-1 mb-2">
+                {/* Resolution (was Quality) */}
+                <button 
+                  onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')} 
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors ${
+                    quality === 'high' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  {quality === 'high' ? 'HD' : 'Standard'}
+                </button>
+
+                {/* Enhancement Model */}
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowEnhancePopup(!showEnhancePopup)}
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[9px] font-medium transition-colors"
+                  >
+                    {enhancementModel === 'qwen_instruct' ? 'Instruct' : enhancementModel === 'qwen_base' ? 'Base' : 'None'}
+                    <ChevronDown size={7} />
+                  </button>
+                  {showEnhancePopup && (
+                    <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[70px]">
+                      {(['qwen_instruct', 'qwen_base', 'none'] as const).map(m => (
+                        <button key={m} onClick={() => { onEnhancementModelChange?.(m); setShowEnhancePopup(false); }}
+                          className="w-full text-left px-1.5 py-0.5 text-[9px] hover:bg-muted transition-colors">
+                          {m === 'qwen_instruct' ? 'Instruct' : m === 'qwen_base' ? 'Base' : 'None'}
+                        </button>
+                      ))}
                     </div>
-                    <Slider
-                      value={[extendStrength]}
-                      onValueChange={([v]) => onExtendStrengthChange?.(v)}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      size="xs"
-                    />
-                    <p className="text-[9px] text-muted-foreground mt-0.5">How much the model can deviate from source video</p>
-                  </div>
-                  
-                  {/* Reverse Video toggle */}
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-muted-foreground">Reverse Video</label>
-                    <button
-                      onClick={() => onExtendReverseVideoChange?.(!extendReverseVideo)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                        extendReverseVideo ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      {extendReverseVideo ? 'ON' : 'OFF'}
-                    </button>
+                  )}
+                </div>
+
+                {/* Shot Type */}
+                <div className="relative">
+                  <button onClick={handleShotTypeToggle}
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[9px] font-medium transition-colors">
+                    {shotType.charAt(0).toUpperCase() + shotType.slice(1)} <ChevronDown size={7} />
+                  </button>
+                  {showShotTypePopup && (
+                    <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[60px]">
+                      {shotTypeOptions.map(o => (
+                        <button key={o.value} onClick={() => handleShotTypeSelect(o.value as any)}
+                          className="w-full text-left px-1.5 py-0.5 text-[9px] hover:bg-muted transition-colors">{o.label}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Camera Angle */}
+                <div className="relative">
+                  <button onClick={handleCameraAngleToggle}
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[9px] font-medium transition-colors">
+                    {cameraAngle === 'none' ? 'Angle' : cameraAngle.replace('_', ' ')} <ChevronDown size={7} />
+                  </button>
+                  {showAnglePopup && (
+                    <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
+                      {cameraAngleOptions.map(o => (
+                        <button key={o.value} onClick={() => handleCameraAngleSelect(o.value as any)}
+                          className="w-full text-left px-1.5 py-0.5 text-[9px] hover:bg-muted transition-colors">{o.label}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Style */}
+                <div className="relative">
+                  <button onClick={handleStyleToggle}
+                    className="flex items-center gap-0.5 px-1.5 py-0.5 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[9px] font-medium transition-colors">
+                    <Palette size={7} /> Style <ChevronDown size={7} />
+                  </button>
+                  {showStylePopup && (
+                    <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[100px] max-h-40 overflow-y-auto">
+                      {stylePresets.map(p => (
+                        <button key={p.name} onClick={() => handleStyleSelect(p.style)}
+                          className="w-full text-left px-1.5 py-0.5 text-[9px] hover:bg-muted transition-colors">{p.name}</button>
+                      ))}
+                      <div className="border-t border-border mt-0.5 pt-0.5">
+                        <label className="block px-1.5 py-0.5 text-[9px] text-muted-foreground cursor-pointer hover:bg-muted">
+                          Upload Style Ref
+                          <input type="file" accept="image/*" onChange={handleStyleRefUpload} className="hidden" />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Video Extend Controls */}
+              {mode === 'video' && videoModelSettings?.settings?.referenceMode === 'video' && (
+                <div className="mb-2 p-1.5 bg-muted/20 rounded border border-border/30">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[9px] text-muted-foreground">Strength</label>
+                        <input type="number" value={extendStrength.toFixed(2)} onChange={e => onExtendStrengthChange?.(parseFloat(e.target.value) || 1.0)}
+                          className="h-5 w-12 text-[10px] bg-background border border-input rounded px-1 text-right" min="0" max="1" step="0.05" />
+                      </div>
+                      <input type="range" value={extendStrength} onChange={e => onExtendStrengthChange?.(parseFloat(e.target.value))}
+                        min={0} max={1} step={0.05} className="w-full h-1 appearance-none bg-border rounded [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] text-muted-foreground">Reverse</label>
+                      <button onClick={() => onExtendReverseVideoChange?.(!extendReverseVideo)}
+                        className={`px-1.5 py-0.5 rounded text-[9px] font-medium transition-colors ${extendReverseVideo ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
+                        {extendReverseVideo ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
               
-              {/* Reference Type Selection and Variation - Always show at top when reference image present */}
+              {/* Reference Controls */}
               {(referenceImage || referenceImageUrl) && (
-                <div className="mb-4 p-2 bg-muted/20 rounded border border-border/30">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-xs font-medium text-foreground">Reference Type</h4>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button className="w-4 h-4 rounded-full bg-muted-foreground/30 flex items-center justify-center text-muted-foreground cursor-help hover:bg-muted-foreground/40">
-                            <Info size={10} />
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-48 text-xs z-50 bg-popover border border-border shadow-lg">
-                          <p><strong>Character:</strong> Preserves identity/face best</p>
-                          <p><strong>Style:</strong> Transfers overall look & lighting</p>
-                          <p><strong>Composition:</strong> Follows pose/framing</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                <div className="mb-2 p-1.5 bg-muted/20 rounded border border-border/30">
+                  {/* Reference Type - compact inline */}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <label className="text-[9px] text-muted-foreground shrink-0">Ref Type</label>
+                    <div className="flex gap-0">
+                      {(['character', 'style', 'composition'] as const).map((type, i) => (
+                        <button key={type} onClick={() => onReferenceTypeChange?.(type)}
+                          className={`px-1.5 py-0.5 text-[9px] font-medium transition-colors border border-border/30 capitalize ${
+                            i === 0 ? 'rounded-l' : i === 2 ? 'rounded-r' : ''
+                          } ${i > 0 ? 'border-l-0' : ''} ${
+                            referenceType === type ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                          }`}>
+                          {type.slice(0, 4)}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   
-                  {/* Reference Type Radio Group - Pure (no auto-changes) */}
-                  <RadioGroup 
-                    value={referenceType} 
-                    onValueChange={(value) => {
-                      onReferenceTypeChange?.(value as any);
-                    }}
-                    className="flex gap-3 mb-3"
-                  >
-                    {(['character', 'style', 'composition'] as const).map((type) => (
-                      <div key={type} className="flex items-center space-x-1">
-                        <RadioGroupItem value={type} id={type} className="w-2.5 h-2.5 [&>*]:w-1 [&>*]:h-1" />
-                        <Label 
-                          htmlFor={type} 
-                          className="text-[10px] font-medium capitalize cursor-pointer"
-                        >
-                          {type}
-                        </Label>
-                      </div>
-                    ))}
-                  </RadioGroup>
-                  
-                  {/* Variation Preset Chips - Segmented Style */}
-                  <div className="mb-2">
-                    <label className="text-[9px] text-muted-foreground mb-1 block">Variation</label>
+                  {/* Variation - compact inline */}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <label className="text-[9px] text-muted-foreground shrink-0">Variation</label>
                     <div className="flex gap-0">
-                      <button
-                        onClick={() => {
-                          onExactCopyModeChange?.(true);
-                          onReferenceStrengthChange?.(0.95);
-                          onGuidanceScaleChange?.(1.0);
-                          onStepsChange?.(15);
-                          onLockSeedChange?.(true);
-                        }}
-                        className={`chip-segmented rounded-r-none border-r-0 ${exactCopyMode ? 'chip-segmented-active' : ''}`}
-                      >
+                      <button onClick={() => { onExactCopyModeChange?.(true); onReferenceStrengthChange?.(0.95); onGuidanceScaleChange?.(1.0); onStepsChange?.(15); onLockSeedChange?.(true); }}
+                        className={`px-1.5 py-0.5 text-[9px] font-medium transition-colors border border-border/30 rounded-l ${exactCopyMode ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
                         Copy
                       </button>
-                      <button
-                        onClick={() => {
-                          onExactCopyModeChange?.(false);
-                          onReferenceStrengthChange?.(0.75);
-                          onGuidanceScaleChange?.(6.5);
-                          onStepsChange?.(25);
-                          onLockSeedChange?.(false);
-                        }}
-                        className={`chip-segmented rounded-none ${!exactCopyMode && referenceStrength >= 0.7 && referenceStrength <= 0.8 ? 'chip-segmented-active' : ''}`}
-                      >
+                      <button onClick={() => { onExactCopyModeChange?.(false); onReferenceStrengthChange?.(0.75); onGuidanceScaleChange?.(6.5); onStepsChange?.(25); onLockSeedChange?.(false); }}
+                        className={`px-1.5 py-0.5 text-[9px] font-medium transition-colors border border-border/30 border-l-0 ${!exactCopyMode && referenceStrength >= 0.7 && referenceStrength <= 0.8 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
                         Modify
                       </button>
-                      <button
-                        onClick={() => {
-                          onExactCopyModeChange?.(false);
-                          onReferenceStrengthChange?.(0.40);
-                          onGuidanceScaleChange?.(7.0);
-                          onStepsChange?.(25);
-                          onLockSeedChange?.(false);
-                        }}
-                        className={`chip-segmented rounded-l-none ${!exactCopyMode && referenceStrength >= 0.35 && referenceStrength <= 0.45 ? 'chip-segmented-active' : ''}`}
-                      >
+                      <button onClick={() => { onExactCopyModeChange?.(false); onReferenceStrengthChange?.(0.40); onGuidanceScaleChange?.(7.0); onStepsChange?.(25); onLockSeedChange?.(false); }}
+                        className={`px-1.5 py-0.5 text-[9px] font-medium transition-colors border border-border/30 border-l-0 rounded-r ${!exactCopyMode && referenceStrength >= 0.35 && referenceStrength <= 0.45 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
                         Creative
                       </button>
                     </div>
                   </div>
-                  
-                   {/* Clothing Changes Preset - Special chip for clothing modifications - SUGGESTION ONLY */}
-                   {/\b(change|replace|swap|modify|make.*?(?:dress|shirt|top|bottom|pants|skirt|outfit|clothing|clothes|suit|jacket|coat|blue|red|green|yellow|purple|pink|black|white|brown))\b/i.test(prompt) && (
-                     <div className="mb-2">
-                       <div className="flex items-center gap-1 mb-1">
-                         <div className="w-1 h-1 bg-orange-500 rounded-full"></div>
-                         <label className="text-[9px] text-orange-600 font-medium">Suggestion: Clothing Change</label>
-                       </div>
-                       <button
-                         onClick={() => {
-                           onExactCopyModeChange?.(false);
-                           // Don't auto-force composition - respect user's selection
-                           // onReferenceTypeChange?.('composition');
-                           onReferenceStrengthChange?.(0.30);
-                           onGuidanceScaleChange?.(7.5);
-                           onStepsChange?.(25);
-                           onLockSeedChange?.(false);
-                         }}
-                         className="chip-segmented w-full border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 text-[10px] py-1"
-                       >
-                         🔄 Optimize for Clothing (Keep {referenceType})
-                       </button>
-                     </div>
-                   )}
-                    
-                    {/* Hair Lock Toggle - Visible with tooltip */}
-                    <div className="mb-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          <label className="text-[9px] text-muted-foreground font-medium">Hair Lock</label>
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="w-3 h-3 rounded-full bg-muted-foreground/30 flex items-center justify-center text-muted-foreground cursor-help hover:bg-muted-foreground/40">
-                                  <Info size={8} />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-48 text-xs z-50 bg-popover border border-border shadow-lg">
-                                <p>Preserves hair color and style during generation. Useful for clothing changes while maintaining identity.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </div>
-                        <button
-                          onClick={() => onLockHairChange?.(!lockHair)}
-                          className={`w-8 h-4 rounded-full transition-colors ${
-                            lockHair ? 'bg-primary' : 'bg-muted'
-                          }`}
-                        >
-                          <div
-                            className={`w-3 h-3 bg-white rounded-full transition-transform ${
-                              lockHair ? 'translate-x-4' : 'translate-x-0.5'
-                            }`}
-                          />
+
+                  {/* 2-column grid: Steps + CFG */}
+                  <div className="grid grid-cols-2 gap-1.5 mb-1.5">
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[9px] text-muted-foreground">Steps</label>
+                        <input type="number" value={steps} onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)}
+                          className="h-5 w-12 text-[10px] bg-background border border-input rounded px-1 text-right" min="10" max="50" />
+                      </div>
+                      <input type="range" value={steps} onChange={e => onStepsChange?.(parseInt(e.target.value))}
+                        min={10} max={50} step={1} className="w-full h-1 appearance-none bg-border rounded [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[9px] text-muted-foreground">CFG</label>
+                        <input type="number" value={guidanceScale} onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)}
+                          className="h-5 w-12 text-[10px] bg-background border border-input rounded px-1 text-right" min="1" max="20" step="0.5" />
+                      </div>
+                      <input type="range" value={guidanceScale} onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value))}
+                        min={1} max={20} step={0.5} className="w-full h-1 appearance-none bg-border rounded [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full" />
+                    </div>
+                  </div>
+
+                  {/* 2-column grid: Strength + Seed */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[9px] text-muted-foreground">Strength <span className="text-[8px] text-muted-foreground/60">({Math.round((1 - referenceStrength) * 100)}%)</span></label>
+                        <input type="number" value={referenceStrength.toFixed(2)} onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= 0.1 && v <= 0.9) onReferenceStrengthChange?.(v); }}
+                          className="h-5 w-12 text-[10px] bg-background border border-input rounded px-1 text-right" min="0.1" max="0.9" step="0.05" />
+                      </div>
+                      <input type="range" value={referenceStrength} onChange={e => onReferenceStrengthChange?.(parseFloat(e.target.value))}
+                        min={0.1} max={0.9} step={0.05} className="w-full h-1 appearance-none bg-border rounded [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:rounded-full" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <label className="text-[9px] text-muted-foreground">Seed</label>
+                        <button onClick={() => onLockSeedChange?.(!lockSeed)}
+                          className={`text-[8px] px-1 rounded transition-colors ${lockSeed ? 'bg-yellow-500 text-white' : 'bg-muted text-muted-foreground hover:bg-yellow-100'}`}>
+                          {lockSeed ? '🔒' : '🔓'}
                         </button>
                       </div>
+                      <input type="number" value={seed || ''} onChange={e => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)}
+                        placeholder="Random" className="w-full h-5 text-[10px] bg-background border border-input rounded px-1" min="0" max="2147483647" />
                     </div>
-
-                   
-                    {/* Debug Controls */}
-                    {(onBypassEnhancement !== undefined || onHardOverride !== undefined) && (
-                      <div className="space-y-1 p-2 border-t border-border/50">
-                        <div className="text-[8px] font-medium text-muted-foreground">Debug</div>
-                        <div className="flex gap-2 text-[8px]">
-                          {onBypassEnhancement !== undefined && (
-                            <label className="flex items-center gap-1">
-                              <input
-                                type="checkbox"
-                                checked={onBypassEnhancement}
-                                onChange={(e) => onBypassEnhancementChange?.(e.target.checked)}
-                                className="w-3 h-3"
-                              />
-                              Bypass enhancement
-                            </label>
-                          )}
-                          {onHardOverride !== undefined && (
-                            <label className="flex items-center gap-1">
-                              <input
-                                type="checkbox"
-                                checked={onHardOverride}
-                                onChange={(e) => onHardOverrideChange?.(e.target.checked)}
-                                className="w-3 h-3"
-                              />
-                              Hard override
-                            </label>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                   {/* Profile Summary */}
-                   <div className="text-[9px] text-muted-foreground text-center">
-                     {exactCopyMode ? 'Copy' : referenceType?.charAt(0).toUpperCase() + referenceType?.slice(1)} • 
-                     Strength {referenceStrength.toFixed(2)} • 
-                     Denoise {(1 - referenceStrength).toFixed(2)} • 
-                     CFG {guidanceScale} • 
-                     Steps {steps}
-                     {lockSeed && ' • Seed Locked'}
-                   </div>
-                </div>
-              )}
-              
-              {/* Compact 3-column layout for reference controls with proper spacing */}
-              {(referenceImage || referenceImageUrl) && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 controls-compact mb-4">
-                  {/* Steps */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-medium text-muted-foreground">
-                        Steps
-                      </label>
-                       <input 
-                         type="number" 
-                         value={steps} 
-                         onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)} 
-                         className="control-number"
-                         min="10" 
-                         max="50"
-                       />
-                    </div>
-                    <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
                   </div>
 
-                  {/* Reference Strength */}
-                  <div>
-                     <div className="flex items-center justify-between mb-1">
-                       <label className="text-[10px] font-medium text-muted-foreground">
-                         Ref Strength <span className="text-[8px] text-muted-foreground/60">(Variation: {Math.round((1 - referenceStrength) * 100)}%)</span>
-                       </label>
-                      <input 
-                        type="number" 
-                        value={referenceStrength.toFixed(2)} 
-                        onChange={e => {
-                          const val = parseFloat(e.target.value);
-                          if (!isNaN(val) && val >= 0.1 && val <= 0.9) {
-                            onReferenceStrengthChange?.(val);
-                          }
-                        }} 
-                        className="control-number"
-                        min="0.1" 
-                        max="0.9"
-                        step="0.05"
-                      />
-                    </div>
-                    <Slider 
-                      value={[referenceStrength]} 
-                      onValueChange={value => onReferenceStrengthChange?.(value[0])} 
-                      min={0.1} 
-                      max={0.9} 
-                      step={0.05} 
-                      size="xs"
-                      className="w-full max-w-[140px] sm:max-w-full" 
-                    />
-                  </div>
-
-                  {/* Guidance Scale */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-medium text-muted-foreground">
-                        CFG
-                      </label>
-                       <input 
-                         type="number" 
-                         value={guidanceScale} 
-                         onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)} 
-                         className="control-number"
-                         min="1" 
-                         max="20"
-                         step="0.5"
-                       />
-                    </div>
-                    <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
+                  {/* Profile summary */}
+                  <div className="text-[8px] text-muted-foreground text-center mt-1.5 pt-1 border-t border-border/20">
+                    {exactCopyMode ? 'Copy' : referenceType?.charAt(0).toUpperCase() + referenceType?.slice(1)} • 
+                    Str {referenceStrength.toFixed(2)} • Den {(1 - referenceStrength).toFixed(2)} • CFG {guidanceScale} • {steps}st
+                    {lockSeed && ' • 🔒'}
                   </div>
                 </div>
               )}
               
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                {/* Batch Size - Compact Chips */}
+              {/* Negative Prompt + Compel */}
+              <div className="space-y-1.5">
                 <div>
-                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
-                    Batch Size
-                  </label>
-                  <div className="flex gap-0">
-                    {[1, 3, 6].map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => onNumImagesChange?.(size)}
-                        disabled={mode === 'video'}
-                        className={`chip-segmented ${size === 1 ? 'rounded-r-none border-r-0' : size === 6 ? 'rounded-l-none border-l-0' : 'rounded-none'} ${
-                          numImages === size ? 'chip-segmented-active' : ''
-                        } ${mode === 'video' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {size}
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label className="text-[9px] text-muted-foreground font-medium">Negative Prompt</label>
+                    <button type="button" onClick={() => { if (!showBaseNegative && !baseNegativePrompt) fetchBaseNegativePrompt(); setShowBaseNegative(!showBaseNegative); }}
+                      className="text-[8px] text-primary hover:text-primary/80">{showBaseNegative ? 'Hide base' : 'View base'}</button>
                   </div>
+                  <div className="text-[8px] text-muted-foreground mb-0.5">Base applied for {selectedModel?.type?.toUpperCase() || 'SDXL'} {contentType.toUpperCase()}</div>
+                  {showBaseNegative && (
+                    <div className="mb-1 p-1 bg-muted/20 border border-border/30 rounded text-[8px] text-muted-foreground max-h-12 overflow-y-auto">
+                      {loadingBaseNegative ? 'Loading...' : baseNegativePrompt || 'No base negative prompt'}
+                    </div>
+                  )}
+                  <NegativePromptPresets currentPrompt={negativePrompt} onSelect={onNegativePromptChange || (() => {})} />
+                  <textarea value={negativePrompt} onChange={e => onNegativePromptChange?.(e.target.value)}
+                    placeholder="Additional negatives..." className="w-full h-10 px-1.5 py-1 bg-background border border-input rounded text-[10px] resize-none mt-0.5" rows={2} />
                 </div>
 
-                {/* Seed - Inline with Lock */}
+                {/* Compel */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-medium text-muted-foreground">
-                      Seed
-                    </label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={() => onLockSeedChange?.(!lockSeed)}
-                            className={`w-4 h-4 rounded text-[8px] font-medium transition-colors flex items-center justify-center ${
-                              lockSeed 
-                                ? 'bg-yellow-500 text-white' 
-                                : 'bg-muted text-muted-foreground hover:bg-yellow-100 hover:text-yellow-600'
-                            }`}
-                          >
-                            {lockSeed ? '🔒' : '🔓'}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs z-50 bg-popover border border-border shadow-lg">
-                          {lockSeed ? 'Seed locked - unlock for variation' : 'Click to lock seed'}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <input 
-                    type="number" 
-                    value={seed || ''} 
-                    onChange={e => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)} 
-                    placeholder="Random" 
-                    className="field-xxs w-full" 
-                    min="0" 
-                    max="2147483647" 
-                  />
-                </div>
-
-                {/* Additional Negative Prompt */}
-                <div className="col-span-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[10px] font-medium text-muted-foreground">
-                      Additional Negative Prompt
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!showBaseNegative && !baseNegativePrompt) {
-                          fetchBaseNegativePrompt();
-                        }
-                        setShowBaseNegative(!showBaseNegative);
-                      }}
-                      className="text-[9px] text-primary hover:text-primary/80"
-                    >
-                      {showBaseNegative ? 'Hide base' : 'View base'}
-                    </button>
-                  </div>
-                   <div className="text-[9px] text-muted-foreground mb-1">
-                     A base negative prompt for {selectedModel?.type?.toUpperCase() || 'SDXL'} {contentType.toUpperCase()} is applied automatically
-                   </div>
-                   {showBaseNegative && (
-                     <div className="mb-2 p-1 bg-muted/20 border border-border/30 rounded text-[9px] text-muted-foreground max-h-16 overflow-y-auto">
-                       {loadingBaseNegative ? 'Loading...' : baseNegativePrompt || 'No base negative prompt'}
-                     </div>
-                   )}
-                   
-                   {/* Negative Prompt Presets */}
-                   <div className="mb-2">
-                     <NegativePromptPresets 
-                       currentPrompt={negativePrompt} 
-                       onSelect={onNegativePromptChange || (() => {})} 
-                     />
-                   </div>
-                   
-                   <textarea 
-                     value={negativePrompt} 
-                     onChange={e => onNegativePromptChange?.(e.target.value)} 
-                     placeholder="Additional negatives..." 
-                     className="w-full h-12 px-2 py-1 bg-background border border-input rounded text-[10px] resize-none"
-                     rows={2} 
-                   />
-                </div>
-
-                {/* Compel Enhancement */}
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2 mb-1">
+                  <label className="flex items-center gap-1.5">
                     <input type="checkbox" checked={compelEnabled} onChange={e => onCompelEnabledChange?.(e.target.checked)} className="w-3 h-3" />
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      Compel Enhancement
-                    </span>
+                    <span className="text-[9px] font-medium text-muted-foreground">Compel Enhancement</span>
                   </label>
                   {compelEnabled && (
-                    <input type="text" value={compelWeights} onChange={e => onCompelWeightsChange?.(e.target.value)} placeholder="(woman:1.2), (beautiful:0.8)" className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" />
+                    <input type="text" value={compelWeights} onChange={e => onCompelWeightsChange?.(e.target.value)}
+                      placeholder="(woman:1.2), (beautiful:0.8)" className="w-full h-5 px-1.5 bg-background border border-input rounded text-[10px] mt-0.5" />
                   )}
                 </div>
+              </div>
+
+              {/* Workspace Actions - compact text links at bottom */}
+              <div className="flex items-center justify-center gap-4 mt-2 pt-1.5 border-t border-border/20">
+                {onClearWorkspace && (
+                  <button type="button" onClick={onClearWorkspace}
+                    className="text-[9px] text-muted-foreground hover:text-foreground transition-colors">Clear All</button>
+                )}
+                {onDeleteAllWorkspace && (
+                  <button type="button" onClick={onDeleteAllWorkspace}
+                    className="text-[9px] text-destructive hover:text-destructive/80 transition-colors">Delete All</button>
+                )}
               </div>
             </div>
           )}

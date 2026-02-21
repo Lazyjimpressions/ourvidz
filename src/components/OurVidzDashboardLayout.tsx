@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from "@/contexts/AuthContext";
-import { Home, FileText, Play, Image, Library, Settings, LogOut, Brain, Users, Menu } from "lucide-react";
+import { Home, FileText, Play, Image, Library, Settings, LogOut, Brain, Users, Menu, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { MobileNavDrawer } from "@/components/shared/MobileNavDrawer";
@@ -15,6 +15,17 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  
+  // Collapsible sidebar state (persisted in localStorage)
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('sidebar-collapsed') === 'true';
+    } catch { return false; }
+  });
+  
+  useEffect(() => {
+    try { localStorage.setItem('sidebar-collapsed', String(isCollapsed)); } catch {}
+  }, [isCollapsed]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -113,45 +124,56 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">
       {/* Left Sidebar - hide on small screens for compact routes (CSS breakpoint, no JS) */}
-      <div className={`w-64 bg-[#111111] flex-col ${isCompactRoute ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`${isCollapsed ? 'w-12' : 'w-64'} bg-[#111111] flex-col transition-all duration-200 ${isCompactRoute ? 'hidden md:flex' : 'flex'}`}>
         {/* Logo */}
-        <div className="p-6">
-          <h1 className="text-2xl font-bold text-white">OurVidz</h1>
+        <div className={`${isCollapsed ? 'p-2' : 'p-6'} flex items-center justify-between`}>
+          {!isCollapsed && <h1 className="text-2xl font-bold text-white">OurVidz</h1>}
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="text-gray-400 hover:text-white p-1 rounded transition-colors hidden md:block"
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-4 space-y-6">
+        <nav className={`flex-1 ${isCollapsed ? 'px-1' : 'px-4'} space-y-6`}>
           {/* Home */}
           <div>
             <button
               onClick={() => navigate("/dashboard")}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${isActiveRoute("/dashboard")
+              className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} ${isCollapsed ? 'px-0 py-2' : 'px-3 py-2'} rounded-lg cursor-pointer transition-colors ${isActiveRoute("/dashboard")
                   ? 'bg-blue-600 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-800'
                 }`}
+              title={isCollapsed ? 'Home' : undefined}
             >
-              <Home className="w-5 h-5" />
-              <span className="text-sm font-medium">Home</span>
+              <Home className="w-5 h-5 shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium">Home</span>}
             </button>
           </div>
 
           {/* Recent Section */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
-              Recent
-            </h3>
+            {!isCollapsed && (
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
+                Recent
+              </h3>
+            )}
             <ul className="space-y-1">
               {recentItems.map((item, index) => (
                 <li key={index}>
                   <button
                     onClick={item.onClick}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${item.active
+                    className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} ${isCollapsed ? 'px-0 py-2' : 'px-3 py-2'} rounded-lg cursor-pointer transition-colors ${item.active
                         ? 'bg-blue-600 text-white'
                         : 'text-gray-400 hover:text-white hover:bg-gray-800'
                       }`}
+                    title={isCollapsed ? item.label : undefined}
                   >
-                    <item.icon className="w-5 h-5" />
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <item.icon className="w-5 h-5 shrink-0" />
+                    {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
                   </button>
                 </li>
               ))}
@@ -160,21 +182,24 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
 
           {/* Creative Tools Section */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
-              Creative Tools
-            </h3>
+            {!isCollapsed && (
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
+                Creative Tools
+              </h3>
+            )}
             <ul className="space-y-1">
               {creativeToolsItems.map((item, index) => (
                 <li key={index}>
                   <button
                     onClick={item.onClick}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${item.active
+                    className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} ${isCollapsed ? 'px-0 py-2' : 'px-3 py-2'} rounded-lg cursor-pointer transition-colors ${item.active
                         ? 'bg-blue-600 text-white'
                         : 'text-gray-400 hover:text-white hover:bg-gray-800'
                       }`}
+                    title={isCollapsed ? item.label : undefined}
                   >
-                    <item.icon className="w-5 h-5" />
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <item.icon className="w-5 h-5 shrink-0" />
+                    {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
                   </button>
                 </li>
               ))}
@@ -188,13 +213,14 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                 <li key={index}>
                   <button
                     onClick={item.onClick}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${item.active
+                    className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} ${isCollapsed ? 'px-0 py-2' : 'px-3 py-2'} rounded-lg cursor-pointer transition-colors ${item.active
                         ? 'bg-blue-600 text-white'
                         : 'text-gray-400 hover:text-white hover:bg-gray-800'
                       }`}
+                    title={isCollapsed ? item.label : undefined}
                   >
-                    <item.icon className="w-5 h-5" />
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <item.icon className="w-5 h-5 shrink-0" />
+                    {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
                   </button>
                 </li>
               ))}
