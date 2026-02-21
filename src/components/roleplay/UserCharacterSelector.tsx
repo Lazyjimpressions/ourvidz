@@ -6,8 +6,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useUserCharacters, UserCharacter } from '@/hooks/useUserCharacters';
-import { Plus, User, Settings } from 'lucide-react';
+import { Plus, User, Settings, X, Shirt } from 'lucide-react';
 import { UserCharacterSetup } from './ARCHIVED/UserCharacterSetup';
 
 interface UserCharacterSelectorProps {
@@ -21,9 +23,11 @@ export const UserCharacterSelector = ({
   onCharacterSelect,
   aiCharacterName 
 }: UserCharacterSelectorProps) => {
-  const { characters, isLoading, error } = useUserCharacters();
+  const { characters, isLoading, error, updateUserCharacter } = useUserCharacters();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
+  const [editingClothingId, setEditingClothingId] = useState<string | null>(null);
+  const [newClothingTag, setNewClothingTag] = useState('');
   
   const selectedCharacter = characters.find(char => char.id === selectedCharacterId);
 
@@ -144,11 +148,11 @@ export const UserCharacterSelector = ({
           <DialogHeader>
             <DialogTitle>Manage Your Characters</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="max-h-96">
+          <ScrollArea className="max-h-[28rem]">
             <div className="space-y-3">
               {characters.map((character) => (
                 <Card key={character.id} className="bg-gray-800 border-gray-700">
-                  <CardContent className="p-3">
+                  <CardContent className="p-3 space-y-2">
                     <div className="flex items-center gap-3">
                       <Avatar className="w-8 h-8">
                         <AvatarImage src={character.image_url} alt={character.name} />
@@ -158,18 +162,90 @@ export const UserCharacterSelector = ({
                         <p className="text-sm font-medium truncate">{character.name}</p>
                         <p className="text-xs text-gray-400 truncate">{character.description}</p>
                       </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => {
-                          onCharacterSelect(character.id);
-                          setShowManageModal(false);
-                        }}
-                        className="text-xs"
-                      >
-                        Select
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingClothingId(editingClothingId === character.id ? null : character.id)}
+                          className="px-2"
+                          title="Edit clothing tags"
+                        >
+                          <Shirt className="w-3 h-3" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            onCharacterSelect(character.id);
+                            setShowManageModal(false);
+                          }}
+                          className="text-xs"
+                        >
+                          Select
+                        </Button>
+                      </div>
                     </div>
+
+                    {/* Clothing Tags Editor */}
+                    {editingClothingId === character.id && (
+                      <div className="space-y-2 pt-2 border-t border-gray-700">
+                        <Label className="text-xs text-gray-400 flex items-center gap-1">
+                          <Shirt className="w-3 h-3" /> Default Outfit
+                        </Label>
+                        <div className="flex flex-wrap gap-1">
+                          {(character.clothing_tags || []).map((tag, idx) => (
+                            <Badge key={idx} variant="secondary" className="gap-1 text-xs">
+                              {tag}
+                              <button
+                                onClick={async () => {
+                                  const updated = (character.clothing_tags || []).filter((_, i) => i !== idx);
+                                  await updateUserCharacter(character.id, { clothing_tags: updated } as any);
+                                }}
+                                className="ml-0.5 hover:text-destructive"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                        <div className="flex gap-1">
+                          <Input
+                            value={newClothingTag}
+                            onChange={(e) => setNewClothingTag(e.target.value)}
+                            placeholder="e.g. sundress, sneakers"
+                            className="flex-1 h-7 text-xs"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const tag = newClothingTag.trim();
+                                if (tag) {
+                                  const updated = [...(character.clothing_tags || []), tag];
+                                  updateUserCharacter(character.id, { clothing_tags: updated } as any);
+                                  setNewClothingTag('');
+                                }
+                              }
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            disabled={!newClothingTag.trim()}
+                            onClick={() => {
+                              const tag = newClothingTag.trim();
+                              if (tag) {
+                                const updated = [...(character.clothing_tags || []), tag];
+                                updateUserCharacter(character.id, { clothing_tags: updated } as any);
+                                setNewClothingTag('');
+                              }
+                            }}
+                          >
+                            <Plus className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <p className="text-[10px] text-gray-500">Default outfit when no scene override applies</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}

@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useSceneCreation, SceneFormData, SceneAIOptions } from '@/hooks/useSceneCreation';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
-import { Sparkles, Undo2, ImageIcon, RefreshCw, Loader2, Plus, X, HelpCircle, MessageSquare } from 'lucide-react';
+import { Sparkles, Undo2, ImageIcon, RefreshCw, Loader2, Plus, X, HelpCircle, MessageSquare, Shirt, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ContentRating, SceneTemplate } from '@/types/roleplay';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -83,6 +83,13 @@ export const SceneCreationModal = ({
   const [maxWords, setMaxWords] = useState(60);
   const [showAdvancedNarrative, setShowAdvancedNarrative] = useState(false);
 
+  // Clothing override state
+  const [defaultClothing, setDefaultClothing] = useState('');
+  const [showClothingOverrides, setShowClothingOverrides] = useState(false);
+  const [clothingOverrides, setClothingOverrides] = useState<Record<string, string>>({});
+  const [newOverrideKey, setNewOverrideKey] = useState('');
+  const [newOverrideValue, setNewOverrideValue] = useState('');
+
   // Model selection state - use "auto" as default value instead of empty string
   // (Radix UI Select has issues with empty string values)
   const [selectedChatModel, setSelectedChatModel] = useState<string>('auto');
@@ -129,6 +136,8 @@ export const SceneCreationModal = ({
           setVisualPriority(editScene.visual_priority || ['setting', 'lighting', 'positioning']);
           setPerspectiveHint(editScene.perspective_hint || 'third_person');
           setMaxWords(editScene.max_words || 60);
+          setDefaultClothing(editScene.default_clothing || '');
+          setClothingOverrides(editScene.character_clothing_overrides || {});
           setHasEnhanced(false);
           console.log('✅ Edit mode form populated');
         } catch (err) {
@@ -152,6 +161,9 @@ export const SceneCreationModal = ({
         setPerspectiveHint('third_person');
         setMaxWords(60);
         setShowAdvancedNarrative(false);
+        setDefaultClothing('');
+        setClothingOverrides({});
+        setShowClothingOverrides(false);
         setSelectedChatModel('auto');
         setSelectedImageModel('auto');
         setHasEnhanced(false);
@@ -253,7 +265,10 @@ export const SceneCreationModal = ({
       narrative_style: narrativeStyle,
       visual_priority: visualPriority,
       perspective_hint: perspectiveHint,
-      max_words: maxWords
+      max_words: maxWords,
+      // Clothing overrides
+      default_clothing: defaultClothing.trim() || undefined,
+      character_clothing_overrides: Object.keys(clothingOverrides).length > 0 ? clothingOverrides : undefined
     };
 
     // Use updateScene if editing, createScene if new
@@ -269,6 +284,7 @@ export const SceneCreationModal = ({
     name, description, contentRating, scenarioType, tags,
     isPublic, scenePrompt, previewImageUrl, sceneStarters,
     sceneFocus, narrativeStyle, visualPriority, perspectiveHint, maxWords,
+    defaultClothing, clothingOverrides,
     editScene, createScene, updateScene, onSceneCreated, onClose
   ]);
 
@@ -527,6 +543,96 @@ export const SceneCreationModal = ({
                 </div>
               </div>
             </TooltipProvider>
+
+            {/* Scene Clothing */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Shirt className="w-4 h-4 text-muted-foreground" />
+                <Label>Scene Clothing</Label>
+              </div>
+              <Input
+                value={defaultClothing}
+                onChange={(e) => setDefaultClothing(e.target.value)}
+                placeholder="e.g. swimwear, bikini (applies to all characters)"
+                disabled={isLoading}
+              />
+              <p className="text-xs text-muted-foreground">
+                What should characters wear in this scene? Leave empty to use each character's default outfit.
+              </p>
+
+              {/* Per-character overrides */}
+              <div>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowClothingOverrides(!showClothingOverrides)}
+                >
+                  {showClothingOverrides ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  Character-specific overrides
+                </button>
+
+                {showClothingOverrides && (
+                  <div className="mt-2 space-y-2 p-3 border rounded-lg bg-muted/30">
+                    {Object.entries(clothingOverrides).map(([key, value]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <Badge variant="outline" className="shrink-0 text-xs">{key}</Badge>
+                        <span className="text-xs text-muted-foreground flex-1 truncate">{value}</span>
+                        <button
+                          onClick={() => {
+                            const updated = { ...clothingOverrides };
+                            delete updated[key];
+                            setClothingOverrides(updated);
+                          }}
+                          className="hover:text-destructive"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2">
+                      <Input
+                        value={newOverrideKey}
+                        onChange={(e) => setNewOverrideKey(e.target.value)}
+                        placeholder="user / character name"
+                        className="flex-1 h-7 text-xs"
+                        disabled={isLoading}
+                      />
+                      <Input
+                        value={newOverrideValue}
+                        onChange={(e) => setNewOverrideValue(e.target.value)}
+                        placeholder="outfit description"
+                        className="flex-1 h-7 text-xs"
+                        disabled={isLoading}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newOverrideKey.trim() && newOverrideValue.trim()) {
+                            e.preventDefault();
+                            setClothingOverrides(prev => ({ ...prev, [newOverrideKey.trim()]: newOverrideValue.trim() }));
+                            setNewOverrideKey('');
+                            setNewOverrideValue('');
+                          }
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2"
+                        disabled={!newOverrideKey.trim() || !newOverrideValue.trim() || isLoading}
+                        onClick={() => {
+                          setClothingOverrides(prev => ({ ...prev, [newOverrideKey.trim()]: newOverrideValue.trim() }));
+                          setNewOverrideKey('');
+                          setNewOverrideValue('');
+                        }}
+                      >
+                        <Plus className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Use "user" for the user character, or a character name/ID for specific AI characters.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* Scene Prompt */}
             <div className="space-y-2">

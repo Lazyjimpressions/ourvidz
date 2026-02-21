@@ -1542,6 +1542,8 @@ const MobileRoleplayChat: React.FC = () => {
           // For scene templates (scenes table), only scene_context (scene_prompt) is used; scenes have no system_prompt.
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt ?? null,
+          scene_default_clothing: (selectedScene as any)?.default_clothing || null,
+          scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           // NOTE: Template selection is handled server-side based on model_provider
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
@@ -1719,6 +1721,8 @@ const MobileRoleplayChat: React.FC = () => {
           user_id: user.id,
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
+          scene_default_clothing: (selectedScene as any)?.default_clothing || null,
+          scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           // NOTE: Template selection is handled server-side based on model_provider
           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
           scene_style: sceneStyle, // ✅ Scene style for user representation
@@ -1913,6 +1917,8 @@ const MobileRoleplayChat: React.FC = () => {
           scene_only: true, // Flag to indicate we only want scene, no chat response
           user_id: user.id,
           scene_context: selectedScene?.scene_prompt || null,
+          scene_default_clothing: (selectedScene as any)?.default_clothing || null,
+          scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           selected_image_model: validImageModel,
           scene_style: sceneStyle,
@@ -2174,6 +2180,8 @@ const MobileRoleplayChat: React.FC = () => {
           scene_generation: true, // ✅ Enable auto scene generation on kickoff retry
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
+          scene_default_clothing: (selectedScene as any)?.default_clothing || null,
+          scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           user_id: user.id,
           selected_image_model: getValidImageModel(),
@@ -2323,6 +2331,8 @@ const MobileRoleplayChat: React.FC = () => {
           scene_generation: true, // ✅ Enable auto scene generation on kickoff
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
+          scene_default_clothing: (selectedScene as any)?.default_clothing || null,
+          scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           user_id: user.id,
           selected_image_model: getValidImageModel(),
           scene_style: sceneStyle, // ✅ Scene style for user representation
