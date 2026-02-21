@@ -1306,13 +1306,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           const isExtendModel = caps?.input_schema?.video?.required === true;
           
           if (isExtendModel && refImageUrl) {
-            // Package as video conditioning object for extend endpoint
-            inputObj.video = {
-              video_url: refImageUrl,
-              strength: extendStrength,
-              reverse_video: extendReverseVideo,
-              conditioning_type: "rgb",
-            };
+            // fal.ai LTX extend expects `video` as a plain URL string
+            inputObj.video = refImageUrl;
+            // reverse_video is a top-level param in the schema
+            if (extendReverseVideo) inputObj.reverse_video = true;
           } else if (refImageUrl) {
             inputObj.image_url = refImageUrl; // Standard I2V
           }

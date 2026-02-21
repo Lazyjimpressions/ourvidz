@@ -804,12 +804,41 @@ serve(async (req) => {
 
       // Video-specific params (generic, table-driven)
       if (isVideo) {
-        // Video conditioning object (for extend models like LTX extend)
+        // Video conditioning (for extend models like LTX extend)
+        // fal.ai expects `video` as a URL string, not a nested object
         let hasVideoConditioning = false;
-        if (body.input?.video && typeof body.input.video === 'object') {
-          modelInput.video = body.input.video;
-          hasVideoConditioning = true;
-          console.log('🎬 Video conditioning object set for extend model:', JSON.stringify(body.input.video));
+        if (body.input?.video) {
+          let videoUrl = typeof body.input.video === 'object'
+            ? (body.input.video as any).video_url || (body.input.video as any).url
+            : body.input.video;
+          
+          // Sign URL if it's a Supabase storage path
+          if (typeof videoUrl === 'string' && videoUrl && !videoUrl.startsWith('http') && !videoUrl.startsWith('data:')) {
+            const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+            const parts = videoUrl.split('/');
+            let bucket = '';
+            let path = '';
+            if (knownBuckets.includes(parts[0])) {
+              bucket = parts[0];
+              path = parts.slice(1).join('/');
+            } else {
+              bucket = 'reference_images';
+              path = videoUrl;
+            }
+            const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+            if (!signError && signed?.signedUrl) {
+              videoUrl = signed.signedUrl;
+              console.log(`🔏 Signed video URL for extend model from bucket "${bucket}"`);
+            }
+          }
+          
+          if (videoUrl && typeof videoUrl === 'string' && (videoUrl.startsWith('http') || videoUrl.startsWith('data:'))) {
+            modelInput.video = videoUrl;
+            hasVideoConditioning = true;
+            console.log('🎬 Video URL set for extend model:', videoUrl.substring(0, 80) + '...');
+          } else {
+            console.warn('⚠️ Video input provided but could not resolve to valid URL:', typeof body.input.video);
+          }
         }
         // Duration to num_frames conversion using model's own frame_rate
         const frameRate = modelInput.frame_rate || modelInput.frames_per_second || 16;
@@ -914,7 +943,7 @@ serve(async (req) => {
 
     // Map aspect ratio based on model's input_schema (table-driven)
     // Skip for extend models using video conditioning (they don't need image_size)
-    const hasVideoConditioningFinal = !!(modelInput.video && typeof modelInput.video === 'object');
+    const hasVideoConditioningFinal = !!modelInput.video;
     if (body.metadata?.aspectRatio && !hasVideoConditioningFinal) {
       const aspectRatio = body.metadata.aspectRatio;
 
