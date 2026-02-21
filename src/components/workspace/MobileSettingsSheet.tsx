@@ -3,7 +3,6 @@ import { X, Upload, Image, Copy, Settings2 } from 'lucide-react';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -82,9 +81,6 @@ export interface MobileSettingsSheetProps {
   // Workspace Actions
   onClearWorkspace?: () => void;
   onDeleteAllWorkspace?: () => void;
-  
-  // Advanced Settings (local model only)
-  // These will be shown based on model capabilities
 }
 
 export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
@@ -127,7 +123,6 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onExtendReverseVideoChange,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
-  const [showWorkspaceActions, setShowWorkspaceActions] = React.useState(false);
   
   // Determine if current model is local (SDXL/WAN) for advanced settings
   const isLocalModel = useMemo(() => {
@@ -136,15 +131,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
            selectedModel?.id === 'wan';
   }, [selectedModel]);
   
-  // Get model capabilities for API models
-  const modelCapabilities = useMemo((): ModelCapabilities | null => {
-    if (isLocalModel) return null;
-    const model = imageModels.find(m => m.id === selectedModel?.id);
-    return model?.capabilities || null;
-  }, [selectedModel, imageModels, isLocalModel]);
-  
   // Determine which advanced features to show
-  const showAdvancedSettings = isLocalModel; // Only show for local models for now
+  const showAdvancedSettings = isLocalModel;
   
   // Has reference image
   const hasReference = !!(referenceImage || referenceImageUrl);
@@ -153,25 +141,25 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   
   return (
     <Drawer open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DrawerContent className="max-h-[85vh]">
-        {/* Header with Close Button */}
-        <DrawerHeader className="flex items-center justify-between border-b pb-3">
-          <DrawerTitle className="flex items-center gap-2 text-base">
-            <Settings2 className="h-4 w-4" />
+      <DrawerContent className="max-h-[80vh]">
+        {/* Compact Header */}
+        <DrawerHeader className="flex items-center justify-between border-b py-2 px-3">
+          <DrawerTitle className="flex items-center gap-1.5 text-sm">
+            <Settings2 className="h-3.5 w-3.5" />
             Settings
           </DrawerTitle>
           <DrawerClose asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <X className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="h-7 w-7">
+              <X className="h-3.5 w-3.5" />
             </Button>
           </DrawerClose>
         </DrawerHeader>
         
-        {/* Scrollable Content */}
-        <div className="overflow-y-auto px-4 py-3 space-y-4">
-          {/* Section: Model Selection */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {/* Scrollable Content - Compact */}
+        <div className="overflow-y-auto px-3 py-2 space-y-3">
+          {/* Model Selection - Compact */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
               Model
             </label>
             <Select
@@ -206,7 +194,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                 }
               }}
             >
-              <SelectTrigger className="w-full bg-background">
+              <SelectTrigger className="w-full h-8 text-xs bg-background">
                 <SelectValue placeholder="Select Model" />
               </SelectTrigger>
               <SelectContent className="bg-popover z-[100]">
@@ -233,127 +221,151 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             </Select>
           </div>
           
-          {/* Section: Quick Settings Row */}
-          <div className="flex items-center gap-3">
-            {/* Quality Toggle */}
-            <div className="flex-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide block mb-1.5">
-                Quality
+          {/* Quick Settings - 2 column grid */}
+          <div className="grid grid-cols-2 gap-2">
+            {/* Resolution (was Quality) */}
+            <div className="space-y-1">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                Resolution
               </label>
-              <SegmentedControl
-                options={[
-                  { value: 'fast', label: 'Fast' },
-                  { value: 'high', label: 'High' },
-                ]}
-                value={quality}
-                onChange={onQualityChange}
-                size="sm"
-                className="w-full"
-              />
+              <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
+                {([
+                  { value: 'fast' as const, label: 'Standard' },
+                  { value: 'high' as const, label: 'HD' },
+                ] as const).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => onQualityChange(value)}
+                    className={cn(
+                      "flex-1 px-2 py-1 text-[10px] font-medium transition-colors",
+                      quality === value
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             
-            {/* NSFW Toggle */}
-            <div className="flex flex-col items-center">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
-                NSFW
+            {/* Content Type */}
+            <div className="space-y-1">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                Content
               </label>
-              <Switch
-                checked={contentType === 'nsfw'}
-                onCheckedChange={(checked) => onContentTypeChange(checked ? 'nsfw' : 'sfw')}
-                className="data-[state=checked]:bg-primary"
-              />
+              <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
+                {(['sfw', 'nsfw'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => onContentTypeChange(t)}
+                    className={cn(
+                      "flex-1 px-2 py-1 text-[10px] font-medium uppercase transition-colors",
+                      contentType === t
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           
-          {/* Section: Aspect Ratio */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {/* Aspect Ratio - Compact pills */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
               Aspect Ratio
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {(['1:1', '16:9', '9:16'] as const).map((ratio) => (
-                <Button
+                <button
                   key={ratio}
                   type="button"
-                  variant={aspectRatio === ratio ? 'default' : 'outline'}
-                  size="sm"
                   onClick={() => onAspectRatioChange(ratio)}
                   className={cn(
-                    "flex-1 min-h-[40px]",
-                    aspectRatio === ratio && "ring-2 ring-primary ring-offset-1"
+                    "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-colors",
+                    aspectRatio === ratio
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-muted/50 text-muted-foreground border-border hover:text-foreground"
                   )}
                 >
-                  <span className="flex items-center justify-center">
-                    {ratio === '1:1' && <span className="w-4 h-4 border-2 border-current rounded-sm" />}
-                    {ratio === '16:9' && <span className="w-5 h-3 border-2 border-current rounded-sm" />}
-                    {ratio === '9:16' && <span className="w-3 h-5 border-2 border-current rounded-sm" />}
-                  </span>
-                </Button>
+                  {ratio === '1:1' && <span className="w-2.5 h-2.5 border border-current rounded-[1px]" />}
+                  {ratio === '16:9' && <span className="w-3 h-2 border border-current rounded-[1px]" />}
+                  {ratio === '9:16' && <span className="w-2 h-3 border border-current rounded-[1px]" />}
+                  {ratio}
+                </button>
               ))}
             </div>
           </div>
           
-          {/* Section: Reference Image (Image Mode) */}
+          {/* Reference Image (Image Mode) - Compact */}
           {currentMode === 'image' && (
-            <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
                 Reference Image
               </label>
               
               {hasReference ? (
-                <div className="space-y-3">
-                  {/* Thumbnail + Info Row */}
-                  <div className="flex items-center gap-3">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
                     <MobileReferenceImagePreview
                       key={referenceImageUrl || referenceImage?.name || 'ref-single'}
                       file={referenceImage}
                       imageUrl={referenceImageUrl}
                       onRemove={onReferenceImageRemove}
-                      sizeClass="h-12 w-12"
+                      sizeClass="h-10 w-10"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">
+                      <div className="text-[10px] font-medium truncate">
                         {referenceImage?.name || 'Reference set'}
                       </div>
                       {referenceImage && (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-[9px] text-muted-foreground">
                           {(referenceImage.size / 1024).toFixed(0)}KB
                         </div>
                       )}
                     </div>
                     
-                    {/* COPY Button - Consolidated */}
                     {onExactCopyModeChange && (
-                      <Button
+                      <button
                         type="button"
-                        variant={exactCopyMode ? 'default' : 'outline'}
-                        size="sm"
                         onClick={() => onExactCopyModeChange(!exactCopyMode)}
                         className={cn(
-                          "min-w-[70px] gap-1.5",
-                          exactCopyMode && "bg-primary text-primary-foreground"
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium border transition-colors",
+                          exactCopyMode
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/50 text-muted-foreground border-border"
                         )}
                       >
-                        <Copy className="h-3.5 w-3.5" />
+                        <Copy className="h-3 w-3" />
                         COPY
-                      </Button>
+                      </button>
                     )}
                   </div>
                   
-                  {/* Strength Slider - Only in modify mode */}
+                  {/* Strength - Compact range input */}
                   {!exactCopyMode && onReferenceStrengthChange && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[9px] text-muted-foreground">
                         <span>Variation: {Math.round((1 - referenceStrength) * 100)}%</span>
-                        <span>Strength: {referenceStrength.toFixed(2)}</span>
+                        <span className="font-mono">{referenceStrength.toFixed(2)}</span>
                       </div>
-                      <Slider
-                        value={[referenceStrength]}
-                        onValueChange={(value) => onReferenceStrengthChange(value[0])}
+                      <input
+                        type="range"
                         min={0.1}
                         max={0.9}
                         step={0.05}
-                        className="w-full"
+                        value={referenceStrength}
+                        onChange={(e) => onReferenceStrengthChange(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
+                          [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full 
+                          [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
                       />
                     </div>
                   )}
@@ -364,36 +376,39 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={onReferenceImageSelect}
-                  className="w-full min-h-[44px] gap-2"
+                  className="w-full h-8 gap-1.5 text-[10px]"
                 >
-                  <Upload className="h-4 w-4" />
+                  <Upload className="h-3 w-3" />
                   Add Reference Image
                 </Button>
               )}
             </div>
           )}
           
-          {/* Section: Video Reference Frames */}
+          {/* Video Reference Frames - Compact */}
           {currentMode === 'video' && (
-            <div className="space-y-2 p-3 rounded-lg border bg-muted/30">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
                 {videoReferenceMode === 'video' ? 'Video Source' : videoReferenceMode === 'single' ? 'Reference Image' : 'Reference Frames'}
               </label>
               
               {videoReferenceMode === 'video' ? (
-                // Video extend mode - show video source + extend controls
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {hasStartFrame ? (
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                        <Image className="h-5 w-5" />
+                    <div className="flex items-center gap-2">
+                      <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
+                        <Image className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">Video source set</div>
+                        <div className="text-[10px] font-medium truncate">Video source set</div>
                       </div>
-                      <Button variant="ghost" size="sm" onClick={onStartFrameRemove} className="text-xs text-destructive">
+                      <button
+                        type="button"
+                        onClick={onStartFrameRemove}
+                        className="text-[9px] text-destructive hover:underline"
+                      >
                         Remove
-                      </Button>
+                      </button>
                     </div>
                   ) : (
                     <Button
@@ -401,27 +416,32 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={onStartFrameSelect}
-                      className="w-full min-h-[44px] gap-2"
+                      className="w-full h-8 gap-1.5 text-[10px]"
                     >
-                      <Upload className="h-4 w-4" />
+                      <Upload className="h-3 w-3" />
                       Add Video Source
                     </Button>
                   )}
                   
-                  {/* Extend Strength */}
+                  {/* Extend Strength - Compact */}
                   {onExtendStrengthChange && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[9px] text-muted-foreground">
                         <span>Strength</span>
                         <span className="font-mono">{(extendStrength ?? 1.0).toFixed(2)}</span>
                       </div>
-                      <Slider
-                        value={[extendStrength ?? 1.0]}
-                        onValueChange={(v) => onExtendStrengthChange(v[0])}
+                      <input
+                        type="range"
                         min={0}
                         max={1}
                         step={0.05}
-                        className="w-full"
+                        value={extendStrength ?? 1.0}
+                        onChange={(e) => onExtendStrengthChange(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
+                          [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full 
+                          [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
                       />
                     </div>
                   )}
@@ -429,7 +449,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   {/* Reverse Video */}
                   {onExtendReverseVideoChange && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Reverse Video</span>
+                      <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Reverse Video</span>
                       <Switch
                         checked={extendReverseVideo}
                         onCheckedChange={onExtendReverseVideoChange}
@@ -438,30 +458,28 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   )}
                 </div>
               ) : videoReferenceMode === 'single' ? (
-                // Single reference (WAN 2.1 i2v)
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {hasStartFrame ? (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <MobileReferenceImagePreview
                         key={beginningRefImageUrl || beginningRefImage?.name || 'ref-start'}
                         file={beginningRefImage}
                         imageUrl={beginningRefImageUrl}
                         onRemove={onStartFrameRemove}
-                        sizeClass="h-12 w-12"
+                        sizeClass="h-10 w-10"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">
+                        <div className="text-[10px] font-medium truncate">
                           {beginningRefImage?.name || 'Reference set'}
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      <button
+                        type="button"
                         onClick={onStartFrameSelect}
-                        className="text-xs"
+                        className="text-[9px] text-muted-foreground hover:underline"
                       >
                         Change
-                      </Button>
+                      </button>
                     </div>
                   ) : (
                     <Button
@@ -469,35 +487,34 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       variant="outline"
                       size="sm"
                       onClick={onStartFrameSelect}
-                      className="w-full min-h-[44px] gap-2"
+                      className="w-full h-8 gap-1.5 text-[10px]"
                     >
-                      <Image className="h-4 w-4" />
+                      <Image className="h-3 w-3" />
                       Add Reference Image
                     </Button>
                   )}
                 </div>
               ) : (
-                // Dual reference (other video models)
-                <div className="flex gap-3">
-                  {/* Start Frame */}
-                  <div className="flex-1 space-y-1.5">
-                    <span className="text-xs text-muted-foreground">Start</span>
+                // Dual reference
+                <div className="flex gap-2">
+                  <div className="flex-1 space-y-1">
+                    <span className="text-[9px] text-muted-foreground">Start</span>
                     {hasStartFrame ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <MobileReferenceImagePreview
                           key={`start-${beginningRefImageUrl || beginningRefImage?.name || 'start'}`}
                           file={beginningRefImage}
                           imageUrl={beginningRefImageUrl}
                           onRemove={onStartFrameRemove}
-                          sizeClass="h-10 w-10"
+                          sizeClass="h-8 w-8"
                         />
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={onStartFrameSelect}
-                          className="h-8 w-8"
+                          className="h-6 w-6"
                         >
-                          <Upload className="h-3 w-3" />
+                          <Upload className="h-2.5 w-2.5" />
                         </Button>
                       </div>
                     ) : (
@@ -505,32 +522,31 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={onStartFrameSelect}
-                        className="w-full min-h-[40px]"
+                        className="w-full h-8 text-[9px]"
                       >
-                        <Image className="h-4 w-4" />
+                        <Image className="h-3 w-3" />
                       </Button>
                     )}
                   </div>
                   
-                  {/* End Frame */}
-                  <div className="flex-1 space-y-1.5">
-                    <span className="text-xs text-muted-foreground">End</span>
+                  <div className="flex-1 space-y-1">
+                    <span className="text-[9px] text-muted-foreground">End</span>
                     {hasEndFrame ? (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <MobileReferenceImagePreview
                           key={`end-${endingRefImageUrl || endingRefImage?.name || 'end'}`}
                           file={endingRefImage}
                           imageUrl={endingRefImageUrl}
                           onRemove={onEndFrameRemove}
-                          sizeClass="h-10 w-10"
+                          sizeClass="h-8 w-8"
                         />
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={onEndFrameSelect}
-                          className="h-8 w-8"
+                          className="h-6 w-6"
                         >
-                          <Upload className="h-3 w-3" />
+                          <Upload className="h-2.5 w-2.5" />
                         </Button>
                       </div>
                     ) : (
@@ -538,9 +554,9 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={onEndFrameSelect}
-                        className="w-full min-h-[40px]"
+                        className="w-full h-8 text-[9px]"
                       >
-                        <Image className="h-4 w-4" />
+                        <Image className="h-3 w-3" />
                       </Button>
                     )}
                   </div>
@@ -549,58 +565,48 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             </div>
           )}
           
-          {/* Section: Advanced Settings (Local Models Only) */}
+          {/* Advanced Settings (Local Models Only) */}
           {showAdvancedSettings && (
             <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
               <CollapsibleTrigger asChild>
-                <Button variant="ghost" className="w-full justify-between h-10 px-3">
-                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <Button variant="ghost" className="w-full justify-between h-8 px-2">
+                  <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
                     Advanced Settings
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-[9px] text-muted-foreground">
                     {showAdvanced ? '−' : '+'}
                   </span>
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="pt-2 space-y-3">
-                <p className="text-xs text-muted-foreground italic">
+              <CollapsibleContent className="pt-1 space-y-2">
+                <p className="text-[9px] text-muted-foreground italic px-2">
                   Advanced controls for local models (Steps, CFG, Seed, etc.) coming soon...
                 </p>
               </CollapsibleContent>
             </Collapsible>
           )}
           
-          {/* Section: Workspace Actions */}
-          <Collapsible open={showWorkspaceActions} onOpenChange={setShowWorkspaceActions}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" className="w-full justify-between h-10 px-3">
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Workspace Actions
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {showWorkspaceActions ? '−' : '+'}
-                </span>
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-2 space-y-2">
-              <Button
-                variant="outline"
-                size="sm"
+          {/* Workspace Actions - Simple text links */}
+          <div className="flex items-center justify-center gap-4 pt-1 pb-2 border-t">
+            {onClearWorkspace && (
+              <button
+                type="button"
                 onClick={onClearWorkspace}
-                className="w-full justify-start"
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 Clear All (Save to Library)
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
+              </button>
+            )}
+            {onDeleteAllWorkspace && (
+              <button
+                type="button"
                 onClick={onDeleteAllWorkspace}
-                className="w-full justify-start text-destructive hover:text-destructive"
+                className="text-[10px] text-destructive/70 hover:text-destructive transition-colors"
               >
                 Delete All
-              </Button>
-            </CollapsibleContent>
-          </Collapsible>
+              </button>
+            )}
+          </div>
         </div>
       </DrawerContent>
     </Drawer>

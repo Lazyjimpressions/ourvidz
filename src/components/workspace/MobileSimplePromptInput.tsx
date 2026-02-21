@@ -52,6 +52,9 @@ export interface MobileSimplePromptInputProps {
   onExtendStrengthChange?: (strength: number) => void;
   extendReverseVideo?: boolean;
   onExtendReverseVideoChange?: (reverse: boolean) => void;
+  // Batch size
+  batchSize?: number;
+  onBatchSizeChange?: (size: number) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -89,6 +92,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onExtendStrengthChange,
   extendReverseVideo = false,
   onExtendReverseVideoChange,
+  batchSize = 1,
+  onBatchSizeChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -389,6 +394,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         referenceImageUrl={displayReferenceUrl}
         onRemoveReference={() => removeReferenceImage(currentMode === 'image' ? 'single' : 'start')}
         disabled={isGenerating}
+        contentType={contentType}
+        onContentTypeChange={onContentTypeChange}
+        aspectRatio={aspectRatio}
+        onAspectRatioChange={onAspectRatioChange}
+        batchSize={batchSize}
+        onBatchSizeChange={onBatchSizeChange}
       />
       
       {/* Prompt Input + Generate Button */}

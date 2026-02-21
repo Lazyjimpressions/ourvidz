@@ -20,6 +20,14 @@ export interface MobileQuickBarProps {
   referenceImageUrl?: string | null;
   onRemoveReference?: () => void;
   
+  // Desktop inline controls
+  contentType?: 'sfw' | 'nsfw';
+  onContentTypeChange?: (type: 'sfw' | 'nsfw') => void;
+  aspectRatio?: '16:9' | '1:1' | '9:16';
+  onAspectRatioChange?: (ratio: '16:9' | '1:1' | '9:16') => void;
+  batchSize?: number;
+  onBatchSizeChange?: (size: number) => void;
+  
   // Disabled state
   disabled?: boolean;
 }
@@ -32,6 +40,12 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   hasReferenceImage = false,
   referenceImageUrl,
   onRemoveReference,
+  contentType = 'nsfw',
+  onContentTypeChange,
+  aspectRatio = '1:1',
+  onAspectRatioChange,
+  batchSize = 1,
+  onBatchSizeChange,
   disabled = false,
 }) => {
   return (
@@ -75,6 +89,72 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
             >
               <X className="h-3 w-3 text-muted-foreground" />
             </button>
+          )}
+        </div>
+      )}
+
+      {/* Desktop-only inline controls */}
+      {onContentTypeChange && (
+        <div className="hidden md:flex items-center gap-1.5">
+          {/* Content Type */}
+          <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
+            {(['sfw', 'nsfw'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onContentTypeChange(t)}
+                className={cn(
+                  "px-2 py-1 text-[10px] font-medium uppercase transition-colors",
+                  contentType === t
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {/* Aspect Ratio */}
+          {onAspectRatioChange && (
+            <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
+              {(['1:1', '16:9', '9:16'] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => onAspectRatioChange(r)}
+                  className={cn(
+                    "px-2 py-1 text-[10px] font-medium transition-colors",
+                    aspectRatio === r
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Batch Size */}
+          {onBatchSizeChange && (
+            <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
+              {[1, 3, 6].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onBatchSizeChange(n)}
+                  className={cn(
+                    "px-2 py-1 text-[10px] font-medium transition-colors min-w-[24px]",
+                    batchSize === n
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {n}×
+                </button>
+              ))}
+            </div>
           )}
         </div>
       )}

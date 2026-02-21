@@ -22,6 +22,7 @@ const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isControlsExpanded, setIsControlsExpanded] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [batchSize, setBatchSize] = useState(1);
   const location = useLocation();
   const navigate = useNavigate();
   const processedRef = useRef(false);
@@ -577,6 +578,8 @@ const MobileSimplifiedWorkspace = () => {
           onExtendStrengthChange={setExtendStrength}
           extendReverseVideo={extendReverseVideo}
           onExtendReverseVideoChange={setExtendReverseVideo}
+          batchSize={batchSize}
+          onBatchSizeChange={setBatchSize}
         />
 
         {/* Lightbox */}
