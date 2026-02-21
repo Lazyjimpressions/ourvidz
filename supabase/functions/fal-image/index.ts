@@ -1105,8 +1105,10 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({
             error: `This model requires: ${missingRequired.join(', ')}`,
-            details: missingRequired.includes('image_url')
+        details: missingRequired.includes('image_url')
               ? 'This is an image-to-image (edit) model. Please attach a reference image before generating.'
+              : missingRequired.includes('video')
+              ? 'This is a video extend model. Please attach a video file (MP4/WebM) in the REF box before generating.'
               : `Missing required input fields: ${missingRequired.join(', ')}`,
             missing_fields: missingRequired
           }),
