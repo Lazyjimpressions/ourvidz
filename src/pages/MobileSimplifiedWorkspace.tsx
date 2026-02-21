@@ -14,6 +14,7 @@ import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
 import { useImageModels } from '@/hooks/useApiModels';
+import { useSmartModelDefaults } from '@/hooks/useSmartModelDefaults';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 
@@ -23,10 +24,12 @@ const MobileSimplifiedWorkspace = () => {
   const [isControlsExpanded, setIsControlsExpanded] = useState(false);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [batchSize, setBatchSize] = useState(1);
+  const [userOverrodeModel, setUserOverrodeModel] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const processedRef = useRef(false);
   const { data: imageModels, isLoading: modelsLoading } = useImageModels();
+  const { getDefault } = useSmartModelDefaults();
   
   // Use the proper library-first workspace hook with RV5.1 routing
   // Disable URL optimization - we use useSignedAssets for immediate signing instead
@@ -80,34 +83,44 @@ const MobileSimplifiedWorkspace = () => {
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
 
-  // NEW: Handle signed URL from immediate upload (preferred workflow)
+  // Smart model auto-switching helper
+  const applySmartDefault = useCallback((task: 't2i' | 'i2i' | 't2v' | 'i2v' | 'extend') => {
+    if (userOverrodeModel) return;
+    const defaultModel = getDefault(task);
+    if (!defaultModel) return;
+    const providerName = (defaultModel as any).api_providers?.name || 'fal';
+    const modelType = providerName === 'replicate' ? 'replicate' : providerName === 'fal' ? 'fal' : 'sdxl';
+    setSelectedModel({ id: defaultModel.id, type: modelType as any, display_name: defaultModel.display_name });
+    toast.info(`Switched to ${defaultModel.display_name}`, { duration: 2000 });
+  }, [userOverrodeModel, getDefault, setSelectedModel]);
+
+  // Handle signed URL from immediate upload (preferred workflow)
   const handleReferenceImageUrlSet = useCallback((url: string, type: 'single' | 'start' | 'end') => {
     console.log('🖼️ MOBILE: Setting reference image URL (from immediate upload):', type, {
       url: url.substring(0, 60) + '...',
       isValidUrl: url.startsWith('http://') || url.startsWith('https://')
     });
     
-    // Set reference URL directly — React batches state updates, no rAF needed.
-    // Using requestAnimationFrame previously caused the URL to be lost when
-    // model/mode changes triggered re-renders between the clear and the deferred set.
     switch (type) {
       case 'single':
         setReferenceImage(null);
         setReferenceImageUrl(url);
-        console.log('✅ MOBILE: Reference image URL set in hook state');
+        // Auto-switch to I2I model when ref image added
+        if (mode === 'image') applySmartDefault('i2i');
+        else applySmartDefault('i2v');
         break;
       case 'start':
         setBeginningRefImage(null);
         setBeginningRefImageUrl(url);
-        console.log('✅ MOBILE: Beginning reference image URL set in hook state');
+        // For video start ref, switch to I2V
+        applySmartDefault('i2v');
         break;
       case 'end':
         setEndingRefImage(null);
         setEndingRefImageUrl(url);
-        console.log('✅ MOBILE: Ending reference image URL set in hook state');
         break;
     }
-  }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage]);
+  }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage, mode, applySmartDefault]);
 
   // LEGACY: Handle File object (fallback for backward compatibility)
   const handleReferenceImageSet = useCallback((file: File, type: 'single' | 'start' | 'end') => {
@@ -159,31 +172,31 @@ const MobileSimplifiedWorkspace = () => {
     
     switch (type) {
       case 'single':
-        // Clear all reference states to prevent sync loop
         setReferenceImage(null);
         setReferenceImageUrl(null);
         setReferenceMetadata(null);
         setExactCopyMode(false);
-        // ALSO clear the synced video frame states to prevent re-sync
         setBeginningRefImage(null);
         setBeginningRefImageUrl(null);
+        // Revert to no-ref default
+        if (mode === 'image') applySmartDefault('t2i');
+        else applySmartDefault('t2v');
         break;
       case 'start':
-        // Clear video frame states
         setBeginningRefImage(null);
         setBeginningRefImageUrl(null);
-        // ALSO clear image mode reference to prevent re-sync when switching modes
         setReferenceImage(null);
         setReferenceImageUrl(null);
         setReferenceMetadata(null);
         setExactCopyMode(false);
+        applySmartDefault('t2v');
         break;
       case 'end':
         setEndingRefImage(null);
         setEndingRefImageUrl(null);
         break;
     }
-  }, [setReferenceImage, setReferenceImageUrl, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, setReferenceMetadata, setExactCopyMode]);
+  }, [setReferenceImage, setReferenceImageUrl, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, setReferenceMetadata, setExactCopyMode, mode, applySmartDefault]);
 
   // DEBUG: Track reference image state changes
   useEffect(() => {
@@ -258,13 +271,19 @@ const MobileSimplifiedWorkspace = () => {
     await generate();
   };
 
-  const handleModeToggle = (mode: 'image' | 'video') => {
-    console.log('🔄 MOBILE WORKSPACE: Mode changed to:', mode);
-    updateMode(mode);
+
+
+
+  const handleModeToggle = (newMode: 'image' | 'video') => {
+    console.log('🔄 MOBILE WORKSPACE: Mode changed to:', newMode);
+    updateMode(newMode);
+    setUserOverrodeModel(false);
+    applySmartDefault(newMode === 'image' ? 't2i' : 't2v');
   };
 
   const handleModelChange = (model: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string }) => {
     console.log('🔄 MOBILE WORKSPACE: Model changed to:', model);
+    setUserOverrodeModel(true);
     setSelectedModel(model);
   };
 

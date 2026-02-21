@@ -123,7 +123,7 @@ export const CharacterEditModal = ({
         .select('id, model_key, display_name, api_providers!inner(name)')
         .eq('modality', 'image')
         .eq('is_active', true)
-        .contains('default_for_tasks', ['generation'])
+        .contains('default_for_tasks', ['t2i'])
         .order('priority', { ascending: false })
         .limit(1)
         .single();

@@ -49,9 +49,7 @@ const defaultPanel = (modelId: string): PanelState => ({
 
 /** Determine if a model needs reference images */
 const modelNeedsRef = (model: { modality: string; task: string; model_key: string }) => {
-  if (model.task === 'style_transfer') return true;
-  if (model.modality === 'video' &&
-    (model.model_key.includes('i2v') || model.model_key.includes('image-to-video'))) return true;
+  if (model.task === 'i2i' || model.task === 'i2v' || model.task === 'extend') return true;
   return false;
 };
 

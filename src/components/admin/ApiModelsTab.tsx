@@ -52,8 +52,12 @@ interface ApiModel {
 }
 
 const TASK_ABBREVIATIONS: Record<string, string> = {
-  generation: 'GEN',
-  style_transfer: 'STY',
+  t2i: 'T2I',
+  i2i: 'I2I',
+  t2v: 'T2V',
+  i2v: 'I2V',
+  extend: 'EXT',
+  multi: 'MLT',
   upscale: 'UPS',
   roleplay: 'RP',
   reasoning: 'RSN',
@@ -63,7 +67,7 @@ const TASK_ABBREVIATIONS: Record<string, string> = {
 };
 
 const MODALITIES = ['image', 'video', 'chat'] as const;
-const TASKS = ['generation', 'style_transfer', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding', 'vision'] as const;
+const TASKS = ['t2i', 'i2i', 't2v', 'i2v', 'extend', 'multi', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding', 'vision'] as const;
 
 const formatResponseTime = (ms: number | null | undefined) => {
   if (ms === null || ms === undefined || ms === 0) return '--';

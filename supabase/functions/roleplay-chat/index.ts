@@ -2959,9 +2959,9 @@ const sceneContext = analyzeSceneContent(response);
     if (!effectiveImageModel || effectiveImageModel.trim() === '') {
       console.log('📸 No image model specified, fetching default image model from database...');
 
-      // ✅ ALWAYS I2I: Roleplay always uses style_transfer (I2I) models
-      const requiredTask = 'style_transfer';
-      console.log('🎯 Looking for default I2I model (task=style_transfer) - roleplay always uses I2I');
+      // ✅ ALWAYS I2I: Roleplay always uses I2I models
+      const requiredTask = 'i2i';
+      console.log('🎯 Looking for default I2I model (task=i2i) - roleplay always uses I2I');
 
       // First, look for the default model (is_default = true)
       const { data: defaultModels } = await supabase
@@ -3451,9 +3451,9 @@ ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene n
             const { data: defaultI2IModel } = await supabase
               .from('api_models')
               .select('model_key, display_name')
-              .eq('task', 'style_transfer')
+              .eq('task', 'i2i')
               .eq('is_active', true)
-              .contains('default_for_tasks', ['style_transfer'])
+              .contains('default_for_tasks', ['i2i'])
               .order('priority', { ascending: true })
               .limit(1)
               .single();
@@ -3467,7 +3467,7 @@ ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene n
             const { data: anyI2IModel } = await supabase
               .from('api_models')
               .select('model_key, display_name')
-              .eq('task', 'style_transfer')
+              .eq('task', 'i2i')
               .eq('is_active', true)
               .order('priority', { ascending: true })
               .limit(1)
