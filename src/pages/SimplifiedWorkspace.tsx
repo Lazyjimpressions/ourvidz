@@ -496,10 +496,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     <>
       <div className="flex flex-col min-h-screen">
         {/* Header */}
-        <WorkspaceHeader 
-          onClearWorkspace={clearWorkspace}
-          onDeleteAllWorkspace={deleteAllWorkspace}
-        />
+        <WorkspaceHeader />
         
         {/* Main content area with bottom padding for fixed control bar */}
         <main className="flex-1 pb-32">
@@ -593,22 +590,12 @@ export const SimplifiedWorkspace: React.FC = () => {
           onCompelWeightsChange={setCompelWeights}
           seed={seed}
           onSeedChange={setSeed}
-          onBypassEnhancement={bypassEnhancement}
-          onBypassEnhancementChange={setBypassEnhancement}
-          onHardOverride={hardOverride}
-          onHardOverrideChange={setHardOverride}
-          clothingEditMode={clothingEditMode}
-          onClothingEditModeChange={setClothingEditMode}
-          lockHair={lockHair}
-          onLockHairChange={setLockHair}
-          originalClothingColor={originalClothingColor}
-          onOriginalClothingColorChange={setOriginalClothingColor}
-          targetGarments={targetGarments}
-          onTargetGarmentsChange={setTargetGarments}
           extendStrength={extendStrength}
           onExtendStrengthChange={setExtendStrength}
           extendReverseVideo={extendReverseVideo}
           onExtendReverseVideoChange={setExtendReverseVideo}
+          onClearWorkspace={clearWorkspace}
+          onDeleteAllWorkspace={deleteAllWorkspace}
         />
       </div>
       
