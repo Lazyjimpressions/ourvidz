@@ -64,8 +64,8 @@ serve(async (req) => {
 
     // ── 4. Handle failure ──
     // fal.ai sends status "COMPLETED" on success; anything else is a failure
-    const falStatus = payload.status || "COMPLETED";
-    if (falStatus !== "COMPLETED") {
+    const falStatus = payload.status;
+    if (falStatus === "ERROR") {
       const errorMsg = payload.error || payload.detail || `fal.ai returned status: ${falStatus}`;
       console.error("❌ fal.ai generation failed:", errorMsg);
 
