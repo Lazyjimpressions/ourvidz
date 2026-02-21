@@ -201,6 +201,9 @@ interface RoleplayChatRequest {
   scene_system_prompt?: string;
   /** Scene template's preview_image_url - used for first-scene I2I (kick off from template image, not T2I) */
   scene_preview_image_url?: string;
+  // Scene clothing overrides from scene template
+  scene_default_clothing?: string;
+  scene_clothing_overrides?: Record<string, string>;
   kickoff?: boolean; // New field for scene kickoff
   prompt_template_id?: string; // Prompt template ID for enhanced prompts
   prompt_template_name?: string; // Prompt template name for logging
@@ -385,6 +388,8 @@ serve(async (req) => {
       scene_context,
       scene_system_prompt,
       scene_preview_image_url,
+      scene_default_clothing,
+      scene_clothing_overrides,
       kickoff,
       prompt_template_id,
       prompt_template_name,
@@ -740,7 +745,9 @@ serve(async (req) => {
             scene_continuity_enabled ?? true,
             scene_prompt_override,
             current_scene_image_url,
-            requestBody.selected_i2i_model
+            requestBody.selected_i2i_model,
+            scene_default_clothing,
+            scene_clothing_overrides
           );
           
           console.log('🎬 Background scene generation completed:', {
@@ -2628,7 +2635,10 @@ async function generateScene(
   scenePromptOverride?: string, // User-edited prompt for regeneration (skips narrative generation)
   currentSceneImageUrl?: string, // Current scene image for I2I modification mode
   // ✅ NEW: I2I model override - user can select specific I2I model for iterations
-  i2iModelOverride?: string // User-selected I2I model (e.g., Seedream v4.5 Edit)
+  i2iModelOverride?: string, // User-selected I2I model (e.g., Seedream v4.5 Edit)
+  // Scene clothing overrides from template
+  sceneDefaultClothing?: string,
+  sceneClothingOverrides?: Record<string, string>
 ): Promise<{ 
   success: boolean; 
   consistency_score?: number; 
@@ -3167,8 +3177,13 @@ const sceneContext = analyzeSceneContent(response);
     }
 
     // Build character identity: physical tags for identity, clothing from scene context or defaults
+    // Clothing priority: 1) AI narrative extraction, 2) per-character scene override, 3) scene default clothing, 4) character clothing_tags
     const physicalAppearance = (sceneCharacter.appearance_tags || []).slice(0, 5).join(', ') || characterVisualDescription;
-    const outfitTags = sceneContext?.clothing || ((sceneCharacter as any).clothing_tags || []).join(', ');
+    const characterClothingOverride = sceneClothingOverrides?.[characterId] || sceneClothingOverrides?.[(sceneCharacter as any).name];
+    const outfitTags = sceneContext?.clothing
+      || characterClothingOverride
+      || sceneDefaultClothing
+      || ((sceneCharacter as any).clothing_tags || []).join(', ');
     const characterAppearance = outfitTags
       ? `${physicalAppearance}, wearing ${outfitTags}`
       : physicalAppearance;
@@ -3180,7 +3195,11 @@ const sceneContext = analyzeSceneContent(response);
         userCharacter.gender,
         userCharacter.appearance_tags || []
       );
-      const userAppearanceFinal = userAppearance || userVisualFallback;
+      // User clothing priority: scene override for "user" key, then scene default, then user's clothing_tags
+      const userClothingOverride = sceneClothingOverrides?.['user'] || sceneClothingOverrides?.[userCharacter.name || ''];
+      const userOutfit = userClothingOverride || sceneDefaultClothing || ((userCharacter as any).clothing_tags || []).join(', ');
+      const userAppearanceBase = userAppearance || userVisualFallback;
+      const userAppearanceFinal = userOutfit ? `${userAppearanceBase}, wearing ${userOutfit}` : userAppearanceBase;
 
       enhancedScenePrompt = `In the setting from Figure 1, show two people together.
 

@@ -647,6 +647,10 @@ export interface SceneTemplate {
   perspective_hint?: 'third_person' | 'pov' | 'observer';
   max_words?: number; // 20-200 words
 
+  // Clothing overrides
+  default_clothing?: string;
+  character_clothing_overrides?: Record<string, string>;
+
   created_at: string;
   updated_at: string;
 }

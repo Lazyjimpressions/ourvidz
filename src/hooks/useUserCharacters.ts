@@ -12,6 +12,7 @@ export interface UserCharacter {
   description: string;
   traits?: string;
   appearance_tags?: string[];
+  clothing_tags?: string[];
   image_url?: string;
   persona?: string;
   voice_tone?: string;

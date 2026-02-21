@@ -1676,9 +1676,11 @@ export type Database = {
       scenes: {
         Row: {
           atmosphere: Json | null
+          character_clothing_overrides: Json | null
           content_rating: string | null
           created_at: string | null
           creator_id: string | null
+          default_clothing: string | null
           description: string
           id: string
           is_public: boolean | null
@@ -1703,9 +1705,11 @@ export type Database = {
         }
         Insert: {
           atmosphere?: Json | null
+          character_clothing_overrides?: Json | null
           content_rating?: string | null
           created_at?: string | null
           creator_id?: string | null
+          default_clothing?: string | null
           description: string
           id?: string
           is_public?: boolean | null
@@ -1730,9 +1734,11 @@ export type Database = {
         }
         Update: {
           atmosphere?: Json | null
+          character_clothing_overrides?: Json | null
           content_rating?: string | null
           created_at?: string | null
           creator_id?: string | null
+          default_clothing?: string | null
           description?: string
           id?: string
           is_public?: boolean | null

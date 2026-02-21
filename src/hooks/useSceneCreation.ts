@@ -23,6 +23,9 @@ export interface SceneFormData {
   visual_priority?: string[];
   perspective_hint?: 'third_person' | 'pov' | 'observer';
   max_words?: number;
+  // Clothing overrides
+  default_clothing?: string;
+  character_clothing_overrides?: Record<string, string>;
 }
 
 /**
@@ -453,6 +456,9 @@ export const useSceneCreation = (): UseSceneCreationResult => {
           visual_priority: formData.visual_priority || ['setting', 'lighting', 'positioning'],
           perspective_hint: formData.perspective_hint || 'third_person',
           max_words: formData.max_words || 60,
+          // Clothing overrides
+          default_clothing: formData.default_clothing || null,
+          character_clothing_overrides: formData.character_clothing_overrides || {},
           usage_count: 0
         })
         .select()
@@ -487,6 +493,8 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         visual_priority: data.visual_priority || ['setting', 'lighting', 'positioning'],
         perspective_hint: (data.perspective_hint || 'third_person') as SceneTemplate['perspective_hint'],
         max_words: data.max_words || 60,
+        default_clothing: data.default_clothing || undefined,
+        character_clothing_overrides: (data.character_clothing_overrides as Record<string, string>) || undefined,
         created_at: data.created_at,
         updated_at: data.updated_at
       };
@@ -564,7 +572,9 @@ export const useSceneCreation = (): UseSceneCreationResult => {
           narrative_style: formData.narrative_style || 'concise',
           visual_priority: formData.visual_priority || ['setting', 'lighting', 'positioning'],
           perspective_hint: formData.perspective_hint || 'third_person',
-          max_words: formData.max_words || 60
+          max_words: formData.max_words || 60,
+          default_clothing: formData.default_clothing || null,
+          character_clothing_overrides: formData.character_clothing_overrides || {}
         })
         .eq('id', sceneId);
 
@@ -613,6 +623,8 @@ export const useSceneCreation = (): UseSceneCreationResult => {
         visual_priority: data.visual_priority || ['setting', 'lighting', 'positioning'],
         perspective_hint: (data.perspective_hint || 'third_person') as SceneTemplate['perspective_hint'],
         max_words: data.max_words || 60,
+        default_clothing: data.default_clothing || undefined,
+        character_clothing_overrides: (data.character_clothing_overrides as Record<string, string>) || undefined,
         created_at: data.created_at,
         updated_at: data.updated_at
       };
