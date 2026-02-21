@@ -534,7 +534,7 @@ const MobileSimplifiedWorkspace = () => {
                 }
               }
             }}
-            isLoading={isGenerating || isSigning}
+            isLoading={isGenerating && sharedAssets.length === 0}
           />
         </div>
 

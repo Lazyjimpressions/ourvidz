@@ -38,10 +38,14 @@ export function useSignedAssets(
   const queuedIdsRef = useRef<Set<string>>(new Set());
   const prevEnabledRef = useRef(enabled);
 
-  // Reset queued tracking when assets change (e.g., tab switch, dialog reopen)
+  // Stable identity key: only clear queued IDs when actual asset IDs change,
+  // not on every array reference change (which happens on every refetch)
+  const assetIdKey = useMemo(() => assets.map(a => a.id).sort().join(','), [assets]);
+
+  // Reset queued tracking when asset IDs change (e.g., tab switch, dialog reopen, new asset added)
   useEffect(() => {
     queuedIdsRef.current.clear();
-  }, [assets]);
+  }, [assetIdKey]);
 
   // Clear queued IDs when enabled transitions from false to true (dialog reopen)
   useEffect(() => {
