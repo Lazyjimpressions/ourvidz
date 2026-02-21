@@ -126,35 +126,52 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     setThumbUrls({});
     setFailedIds(new Set());
 
+    const BATCH_SIZE = 10;
+
     const signAll = async () => {
-      for (const asset of sharedAssets) {
+      for (let i = 0; i < sharedAssets.length; i += BATCH_SIZE) {
         if (cancelled) break;
-        const path = asset.thumbPath || asset.originalPath;
-        if (!path) {
-          if (!cancelled) setFailedIds(prev => new Set(prev).add(asset.id));
-          continue;
-        }
-        // Skip if path is already a full URL (e.g. public bucket)
-        if (path.startsWith('http://') || path.startsWith('https://')) {
-          if (!cancelled) setThumbUrls(prev => ({ ...prev, [asset.id]: path }));
-          continue;
-        }
-        try {
-          const { data, error } = await supabase.storage
-            .from(bucket)
-            .createSignedUrl(path, 3600);
-          if (cancelled) break;
-          if (error || !data?.signedUrl) {
-            console.warn('⚠️ Sign failed for', asset.id, path, error?.message);
-            setFailedIds(prev => new Set(prev).add(asset.id));
-          } else {
-            setThumbUrls(prev => ({ ...prev, [asset.id]: data.signedUrl }));
+        const batch = sharedAssets.slice(i, i + BATCH_SIZE);
+
+        const results = await Promise.allSettled(
+          batch.map(async (asset) => {
+            const path = asset.thumbPath || asset.originalPath;
+            if (!path) return { id: asset.id, failed: true as const };
+            if (path.startsWith('http://') || path.startsWith('https://')) {
+              return { id: asset.id, url: path };
+            }
+            try {
+              const { data, error } = await supabase.storage
+                .from(bucket)
+                .createSignedUrl(path, 3600);
+              if (error || !data?.signedUrl) {
+                return { id: asset.id, failed: true as const };
+              }
+              return { id: asset.id, url: data.signedUrl };
+            } catch {
+              return { id: asset.id, failed: true as const };
+            }
+          })
+        );
+
+        if (cancelled) break;
+
+        const batchUrls: Record<string, string> = {};
+        const batchFailed: string[] = [];
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            const val = result.value;
+            if ('failed' in val) batchFailed.push(val.id);
+            else if (val.url) batchUrls[val.id] = val.url;
           }
-        } catch (e) {
-          if (!cancelled) {
-            console.warn('⚠️ Sign error for', asset.id, e);
-            setFailedIds(prev => new Set(prev).add(asset.id));
-          }
+        }
+        setThumbUrls(prev => ({ ...prev, ...batchUrls }));
+        if (batchFailed.length > 0) {
+          setFailedIds(prev => {
+            const next = new Set(prev);
+            batchFailed.forEach(id => next.add(id));
+            return next;
+          });
         }
       }
       if (!cancelled) setSigning(false);
