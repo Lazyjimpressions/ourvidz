@@ -1216,10 +1216,19 @@ serve(async (req) => {
           providerMetadata: { model_key: modelKey }
         }).catch(logErr => console.error('Failed to log error usage:', logErr));
 
+        // For 500 downstream errors, return a user-friendly message instead of raw error
+        const isDownstreamError = falResponse.status === 500 && 
+          (errorText.includes('downstream_service_error') || errorText.includes('Downstream service error'));
+        
+        const userMessage = isDownstreamError
+          ? `The model "${apiModel.display_name || modelKey}" is temporarily unavailable. This is a provider-side issue. Please try again or use a different model.`
+          : (errorDetails.message || errorText);
+
         return new Response(JSON.stringify({
-          error: 'fal.ai API request failed',
-          details: errorDetails.message || errorText,
+          error: isDownstreamError ? 'Model temporarily unavailable' : 'fal.ai API request failed',
+          details: userMessage,
           status: falResponse.status,
+          retryable: isDownstreamError,
           debug: falResponse.status === 422 ? {
             model_key: modelKey,
             is_overridden: isModelOverridden,
@@ -1231,7 +1240,7 @@ serve(async (req) => {
           } : undefined
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: falResponse.status,
+          status: isDownstreamError ? 503 : falResponse.status,
         });
       }
 
