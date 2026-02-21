@@ -792,15 +792,34 @@ serve(async (req) => {
       throw errorResponse;
     }
 
-    // 5. Create job record
+    // 5. Determine async vs sync from endpoint_path (table-driven)
+    const webhookFunction = apiModel.endpoint_path; // e.g. 'fal-webhook' or null
+    const isAsync = !!webhookFunction;
     const quality = body.quality || 'high';
     const jobType = normalizeJobType(body.job_type || body.jobType, isVideo, quality);
     const contentMode = body.metadata?.contentType || 'nsfw';
 
+    // Build provider URL from table (no hardcoded URLs)
+    const providerBaseUrl = apiModel.api_providers.base_url;
+    const falEndpoint = `${providerBaseUrl}/${modelKey}`;
+
+    // For async: store the signed reference URL so webhook can use it for thumbnails
+    let signedRefUrl: string | null = null;
+    if (isAsync && modelInput.image_url) {
+      signedRefUrl = modelInput.image_url;
+    }
+
+    // Estimated cost for usage tracking
+    const estimatedCost = calculateFalCost(modelKey, modelModality);
+
+    // Merged job insert — single DB call instead of insert + update
     const { data: jobData, error: jobError } = await supabase
       .from('jobs').insert({
         user_id: user.id, job_type: jobType,
-        original_prompt: body.prompt, status: 'queued', quality,
+        original_prompt: body.prompt,
+        status: isAsync ? 'queued' : 'processing',
+        started_at: new Date().toISOString(),
+        quality,
         api_model_id: apiModel.id, model_type: 'sdxl', format: isVideo ? 'video' : 'image',
         metadata: {
           ...body.metadata,
@@ -809,7 +828,10 @@ serve(async (req) => {
           database_model_key: apiModel.model_key,
           is_model_overridden: !!modelKeyOverride,
           content_mode: contentMode,
-          generation_mode: generationMode
+          generation_mode: generationMode,
+          input_used: modelInput,
+          estimated_cost: estimatedCost,
+          ...(signedRefUrl ? { reference_image_signed_url: signedRefUrl } : {})
         }
       }).select().single();
 
@@ -818,17 +840,84 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Failed to create job', details: jobError?.message }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 });
     }
-    console.log('✅ Job created:', jobData.id);
+    console.log('✅ Job created:', jobData.id, isAsync ? '(async/queued)' : '(sync/processing)');
 
-    // Update job to processing
-    await supabase.from('jobs').update({
-      status: 'processing', started_at: new Date().toISOString(),
-      metadata: { ...jobData.metadata, input_used: modelInput }
-    }).eq('id', jobData.id);
+    // ── 6a. ASYNC PATH: Submit to queue with webhook, return immediately ──
+    if (isAsync) {
+      const webhookSecret = Deno.env.get('FAL_WEBHOOK_SECRET');
+      if (!webhookSecret) {
+        console.error('❌ FAL_WEBHOOK_SECRET not configured for async model');
+        // Fall through to synchronous as fallback
+      } else {
+        const webhookUrl = `${supabaseUrl}/functions/v1/${webhookFunction}?secret=${webhookSecret}`;
+        console.log('🚀 Async submit to:', falEndpoint, '→ webhook:', webhookFunction);
 
-    // 6. Call fal.ai API
-    const falEndpoint = `https://fal.run/${modelKey}`;
-    console.log('🚀 Calling fal.ai:', falEndpoint);
+        try {
+          const falResponse = await fetch(`${falEndpoint}?fal_webhook=${encodeURIComponent(webhookUrl)}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Key ${falApiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(modelInput)
+          });
+
+          if (!falResponse.ok) {
+            const errorText = await falResponse.text();
+            console.error('❌ Async submission failed:', falResponse.status, errorText);
+
+            await supabase.from('jobs').update({
+              status: 'failed',
+              error_message: `Async submission failed: ${falResponse.status} - ${errorText.slice(0, 500)}`
+            }).eq('id', jobData.id);
+
+            return new Response(JSON.stringify({
+              error: 'Failed to submit async generation',
+              details: errorText.slice(0, 500),
+              status: falResponse.status
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: falResponse.status >= 400 && falResponse.status < 500 ? falResponse.status : 500,
+            });
+          }
+
+          const queueResult = await falResponse.json();
+          console.log('✅ Async queued:', {
+            request_id: queueResult.request_id,
+            status: queueResult.status
+          });
+
+          // Store request_id for webhook lookup
+          await supabase.from('jobs').update({
+            metadata: { ...jobData.metadata, fal_request_id: queueResult.request_id, input_used: modelInput }
+          }).eq('id', jobData.id);
+
+          // Log usage (submission only, actual cost tracked by webhook)
+          logApiUsage(supabase, {
+            providerId: apiModel.api_providers.id, modelId: apiModel.id, userId: user.id,
+            requestType: modelModality === 'video' ? 'video' : 'image',
+            endpointPath: `/${modelKey}`,
+            requestPayload: modelInput,
+            responseStatus: 202, responseTimeMs: Date.now() - Date.now(),
+            costUsd: estimatedCost,
+            providerMetadata: { request_id: queueResult.request_id, async: true, model_key: modelKey }
+          }).catch(() => {});
+
+          return new Response(JSON.stringify({
+            jobId: jobData.id,
+            requestId: queueResult.request_id,
+            status: 'queued',
+            message: 'Generation queued — results delivered via webhook'
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+
+        } catch (asyncError) {
+          console.error('❌ Async fetch error:', asyncError);
+          // Fall through to sync as fallback
+          console.log('⚠️ Falling back to synchronous call');
+          await supabase.from('jobs').update({ status: 'processing' }).eq('id', jobData.id);
+        }
+      }
+    }
+
+    // ── 6b. SYNCHRONOUS PATH (images, or async fallback) ──
+    console.log('🚀 Calling fal.ai (sync):', falEndpoint);
 
     const startTime = Date.now();
     const requestType = modelModality === 'video' ? 'video' : 'image';
@@ -894,8 +983,10 @@ serve(async (req) => {
         ...usageData, responseStatus: falResponse.status, responseTimeMs, responsePayload: falResult
       }).catch(() => {});
 
-      // Handle queued response
+      // Note: IN_QUEUE/IN_PROGRESS statuses won't occur on sync fal.run calls.
+      // Async models use the webhook path above. This is a safety net only.
       if (falResult.status === 'IN_QUEUE' || falResult.status === 'IN_PROGRESS') {
+        console.warn('⚠️ Unexpected queue status on sync call — model may need endpoint_path set for async');
         await supabase.from('jobs').update({
           metadata: { ...jobData.metadata, fal_request_id: falResult.request_id, input_used: modelInput }
         }).eq('id', jobData.id);
@@ -945,19 +1036,17 @@ serve(async (req) => {
         storagePath = '';
       }
 
-      // Video thumbnail from reference image
+      // Video thumbnail from reference image — reuse already-signed URL from modelInput
       let thumbnailPath: string | null = null;
-      if (resultType === 'video' && body.input?.image_url) {
+      if (resultType === 'video' && modelInput.image_url) {
         try {
-          const thumbUrl = await signIfStoragePath(supabase, body.input.image_url, 'user-library');
-          if (thumbUrl) {
-            const thumbResponse = await fetch(thumbUrl);
-            if (thumbResponse.ok) {
-              const thumbBuffer = await thumbResponse.arrayBuffer();
-              const thumbStoragePath = `${user.id}/${jobData.id}_${Date.now()}.thumb.webp`;
-              const { error: thumbUploadError } = await supabase.storage.from('workspace-temp').upload(thumbStoragePath, thumbBuffer, { contentType: 'image/webp', upsert: true });
-              if (!thumbUploadError) { thumbnailPath = thumbStoragePath; console.log('✅ Thumbnail created'); }
-            }
+          // modelInput.image_url is already signed by buildModelInput, no need to re-sign
+          const thumbResponse = await fetch(modelInput.image_url);
+          if (thumbResponse.ok) {
+            const thumbBuffer = await thumbResponse.arrayBuffer();
+            const thumbStoragePath = `${user.id}/${jobData.id}_${Date.now()}.thumb.webp`;
+            const { error: thumbUploadError } = await supabase.storage.from('workspace-temp').upload(thumbStoragePath, thumbBuffer, { contentType: 'image/webp', upsert: true });
+            if (!thumbUploadError) { thumbnailPath = thumbStoragePath; console.log('✅ Thumbnail created'); }
           }
         } catch (thumbError) {
           console.warn('⚠️ Thumbnail generation failed:', thumbError);
@@ -994,8 +1083,9 @@ serve(async (req) => {
       if (assetError) console.warn('⚠️ Failed to create workspace asset:', assetError);
       else console.log('✅ Workspace asset created');
 
-      // 10. Post-process destinations (helper)
-      await handlePostProcessing(supabase, body, user, storagePath, jobData, resultType, fileSizeBytes, falResult, generationSeed, modelKey);
+      // 10. Post-process destinations (fire-and-forget — don't block response)
+      handlePostProcessing(supabase, body, user, storagePath, jobData, resultType, fileSizeBytes, falResult, generationSeed, modelKey)
+        .catch(err => console.error('❌ Post-processing error:', err));
 
       return new Response(JSON.stringify({
         jobId: jobData.id, status: 'completed', resultUrl, resultType
