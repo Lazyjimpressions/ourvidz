@@ -1193,6 +1193,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         
         // Check if this video model requires a reference image (I2V) using capabilities from the already-loaded model data
         let videoRequiresRefImage = false;
+        let cachedCaps: any = {};
         if (isFalVideo && selectedModel.id) {
           try {
             const { data: modelData } = await supabase
@@ -1200,11 +1201,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               .select('capabilities')
               .eq('id', selectedModel.id)
               .single();
-            const caps = (modelData?.capabilities as any) || {};
-            videoRequiresRefImage = caps?.input_schema?.image_url?.required === true ||
-                                   caps?.supports_i2v === true ||
-                                   caps?.video?.reference_mode === 'single' ||
-                                   caps?.video?.reference_mode === 'dual';
+            cachedCaps = (modelData?.capabilities as any) || {};
+            videoRequiresRefImage = cachedCaps?.input_schema?.image_url?.required === true ||
+                                   cachedCaps?.input_schema?.video?.required === true || // V2V extend models
+                                   cachedCaps?.supports_i2v === true ||
+                                   cachedCaps?.video?.reference_mode === 'single' ||
+                                   cachedCaps?.video?.reference_mode === 'dual';
           } catch (err) {
             console.warn('⚠️ Could not check model capabilities');
           }
@@ -1297,14 +1299,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         if (isFalVideo) {
           const refImageUrl = startRefUrl || effRefUrl;
           
-          // Check if this is a video extend model (requires video conditioning object)
-          const caps = await (async () => {
-            try {
-              const { data: md } = await supabase.from('api_models').select('capabilities').eq('id', selectedModel.id).single();
-              return (md?.capabilities as any) || {};
-            } catch { return {}; }
-          })();
-          const isExtendModel = caps?.input_schema?.video?.required === true;
+          // Check if this is a video extend model (uses cached caps from validation above)
+          const isExtendModel = cachedCaps?.input_schema?.video?.required === true;
           
           if (isExtendModel && refImageUrl) {
             // fal.ai LTX extend expects `video` as a plain URL string
