@@ -875,21 +875,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       
       // NOW enhance prompt if we have a reference image (but not in exact copy mode)
       if (!exactCopyMode && effRefUrl) {
-        // MODIFY MODE: Handle reference images for modification
-        console.log('🎯 MODIFY MODE: Processing reference image for modification (after upload)');
-        
-        if (referenceMetadata && prompt.trim()) {
-          // Workspace item with metadata and user modification
-          console.log('🎯 MODIFY MODE: Workspace item with modification');
-          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
-        } else if (prompt.trim()) {
-          // Uploaded image or workspace item without metadata, with user modification
-          console.log('🎯 MODIFY MODE: Reference image with modification');
-          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
+        if (mode === 'video') {
+          // I2V MODE: Do NOT wrap with identity-preservation boilerplate.
+          // WAN 2.1 already receives the reference image via image_url — the prompt
+          // should describe motion, camera, and scene changes instead.
+          console.log('🎬 I2V MODE: Passing user prompt through without identity wrapping');
+          finalPrompt = prompt.trim() || 'gentle motion, cinematic, high quality';
         } else {
-          // Reference image but no modification prompt
-          console.log('🎯 MODIFY MODE: Reference image without modification');
-          finalPrompt = 'preserve the same person/identity and facial features from the reference image, maintaining similar quality and detail level';
+          // IMAGE I2I MODIFY MODE: Handle reference images for modification
+          console.log('🎯 MODIFY MODE: Processing reference image for modification (after upload)');
+          
+          if (prompt.trim()) {
+            console.log('🎯 MODIFY MODE: Reference image with modification');
+            finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
+          } else {
+            console.log('🎯 MODIFY MODE: Reference image without modification');
+            finalPrompt = 'preserve the same person/identity and facial features from the reference image, maintaining similar quality and detail level';
+          }
         }
         
         // Guard against seed-based near copies: clear lockSeed if it was set by exact copy
