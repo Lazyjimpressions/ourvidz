@@ -289,10 +289,9 @@ async function buildModelInput(
     hasImageUrl, hasImageUrls, hasVideoInput, isVideo
   });
 
-  // --- Determine if model requires image_urls array (edit models) ---
-  const supportsI2I = capabilities?.supports_i2i === true || capabilities?.reference_images === true;
-  let requiresImageUrlsArray = capabilities?.requires_image_urls_array === true ||
-    (supportsI2I && modelKey.includes('edit'));
+  // --- Determine if model requires image_urls array (schema-driven) ---
+  // Derive from input_schema: if schema defines image_urls, model expects array format
+  let requiresImageUrlsArray = !!inputSchema.image_urls;
 
   // Check override model capabilities if model_key_override is used
   const modelKeyOverride = body.model_key_override;
@@ -303,9 +302,8 @@ async function buildModelInput(
       .eq('model_key', modelKeyOverride)
       .single();
     if (overrideModel?.capabilities) {
-      const oc = overrideModel.capabilities as any;
-      requiresImageUrlsArray = oc?.requires_image_urls_array === true ||
-        (oc?.supports_i2i === true && modelKeyOverride.includes('edit'));
+      const overrideSchema = (overrideModel.capabilities as any)?.input_schema || {};
+      requiresImageUrlsArray = !!overrideSchema.image_urls;
     }
   }
 
@@ -355,16 +353,15 @@ async function buildModelInput(
       }
     }
 
-    // Strength parameter (skip for Seedream edit and models without schema support)
-    const isSeedreamEdit = modelKey.includes('seedream') && modelKey.includes('edit');
-    const usesStrengthParam = capabilities?.uses_strength_param !== false;
-    const schemaAllowsStrength = !Object.keys(inputSchema).length || !!inputSchema.strength;
-
-    if (schemaAllowsStrength && usesStrengthParam && !isSeedreamEdit) {
-      modelInput.strength = body.input?.strength !== undefined
-        ? Math.min(Math.max(body.input.strength, 0.1), 1.0)
-        : 0.5;
+    // Strength parameter — purely schema-driven: if the schema has a 'strength' field, include it
+    if (inputSchema.strength && body.input?.strength !== undefined) {
+      const range = inputSchema.strength;
+      modelInput.strength = Math.min(Math.max(body.input.strength, range.min || 0.1), range.max || 1.0);
+    } else if (inputSchema.strength) {
+      // Schema allows strength but client didn't send it — use a sensible default
+      modelInput.strength = inputSchema.strength.default || 0.5;
     } else {
+      // Schema doesn't have strength — remove it
       delete modelInput.strength;
     }
   }

@@ -14,18 +14,15 @@ export interface ImageModel {
   priority: number;
   provider_name: string;
   provider_display_name: string;
-  avg_generation_time?: number;  // Average generation time in seconds
-  cost_per_use?: number;         // Cost per use in USD
-  capabilities?: {
-    nsfw?: boolean;
-    speed?: string;
-    cost?: string;
-    quality?: string;
-    reference_images?: boolean;  // Keep for backward compatibility
-    supports_i2i?: boolean;      // NEW: Primary I2I indicator
-    seed_control?: boolean;
-    char_limit?: number;         // For fal.ai models
-  };
+  avg_generation_time?: number;
+  cost_per_use?: number;
+  /** 
+   * Capabilities JSONB from api_models table. Contains input_schema, 
+   * requires_image_urls_array, supports_i2i, safety_checker_param, 
+   * uses_strength_param, supports_i2v, char_limit, etc.
+   * Kept as Record<string, any> since the schema is table-driven and evolves.
+   */
+  capabilities?: Record<string, any>;
 }
 
 export interface ImageModelOption {
