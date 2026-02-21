@@ -62,7 +62,7 @@ export class ModelRoutingService {
         .eq('modality', 'image')
         .eq('is_active', true)
         .eq('api_providers.name', 'replicate')
-        .contains('default_for_tasks', ['generation'])
+        .contains('default_for_tasks', ['t2i'])
         .order('priority', { ascending: true })
         .limit(1)
         .single();

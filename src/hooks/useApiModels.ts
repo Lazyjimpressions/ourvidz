@@ -8,7 +8,7 @@ interface ApiModel {
   model_key: string;
   version: string | null;
   modality: 'image' | 'video' | 'chat';
-  task: 'generation' | 'style_transfer' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding' | 'vision';
+  task: 't2i' | 'i2i' | 't2v' | 'i2v' | 'extend' | 'multi' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding' | 'vision';
   model_family: string | null;
   is_default: boolean;
   priority: number;
@@ -63,14 +63,14 @@ export const useApiModels = (modality?: string, task?: string) => {
 };
 
 export const useImageModels = () => {
-  return useApiModels('image', 'generation');
+  return useApiModels('image', 't2i');
 };
 
 export const useVideoModels = () => {
-  return useApiModels('video', 'generation');
+  return useApiModels('video');
 };
 
-/** Fetches all visual models: T2I (image/generation), I2I (image/style_transfer), I2V (video/generation) */
+/** Fetches all visual models: T2I, I2I, T2V, I2V, extend, multi */
 export const useAllVisualModels = () => {
   return useQuery({
     queryKey: ['api-models', 'all-visual'],
@@ -93,7 +93,7 @@ export const useAllVisualModels = () => {
         `)
         .eq('is_active', true)
         .or('modality.eq.image,modality.eq.video')
-        .in('task', ['generation', 'style_transfer'])
+        .in('task', ['t2i', 'i2i', 't2v', 'i2v', 'extend', 'multi'])
         .order('priority', { ascending: false })
         .order('display_name', { ascending: true });
 
@@ -101,13 +101,15 @@ export const useAllVisualModels = () => {
 
       const models = data as ApiModel[];
 
-      // Group by category
-      const t2i = models.filter(m => m.modality === 'image' && m.task === 'generation');
-      const i2i = models.filter(m => m.modality === 'image' && m.task === 'style_transfer');
-      const i2v = models.filter(m => m.modality === 'video' &&
-        (m.model_key.includes('i2v') || m.model_key.includes('image-to-video')));
+      // Group by task directly — no model_key sniffing needed
+      const t2i = models.filter(m => m.task === 't2i');
+      const i2i = models.filter(m => m.task === 'i2i');
+      const i2v = models.filter(m => m.task === 'i2v');
+      const t2v = models.filter(m => m.task === 't2v');
+      const extend = models.filter(m => m.task === 'extend');
+      const multi = models.filter(m => m.task === 'multi');
 
-      return { all: models, t2i, i2i, i2v };
+      return { all: models, t2i, i2i, i2v, t2v, extend, multi };
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,

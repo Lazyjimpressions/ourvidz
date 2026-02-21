@@ -737,7 +737,7 @@ serve(async (req) => {
       const { data: defaultModel } = await supabase
         .from('api_models').select('*, api_providers!inner(*)')
         .eq('modality', isVideo ? 'video' : 'image').eq('is_active', true)
-        .contains('default_for_tasks', ['generation']).eq('api_providers.name', 'fal').single();
+        .contains('default_for_tasks', [isVideo ? 't2v' : 't2i']).eq('api_providers.name', 'fal').single();
 
       if (defaultModel) {
         apiModel = defaultModel;

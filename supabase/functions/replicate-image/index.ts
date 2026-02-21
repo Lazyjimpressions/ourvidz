@@ -213,7 +213,7 @@ serve(async (req) => {
         `)
         .eq('modality', 'image')
         .eq('is_active', true)
-        .contains('default_for_tasks', ['generation'])
+        .contains('default_for_tasks', ['t2i'])
         .eq('api_providers.name', 'replicate')
         .single();
 

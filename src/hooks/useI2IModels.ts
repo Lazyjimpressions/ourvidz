@@ -28,7 +28,6 @@ export interface I2IModelOption {
 
 /**
  * Hook to load I2I (Image-to-Image) models for scene iteration
- * These are typically style_transfer models like Seedream Edit
  */
 export const useI2IModels = () => {
   const [i2iModels, setI2IModels] = useState<I2IModel[]>([]);
@@ -41,7 +40,7 @@ export const useI2IModels = () => {
         setIsLoading(true);
         setError(null);
 
-        // Query for style_transfer (I2I) models
+        // Query for I2I models
         const { data, error } = await supabase
           .from('api_models')
           .select(`
@@ -55,7 +54,7 @@ export const useI2IModels = () => {
             capabilities,
             api_providers!inner(name, display_name)
           `)
-          .eq('task', 'style_transfer')
+          .eq('task', 'i2i')
           .eq('is_active', true)
           .order('priority', { ascending: true });
 
