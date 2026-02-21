@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video, Loader2 } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video, Loader2, ImagePlus } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -203,6 +203,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   const [isLoadingFallback, setIsLoadingFallback] = useState(false);
   const [generatedVideoThumbnail, setGeneratedVideoThumbnail] = useState<string | null>(null);
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+  const [hoverVideoUrl, setHoverVideoUrl] = useState<string | null>(null);
+  const [isSigningVideo, setIsSigningVideo] = useState(false);
   
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
 
@@ -344,6 +346,17 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     }
   }, [asset.type, asset.thumbUrl, asset.id, asset.originalPath, generatedVideoThumbnail, isGeneratingThumbnail, isVisible, signOriginalSafely, generateVideoThumbnail]);
 
+  // Sign video URL on hover for autoplay (desktop only, lazy)
+  const handleCardMouseEnter = useCallback(() => {
+    if (asset.type === 'video' && !hoverVideoUrl && !isSigningVideo && !isMobile && asset.originalPath) {
+      setIsSigningVideo(true);
+      signOriginalSafely(asset)
+        .then(url => setHoverVideoUrl(url))
+        .catch(err => console.warn('❌ Failed to sign video for hover playback', err))
+        .finally(() => setIsSigningVideo(false));
+    }
+  }, [asset, hoverVideoUrl, isSigningVideo, isMobile, signOriginalSafely]);
+
   const handlePreview = useCallback(() => {
     onPreview(asset);
   }, [onPreview, asset]);
@@ -362,6 +375,9 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       aspectRatio="3/4"
       onClick={handlePreview}
       className={isSelected ? 'ring-2 ring-primary' : ''}
+      isVideo={asset.type === 'video'}
+      videoSrc={hoverVideoUrl}
+      onMouseEnter={handleCardMouseEnter}
       fallbackIcon={
         (asset.type === 'image' && isLoadingFallback) || (asset.type === 'video' && isGeneratingThumbnail)
           ? <div className="flex flex-col items-center gap-2 animate-pulse">
@@ -375,8 +391,18 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             : <Image className="w-6 h-6 text-muted-foreground/50" />
       }
     >
+      {/* Video indicator badge */}
+      {asset.type === 'video' && (
+        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-1 pointer-events-none">
+          <Video className="w-3 h-3 text-white" />
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+        {isWorkspace && actions?.onSendToRef && (
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onSendToRef!(asset); }} title="Use as reference"><ImagePlus className="w-2.5 h-2.5" /></Button>
+        )}
         {isWorkspace && actions?.onSaveToLibrary && (
           <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onSaveToLibrary!(asset); }} title="Save to Library"><Save className="w-2.5 h-2.5" /></Button>
         )}

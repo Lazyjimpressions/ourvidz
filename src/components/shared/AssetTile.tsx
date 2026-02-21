@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +23,10 @@ export interface AssetTileProps {
   onMouseLeave?: (e: React.MouseEvent) => void;
   /** Ref forwarding for IntersectionObserver etc. */
   innerRef?: React.Ref<HTMLDivElement>;
+  /** Signed video URL for hover-to-play (desktop only) */
+  videoSrc?: string | null;
+  /** Whether this tile represents a video asset */
+  isVideo?: boolean;
 }
 
 const aspectMap: Record<string, string> = {
@@ -35,7 +39,7 @@ const aspectMap: Record<string, string> = {
 /**
  * Pure rendering component for all asset/image tiles across the app.
  * 
- * NO business logic, NO URL signing, NO internal state.
+ * NO business logic, NO URL signing, NO internal state (except hover-to-play).
  * Image sits directly inside the aspect-ratio container (no nested h-full div)
  * to avoid the iOS Safari layout calculation bug.
  * 
@@ -54,7 +58,26 @@ export const AssetTile: React.FC<AssetTileProps> = ({
   onMouseEnter,
   onMouseLeave,
   innerRef,
+  videoSrc,
+  isVideo,
 }) => {
+  const [isHovering, setIsHovering] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const showVideo = isVideo && !!videoSrc && isHovering;
+
+  const handleMouseEnter = useCallback((e: React.MouseEvent) => {
+    if (isVideo && videoSrc) {
+      setIsHovering(true);
+    }
+    onMouseEnter?.(e);
+  }, [isVideo, videoSrc, onMouseEnter]);
+
+  const handleMouseLeave = useCallback((e: React.MouseEvent) => {
+    setIsHovering(false);
+    onMouseLeave?.(e);
+  }, [onMouseLeave]);
+
   return (
     <div
       ref={innerRef}
@@ -69,17 +92,33 @@ export const AssetTile: React.FC<AssetTileProps> = ({
         className
       )}
       onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       {src ? (
-        <img
-          src={src}
-          alt={alt}
-          className="absolute inset-0 w-full h-full object-cover"
-          loading={loading}
-          decoding="async"
-        />
+        <>
+          <img
+            src={src}
+            alt={alt}
+            className={cn(
+              "absolute inset-0 w-full h-full object-cover",
+              showVideo && "opacity-0"
+            )}
+            loading={loading}
+            decoding="async"
+          />
+          {showVideo && (
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              className="absolute inset-0 w-full h-full object-cover"
+              autoPlay
+              muted
+              loop
+              playsInline
+            />
+          )}
+        </>
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-muted to-muted/80 flex items-center justify-center">
           {fallbackIcon || (
