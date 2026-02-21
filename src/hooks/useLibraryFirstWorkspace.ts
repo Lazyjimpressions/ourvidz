@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
@@ -567,12 +567,18 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   }, [queryClient, debouncedInvalidate]);
 
   // POLLING FALLBACK: Check for completed jobs when optimistic placeholders are active
-  // This catches cases where Supabase Realtime events are missed
+  // Uses a ref to avoid re-creating the interval on every optimisticAssets change
+  const optimisticAssetsRef = useRef(optimisticAssets);
+  optimisticAssetsRef.current = optimisticAssets;
+
   useEffect(() => {
     if (optimisticAssets.length === 0) return;
 
     const interval = setInterval(async () => {
-      const jobIds = optimisticAssets
+      const current = optimisticAssetsRef.current;
+      if (current.length === 0) return;
+
+      const jobIds = current
         .map(a => a.metadata?.job_id)
         .filter(Boolean) as string[];
 
@@ -597,7 +603,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [optimisticAssets, queryClient]);
+  }, [optimisticAssets.length > 0, queryClient]); // Only re-create when transitioning between 0 and non-zero
 
   // OPTIMIZED: Use the new optimized URL loading hook with preloading (configurable)
   const {
