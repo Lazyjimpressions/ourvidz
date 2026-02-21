@@ -807,10 +807,15 @@ serve(async (req) => {
         // Video conditioning (for extend models like LTX extend)
         // fal.ai expects `video` as a URL string, not a nested object
         let hasVideoConditioning = false;
-        if (body.input?.video) {
-          let videoUrl = typeof body.input.video === 'object'
-            ? (body.input.video as any).video_url || (body.input.video as any).url
-            : body.input.video;
+        // Source video URL from input.video, or fall back to metadata reference URLs
+        const rawVideo = body.input?.video
+          || body.metadata?.reference_image_url
+          || body.metadata?.start_reference_url
+          || body.input?.image_url;
+        if (rawVideo) {
+          let videoUrl = typeof rawVideo === 'object'
+            ? (rawVideo as any).video_url || (rawVideo as any).url
+            : rawVideo;
           
           // Sign URL if it's a Supabase storage path
           if (typeof videoUrl === 'string' && videoUrl && !videoUrl.startsWith('http') && !videoUrl.startsWith('data:')) {
@@ -835,9 +840,12 @@ serve(async (req) => {
           if (videoUrl && typeof videoUrl === 'string' && (videoUrl.startsWith('http') || videoUrl.startsWith('data:'))) {
             modelInput.video = videoUrl;
             hasVideoConditioning = true;
+            // Clean up image_url — extend models use video, not image_url
+            delete modelInput.image_url;
+            delete modelInput.image;
             console.log('🎬 Video URL set for extend model:', videoUrl.substring(0, 80) + '...');
           } else {
-            console.warn('⚠️ Video input provided but could not resolve to valid URL:', typeof body.input.video);
+            console.warn('⚠️ Video input provided but could not resolve to valid URL:', typeof rawVideo, String(rawVideo).substring(0, 60));
           }
         }
         // Duration to num_frames conversion using model's own frame_rate
