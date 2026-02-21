@@ -399,7 +399,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [referenceType, setReferenceType] = useState<'style' | 'character' | 'composition'>('character');
 
   // Advanced SDXL Settings (modify mode defaults)
-  const [numImages, setNumImages] = useState(3);
+  const [numImages, setNumImages] = useState(1);
   const [steps, setSteps] = useState(25);
   const [guidanceScale, setGuidanceScale] = useState(6.0); // Better for modify mode
   const [negativePrompt, setNegativePrompt] = useState('');
@@ -1474,7 +1474,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       const jobId = data?.jobId as string | undefined;
       if (jobId) {
         // Create optimistic placeholders immediately
-        const count = mode === 'image' ? numImages : 1;
+        const clampedCount = numImages <= 1 ? 1 : (numImages <= 3 ? 3 : 6);
+        const count = mode === 'image' ? clampedCount : 1;
         const now = new Date();
         const placeholders: UnifiedAsset[] = Array.from({ length: count }, (_, i) => ({
           id: `optimistic-${jobId}-${i}`,
