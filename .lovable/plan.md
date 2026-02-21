@@ -1,166 +1,98 @@
 
 
-# Bulletproof Long-Form Video: AI-Driven Storyboard
+# Refactor: fal-image Function Cleanup (Not a Split)
 
-## The Core Problem
+## Why NOT Split by Modality
 
-Right now the storyboard is a manual, clip-by-clip process. The user writes every prompt, picks every reference, extracts every frame. There's no narrative intelligence, no quality gating, and no way to preview or assemble the final video. For long-form content, this breaks down fast.
+Splitting into `fal-image` and `fal-video` would duplicate ~70% of the code (auth, model resolution, job creation, API call, storage, asset creation). This directly contradicts the table-driven architecture where `api_models` drives behavior. Every future bug fix or feature (usage logging, new providers) would need to be applied in two places.
 
-## Design Philosophy
+The modality-specific code is only ~280 lines out of 1,824. The other 1,544 lines are shared.
 
-Keep the existing minimalist UI. Don't add panels or complex timelines. Instead, make AI do the heavy lifting behind the scenes so the user's workflow becomes: **describe your story -> review AI's plan -> generate -> approve -> assemble**.
+## What's Actually Wrong
 
----
+### Problem 1: URL Signing Copy-Pasted 5 Times
+The same 15-line block for "detect bucket, split path, call createSignedUrl" is duplicated at 5 locations. Each copy has slightly different bucket defaults and error handling. This is the root cause of signing bugs.
 
-## Step 1: AI Story Planner (the "AI Assist" button that currently does nothing)
+### Problem 2: Post-Processing Bloat (300 lines)
+Character portrait handling (167 lines) and scene destination handling (117 lines) are business logic that doesn't belong in a generation function. They handle file copying to `user-library`, creating library records, updating character records, retry logic, and thumbnail management. This makes the function hard to read and test.
 
-Wire the existing "AI Assist" button in the project header to open a compact sheet/drawer that lets the user describe their video in plain language.
+### Problem 3: Defensive Fallback Chains
+The video URL is sourced from `body.input?.video || body.metadata?.reference_image_url || body.metadata?.start_reference_url || body.input?.image_url`. The I2I reference is sourced from 6 different fields. These hide client-side bugs by "finding" the URL wherever it lands, making failures intermittent and hard to diagnose.
 
-**User flow:**
-1. User clicks "AI Assist" in the header
-2. A side sheet opens with a single textarea: "Describe your video..."
-3. User types something like: "Maya at a pool party, starts relaxed by the pool, moves to the hot tub, playful mood builds to intimate"
-4. User clicks "Generate Plan"
-5. AI returns a structured breakdown: scenes with titles, settings, moods, descriptions, and suggested clip prompts
-6. User reviews the plan -- each scene shows as a card they can accept, edit, or remove
-7. "Apply Plan" creates all the scenes in one action, pre-populated with settings, moods, and suggested prompts
+## Proposed Refactor
 
-**Technical approach:**
-- Call `playground-chat` edge function (already exists) with a system prompt tuned for scene breakdown
-- Parse the structured response into `CreateSceneInput[]`
-- Batch-create scenes via `StoryboardService.createScene()`
-- Store the raw narrative in `story_summary` and parsed beats in `story_beats` (both columns already exist, unused)
+### Step 1: Extract `signIfStoragePath` Helper (Top-Level Function)
+Replace all 5 copy-pasted blocks with one reusable function at module scope.
 
-**UI:** A Sheet component, matching existing patterns. One textarea, one button, results as a scrollable list of scene cards with inline edit capability.
+```text
+Before: 5x 15-line blocks scattered through the file
+After:  1x helper function, 5x one-line calls
+```
 
----
+Saves ~60 lines, eliminates signing inconsistencies.
 
-## Step 2: Smart Prompt Generation (upgrade the existing AI Suggest)
+### Step 2: Extract Input Mapper (Top-Level Function)
+Create a `buildModelInput(body, apiModel, supabase)` function that handles:
+- Prompt sanitization
+- Safety parameter selection
+- Reference image resolution (single, multi-ref, video conditioning)
+- Aspect ratio mapping
+- Schema allow-list filtering
+- Required field validation
 
-The current `generateClipPrompt()` is a static string concatenation. Replace it with AI-powered prompt generation that understands the narrative arc.
+This is the core of the modality-specific logic (~400 lines) extracted into a testable, readable function.
 
-**User flow:**
-1. User selects a scene and clicks "AI Suggest" in the prompt bar (already exists)
-2. Instead of concatenating strings, it calls the AI with full context: the scene's setting/mood/description, the character's appearance, what happened in previous clips, and where the story is going next
-3. The AI returns a cinematic prompt optimized for the I2V model
-4. Prompt appears in the textarea, user can edit before generating
+### Step 3: Extract Post-Processing (Top-Level Function)
+Create a `handlePostProcessing(supabase, body, result, user)` function that handles:
+- Character portrait destination (copy to library, update character record)
+- Character scene destination (copy to library, update scene record, retry)
+- Scene preview destination (no-op)
 
-**Technical approach:**
-- Enhance `handleGeneratePrompt()` in ClipWorkspace to call an edge function instead of the local `generateClipPrompt()`
-- Pass: scene context, character data, previous clip prompts, next scene preview (for narrative continuity)
-- Use the existing `fal-image` prompt enhancement path or `playground-chat` with a video-prompt-specific system prompt
-- Keep the local `storyboardPrompts.ts` as instant fallback if AI call fails
+This is ~300 lines that runs AFTER the generation succeeds and is independent of the API call.
 
-**UI change:** Minimal -- add a small loading spinner on the existing "AI Suggest" button while the call is in flight. No new UI elements.
+### Step 4: Simplify the Main Handler to an Orchestrator
+The `serve()` handler becomes a clean pipeline:
 
----
+```text
+1. CORS check
+2. Auth
+3. Resolve model from api_models
+4. Build input (Step 2 helper)
+5. Create job record
+6. Call fal.ai API
+7. Download result + upload to storage
+8. Create workspace_assets record
+9. Post-process destinations (Step 3 helper)
+10. Return response
+```
 
-## Step 3: Clip Quality Gate (approve before chaining)
+Each step is 5-15 lines in the main function, with complexity pushed into named helpers.
 
-**User flow:**
-1. Clip generates and completes
-2. ClipCard shows two small buttons: a checkmark (approve) and an X (reject/regenerate)
-3. Only approved clips show the "Extract Frame" option
-4. The "Add Clip" placeholder requires the previous clip to be approved AND have an extracted frame
+### Step 5: Remove Fallback Chains
+For video extend: the client sends `input.video` -- period. No fallback to `metadata.reference_image_url`.
+For I2V: the client sends `input.image_url` -- period. No fallback to `metadata.start_reference_url`.
+For I2I: the client sends `input.image_url` or `input.image_urls` -- period.
 
-**Technical approach:**
-- The `approved` status already exists in `ClipStatus` type
-- Add `approveClip` helper to `useClipGeneration` that calls `StoryboardService.updateClip(id, { status: 'approved' })`
-- Update `canChain` logic: `previousClip?.status === 'approved' && previousClip?.extracted_frame_url`
-- Update ClipCard to show approve/reject actions for `completed` clips
+If the field is missing, return a clear 400 error. This forces client bugs to surface immediately instead of intermittently.
 
-**UI change:** Two small icon buttons on ClipCard when status is `completed`. Green check, red X. Compact, no labels needed.
+## Files Changed
 
----
+1. **`supabase/functions/fal-image/index.ts`** -- Refactor into orchestrator pattern with extracted helpers (all within same file per edge function rules: no subfolders, all code in index.ts)
+2. **`src/hooks/useLibraryFirstWorkspace.ts`** -- Update client to send references in the correct, canonical field (no reliance on metadata fallbacks)
 
-## Step 4: Auto-Chain Flow (reduce friction)
+## What This Does NOT Change
 
-After a clip is approved, auto-prompt the user to extract a frame and write the next prompt. Minimize clicks.
+- No new edge functions created
+- No splitting by modality
+- Same API contract (request/response format unchanged)
+- Same table-driven model resolution
+- Same fal.ai API integration pattern
 
-**User flow:**
-1. User approves a clip
-2. Frame selector opens automatically (skip the manual "Extract Frame" click)
-3. User picks a frame and confirms
-4. AI automatically generates a suggested prompt for the next clip based on narrative context
-5. Prompt appears in the textarea, ready to generate
+## Expected Outcome
 
-**Technical approach:**
-- After `approveClip` succeeds, auto-open the FrameSelector dialog
-- After frame extraction succeeds, auto-call the AI prompt generator (Step 2)
-- Chain these as sequential async operations with clear loading states
-
-**UI change:** None -- it reuses existing components (FrameSelector dialog, prompt textarea) but triggers them automatically.
-
----
-
-## Step 5: Assembly Preview
-
-**User flow:**
-1. User clicks the existing "Preview" button in the project header
-2. A fullscreen dialog opens with a video player
-3. Clips play back-to-back in scene order
-4. Scene markers show at the bottom (small dots or segments)
-5. Total duration displayed
-6. "Not ready" state shows which clips are missing/unapproved
-
-**Technical approach:**
-- New component: `AssemblyPreview.tsx`
-- Uses `StoryboardService.getProjectAssembly()` (already exists)
-- HTML5 `<video>` element with `onended` handler to auto-advance to next clip
-- Simple state machine: `currentClipIndex` increments on each `ended` event
-- No server-side stitching -- pure client-side sequential playback
-
-**UI:** A Dialog with a centered video player, minimal controls (play/pause, restart), scene indicator dots below, duration counter. Dark background, matches the existing aesthetic.
-
----
-
-## Implementation Order and File Changes
-
-| Priority | Feature | Files | Complexity |
-|----------|---------|-------|------------|
-| 1 | Clip quality gate | `ClipCard.tsx`, `ClipWorkspace.tsx`, `useClipGeneration.ts` | Low |
-| 2 | Assembly preview | New `AssemblyPreview.tsx`, `StoryboardEditor.tsx` | Low |
-| 3 | AI story planner | `StoryboardEditor.tsx` (wire AI Assist button), new `StoryPlannerSheet.tsx`, edge function call | Medium |
-| 4 | Smart prompt generation | `ClipWorkspace.tsx` (upgrade AI Suggest), edge function call | Medium |
-| 5 | Auto-chain flow | `ClipWorkspace.tsx` (post-approve automation) | Low |
-
-### Detailed file changes:
-
-**`src/components/storyboard/ClipCard.tsx`**
-- Add approve/reject buttons for `completed` status clips
-- Show approved status with a distinct visual indicator (green border or badge)
-
-**`src/components/storyboard/ClipWorkspace.tsx`**
-- Update `canChain` to require `approved` status
-- Add `approveClip` flow with auto-open FrameSelector
-- Upgrade `handleGeneratePrompt` to call AI edge function
-- After frame extraction success, auto-generate next prompt
-
-**`src/hooks/useClipGeneration.ts`**
-- Add `approveClip` mutation
-- Add `generateAIPrompt` function that calls edge function
-
-**`src/components/storyboard/AssemblyPreview.tsx`** (new)
-- Sequential video player component
-- Scene markers, duration counter, play/pause controls
-- Uses `getProjectAssembly()` data
-
-**`src/components/storyboard/StoryPlannerSheet.tsx`** (new)
-- Side sheet with narrative input textarea
-- "Generate Plan" button calling AI
-- Scene card list with accept/edit/remove per scene
-- "Apply Plan" button to batch-create scenes
-
-**`src/pages/StoryboardEditor.tsx`**
-- Wire "AI Assist" button to open StoryPlannerSheet
-- Wire "Preview" button to open AssemblyPreview dialog
-
-**`src/lib/utils/storyboardPrompts.ts`**
-- Keep as fallback, no changes needed
-
-### No database changes needed
-All required columns (`story_summary`, `story_beats`, `approved` status, `suggested_prompts`) already exist in the schema.
-
-### No new edge functions needed
-Reuse `playground-chat` for AI story planning and prompt generation by passing scene-specific system prompts.
+- Function drops from ~1,824 lines to ~800-900 lines (same file, helpers at module scope)
+- URL signing bugs eliminated (single implementation)
+- Client-side reference bugs surface immediately (no silent fallbacks)
+- Post-processing logic is isolated and testable
+- Adding new model types or destinations requires touching one helper, not hunting through 1,800 lines
 
