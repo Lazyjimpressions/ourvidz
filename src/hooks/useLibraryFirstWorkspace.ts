@@ -923,16 +923,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           console.log('🎬 I2V MODE: Passing user prompt through without identity wrapping');
           finalPrompt = prompt.trim() || 'gentle motion, cinematic, high quality';
         } else {
-          // IMAGE I2I MODIFY MODE: Handle reference images for modification
-          console.log('🎯 MODIFY MODE: Processing reference image for modification (after upload)');
-          
-          if (prompt.trim()) {
-            console.log('🎯 MODIFY MODE: Reference image with modification');
-            finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
-          } else {
-            console.log('🎯 MODIFY MODE: Reference image without modification');
-            finalPrompt = 'preserve the same person/identity and facial features from the reference image, maintaining similar quality and detail level';
-          }
+          // IMAGE I2I MODE: Pass user prompt directly — no hardcoded wrapping.
+          // Enhancement is handled by the enhance-prompt edge function if toggled on.
+          console.log('🎯 I2I MODE: Passing user prompt through without identity wrapping');
+          finalPrompt = prompt.trim() || 'enhance this image';
         }
         
         // Guard against seed-based near copies: clear lockSeed if it was set by exact copy
