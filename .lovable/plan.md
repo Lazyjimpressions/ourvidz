@@ -1,149 +1,95 @@
 
+# Desktop Workspace UX/UI Overhaul (Corrected)
 
-# Desktop Workspace UX/UI Overhaul
+## Root Cause
 
-## Problem Summary
+The `/workspace` route in `App.tsx` renders `MobileSimplifiedWorkspace`, which uses:
+- `MobileQuickBar.tsx` -- the top row (mode toggle, model name, settings gear)
+- `MobileSimplePromptInput.tsx` -- prompt textarea + generate button
+- `MobileSettingsSheet.tsx` -- the drawer/modal with settings
 
-The `/workspace` route currently renders `MobileSimplifiedWorkspace`, which wraps content in `OurVidzDashboardLayout`. This layout includes a 264px left sidebar that wastes space on the workspace page. Additionally, the desktop control bar (`SimplePromptInput`) has Row 2 buttons that ARE visible but are too numerous (8 buttons in image mode), the settings modal is oversized with large sliders and wasteful spacing, and the `quality` toggle (fast/high) is not meaningfully wired to image model behavior.
-
----
-
-## 1. Collapse the Left Sidebar on Workspace
-
-**Current state**: `OurVidzDashboardLayout` already hides the sidebar on small screens via `hidden md:flex` when `isCompactRoute` is true (workspace is a compact route). But on desktop (`md+`), the 264px sidebar is always visible and cannot be collapsed.
-
-**Change**: Make the sidebar collapsible on desktop for workspace routes. Add a collapse toggle button in the sidebar header. When collapsed, show only icons (no labels), reducing width to ~48px. Store collapse state in localStorage.
-
-**File**: `src/components/OurVidzDashboardLayout.tsx`
-- Add `isCollapsed` state (persisted in localStorage)
-- When collapsed on workspace: sidebar becomes 48px wide, only icons shown
-- Add a toggle button (ChevronLeft/ChevronRight) at the bottom of sidebar
-- Keep existing mobile behavior (fully hidden on small screens)
+The previous changes went to `SimplePromptInput.tsx` and `SimplifiedWorkspace.tsx`, which are **dead code** (not imported in `App.tsx`). This is why no changes were visible.
 
 ---
 
-## 2. Slim Down Row 2 Controls -- Move Secondary Controls to Settings
+## Plan
 
-**Current state**: Row 2 in image mode has 8 buttons: Quality, Model, Content Type, Aspect Ratio, Enhancement Model, Shot Type, Camera Angle, Style. All visible but cluttered.
+### 1. Delete Dead Code
 
-**Change**: Keep only 4 essential controls in Row 2. Move 4 secondary controls to the settings modal:
+Remove unused files that were incorrectly modified:
+- `src/pages/SimplifiedWorkspace.tsx`
+- `src/components/workspace/SimplePromptInput.tsx`
 
-**Keep in Row 2** (image mode):
-- Model selector
-- Content Type (SFW/NSFW)
-- Aspect Ratio
-- Batch size (inline segmented: 1|3|6)
+These are not referenced anywhere in the app routing.
 
-**Move to Settings Modal**:
-- Quality toggle (with rewiring -- see section 4)
-- Enhancement Model
-- Shot Type
-- Camera Angle
-- Style
+### 2. Redesign MobileQuickBar for Desktop
 
-**Keep in Row 2** (video mode):
-- Video Model selector
-- Duration
-- Content Type
-- Aspect Ratio
-- Sound toggle
+**File**: `src/components/workspace/MobileQuickBar.tsx`
 
-**File**: `src/components/workspace/SimplePromptInput.tsx` (lines ~1100-1320, ~1494-1923)
+Currently shows: Mode toggle | (spacer) | model name | gear icon
 
----
+Change to show more controls inline on desktop (`md+` breakpoint), keeping mobile as-is:
+- Mode toggle (keep)
+- Content Type toggle (SFW/NSFW) -- visible on `md+`
+- Aspect Ratio selector (1:1 | 16:9 | 9:16) -- visible on `md+`
+- Batch size (1 | 3 | 6) -- visible on `md+`
+- (spacer)
+- Model name chip
+- Settings gear
 
-## 3. Redesign the Settings Modal -- Compact, Dense Layout
+On mobile (`< md`), these extra controls remain hidden (accessed via settings sheet).
 
-The current modal has oversized sliders, large section headers, and too much padding.
+### 3. Redesign MobileSettingsSheet -- Compact Dense Layout
 
-**Changes**:
-- Replace Radix `Slider` with compact inline number inputs + tiny range inputs (HTML `<input type="range">` with custom tiny styling, h-1 track)
-- Use 2-column grid for all numeric controls (Steps + CFG side by side, Strength + Seed side by side)
-- Reduce all labels to `text-[9px]`, reduce padding from `p-3` to `p-2`
-- Reduce modal `max-h` from `max-h-80` to `max-h-[70vh]`
-- Move the secondary Row 2 controls (Style, Shot Type, Camera Angle, Enhancement) into the top of the modal as a compact row of chip buttons
-- Move workspace actions (Clear All, Delete All) into the bottom of the modal as small text links
-- Remove the large `chip-segmented` button styling for variation presets -- use smaller inline pills
+**File**: `src/components/workspace/MobileSettingsSheet.tsx`
 
-**File**: `src/components/workspace/SimplePromptInput.tsx`
-**File**: `src/components/WorkspaceHeader.tsx` (remove Clear/Delete buttons, simplify header)
+Current issues (visible in screenshot):
+- Full-width `Select` for model taking entire row
+- Large "Fast/High" segmented control spanning most of the width
+- Huge aspect ratio buttons (40px tall, each taking 1/3 width with blue ring)
+- Reference image section has large upload button
+- Workspace Actions in a collapsible section
 
----
+Changes:
+- Reduce all labels from `text-xs` to `text-[9px]` uppercase
+- Replace the large aspect ratio buttons with compact pills (`px-1.5 py-0.5 text-[9px]`)
+- Make Quality row and NSFW toggle more compact (smaller segmented control)
+- Replace Radix `Slider` for reference strength with a compact HTML `input[type=range]` (h-1 track, h-3 w-3 thumb)
+- Add secondary controls from the plan: Resolution (Standard/HD, replaces Quality), Enhancement Model, Shot Type, Camera Angle, Style -- as compact chip rows
+- Move workspace actions (Clear All, Delete All) to bottom as small text links (not collapsible section)
+- Reduce overall padding from `px-4 py-3 space-y-4` to `px-3 py-2 space-y-2`
+- Reduce model `Select` height
+- Reduce reference image upload button to a smaller size
 
-## 4. Quality Toggle: Wire or Remove
+### 4. Wire Batch Size
 
-**Analysis**: The `quality` toggle (fast/high) is passed through to edge functions and affects:
-- `queue-job`: Maps to job_type suffix (`_fast` vs `_high`)
-- `fal-image`: Sets resolution (`480p` for fast, `720p` for high) and job type
-- `replicate-image`: Used for metadata tagging
+**File**: `src/components/workspace/MobileSimplePromptInput.tsx`
+**File**: `src/pages/MobileSimplifiedWorkspace.tsx`
 
-For image generation specifically, `quality` controls resolution in the fal pipeline. This is a useful toggle. However, it's confusing as a standalone button since different models handle it differently.
+Add `batchSize` state to `MobileSimplifiedWorkspace` (default: 1), pass it through to `MobileQuickBar` and into the `onGenerate` options. The `useLibraryFirstWorkspace` hook's `generate` function already accepts batch parameters.
 
-**Recommendation**: Keep `quality` but move it to the settings modal and rename it "Resolution" with clearer labels:
-- "Standard" (maps to `fast` -- 480p)  
-- "HD" (maps to `high` -- 720p)
+### 5. Sidebar Collapse (Already Done)
 
-This makes its function clear without exposing internal naming.
-
----
-
-## 5. Settings Not Worth Exposing (Admin-Only Defaults)
-
-These should NOT appear in the UI -- admin sets defaults in the portal, edge functions use them:
-- `output_format` -- always model default (png/jpeg)
-- `sync_mode` -- always false
-- `enable_safety_checker` -- always model default
-- `enable_prompt_expansion` -- controlled by enhancement toggle
-- `scheduler` -- model-specific, rarely changed by users
-- `acceleration` -- fal-specific optimization, leave as default
-
-These SHOULD remain in settings modal (they meaningfully affect output):
-- Steps, CFG/Guidance Scale, Reference Strength -- already there
-- Seed + Lock -- already there
-- Batch Size -- moving to Row 2
-- Negative Prompt -- keep in modal
-- Compel -- keep in modal (power user)
-
----
-
-## 6. Legacy Code Cleanup
-
-Remove from `SimplePromptInput.tsx`:
-- `clothingEditMode`, `onClothingEditModeChange`, `originalClothingColor`, `targetGarments` -- the clothing edit feature is a dead code path (the regex-based suggestion UI is fragile and unused)
-- `lockHair` / `onLockHairChange` -- closely tied to clothing edit, remove together
-- `onBypassEnhancement` / `onHardOverride` debug checkboxes -- move to a debug panel, not settings modal
-- The massive `ReferenceImageUpload` component (315 lines) should be extracted to its own file
-
-Remove from `SimplifiedWorkspace.tsx`:
-- Props for `clothingEditMode`, `lockHair`, `originalClothingColor`, `targetGarments`
-- Corresponding state from `useLibraryFirstWorkspace`
-
-Remove from `WorkspaceHeader.tsx`:
-- `onClearWorkspace`, `onDismissAllJobs`, `onDeleteAllWorkspace` props and buttons (moving to settings modal)
-- `showForceCleanup` prop and force clear button
+The `OurVidzDashboardLayout.tsx` changes from the previous round are correct and working (collapse toggle with localStorage persistence).
 
 ---
 
 ## Technical Details
 
 ### Files to modify:
-1. **`src/components/OurVidzDashboardLayout.tsx`** -- Add collapsible sidebar with localStorage persistence
-2. **`src/components/workspace/SimplePromptInput.tsx`** -- Major refactor: slim Row 2, compact settings modal, remove legacy props, extract ReferenceImageUpload
-3. **`src/components/workspace/ReferenceImageUpload.tsx`** (NEW) -- Extract from SimplePromptInput
-4. **`src/components/WorkspaceHeader.tsx`** -- Simplify to just back arrow + user info
-5. **`src/pages/SimplifiedWorkspace.tsx`** -- Remove legacy props passed to SimplePromptInput
-6. **`src/hooks/useLibraryFirstWorkspace.ts`** -- Remove clothing edit state
+1. **`src/components/workspace/MobileQuickBar.tsx`** -- Add inline desktop controls (content type, aspect ratio, batch size)
+2. **`src/components/workspace/MobileSettingsSheet.tsx`** -- Full compact redesign: smaller labels, compact sliders, dense 2-column grids, workspace actions as text links
+3. **`src/components/workspace/MobileSimplePromptInput.tsx`** -- Pass through new batch size prop
+4. **`src/pages/MobileSimplifiedWorkspace.tsx`** -- Add batch size state, pass new props
 
-### Files unchanged:
-- `MobileSimplifiedWorkspace.tsx` -- Mobile stays as-is
-- `MobileSimplePromptInput.tsx` -- Mobile stays as-is
-- Edge functions -- No changes needed (quality mapping already works)
+### Files to delete:
+1. **`src/pages/SimplifiedWorkspace.tsx`** -- Dead code
+2. **`src/components/workspace/SimplePromptInput.tsx`** -- Dead code
 
-### Compact element sizing guidelines:
-- All labels: `text-[9px]`
-- All control values: `text-[10px]`
-- Range inputs: custom `h-1` track, `h-3 w-3` thumb (not Radix Slider)
-- Modal padding: `p-2`, gaps: `gap-1.5`
+### Compact element sizing (same as approved plan):
+- All labels: `text-[9px]` uppercase
+- Control values: `text-[10px]`
+- Range inputs: custom `h-1` track, `h-3 w-3` thumb
+- Padding: `p-2`, gaps: `gap-1.5`
 - Chip buttons: `px-1.5 py-0.5 text-[9px]`
-- Number inputs: `h-5 w-12 text-[10px]`
-
+- Aspect ratio buttons: compact pills instead of 40px tall buttons
