@@ -838,7 +838,7 @@ serve(async (req) => {
           }
           
           if (videoUrl && typeof videoUrl === 'string' && (videoUrl.startsWith('http') || videoUrl.startsWith('data:'))) {
-            modelInput.video = { url: videoUrl };
+            modelInput.video = { video_url: videoUrl };
             hasVideoConditioning = true;
             // Clean up image_url — extend models use video, not image_url
             delete modelInput.image_url;
