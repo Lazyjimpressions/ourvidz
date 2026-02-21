@@ -1091,6 +1091,30 @@ serve(async (req) => {
       }
     });
 
+    // Validate required fields from input_schema before sending
+    if (inputSchema) {
+      const missingRequired: string[] = [];
+      for (const [key, schemaDef] of Object.entries(inputSchema)) {
+        const def = schemaDef as any;
+        if (def?.required === true && modelInput[key] === undefined) {
+          missingRequired.push(key);
+        }
+      }
+      if (missingRequired.length > 0) {
+        console.error('❌ Missing required fields for model:', missingRequired);
+        return new Response(
+          JSON.stringify({
+            error: `This model requires: ${missingRequired.join(', ')}`,
+            details: missingRequired.includes('image_url')
+              ? 'This is an image-to-image (edit) model. Please attach a reference image before generating.'
+              : `Missing required input fields: ${missingRequired.join(', ')}`,
+            missing_fields: missingRequired
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      }
+    }
+
     // Final log before sending to fal.ai
     console.log('🔧 fal.ai input configuration (FINAL):', {
       model_key: modelKey,
