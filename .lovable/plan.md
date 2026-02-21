@@ -1,82 +1,41 @@
 
 
-# Fix: ImagePickerDialog Sequential Signing Causes Render Storm
+# Fix: Allow Video Upload for LTX Extend in Reference Images Bucket
 
-## Root Cause
+## Problem
 
-In `ImagePickerDialog.tsx`, the `signAll` function (line 129) processes assets in a sequential `for` loop. Each successful sign calls `setThumbUrls(prev => ...)`, which triggers a React re-render of the entire dialog including the grid. With 69+ workspace assets, this means 69+ sequential re-renders, each rendering all grid cards. On mobile, this completely freezes the UI.
+The `reference_images` storage bucket only allows image MIME types (`image/jpeg`, `image/png`, `image/webp`, `image/gif`). When you try to upload a video file for LTX Extend, Supabase rejects it with "mime type video/mp4 is not supported".
 
-## Solution: Batch Parallel Signing with Batched State Updates
+## Solution
 
-Replace the sequential loop with parallel batch signing (chunks of 10), updating state once per batch instead of once per asset. This reduces 69 re-renders down to 7.
+Add `video/mp4` and `video/webm` to the `reference_images` bucket's allowed MIME types. This is a single SQL migration -- no code changes needed.
 
-### File: `src/components/storyboard/ImagePickerDialog.tsx`
+## Technical Details
 
-Replace the `signAll` function (lines 129-161) with:
+### SQL Migration
 
 ```text
-const BATCH_SIZE = 10;
-
-const signAll = async () => {
-  // Process in parallel batches of 10
-  for (let i = 0; i < sharedAssets.length; i += BATCH_SIZE) {
-    if (cancelled) break;
-    const batch = sharedAssets.slice(i, i + BATCH_SIZE);
-
-    const results = await Promise.allSettled(
-      batch.map(async (asset) => {
-        const path = asset.thumbPath || asset.originalPath;
-        if (!path) return { id: asset.id, failed: true };
-        if (path.startsWith('http://') || path.startsWith('https://')) {
-          return { id: asset.id, url: path };
-        }
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .createSignedUrl(path, 3600);
-        if (error || !data?.signedUrl) {
-          return { id: asset.id, failed: true };
-        }
-        return { id: asset.id, url: data.signedUrl };
-      })
-    );
-
-    if (cancelled) break;
-
-    // Single state update per batch (not per asset)
-    const batchUrls: Record<string, string> = {};
-    const batchFailed: string[] = [];
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        const val = result.value;
-        if (val.failed) batchFailed.push(val.id);
-        else if (val.url) batchUrls[val.id] = val.url;
-      } else {
-        // Promise rejected -- shouldn't happen with allSettled, but guard
-      }
-    }
-    setThumbUrls(prev => ({ ...prev, ...batchUrls }));
-    if (batchFailed.length > 0) {
-      setFailedIds(prev => {
-        const next = new Set(prev);
-        batchFailed.forEach(id => next.add(id));
-        return next;
-      });
-    }
-  }
-  if (!cancelled) setSigning(false);
-};
+UPDATE storage.buckets
+SET allowed_mime_types = ARRAY[
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'video/mp4', 'video/webm'
+],
+file_size_limit = 52428800  -- 50MB (videos are larger than images)
+WHERE id = 'reference_images';
 ```
 
-### Impact
+The current file size limit is 10MB which is too small for video files. The memory note mentions video uploads up to 50MB are expected, so we increase the limit accordingly.
 
-- 69 sequential network requests become 7 parallel batches of 10
-- 69 state updates (re-renders) become 7
-- Network time drops from ~35s (sequential) to ~3.5s (parallel)
-- UI remains responsive during signing
+### Why this is sufficient
+
+- The upload code in `storage.ts` (`uploadReferenceImage`) already handles any file type -- it just passes the file to `supabase.storage.from('reference_images').upload()`
+- The workspace code already detects video files and auto-switches to extend models
+- The edge function already handles video URLs in the payload
+- The only blocker is the bucket's MIME type whitelist
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/storyboard/ImagePickerDialog.tsx` | Replace sequential signing loop with batched parallel signing |
+| SQL migration | Add video/mp4 and video/webm to reference_images bucket allowed_mime_types, increase file_size_limit to 50MB |
 
