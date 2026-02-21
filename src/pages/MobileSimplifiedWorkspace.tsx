@@ -86,35 +86,24 @@ const MobileSimplifiedWorkspace = () => {
       isValidUrl: url.startsWith('http://') || url.startsWith('https://')
     });
     
-    // CRITICAL FIX: Clear old image state FIRST to prevent visual conflicts
-    // Use requestAnimationFrame to ensure DOM clears before setting new URL
-    // This prevents race conditions that cause the old image to persist visually
+    // Set reference URL directly — React batches state updates, no rAF needed.
+    // Using requestAnimationFrame previously caused the URL to be lost when
+    // model/mode changes triggered re-renders between the clear and the deferred set.
     switch (type) {
       case 'single':
-        // Clear old state synchronously first
         setReferenceImage(null);
-        setReferenceImageUrl(null);
-        // Use requestAnimationFrame to ensure DOM updates before setting new URL
-        requestAnimationFrame(() => {
-          setReferenceImageUrl(url);
-          console.log('✅ MOBILE: Reference image URL set in hook state (after clear)');
-        });
+        setReferenceImageUrl(url);
+        console.log('✅ MOBILE: Reference image URL set in hook state');
         break;
       case 'start':
         setBeginningRefImage(null);
-        setBeginningRefImageUrl(null);
-        requestAnimationFrame(() => {
-          setBeginningRefImageUrl(url);
-          console.log('✅ MOBILE: Beginning reference image URL set in hook state (after clear)');
-        });
+        setBeginningRefImageUrl(url);
+        console.log('✅ MOBILE: Beginning reference image URL set in hook state');
         break;
       case 'end':
         setEndingRefImage(null);
-        setEndingRefImageUrl(null);
-        requestAnimationFrame(() => {
-          setEndingRefImageUrl(url);
-          console.log('✅ MOBILE: Ending reference image URL set in hook state (after clear)');
-        });
+        setEndingRefImageUrl(url);
+        console.log('✅ MOBILE: Ending reference image URL set in hook state');
         break;
     }
   }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage]);
