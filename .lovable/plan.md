@@ -1,72 +1,75 @@
 
 
-# Fix: Placeholder Count, Mobile Conformity, and Playground Scope
+# Workspace Tile UX Enhancements
 
-## Scope Clarification
-
-The **Playground page** (`/playground`) is a pure chat/AI interface -- it does not use the workspace generation pipeline, `useLibraryFirstWorkspace`, or any media tile rendering. There are no video/image generation features there to update. Items 1 and 3 are the actionable fixes.
+Three improvements to the asset tile cards in the workspace grid.
 
 ---
 
-## Issue: 3 Placeholder Tiles Always Appear
+## 1. "Use as Reference" Button on Tiles
 
-**Root cause**: In `useLibraryFirstWorkspace.ts` line 402, `numImages` defaults to `3`. The optimistic placeholder logic on line 1477 uses this value directly:
+**Current state**: The `onSendToRef` action is wired up in both desktop and mobile workspace pages, but the SharedGridCard never renders a button for it -- it's a dead code path.
 
-```text
-const count = mode === 'image' ? numImages : 1;
-```
+**Change**: Add a small reference-image button (using the `ImagePlus` or `ArrowRight` icon) to the hover overlay alongside the existing Save and Discard buttons. For workspace tiles, this renders next to the Save button. On mobile, the buttons are always visible on tap (leveraging the existing `group-hover` pattern which activates on touch).
 
-So even when a user has never touched the image count selector, or when they explicitly set it to 1, 3 placeholders appear because the default is 3. For videos, this is already correct (hardcoded to 1).
-
-The real problem is the **default value** and the fact that the backend clamps batch sizes to `[1, 3, 6]` -- so if a user picks 2, they see 2 placeholders but get 3 images back (or vice versa).
-
-**Fix**: 
-- Change the default `numImages` from `3` to `1` (line 402) -- most generations are single-image
-- Align the placeholder count with the **clamped** value the backend will actually produce, so users see the correct number of spinners
-
-```text
-// Line 1477: Match backend clamping logic
-const clampedCount = numImages <= 1 ? 1 : (numImages <= 3 ? 3 : 6);
-const count = mode === 'image' ? clampedCount : 1;
-```
-
-This way if a user picks "3", they see 3 placeholders and get 3 images. If they pick "1", they see 1 placeholder and get 1 image.
+**File**: `src/components/shared/SharedGrid.tsx` (SharedGridCard JSX, ~line 380)
+- Add a button for `actions.onSendToRef` in the workspace action buttons section, positioned as the first button (left of Save)
+- Use a distinctive but discrete icon (e.g., `ImagePlus` from lucide) with a tooltip title "Use as reference"
 
 ---
 
-## Mobile Conformity
+## 2. Video Indicator Badge
 
-`MobileSimplifiedWorkspace.tsx` uses `useLibraryFirstWorkspace` but does not expose `numImages` or `setNumImages` to the user. This means mobile always uses the default value.
+**Current state**: Video tiles show a thumbnail (or fallback icon), but once the thumbnail loads there's no persistent visual indicator that this is a video rather than an image.
 
-**Fix**: Since mobile doesn't have a num-images selector, the default change from 3 to 1 automatically fixes mobile -- users will see 1 placeholder per generation as expected.
+**Change**: Add a small semi-transparent badge in the top-left corner of video tiles showing a play/film icon. Always visible (not just on hover).
 
-No additional mobile-specific changes are needed because:
-- The optimistic placeholder logic is in the shared hook (`useLibraryFirstWorkspace`)
-- The animated spinner fix from the previous change is in `SharedGrid.tsx` which is used by both desktop and mobile
-- The polling fallback is also in the shared hook
+**File**: `src/components/shared/SharedGrid.tsx` (SharedGridCard JSX, inside AssetTile children)
+- When `asset.type === 'video'`, render a small badge overlay:
+  ```
+  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-1">
+    <Video className="w-3 h-3 text-white" />
+  </div>
+  ```
 
 ---
 
-## Files Changed
+## 3. Video Autoplay on Hover
 
-1. **`src/hooks/useLibraryFirstWorkspace.ts`**:
-   - Line 402: Change `useState(3)` to `useState(1)` for `numImages` default
-   - Line 1477: Add clamping logic to match backend behavior so placeholder count equals actual output count
+**Current state**: Video tiles display a static thumbnail. The actual video only plays after clicking into the lightbox.
+
+**Change**: On desktop hover, replace the thumbnail with an inline `<video>` element that autoplays (muted, looped). On mouse leave, revert to the thumbnail. On mobile, this is skipped (no hover).
+
+**Implementation**:
+
+**File**: `src/components/shared/AssetTile.tsx`
+- Add optional props: `videoSrc?: string | null`, `isVideo?: boolean`
+- Add `onMouseEnter`/`onMouseLeave` state internally when `isVideo && videoSrc` to toggle between showing the `<img>` thumbnail and a `<video muted autoPlay loop playsInline>` element
+- The video element uses the same `absolute inset-0 w-full h-full object-cover` positioning as the image
+- Only applies on non-mobile (check `window.matchMedia` or just rely on hover behavior being desktop-only)
+
+**File**: `src/components/shared/SharedGrid.tsx`
+- SharedGridCard needs to sign the original video URL when hovered (lazy, not on mount)
+- Pass `videoSrc` and `isVideo={asset.type === 'video'}` to AssetTile
+- On hover start: sign the video URL if not already signed, pass it as `videoSrc`
+- On hover end: the AssetTile stops playing
 
 ---
 
 ## Technical Details
 
-### Backend Clamping Reference (queue-job, line 441-442)
-```text
-const batchCount = isImageJob ? (jobRequest.num_images || 1) : 1;
-const clampedBatchCount = batchCount <= 1 ? 1 : (batchCount <= 3 ? 3 : 6);
-```
+### Files to modify:
+1. **`src/components/shared/AssetTile.tsx`** -- Add `videoSrc`/`isVideo` props, hover-to-play logic
+2. **`src/components/shared/SharedGrid.tsx`** -- Add ref button, video badge, sign video URL on hover and pass to AssetTile
 
-### Placeholder Clamping (new, useLibraryFirstWorkspace line 1477)
-```text
-const clampedCount = numImages <= 1 ? 1 : (numImages <= 3 ? 3 : 6);
-const count = mode === 'image' ? clampedCount : 1;
-```
+### Performance considerations:
+- Video URL is only signed on first hover (cached after that), not eagerly for all visible tiles
+- The `<video>` element is only mounted while hovered, then removed to free memory
+- Uses the existing `OriginalImageLoader` concurrency limiter for signing
+- Mobile is unaffected -- no hover means no video preload
 
-This ensures the number of spinning tiles matches the number of images the backend will actually produce.
+### No changes needed to:
+- `AssetTile` core layout (img stays `absolute inset-0` for iOS Safari compatibility)
+- Desktop/mobile workspace pages (actions are already wired)
+- Any other components
+
