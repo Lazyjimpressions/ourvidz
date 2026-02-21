@@ -330,6 +330,36 @@ export function useClipGeneration() {
     },
   });
 
+  // Approve clip
+  const approveClipMutation = useMutation({
+    mutationFn: async (clipId: string) => {
+      return StoryboardService.updateClip(clipId, { status: 'approved' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['storyboard-clips'] });
+      queryClient.invalidateQueries({ queryKey: ['storyboard-scenes'] });
+      toast({ title: 'Clip approved' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to approve clip', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Reject clip (reset to pending)
+  const rejectClipMutation = useMutation({
+    mutationFn: async (clipId: string) => {
+      return StoryboardService.updateClip(clipId, { status: 'pending' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['storyboard-clips'] });
+      queryClient.invalidateQueries({ queryKey: ['storyboard-scenes'] });
+      toast({ title: 'Clip rejected — ready to regenerate' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to reject clip', description: error.message, variant: 'destructive' });
+    },
+  });
+
   return {
     // Models
     videoModels,
@@ -345,6 +375,8 @@ export function useClipGeneration() {
     retryClip,
     deleteClip: deleteClipMutation.mutateAsync,
     updateClip: updateClipMutation.mutateAsync,
+    approveClip: approveClipMutation.mutateAsync,
+    rejectClip: rejectClipMutation.mutateAsync,
     isDeletingClip: deleteClipMutation.isPending,
     isUpdatingClip: updateClipMutation.isPending,
 

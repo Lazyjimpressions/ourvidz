@@ -72,6 +72,8 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
     deleteClip,
     updateClip,
     isClipGenerating,
+    approveClip,
+    rejectClip,
   } = useClipGeneration();
 
   // UI State
@@ -100,8 +102,8 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
     return clips[clips.length - 1];
   }, [clips]);
 
-  // Check if we can chain from previous clip
-  const canChain = previousClip?.extracted_frame_url != null;
+  // Check if we can chain from previous clip (requires approved + frame extracted)
+  const canChain = previousClip?.status === 'approved' && previousClip?.extracted_frame_url != null;
   const isFirstClip = clips.length === 0;
 
   // Set default model when loaded
@@ -174,7 +176,41 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
   };
 
   // Generate AI prompt suggestion
-  const handleGeneratePrompt = () => {
+  const [isAIPromptLoading, setIsAIPromptLoading] = useState(false);
+
+  const handleGeneratePrompt = async () => {
+    // Try AI-powered prompt generation first
+    setIsAIPromptLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('playground-chat', {
+        body: {
+          system_prompt_override: `You are a cinematic video prompt engineer for WAN 2.1 I2V model. Generate a single concise prompt (2-3 sentences max) for a video clip. Focus on: character appearance, motion/action, setting, lighting, and mood. Do NOT include technical tags. Write naturally. Return ONLY the prompt text, nothing else.`,
+          messages: [
+            {
+              role: 'user',
+              content: `Generate a video prompt for this context:
+Scene: ${scene.title || 'Untitled'} - ${scene.description || 'No description'}
+Setting: ${scene.setting || 'unspecified'}
+Mood: ${scene.mood || 'natural'}
+${character ? `Character: ${character.name} - ${character.appearance_tags?.join(', ') || character.description}` : ''}
+Clip #${clips.length + 1} in scene${previousClip ? `\nPrevious clip prompt: "${previousClip.prompt}"` : ''}
+${clips.length === 0 ? 'This is the FIRST clip - include full character description and environment.' : 'This is a CHAINED clip - focus on motion continuation, the reference frame handles identity.'}`,
+            },
+          ],
+        },
+      });
+
+      if (!error && data?.content) {
+        setPrompt(data.content.trim());
+        setIsAIPromptLoading(false);
+        return;
+      }
+    } catch (err) {
+      console.warn('AI prompt generation failed, falling back to local:', err);
+    }
+    setIsAIPromptLoading(false);
+
+    // Fallback to local prompt generation
     const context: PromptContext = {
       scene,
       character,
@@ -182,9 +218,25 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
       previousClip: previousClip || undefined,
       isFirstClip,
     };
-
     const suggestion = generateClipPrompt(context);
     setPrompt(suggestion.prompt);
+  };
+
+  // Handle clip approval with auto-chain flow
+  const handleApproveClip = async (clip: StoryboardClip) => {
+    await approveClip(clip.id);
+    // Auto-open frame selector for chain extraction
+    if (clip.video_url && !clip.extracted_frame_url) {
+      setFrameExtractClip(clip);
+      setShowFrameSelector(true);
+    }
+    onClipsChange?.();
+  };
+
+  // Handle clip rejection (reset to pending for re-generation)
+  const handleRejectClip = async (clip: StoryboardClip) => {
+    await rejectClip(clip.id);
+    onClipsChange?.();
   };
 
   // Handle clip generation
@@ -412,8 +464,18 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
                       onClick={() => setSelectedClipId(clip.id)}
                       onRetry={() => handleGenerate()}
                       onDelete={() => handleDeleteClip(clip.id)}
+                      onApprove={
+                        clip.status === 'completed'
+                          ? () => handleApproveClip(clip)
+                          : undefined
+                      }
+                      onReject={
+                        clip.status === 'completed'
+                          ? () => handleRejectClip(clip)
+                          : undefined
+                      }
                       onExtractFrame={
-                        clip.status === 'completed' && clip.video_url
+                        clip.status === 'approved' && clip.video_url
                           ? () => handleExtractFrame(clip)
                           : undefined
                       }
@@ -459,6 +521,10 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
                     Chain ready
                   </span>
                 ) : previousClip?.status === 'completed' ? (
+                  <span className="text-[10px] text-amber-400 text-center px-2">
+                    Approve clip first
+                  </span>
+                ) : previousClip?.status === 'approved' && !previousClip?.extracted_frame_url ? (
                   <span className="text-[10px] text-amber-400 text-center px-2">
                     Extract frame first
                   </span>
@@ -514,8 +580,13 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
             size="sm"
             className="absolute right-2 top-2 h-6 px-2 text-[10px] text-blue-400 hover:text-blue-300"
             onClick={handleGeneratePrompt}
+            disabled={isAIPromptLoading}
           >
-            <Sparkles className="w-3 h-3 mr-1" />
+            {isAIPromptLoading ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3 mr-1" />
+            )}
             AI Suggest
           </Button>
         </div>
@@ -599,7 +670,11 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
               : 'First clip: Select a reference image above to begin. The video will animate from this image.'
             : canChain
               ? 'Chained clip: Focus on motion intent. Character identity comes from the reference frame.'
-              : 'Extract a frame from the previous clip first. Click the clip card and select "Extract Frame".'}
+              : previousClip?.status === 'completed'
+                ? 'Approve the previous clip first, then extract a frame to chain.'
+                : previousClip?.status === 'approved' && !previousClip?.extracted_frame_url
+                  ? 'Extract a frame from the approved clip to enable chaining.'
+                  : 'Complete the previous clip before adding a new one.'}
         </p>
       </div>
 

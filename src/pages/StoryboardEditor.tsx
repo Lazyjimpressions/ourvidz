@@ -5,7 +5,7 @@
  * Three-panel layout following the PRD UI/UX guidelines.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { StoryboardLayout } from '@/components/StoryboardLayout';
 import { useStoryboard } from '@/hooks/useStoryboard';
@@ -57,8 +57,12 @@ import {
   StoryboardClip,
   CreateSceneInput,
   UpdateSceneInput,
+  ProjectAssembly,
 } from '@/types/storyboard';
 import { ClipWorkspace } from '@/components/storyboard';
+import { StoryPlannerSheet } from '@/components/storyboard/StoryPlannerSheet';
+import { AssemblyPreview } from '@/components/storyboard/AssemblyPreview';
+import { StoryboardService } from '@/lib/services/StoryboardService';
 
 const StoryboardEditor = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -86,6 +90,10 @@ const StoryboardEditor = () => {
   const [editedTitle, setEditedTitle] = useState('');
   const [sceneToDelete, setSceneToDelete] = useState<StoryboardScene | null>(null);
   const [isAddingScene, setIsAddingScene] = useState(false);
+  const [showStoryPlanner, setShowStoryPlanner] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [assembly, setAssembly] = useState<ProjectAssembly | null>(null);
+  const [isLoadingAssembly, setIsLoadingAssembly] = useState(false);
 
   // Load project on mount
   useEffect(() => {
@@ -146,6 +154,29 @@ const StoryboardEditor = () => {
     selectScene(scene);
     setIsScenePanelOpen(true);
   };
+
+  // Handle preview
+  const handleOpenPreview = useCallback(async () => {
+    if (!projectId) return;
+    setShowPreview(true);
+    setIsLoadingAssembly(true);
+    try {
+      const data = await StoryboardService.getProjectAssembly(projectId);
+      setAssembly(data);
+    } catch (err) {
+      console.error('Failed to load assembly:', err);
+    } finally {
+      setIsLoadingAssembly(false);
+    }
+  }, [projectId]);
+
+  // Handle applying story plan
+  const handleApplyPlan = useCallback(async (sceneInputs: CreateSceneInput[]) => {
+    for (const input of sceneInputs) {
+      const newScene = await createScene(input);
+    }
+    if (projectId) loadProject(projectId);
+  }, [createScene, loadProject, projectId]);
 
   // Calculate total duration
   const totalDuration = scenes.reduce((sum, s) => sum + s.target_duration_seconds, 0);
@@ -236,14 +267,24 @@ const StoryboardEditor = () => {
 
             {/* AI button */}
             {activeProject.ai_assistance_level !== 'none' && (
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1.5"
+                onClick={() => setShowStoryPlanner(true)}
+              >
                 <Sparkles className="w-3.5 h-3.5" />
                 AI Assist
               </Button>
             )}
 
             {/* Preview button */}
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5"
+              onClick={handleOpenPreview}
+            >
               <Play className="w-3.5 h-3.5" />
               Preview
             </Button>
@@ -512,6 +553,22 @@ const StoryboardEditor = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Story Planner Sheet */}
+      <StoryPlannerSheet
+        isOpen={showStoryPlanner}
+        onClose={() => setShowStoryPlanner(false)}
+        projectId={activeProject.id}
+        onApplyPlan={handleApplyPlan}
+      />
+
+      {/* Assembly Preview */}
+      <AssemblyPreview
+        assembly={assembly}
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        isLoading={isLoadingAssembly}
+      />
     </StoryboardLayout>
   );
 };

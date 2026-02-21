@@ -31,6 +31,8 @@ interface ClipCardProps {
   onRetry?: () => void;
   onDelete?: () => void;
   onExtractFrame?: () => void;
+  onApprove?: () => void;
+  onReject?: () => void;
 }
 
 const STATUS_CONFIG: Record<ClipStatus, { icon: React.ElementType; color: string; label: string }> = {
@@ -50,6 +52,8 @@ export const ClipCard: React.FC<ClipCardProps> = ({
   onRetry,
   onDelete,
   onExtractFrame,
+  onApprove,
+  onReject,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -88,7 +92,9 @@ export const ClipCard: React.FC<ClipCardProps> = ({
         'border bg-gray-900/50',
         isSelected
           ? 'border-blue-500 ring-1 ring-blue-500/50'
-          : 'border-gray-800 hover:border-gray-700',
+          : clip.status === 'approved'
+            ? 'border-emerald-500/40 hover:border-emerald-500/60'
+            : 'border-gray-800 hover:border-gray-700',
         isGenerating && 'animate-pulse'
       )}
       onClick={onClick}
@@ -193,10 +199,89 @@ export const ClipCard: React.FC<ClipCardProps> = ({
           {clip.prompt.slice(0, 50)}...
         </p>
 
-        {/* Action buttons - always show for failed clips, hover for others */}
-        {(isHovered || clip.status === 'failed') && (
+        {/* Approve/Reject buttons for completed clips */}
+        {clip.status === 'completed' && onApprove && (
           <div className="flex items-center gap-1 pt-1">
-            {clip.status === 'failed' && onRetry && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-green-400 hover:text-green-300 hover:bg-green-500/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                onApprove();
+              }}
+              title="Approve clip"
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
+            </Button>
+            {onReject && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReject();
+                }}
+                title="Reject & regenerate"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 ml-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                title="Delete clip"
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons for approved clips */}
+        {clip.status === 'approved' && (isHovered || !hasChainFrame) && (
+          <div className="flex items-center gap-1 pt-1">
+            {hasVideo && onExtractFrame && !hasChainFrame && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px] text-green-400 hover:text-green-300"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExtractFrame();
+                }}
+              >
+                <ImageIcon className="w-3 h-3 mr-1" />
+                Extract Frame
+              </Button>
+            )}
+            {onDelete && isHovered && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 ml-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Action buttons for failed clips */}
+        {clip.status === 'failed' && (
+          <div className="flex items-center gap-1 pt-1">
+            {onRetry && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -210,27 +295,11 @@ export const ClipCard: React.FC<ClipCardProps> = ({
                 Retry
               </Button>
             )}
-
-            {hasVideo && onExtractFrame && !hasChainFrame && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-[10px] text-green-400 hover:text-green-300"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExtractFrame();
-                }}
-              >
-                <ImageIcon className="w-3 h-3 mr-1" />
-                Extract
-              </Button>
-            )}
-
             {onDelete && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300 ml-auto"
+                className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 ml-auto"
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete();
@@ -239,6 +308,23 @@ export const ClipCard: React.FC<ClipCardProps> = ({
                 <Trash2 className="w-3 h-3" />
               </Button>
             )}
+          </div>
+        )}
+
+        {/* Hover actions for pending/generating */}
+        {(clip.status === 'pending' || clip.status === 'generating') && isHovered && onDelete && (
+          <div className="flex items-center gap-1 pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 ml-auto"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="w-3 h-3" />
+            </Button>
           </div>
         )}
       </div>
