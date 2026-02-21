@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video, Loader2 } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -364,7 +364,12 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       className={isSelected ? 'ring-2 ring-primary' : ''}
       fallbackIcon={
         (asset.type === 'image' && isLoadingFallback) || (asset.type === 'video' && isGeneratingThumbnail)
-          ? <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+          ? <div className="flex flex-col items-center gap-2 animate-pulse">
+              <Loader2 className="w-7 h-7 text-primary animate-spin" />
+              <span className="text-xs font-medium text-muted-foreground">
+                {asset.type === 'video' ? 'Rendering video…' : 'Generating…'}
+              </span>
+            </div>
           : asset.type === 'video'
             ? <div className="flex flex-col items-center gap-2"><Video className="w-8 h-8 text-muted-foreground/50" /><span className="text-xs text-muted-foreground/50">Video</span></div>
             : <Image className="w-6 h-6 text-muted-foreground/50" />
