@@ -801,7 +801,11 @@ serve(async (req) => {
 
     // Build provider URL from table (no hardcoded URLs)
     const providerBaseUrl = apiModel.api_providers.base_url;
-    const falEndpoint = `${providerBaseUrl}/${modelKey}`;
+    let falEndpoint = `${providerBaseUrl}/${modelKey}`;
+    // Sync models must hit fal.run (returns result inline), not queue.fal.run (returns request_id)
+    if (!isAsync) {
+      falEndpoint = falEndpoint.replace('queue.fal.run', 'fal.run');
+    }
 
     // For async: store the signed reference URL so webhook can use it for thumbnails
     let signedRefUrl: string | null = null;
