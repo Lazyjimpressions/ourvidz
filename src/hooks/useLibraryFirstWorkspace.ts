@@ -497,13 +497,15 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             filter: `user_id=eq.${user.id}`
           }, (payload) => {
             const asset = payload.new as any;
-            console.log('🎉 NEW WORKSPACE ASSET - Adding to debounced update queue:', asset);
-            pendingUpdates.add(`workspace-asset-insert-${asset.id}`);
-            localDebouncedInvalidate();
-            // Remove any optimistic placeholders for this job
-            if (asset.job_id) {
-              setOptimisticAssets(prev => prev.filter(a => a.metadata?.job_id !== asset.job_id));
-            }
+            console.log('🎉 NEW WORKSPACE ASSET - Invalidating immediately:', asset);
+            // Fix: Invalidate immediately for INSERTs (user is waiting), skip debounce
+            queryClient.invalidateQueries({ queryKey: ['assets', true] }).then(() => {
+              // Fix: Only remove optimistic placeholder AFTER cache has real data
+              if (asset.job_id) {
+                console.log('✅ Cache refreshed, removing optimistic placeholder for job:', asset.job_id);
+                setOptimisticAssets(prev => prev.filter(a => a.metadata?.job_id !== asset.job_id));
+              }
+            });
             
             // Note: Legacy custom event dispatch removed - relying on Supabase Realtime only
 
@@ -563,6 +565,39 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       if (cleanup) cleanup();
     };
   }, [queryClient, debouncedInvalidate]);
+
+  // POLLING FALLBACK: Check for completed jobs when optimistic placeholders are active
+  // This catches cases where Supabase Realtime events are missed
+  useEffect(() => {
+    if (optimisticAssets.length === 0) return;
+
+    const interval = setInterval(async () => {
+      const jobIds = optimisticAssets
+        .map(a => a.metadata?.job_id)
+        .filter(Boolean) as string[];
+
+      if (jobIds.length === 0) return;
+
+      console.log('🔍 Polling fallback: checking', jobIds.length, 'active jobs');
+
+      const { data: jobs } = await supabase
+        .from('jobs')
+        .select('id, status')
+        .in('id', jobIds);
+
+      const completedJobs = jobs?.filter(j => j.status === 'completed' || j.status === 'failed') || [];
+
+      if (completedJobs.length > 0) {
+        console.log('✅ Polling fallback: found', completedJobs.length, 'completed jobs, refreshing cache');
+        await queryClient.invalidateQueries({ queryKey: ['assets', true] });
+        setOptimisticAssets(prev =>
+          prev.filter(a => !completedJobs.some(j => j.id === a.metadata?.job_id))
+        );
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [optimisticAssets, queryClient]);
 
   // OPTIMIZED: Use the new optimized URL loading hook with preloading (configurable)
   const {
