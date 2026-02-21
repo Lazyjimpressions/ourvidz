@@ -602,9 +602,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   // Generate content (simplified - always goes to library)
   const generate = useCallback(async (
     overrideReferenceImageUrl?: string | null,
-    beginningRefImageUrl?: string | null, 
-    endingRefImageUrl?: string | null,
-    seed?: number | null
+    overrideBeginningRefImageUrl?: string | null, 
+    overrideEndingRefImageUrl?: string | null,
+    overrideSeed?: number | null
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
       toast({
@@ -815,14 +815,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       // API models (fal.ai WAN 2.1 i2v): Only single reference supported
       // Local WAN workers: Start + end references supported
       const startRefUrl = mode === 'video'
-        ? (beginningRefImageUrl || 
+        ? (overrideBeginningRefImageUrl || beginningRefImageUrl || 
            (beginningRefImage ? await uploadAndSignReference(beginningRefImage) : undefined) ||
            (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined)))
         : undefined;
       
       // Only calculate endRefUrl for local models - API models (fal.ai) don't support dual references
       const endRefUrl = (mode === 'video' && isLocalRoute)
-        ? (endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
+        ? (overrideEndingRefImageUrl || endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
         : undefined;
       
       if (mode === 'video' && isApiRoute && (endingRefImage || endingRefImageUrl)) {
