@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video } from 'lucide-react';
@@ -62,7 +62,7 @@ export type SharedGridProps = {
   actions?: {
     // For Workspace
     onSaveToLibrary?: (asset: SharedAsset) => void;
-    onClear?: (asset: SharedAsset) => void; // Save to library then remove
+    onClear?: (asset: SharedAsset) => void;
     onDiscard?: (asset: SharedAsset) => void;
     onSendToRef?: (asset: SharedAsset) => void;
     // For Library
@@ -87,11 +87,56 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
 }) => {
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const handleCardRef = useCallback((element: HTMLElement | null, assetId: string) => {
+  // Single shared IntersectionObserver for all cards
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const cardElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setVisibleIds(prev => {
+          const next = new Set(prev);
+          let changed = false;
+          for (const entry of entries) {
+            const id = entry.target.getAttribute('data-asset-id');
+            if (!id) continue;
+            if (entry.isIntersecting && !next.has(id)) {
+              next.add(id);
+              changed = true;
+            } else if (!entry.isIntersecting && next.has(id)) {
+              next.delete(id);
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
+      },
+      { rootMargin: '200px' }
+    );
+    observerRef.current = observer;
+    return () => observer.disconnect();
+  }, []);
+
+  const registerCardElement = useCallback((element: HTMLElement | null, assetId: string) => {
+    const observer = observerRef.current;
+    if (!observer) return;
+
+    const prev = cardElementsRef.current.get(assetId);
+    if (prev && prev !== element) {
+      observer.unobserve(prev);
+      cardElementsRef.current.delete(assetId);
+    }
+
+    if (element) {
+      cardElementsRef.current.set(assetId, element);
+      observer.observe(element);
+    }
+
     registerAssetRef?.(element, assetId);
   }, [registerAssetRef]);
 
-  // Loading state - CSS-only responsive grid with auto-fit
+  // Loading state
   if (isLoading) {
     return (
       <div 
@@ -114,7 +159,6 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
     );
   }
 
-  // CSS-only responsive grid using auto-fit minmax - no breakpoint reliance
   return (
     <div 
       ref={gridRef}
@@ -128,7 +172,8 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
           onPreview={onPreview}
           selection={selection}
           actions={actions}
-          registerRef={handleCardRef}
+          isVisible={visibleIds.has(asset.id)}
+          registerRef={registerCardElement}
         />
       ))}
     </div>
@@ -140,6 +185,7 @@ type SharedGridCardProps = {
   onPreview: (asset: SharedAsset) => void;
   selection?: SharedGridProps['selection'];
   actions?: SharedGridProps['actions'];
+  isVisible: boolean;
   registerRef?: (element: HTMLElement | null, assetId: string) => void;
 };
 
@@ -148,64 +194,47 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   onPreview,
   selection,
   actions,
+  isVisible,
   registerRef
 }) => {
   const isSelected = selection?.selectedIds.has(asset.id) ?? false;
   const cardRef = useRef<HTMLDivElement>(null);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const [isLoadingFallback, setIsLoadingFallback] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
   const [generatedVideoThumbnail, setGeneratedVideoThumbnail] = useState<string | null>(null);
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   
-  // Use CSS media query for mobile detection (stable, no resize flicker)
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
 
-  // Register ref for lazy loading
-  React.useEffect(() => {
-    registerRef?.(cardRef.current, asset.id);
-  }, [registerRef, asset.id]);
-
-  // Intersection observer for visibility detection
+  // Register with shared observer and set data attribute for observer identification
   useEffect(() => {
-    if (!cardRef.current) return;
-    
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        setIsVisible(entry.isIntersecting);
-      },
-      { rootMargin: isMobile ? '200px' : '300px' } // Smaller margin on mobile for better performance
-    );
-    
-    observer.observe(cardRef.current);
-    return () => observer.disconnect();
-  }, [isMobile]);
+    const el = cardRef.current;
+    if (el) {
+      el.setAttribute('data-asset-id', asset.id);
+    }
+    registerRef?.(el, asset.id);
+    return () => { registerRef?.(null, asset.id); };
+  }, [registerRef, asset.id]);
 
   // Helper to safely get original URL with fallback to direct signing
   const signOriginalSafely = useCallback(async (asset: SignedAsset): Promise<string> => {
-    // First try using asset.signOriginal if available
     if (typeof asset.signOriginal === 'function') {
       try {
         return await asset.signOriginal();
       } catch (err) {
         console.warn('🔄 asset.signOriginal failed, falling back to direct signing:', err);
       }
-    } else {
-      console.log('🔄 asset.signOriginal not available, using direct signing for asset:', asset.id);
     }
     
-    // Fallback: directly sign the originalPath using UrlSigningService
     if (asset.originalPath) {
       const bucket = asset.metadata?.source === 'library' ? 'user-library' : 'workspace-temp';
-      console.log('🔄 Direct signing fallback:', { assetId: asset.id, originalPath: asset.originalPath, bucket });
       return await urlSigningService.getSignedUrl(asset.originalPath, bucket);
     }
     
     throw new Error('No original path available for signing');
   }, []);
 
-  // Generate video thumbnail client-side when no stored thumbnail exists
+  // Generate video thumbnail client-side
   const generateVideoThumbnail = useCallback(async (videoUrl: string): Promise<string | null> => {
     return new Promise((resolve) => {
       const video = document.createElement('video');
@@ -214,7 +243,6 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       video.preload = 'metadata';
       
       video.onloadedmetadata = () => {
-        // Seek to 10% of video or 0.5s, whichever is smaller
         const seekTime = Math.min(video.duration * 0.1, 0.5);
         video.currentTime = seekTime;
       };
@@ -222,7 +250,6 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       video.onseeked = () => {
         try {
           const canvas = document.createElement('canvas');
-          // Mobile-specific sizing: 200px on mobile, 400px on desktop
           const maxDimension = isMobile ? 200 : 400;
           let width = video.videoWidth;
           let height = video.videoHeight;
@@ -239,10 +266,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(video, 0, 0, width, height);
-            // Mobile-specific quality: 0.7 on mobile, 0.85 on desktop
             const quality = isMobile ? 0.7 : 0.85;
-            const thumbnailUrl = canvas.toDataURL('image/jpeg', quality);
-            resolve(thumbnailUrl);
+            resolve(canvas.toDataURL('image/jpeg', quality));
           } else {
             resolve(null);
           }
@@ -252,30 +277,22 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
         }
       };
       
-      video.onerror = () => {
-        console.warn('Video thumbnail generation failed for asset', asset.id);
-        resolve(null);
-      };
-      
+      video.onerror = () => resolve(null);
       video.src = videoUrl;
     });
-  }, [asset.id, isMobile]);
+  }, [isMobile]);
 
   // Load fallback URL for images when visible, no thumbUrl
-  // Includes timeout to prevent infinite spinner
   useEffect(() => {
     if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible) {
       setIsLoadingFallback(true);
       
-      // Timeout prevents infinite spinner (10 seconds max)
       const timeout = setTimeout(() => {
         if (!fallbackUrl) {
           setIsLoadingFallback(false);
-          console.warn('⚠️ Fallback loading timed out for asset:', asset.id);
         }
       }, 10000);
       
-      // Use concurrency-controlled loader with safe signing
       originalImageLoader.load(async () => {
         try {
           const url = await signOriginalSafely(asset);
@@ -292,8 +309,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     }
   }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely]);
 
-  // Generate video thumbnail when visible, no thumbUrl, and video type
-  // Includes timeout to prevent infinite loading state
+  // Generate video thumbnail when visible
   useEffect(() => {
     if (
       asset.type === 'video' && 
@@ -305,22 +321,17 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     ) {
       setIsGeneratingThumbnail(true);
       
-      // Timeout prevents infinite spinner (15 seconds max for video thumbnail)
       const timeout = setTimeout(() => {
         if (!generatedVideoThumbnail) {
           setIsGeneratingThumbnail(false);
-          console.warn('⚠️ Video thumbnail generation timed out for asset:', asset.id);
         }
       }, 15000);
       
-      // Sign the video URL first, then generate thumbnail
       originalImageLoader.load(async () => {
         try {
           const videoUrl = await signOriginalSafely(asset);
           const thumbnail = await generateVideoThumbnail(videoUrl);
-          if (thumbnail) {
-            setGeneratedVideoThumbnail(thumbnail);
-          }
+          if (thumbnail) setGeneratedVideoThumbnail(thumbnail);
         } catch (err) {
           console.warn('❌ Failed to generate video thumbnail for asset', asset.id, err);
         }
@@ -332,10 +343,6 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       return () => clearTimeout(timeout);
     }
   }, [asset.type, asset.thumbUrl, asset.id, asset.originalPath, generatedVideoThumbnail, isGeneratingThumbnail, isVisible, signOriginalSafely, generateVideoThumbnail]);
-
-  const handleSelect = useCallback((checked: boolean) => {
-    selection?.onToggle(asset.id);
-  }, [selection, asset.id]);
 
   const handlePreview = useCallback(() => {
     onPreview(asset);
@@ -363,115 +370,28 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             : <Image className="w-6 h-6 text-muted-foreground/50" />
       }
     >
-
-      {/* Action buttons - smaller and positioned at bottom-right */}
-      {/* Hidden by default, visible on hover. pointer-events-none prevents accidental taps on mobile */}
+      {/* Action buttons */}
       <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-        {/* Workspace actions */}
         {isWorkspace && actions?.onSaveToLibrary && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onSaveToLibrary!(asset);
-            }}
-            title="Save to Library"
-          >
-            <Save className="w-2.5 h-2.5" />
-          </Button>
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onSaveToLibrary!(asset); }} title="Save to Library"><Save className="w-2.5 h-2.5" /></Button>
         )}
-        
         {isWorkspace && actions?.onClear && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onClear!(asset);
-            }}
-            title="Clear from workspace"
-          >
-            <XCircle className="w-2.5 h-2.5" />
-          </Button>
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onClear!(asset); }} title="Clear from workspace"><XCircle className="w-2.5 h-2.5" /></Button>
         )}
-        
         {isWorkspace && actions?.onDiscard && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onDiscard!(asset);
-            }}
-            title="Delete permanently"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </Button>
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onDiscard!(asset); }} title="Delete permanently"><Trash2 className="w-2.5 h-2.5" /></Button>
         )}
-
-        {/* Library actions */}
         {isLibrary && actions?.onDownload && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onDownload!(asset);
-            }}
-            title="Download"
-          >
-            <Download className="w-2.5 h-2.5" />
-          </Button>
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onDownload!(asset); }} title="Download"><Download className="w-2.5 h-2.5" /></Button>
         )}
-
         {isLibrary && actions?.onUseAsReference && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onUseAsReference!(asset);
-            }}
-            title="Exact Copy"
-          >
-            <Copy className="w-2.5 h-2.5" />
-          </Button>
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onUseAsReference!(asset); }} title="Exact Copy"><Copy className="w-2.5 h-2.5" /></Button>
         )}
-
         {isLibrary && actions?.onAddToWorkspace && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onAddToWorkspace!(asset);
-            }}
-            title="Add to Workspace"
-          >
-            <ArrowRight className="w-2.5 h-2.5" />
-          </Button>
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onAddToWorkspace!(asset); }} title="Add to Workspace"><ArrowRight className="w-2.5 h-2.5" /></Button>
         )}
-
         {isLibrary && actions?.onDelete && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onDelete!(asset);
-            }}
-            title="Delete"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </Button>
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onDelete!(asset); }} title="Delete"><Trash2 className="w-2.5 h-2.5" /></Button>
         )}
       </div>
     </AssetTile>
