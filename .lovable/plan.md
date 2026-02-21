@@ -1,98 +1,189 @@
 
 
-# Refactor: fal-image Function Cleanup (Not a Split)
+# Comprehensive Model Table Audit and Schema Remediation
 
-## Why NOT Split by Modality
+## Audit Summary
 
-Splitting into `fal-image` and `fal-video` would duplicate ~70% of the code (auth, model resolution, job creation, API call, storage, asset creation). This directly contradicts the table-driven architecture where `api_models` drives behavior. Every future bug fix or feature (usage logging, new providers) would need to be applied in two places.
+I reviewed all 18 active image/video models in the `api_models` table against their official fal.ai `llms.txt` schemas. The findings reveal significant gaps that undermine the table-driven architecture: 8 models are missing `input_schema` entirely, several have hardcoded model-key checks in the edge function that should be schema-driven, and the string-vs-array logic has a fragile `modelKey.includes('edit')` heuristic instead of relying on the schema.
 
-The modality-specific code is only ~280 lines out of 1,824. The other 1,544 lines are shared.
+---
 
-## What's Actually Wrong
+## Finding 1: 8 Models Missing `input_schema`
 
-### Problem 1: URL Signing Copy-Pasted 5 Times
-The same 15-line block for "detect bucket, split path, call createSignedUrl" is duplicated at 5 locations. Each copy has slightly different bucket defaults and error handling. This is the root cause of signing bugs.
+These models have **no `input_schema`** in their `capabilities` JSONB, meaning the edge function cannot validate inputs, filter allowed keys, or enforce required fields:
 
-### Problem 2: Post-Processing Bloat (300 lines)
-Character portrait handling (167 lines) and scene destination handling (117 lines) are business logic that doesn't belong in a generation function. They handle file copying to `user-library`, creating library records, updating character records, retry logic, and thumbnail management. This makes the function hard to read and test.
+| Model | model_key | What's Missing |
+|-------|-----------|----------------|
+| Seedream v4 T2I | `fal-ai/bytedance/seedream/v4/text-to-image` | Full schema (prompt, image_size, num_images, max_images, seed, sync_mode, enable_safety_checker, enhance_prompt_mode) |
+| Seedream v4.5 T2I | `fal-ai/bytedance/seedream/v4.5/text-to-image` | Full schema (prompt, image_size, num_images, max_images, seed, sync_mode, enable_safety_checker) |
+| Seedream v4 Edit | `fal-ai/bytedance/seedream/v4/edit` | Full schema -- critically missing `image_urls` (required, array of strings), `enhance_prompt_mode` |
+| Seedream v4.5 Edit | `fal-ai/bytedance/seedream/v4.5/edit` | Full schema -- critically missing `image_urls` (required, array of strings) |
+| WAN 2.1 I2V | `fal-ai/wan-i2v` | Full schema -- critically missing `image_url` (required), `num_frames`, `frames_per_second`, `guide_scale`, `shift`, `resolution`, `acceleration`, `aspect_ratio` |
+| Stability SDXL | `stability-ai/sdxl` | (Legacy - out of scope) |
+| SDXL-API | `lucataco/sdxl` | (Legacy - out of scope) |
+| Realistic Vision | `lucataco/realistic-vision-v5.1` | (Legacy - out of scope) |
 
-### Problem 3: Defensive Fallback Chains
-The video URL is sourced from `body.input?.video || body.metadata?.reference_image_url || body.metadata?.start_reference_url || body.input?.image_url`. The I2I reference is sourced from 6 different fields. These hide client-side bugs by "finding" the URL wherever it lands, making failures intermittent and hard to diagnose.
+**Impact**: Without schemas, the edge function's allow-list filter (line 468-482) is bypassed entirely, meaning any parameter the client sends gets forwarded to fal.ai. The pre-flight validation (line 489-509) also does nothing because there are no `required` fields to check.
 
-## Proposed Refactor
+---
 
-### Step 1: Extract `signIfStoragePath` Helper (Top-Level Function)
-Replace all 5 copy-pasted blocks with one reusable function at module scope.
+## Finding 2: Missing Capability Flags
+
+Several models lack the capability flags that the edge function and client use for routing decisions:
+
+| Model | Missing Flags | Impact |
+|-------|---------------|--------|
+| Seedream v4 Edit | `requires_image_urls_array: true`, `supports_i2i: true` (has supports_i2i but not requires_array) | Edge function falls back to `modelKey.includes('edit')` heuristic |
+| Seedream v4.5 Edit | `requires_image_urls_array: true` (has supports_i2i but not requires_array) | Same heuristic fallback |
+| WAN 2.1 I2V | `supports_i2v: true`, `safety_checker_param: enable_safety_checker` | Client can't detect this as an I2V model via capabilities |
+| Grok I2I | `supports_i2i: true`, `requires_image_urls_array: false` | Not filterable as I2I model |
+| LTX 13b extend | `video.type` is `"string"` but fal.ai expects `"object"` format `{video_url: "..."}` | Schema mismatch |
+
+---
+
+## Finding 3: Hardcoded Logic in Edge Function That Should Be Schema-Driven
+
+Three places in `buildModelInput()` use `modelKey.includes()` instead of schema flags:
+
+1. **Line 295**: `(supportsI2I && modelKey.includes('edit'))` -- determines if model needs `image_urls[]` array vs `image_url` string. Should use `requires_image_urls_array` flag or detect from `input_schema.image_urls` existence.
+
+2. **Line 359**: `const isSeedreamEdit = modelKey.includes('seedream') && modelKey.includes('edit')` -- skips strength parameter for Seedream. Should use `uses_strength_param: false` flag (already exists on some models but not enforced).
+
+3. **Line 308**: Same `modelKeyOverride.includes('edit')` pattern in the override branch.
+
+**Fix**: Once all models have complete schemas, these can be replaced with:
+- `requiresImageUrlsArray = !!inputSchema.image_urls` (if the schema has an `image_urls` field, the model expects an array)
+- `usesStrength = inputSchema.strength !== undefined` (if the schema has a `strength` field, the model accepts it)
+
+---
+
+## Finding 4: String vs Array Logic Analysis
+
+The current flow for determining whether to send `image_url` (string) or `image_urls` (array):
 
 ```text
-Before: 5x 15-line blocks scattered through the file
-After:  1x helper function, 5x one-line calls
+Current logic:
+1. Check capabilities.requires_image_urls_array === true  --> array
+2. Fallback: capabilities.supports_i2i && modelKey.includes('edit') --> array
+3. Otherwise --> string
 ```
 
-Saves ~60 lines, eliminates signing inconsistencies.
+**What the schema actually tells us** (from fal.ai llms.txt):
+- Flux-2 Flash/Edit: `image_urls` (array, required) -- CORRECT, has `requires_image_urls_array: true`
+- Flux Pro/Kontext: `image_url` (string, required) -- CORRECT, has `requires_image_urls_array: false`
+- Seedream v4 Edit: `image_urls` (array, required) -- BROKEN, missing flag, relies on heuristic
+- Seedream v4.5 Edit: `image_urls` (array, required) -- BROKEN, missing flag, relies on heuristic
+- Grok I2I: `image_url` (string, required) -- WORKS by accident (no supports_i2i flag set, so falls through to string)
+- WAN I2V: `image_url` (string, required) -- WORKS (video path, not I2I)
 
-### Step 2: Extract Input Mapper (Top-Level Function)
-Create a `buildModelInput(body, apiModel, supabase)` function that handles:
-- Prompt sanitization
-- Safety parameter selection
-- Reference image resolution (single, multi-ref, video conditioning)
-- Aspect ratio mapping
-- Schema allow-list filtering
-- Required field validation
+**Proposed fix**: Derive string-vs-array entirely from the schema:
+```text
+if (inputSchema.image_urls)  --> model expects array
+if (inputSchema.image_url)   --> model expects string
+```
+No heuristics, no model_key sniffing.
 
-This is the core of the modality-specific logic (~400 lines) extracted into a testable, readable function.
+---
 
-### Step 3: Extract Post-Processing (Top-Level Function)
-Create a `handlePostProcessing(supabase, body, result, user)` function that handles:
-- Character portrait destination (copy to library, update character record)
-- Character scene destination (copy to library, update scene record, retry)
-- Scene preview destination (no-op)
+## Finding 5: Additional Hardcoded Values
 
-This is ~300 lines that runs AFTER the generation succeeds and is independent of the API call.
+1. **`FAL_PRICING` map** (lines 37-50): Hardcoded pricing for specific model keys. Should be stored in `api_models.pricing` JSONB and read from there, falling back to the static map only for unknown models.
 
-### Step 4: Simplify the Main Handler to an Orchestrator
-The `serve()` handler becomes a clean pipeline:
+2. **Safety parameter logic** (lines 271-276): Already partially schema-driven via `safety_checker_param`, but the `safety_tolerance` value `'6'` for NSFW is hardcoded. Should come from `input_defaults.safety_tolerance`.
+
+3. **Aspect ratio dimension maps** (lines 452-464): Hardcoded `1:1 -> 1024x1024`, `16:9 -> 1344x768`. These are model-specific and should ideally be in the schema, but this is lower priority since they're reasonable defaults.
+
+---
+
+## Remediation Plan
+
+### Step 1: Populate Missing `input_schema` for All Active fal.ai Models
+
+Update the `capabilities` JSONB for each model using the official llms.txt data. This is the highest-impact change.
+
+**Models to update (5 fal.ai models):**
+
+- **Seedream v4 T2I**: Add schema with `prompt` (required), `image_size`, `num_images`, `max_images`, `seed`, `sync_mode`, `enable_safety_checker`, `enhance_prompt_mode`
+- **Seedream v4.5 T2I**: Add schema with `prompt` (required), `image_size`, `num_images`, `max_images`, `seed`, `sync_mode`, `enable_safety_checker`
+- **Seedream v4 Edit**: Add schema with `prompt` (required), `image_urls` (required, type: array), `image_size`, `num_images`, `max_images`, `seed`, `sync_mode`, `enable_safety_checker`, `enhance_prompt_mode`. Add `requires_image_urls_array: true`
+- **Seedream v4.5 Edit**: Add schema with `prompt` (required), `image_urls` (required, type: array), `image_size`, `num_images`, `max_images`, `seed`, `sync_mode`, `enable_safety_checker`. Add `requires_image_urls_array: true`
+- **WAN 2.1 I2V**: Add schema with `prompt` (required), `image_url` (required), `negative_prompt`, `num_frames`, `frames_per_second`, `seed`, `resolution`, `num_inference_steps`, `guide_scale`, `shift`, `enable_safety_checker`, `enable_prompt_expansion`, `acceleration`, `aspect_ratio`. Add `supports_i2v: true`
+
+**Also fix:**
+- **LTX 13b extend**: Change `input_schema.video.type` from `"string"` to `"object"`
+- **Grok I2I**: Add `supports_i2i: true`, `requires_image_urls_array: false`
+
+### Step 2: Remove Hardcoded Model-Key Checks from Edge Function
+
+Replace the three `modelKey.includes()` patterns with schema-driven logic:
+
+**File: `supabase/functions/fal-image/index.ts`**
 
 ```text
-1. CORS check
-2. Auth
-3. Resolve model from api_models
-4. Build input (Step 2 helper)
-5. Create job record
-6. Call fal.ai API
-7. Download result + upload to storage
-8. Create workspace_assets record
-9. Post-process destinations (Step 3 helper)
-10. Return response
+// BEFORE (line 294-295):
+let requiresImageUrlsArray = capabilities?.requires_image_urls_array === true ||
+    (supportsI2I && modelKey.includes('edit'));
+
+// AFTER:
+let requiresImageUrlsArray = !!inputSchema.image_urls;
 ```
 
-Each step is 5-15 lines in the main function, with complexity pushed into named helpers.
+```text
+// BEFORE (line 359):
+const isSeedreamEdit = modelKey.includes('seedream') && modelKey.includes('edit');
 
-### Step 5: Remove Fallback Chains
-For video extend: the client sends `input.video` -- period. No fallback to `metadata.reference_image_url`.
-For I2V: the client sends `input.image_url` -- period. No fallback to `metadata.start_reference_url`.
-For I2I: the client sends `input.image_url` or `input.image_urls` -- period.
+// AFTER: (remove entirely -- uses_strength_param already handles this)
+// The schema allow-list filter already removes 'strength' if it's not in the schema
+```
 
-If the field is missing, return a clear 400 error. This forces client bugs to surface immediately instead of intermittently.
+```text
+// BEFORE (line 307-308):
+requiresImageUrlsArray = oc?.requires_image_urls_array === true ||
+    (oc?.supports_i2i === true && modelKeyOverride.includes('edit'));
+
+// AFTER:
+const overrideSchema = oc?.input_schema || {};
+requiresImageUrlsArray = !!overrideSchema.image_urls;
+```
+
+### Step 3: Simplify Strength Parameter Logic
+
+Currently the strength logic has three guards: `schemaAllowsStrength`, `usesStrengthParam`, and `isSeedreamEdit`. With complete schemas, this simplifies to:
+
+```text
+// If the schema has a 'strength' field, include it. Otherwise don't.
+if (inputSchema.strength && body.input?.strength !== undefined) {
+    const range = inputSchema.strength;
+    modelInput.strength = Math.min(Math.max(body.input.strength, range.min || 0.1), range.max || 1.0);
+}
+```
+
+No special-casing for Seedream or any other model family.
+
+### Step 4: Move Pricing to Database (Lower Priority)
+
+Update `api_models.pricing` JSONB for each model with the per-generation cost from fal.ai llms.txt. Update `calculateFalCost()` to read from `apiModel.pricing` first, falling back to the static map.
+
+This is lower priority but aligns with the table-driven philosophy.
+
+### Step 5: Client-Side `useImageModels.ts` Cleanup
+
+The `ImageModel.capabilities` TypeScript interface is stale -- it defines `nsfw`, `speed`, `cost`, `quality`, `reference_images`, `supports_i2i`, `seed_control`, `char_limit` but the actual capabilities JSONB now contains `input_schema`, `requires_image_urls_array`, `safety_checker_param`, `uses_strength_param`, `supports_i2v`, etc.
+
+Update the interface to `Record<string, any>` (which it effectively already is via the cast on line 84) and remove the stale typed interface to prevent confusion.
+
+---
 
 ## Files Changed
 
-1. **`supabase/functions/fal-image/index.ts`** -- Refactor into orchestrator pattern with extracted helpers (all within same file per edge function rules: no subfolders, all code in index.ts)
-2. **`src/hooks/useLibraryFirstWorkspace.ts`** -- Update client to send references in the correct, canonical field (no reliance on metadata fallbacks)
+1. **Database (7 UPDATE statements)**: Populate `input_schema` for 5 models, fix 2 capability flags
+2. **`supabase/functions/fal-image/index.ts`**: Remove 3 `modelKey.includes()` checks, simplify strength logic (~15 lines changed)
+3. **`src/hooks/useImageModels.ts`**: Clean up stale `ImageModel.capabilities` interface
 
 ## What This Does NOT Change
 
-- No new edge functions created
-- No splitting by modality
-- Same API contract (request/response format unchanged)
-- Same table-driven model resolution
-- Same fal.ai API integration pattern
-
-## Expected Outcome
-
-- Function drops from ~1,824 lines to ~800-900 lines (same file, helpers at module scope)
-- URL signing bugs eliminated (single implementation)
-- Client-side reference bugs surface immediately (no silent fallbacks)
-- Post-processing logic is isolated and testable
-- Adding new model types or destinations requires touching one helper, not hunting through 1,800 lines
+- No new edge functions
+- No changes to the main orchestrator flow
+- No changes to the client payload format
+- Video extend and I2V flows remain the same -- they just become properly validated
 
