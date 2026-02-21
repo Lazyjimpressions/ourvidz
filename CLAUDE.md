@@ -52,16 +52,29 @@ The system supports two model pathways that must ALWAYS have fallback/alternativ
 - `src/hooks/useRoleplayModels.ts` - Chat model loading, combines local + API models
 - `src/hooks/useImageModels.ts` - Image/video model loading from `api_models` table
 - `src/hooks/useLocalModelHealth.ts` - Polls health from `system_config.workerHealthCache`
+- `src/hooks/useLibraryFirstWorkspace.ts` - Model selection persistence with sync guard and UUID detection
+- `src/components/roleplay/CharacterEditModal.tsx` - Character portrait generation (routes to fal-image or replicate-image via api_models lookup)
 - `supabase/functions/roleplay-chat/index.ts` - Chat routing (OpenRouter or local worker)
 - `supabase/functions/replicate-image/index.ts` - Replicate image routing (requires `apiModelId`)
 - `supabase/functions/fal-image/index.ts` - fal.ai image/video routing (Seedream, WAN 2.1 I2V)
 - `supabase/functions/health-check-workers/index.ts` - Health check edge function
 - `supabase/functions/get-active-worker-url/index.ts` - Worker URL resolution with fallbacks
 
+### Character Portrait Routing (Feb 2026)
+
+Character portraits bypass the queue-job/SDXL path and route directly to cloud providers:
+
+1. Query `api_models` table for default image model with `default_for_tasks` containing `generation`
+2. Resolve provider from joined `api_providers.name`
+3. Route to `fal-image` (provider = 'fal') or `replicate-image` (provider = 'replicate')
+4. No Redis queue involved - direct edge function invocation
+
+This ensures character portraits always work regardless of local worker health.
+
 ### Known Routing Issues to Address
 
 1. **Incomplete provider support**: `callModelWithConfig()` in `roleplay-chat` only supports `openrouter`, throws for others (fal.ai, Replicate handled by separate edge functions)
-2. **Image fallback**: `replicate-image` requires explicit `apiModelId`, `fal-image` has default model fallback
+2. **Portrait routing**: CharacterEditModal now resolves `apiModelId` from `api_models` table before invoking edge function (resolved Feb 2026)
 3. **Model identifiers**: Chat uses `model_key` (string), Images use `id` (UUID) - both stored in `api_models` table
 4. **Hard-coded chat worker params**: Temperature, max_tokens configurable via `api_models.input_defaults`
 5. **Dead code paths**: `callClaude()`, `callGPT()` declared but unimplemented (use `api_models` table instead)

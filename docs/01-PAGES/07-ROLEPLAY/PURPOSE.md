@@ -253,6 +253,51 @@ When a user selects a model:
 - Image models → `replicate-image` or `fal-image` edge function → Provider API
 - Video models → `fal-image` edge function → fal.ai API
 
+### **URL Re-signing System (Feb 2026)**
+
+The `roleplay-chat` edge function handles expired Supabase Storage signed URLs for reference images:
+
+**Function:** `ensureFreshSignedUrl()` (lines 120-171 in index.ts)
+
+**Logic:**
+
+1. Check if URL is a Supabase storage signed URL (`/storage/v1/object/sign/`)
+2. Extract JWT token from URL query parameter
+3. Decode JWT payload and check `exp` (expiration) field
+4. If expired or within 5-minute buffer: re-sign with 1-hour TTL
+5. Return fresh signed URL (or original URL as fallback)
+
+**Benefits:**
+
+- Prevents 403 errors for long roleplay sessions
+- Handles reference images that expired during conversation
+- Transparent to calling code
+
+### **I2I Fallback & Deduplication (Feb 2026)**
+
+**Problem Solved:** When no scene environment available, using character portrait as Figure 1 (scene) caused duplicate images because Figure 2 (character ref) was also the portrait.
+
+**Figure Notation:**
+
+- Figure 1: Scene environment/setting (optional)
+- Figure 2: AI character reference (always included)
+- Figure 3: User character reference (for `both_characters` style)
+
+**Fallback Logic:** Skip Figure 1 when no scene environment to avoid duplicate character refs.
+
+**De-duplication:** Before sending `image_urls` to fal.ai, detect and remove duplicates by comparing storage paths:
+
+```typescript
+const seenPaths = new Map<string, number>();
+for (let i = 0; i < imageUrlsArray.length; i++) {
+  const pathMatch = imageUrlsArray[i].match(/\/storage\/v1\/object\/(?:sign|public)\/(.+?)(?:\?|$)/);
+  const key = pathMatch ? pathMatch[1] : imageUrlsArray[i];
+  if (seenPaths.has(key)) {
+    // Remove duplicate
+  }
+}
+```
+
 ### **Settings Drawer Integration**
 
 Model selection is accessible via:

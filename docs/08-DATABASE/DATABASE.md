@@ -1,6 +1,6 @@
 # Database Architecture & Schema
 
-**Last Updated:** December 19, 2024  
+**Last Updated:** February 20, 2026  
 **Status:** ✅ Active - Real-time schema from Supabase online  
 **Supabase Project:** ulmdmzhcdwfadbvfpckt
 
@@ -33,7 +33,7 @@
 
 ### **Character System (4 tables)**
 
-- **characters** (30 cols, 10 rows) - Character definitions & metadata
+- **characters** (31 cols, 10 rows) - Character definitions & metadata (includes `clothing_tags` Feb 2026)
 - **character_scenes** (13 cols, 3 rows) - Character-scene relationships
 - **scenes** (10 cols, 0 rows) - Scene definitions within projects
 - **projects** (14 cols, 23 rows) - Project management & workflow
@@ -73,12 +73,16 @@
 **RLS**: Users can only access their own profile, admins can view all
 **Integration**: All user-related operations, authentication system
 
-### **characters** (30 columns, 10 rows)
+### **characters** (31 columns, 10 rows)
 
 **Purpose**: Character profiles and definitions for roleplay
-**Key Columns**: id, user_id, name, description, traits, appearance_tags, image_url, persona, system_prompt, voice_tone, mood, creator_id, likes_count, interaction_count, reference_image_url, is_public, gender, content_rating, role, consistency_method, seed_locked, base_prompt, preview_image_url, quick_start, voice_examples, scene_behavior_rules, forbidden_phrases
+**Key Columns**: id, user_id, name, description, traits, appearance_tags, **clothing_tags**, image_url, persona, system_prompt, voice_tone, mood, creator_id, likes_count, interaction_count, reference_image_url, is_public, gender, content_rating, role, consistency_method, seed_locked, base_prompt, preview_image_url, quick_start, voice_examples, scene_behavior_rules, forbidden_phrases
 **RLS**: Users can manage their own characters, public characters viewable by all
 **Integration**: Roleplay system, storyboard system, social features, consistency system
+
+**Tag Separation (Feb 2026)**:
+- `appearance_tags text[]` - Physical appearance (hair, eyes, body, skin)
+- `clothing_tags text[]` - Outfit/clothing (dress, accessories, attire)
 
 ### **jobs** (35 columns, 945 rows)
 
@@ -603,7 +607,31 @@ supabase functions deploy [function-name]
 
 ---
 
-## **🔧 RECENT FIXES & UPDATES (January 2025)**
+## **🔧 RECENT FIXES & UPDATES**
+
+### **clothing_tags Schema Addition (February 2026)**
+
+**Migration:** `20260220044335_51e68cb7-b800-4ca4-8d80-4173d2ada679.sql`
+
+**Change:** Added `clothing_tags text[] DEFAULT '{}'::text[]` column to `characters` table
+
+**Purpose:** Separate physical appearance attributes from clothing/outfit attributes for:
+
+- Better prompt construction (physical vs outfit tokens)
+- Dynamic outfit changes in roleplay scenes
+- AI suggestion categorization
+
+**Impact:**
+
+- `StudioSidebar.tsx`: Separate "Physical Appearance" and "Default Outfit" tag sections
+- `characterPromptBuilder.ts`: Includes both tag types in portrait prompts (6 appearance + 4 clothing)
+- `roleplay-chat/index.ts`: Constructs `${physicalAppearance}, wearing ${outfitTags}` for scenes
+
+**Migration Guide:** See `docs/08-DATABASE/MIGRATIONS/20260220_clothing_tags.md`
+
+---
+
+### **RV5.1 Prompt Overwriting Fix (January 2025)**
 
 ### **RV5.1 Prompt Overwriting Fix**
 

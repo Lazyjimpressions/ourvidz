@@ -615,6 +615,7 @@ CREATE TABLE characters (
   image_url TEXT,
   reference_image_url TEXT,
   appearance_tags TEXT[] DEFAULT '{}',
+  clothing_tags TEXT[] DEFAULT '{}',       -- Added Feb 2026: outfit/clothing tags
   voice_tone TEXT DEFAULT 'warm',
   mood TEXT DEFAULT 'friendly',
   first_message TEXT,
@@ -736,6 +737,63 @@ CREATE INDEX idx_api_models_is_active ON api_models(is_active) WHERE is_active =
   max_resolution?: string        // e.g. "1024x1024"
   supported_formats?: string[]   // e.g. ["png", "jpg"]
 }
+```
+
+---
+
+## Tag Architecture (Feb 2026)
+
+Character visual attributes are split into two categories for better prompt construction and outfit flexibility:
+
+### Physical Appearance (`appearance_tags`)
+
+- Hair color, style, length
+- Eye color, facial features
+- Body type, skin tone
+- Permanent physical attributes
+
+### Clothing/Outfit (`clothing_tags`)
+
+- Current outfit, dress, attire
+- Accessories (jewelry, glasses)
+- Footwear
+- Contextual/changeable items
+
+### UI Implementation
+
+`StudioSidebar.tsx` provides separate input sections:
+
+- "Physical Appearance" - manages `appearance_tags`
+- "Default Outfit" - manages `clothing_tags`
+
+AI suggestions automatically categorize using keyword detection.
+
+### Prompt Construction
+
+`characterPromptBuilder.ts` includes both tag types:
+
+```typescript
+// Add appearance tags (physical) - up to 6 tags
+if (character.appearance_tags?.length > 0) {
+  characterTokens.push(...character.appearance_tags.slice(0, 6));
+}
+
+// Add clothing tags - up to 4 tags
+if (character.clothing_tags?.length > 0) {
+  characterTokens.push(...character.clothing_tags.slice(0, 4));
+}
+```
+
+### Roleplay Scene Generation
+
+`roleplay-chat` edge function constructs visual description:
+
+```typescript
+const physicalAppearance = (character.appearance_tags || []).slice(0, 5).join(', ');
+const outfitTags = sceneContext?.clothing || (character.clothing_tags || []).join(', ');
+const characterAppearance = outfitTags
+  ? `${physicalAppearance}, wearing ${outfitTags}`
+  : physicalAppearance;
 ```
 
 ---
@@ -1250,6 +1308,19 @@ useEffect(() => {
 ---
 
 ## Model Routing
+
+### Portrait Routing (Feb 2026 Update)
+
+Character portraits now bypass the queue-job/SDXL path and route directly to cloud providers:
+
+1. Query `api_models` table for default image model with `default_for_tasks` containing `generation`
+2. Resolve provider from joined `api_providers.name`
+3. Route to `fal-image` (provider = 'fal') or `replicate-image` (provider = 'replicate')
+4. No Redis queue involved - direct edge function invocation
+
+**File:** `src/components/roleplay/CharacterEditModal.tsx`
+
+This ensures character portraits always work regardless of local worker health.
 
 ### Dynamic Model Selection Algorithm
 
@@ -1799,4 +1870,4 @@ useEffect(() => {
 - New model providers integrated
 - Performance optimizations implemented
 
-**Last Review**: February 6, 2026
+**Last Review**: February 20, 2026

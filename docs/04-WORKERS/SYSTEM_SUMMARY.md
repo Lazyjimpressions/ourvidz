@@ -1,6 +1,6 @@
 # OurVidz Worker System Summary
 
-**Last Updated:** August 31, 2025  
+**Last Updated:** February 20, 2026  
 **Purpose:** Frontend API reference for current system structure and capabilities
 
 ---
@@ -332,6 +332,33 @@ SUPABASE_SERVICE_KEY=      # Service key
 UPSTASH_REDIS_REST_URL=    # Redis queue URL
 UPSTASH_REDIS_REST_TOKEN=  # Redis token
 WAN_WORKER_API_KEY=        # WAN worker API key
+```
+
+### **Redis Queue Format (Feb 2026 Fix)**
+
+The `queue-job` edge function uses Upstash Redis REST API for job queuing.
+
+**Correct RPUSH Format:**
+
+```typescript
+// RPUSH expects body as JSON array containing stringified job
+const response = await fetch(`${UPSTASH_REDIS_REST_URL}/rpush/${queueKey}`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+  body: JSON.stringify([JSON.stringify(queuePayload)])
+});
+```
+
+**Important:** The double-stringify is required:
+
+1. Inner `JSON.stringify(queuePayload)` - serializes job object to string
+2. Outer `JSON.stringify([...])` - wraps in array for RPUSH REST API
+
+**Previous Issue:** Sending object directly without array wrapper caused 500 RPUSH failures.
+
+**Location:** `supabase/functions/queue-job/index.ts` lines 606-614
+
+```text
 HF_TOKEN=                  # HuggingFace token (optional)
 ```
 

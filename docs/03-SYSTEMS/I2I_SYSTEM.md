@@ -1,6 +1,6 @@
 # Image-to-Image (I2I) System
 
-**Last Updated:** January 3, 2026
+**Last Updated:** February 20, 2026
 **Status:** ✅ PRODUCTION - Local SDXL + Replicate API fallback
 
 ## Overview
@@ -283,6 +283,70 @@ if (replicateError) {
   };
 }
 ```
+
+---
+
+## Scene Generation I2I (Feb 2026)
+
+### Figure Notation
+
+The `roleplay-chat` edge function uses "Figure notation" for multi-reference I2I:
+
+| Figure | Purpose | Source |
+|--------|---------|--------|
+| Figure 1 | Scene environment/setting | Template preview or previous scene |
+| Figure 2 | AI character reference | Character portrait |
+| Figure 3 | User character reference | User persona avatar (for `both_characters` style) |
+
+### Fallback Logic
+
+When no scene environment is available (no template preview, no previous scene):
+
+```typescript
+// Skip Figure 1 when no scene environment to avoid duplicate character refs
+if (!templatePreviewImageUrl && !previousSceneImageUrl) {
+  effectiveReferenceImageUrl = undefined;
+  console.log('🎬 No scene environment - skipping Figure 1');
+}
+```
+
+**Rationale:** If Figure 1 is the character portrait and Figure 2 is also the character portrait, the model receives duplicate identical images, causing poor composition and wasted reference slots.
+
+### De-duplication
+
+Before sending `image_urls` array to fal.ai, the system de-duplicates by storage path:
+
+```typescript
+const seenPaths = new Map<string, number>();
+for (let i = 0; i < imageUrlsArray.length; i++) {
+  const pathMatch = imageUrlsArray[i].match(
+    /\/storage\/v1\/object\/(?:sign|public)\/(.+?)(?:\?|$)/
+  );
+  const key = pathMatch ? pathMatch[1] : imageUrlsArray[i];
+  if (seenPaths.has(key)) {
+    imageUrlsArray.splice(i, 1);  // Remove duplicate
+    i--;
+  } else {
+    seenPaths.set(key, i);
+  }
+}
+```
+
+**Handles cases where:**
+- Previous scene is the same as character portrait
+- User character reference equals AI character reference
+- Template preview is the character's avatar
+
+### URL Re-signing
+
+Reference images in long conversations may have expired signed URLs. The `ensureFreshSignedUrl()` function:
+
+1. Checks JWT expiration with 5-minute buffer
+2. Re-signs expired URLs with 1-hour TTL
+3. Extracts bucket/path from URL structure
+4. Falls back to original URL on error
+
+**Location:** `supabase/functions/roleplay-chat/index.ts` lines 120-171
 
 ---
 
