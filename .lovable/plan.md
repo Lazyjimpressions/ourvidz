@@ -1,126 +1,82 @@
 
 
-# Fix: Workspace Performance Freezing on Mobile
+# Fix: ImagePickerDialog Sequential Signing Causes Render Storm
 
-## Problem
+## Root Cause
 
-Two issues are causing the workspace to freeze and become unresponsive on mobile:
+In `ImagePickerDialog.tsx`, the `signAll` function (line 129) processes assets in a sequential `for` loop. Each successful sign calls `setThumbUrls(prev => ...)`, which triggers a React re-render of the entire dialog including the grid. With 69+ workspace assets, this means 69+ sequential re-renders, each rendering all grid cards. On mobile, this completely freezes the UI.
 
-### Issue 1: Re-signing storm from queuedIdsRef.clear()
+## Solution: Batch Parallel Signing with Batched State Updates
 
-A recent fix added `useEffect(() => { queuedIdsRef.current.clear(); }, [assets])` to `useSignedAssets.ts`. This was meant for the ImagePickerDialog tab-switching scenario, but it has a devastating side effect on the always-mounted workspace:
+Replace the sequential loop with parallel batch signing (chunks of 10), updating state once per batch instead of once per asset. This reduces 69 re-renders down to 7.
 
-- The workspace query (`useAssetsWithDebounce`) refetches on window focus, polling, and after generation
-- Each refetch creates a new array reference for `workspaceAssets`
-- `mappedAssets` (via `useMemo`) produces a new array reference
-- This triggers the `useEffect`, clearing `queuedIdsRef`
-- The `pathsToSign` memo re-runs, finding ALL 69+ assets unqueued
-- ALL thumbnails get re-signed sequentially (batches of 20, but still ~4 network roundtrips)
-- On mobile, this blocks the main thread and causes freezing
+### File: `src/components/storyboard/ImagePickerDialog.tsx`
 
-### Issue 2: 69+ individual IntersectionObservers in SharedGrid
-
-Each `SharedGridCard` creates its own `IntersectionObserver` instance (line 173 of SharedGrid.tsx). With 69+ assets rendered at once, that is 69+ observers running concurrently on mobile -- a significant performance drain.
-
-## Solution
-
-### Fix 1: Stabilize queuedIdsRef clearing (useSignedAssets.ts)
-
-Instead of clearing on every `assets` array change, only clear when the **asset IDs actually change**. This ensures the ImagePickerDialog tab-switch still works (different assets = different IDs) while preventing the workspace re-signing storm (same assets, new array reference).
+Replace the `signAll` function (lines 129-161) with:
 
 ```text
-// Replace: useEffect(() => { queuedIdsRef.current.clear(); }, [assets]);
-// With: a stable key based on sorted asset IDs
+const BATCH_SIZE = 10;
 
-const assetIdKey = useMemo(() => assets.map(a => a.id).sort().join(','), [assets]);
+const signAll = async () => {
+  // Process in parallel batches of 10
+  for (let i = 0; i < sharedAssets.length; i += BATCH_SIZE) {
+    if (cancelled) break;
+    const batch = sharedAssets.slice(i, i + BATCH_SIZE);
 
-useEffect(() => {
-  queuedIdsRef.current.clear();
-}, [assetIdKey]);
+    const results = await Promise.allSettled(
+      batch.map(async (asset) => {
+        const path = asset.thumbPath || asset.originalPath;
+        if (!path) return { id: asset.id, failed: true };
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+          return { id: asset.id, url: path };
+        }
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(path, 3600);
+        if (error || !data?.signedUrl) {
+          return { id: asset.id, failed: true };
+        }
+        return { id: asset.id, url: data.signedUrl };
+      })
+    );
+
+    if (cancelled) break;
+
+    // Single state update per batch (not per asset)
+    const batchUrls: Record<string, string> = {};
+    const batchFailed: string[] = [];
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const val = result.value;
+        if (val.failed) batchFailed.push(val.id);
+        else if (val.url) batchUrls[val.id] = val.url;
+      } else {
+        // Promise rejected -- shouldn't happen with allSettled, but guard
+      }
+    }
+    setThumbUrls(prev => ({ ...prev, ...batchUrls }));
+    if (batchFailed.length > 0) {
+      setFailedIds(prev => {
+        const next = new Set(prev);
+        batchFailed.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }
+  if (!cancelled) setSigning(false);
+};
 ```
 
-This way:
-- Workspace refetch with same assets: IDs unchanged, no re-sign
-- ImagePickerDialog tab switch (workspace to library): different IDs, clears correctly
-- New asset added after generation: IDs change, clears correctly
+### Impact
 
-### Fix 2: Single shared IntersectionObserver in SharedGrid
-
-Replace per-card observers with a single observer for the entire grid. This reduces 69 observer instances to 1.
-
-```text
-// SharedGrid.tsx: Create one observer at the grid level
-// Pass visibility state down to cards via a Set<string> of visible IDs
-// Cards receive isVisible as a prop instead of computing it themselves
-```
-
-### Fix 3: Remove isLoading gate from isSigning (MobileSimplifiedWorkspace.tsx)
-
-Line 537: `isLoading={isGenerating || isSigning}` -- while signing is in progress, the entire grid shows skeleton loaders instead of progressively rendering. This means ANY re-sign (even for 1 new asset) causes the whole grid to flash to skeletons.
-
-Change to: `isLoading={isGenerating && sharedAssets.length === 0}` -- only show skeletons when actually generating with no existing content.
+- 69 sequential network requests become 7 parallel batches of 10
+- 69 state updates (re-renders) become 7
+- Network time drops from ~35s (sequential) to ~3.5s (parallel)
+- UI remains responsive during signing
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/lib/hooks/useSignedAssets.ts` | Replace `assets` dependency with stable `assetIdKey` for queuedIdsRef clearing |
-| `src/components/shared/SharedGrid.tsx` | Single shared IntersectionObserver instead of per-card |
-| `src/pages/MobileSimplifiedWorkspace.tsx` | Fix isLoading prop to not gate on isSigning |
-
-## Technical Details
-
-### useSignedAssets.ts -- Stable asset identity
-
-```text
-// Line 41-44: Replace the effect
-const assetIdKey = useMemo(
-  () => assets.map(a => a.id).sort().join(','),
-  [assets]
-);
-
-useEffect(() => {
-  queuedIdsRef.current.clear();
-}, [assetIdKey]);
-```
-
-### SharedGrid.tsx -- Single observer pattern
-
-```text
-// At grid level (SharedGrid component):
-const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
-const observerRef = useRef<IntersectionObserver | null>(null);
-
-useEffect(() => {
-  const observer = new IntersectionObserver(
-    (entries) => {
-      setVisibleIds(prev => {
-        const next = new Set(prev);
-        entries.forEach(entry => {
-          const id = entry.target.getAttribute('data-asset-id');
-          if (id) {
-            if (entry.isIntersecting) next.add(id);
-            else next.delete(id);
-          }
-        });
-        return next;
-      });
-    },
-    { rootMargin: '200px' }
-  );
-  observerRef.current = observer;
-  return () => observer.disconnect();
-}, []);
-
-// Pass observerRef to cards for registration, visibleIds for rendering
-```
-
-### MobileSimplifiedWorkspace.tsx -- Loading prop
-
-```text
-// Line 537: Change from
-isLoading={isGenerating || isSigning}
-// To
-isLoading={isGenerating && sharedAssets.length === 0}
-```
+| `src/components/storyboard/ImagePickerDialog.tsx` | Replace sequential signing loop with batched parallel signing |
 
