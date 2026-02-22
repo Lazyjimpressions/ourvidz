@@ -108,7 +108,7 @@ export interface LibraryFirstWorkspaceActions {
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   setReferenceType: (type: 'style' | 'character' | 'composition') => void;
-  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null) => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[]) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -645,7 +645,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     overrideReferenceImageUrl?: string | null,
     overrideBeginningRefImageUrl?: string | null, 
     overrideEndingRefImageUrl?: string | null,
-    overrideSeed?: number | null
+    overrideSeed?: number | null,
+    additionalImageUrls?: string[]
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
       toast({
@@ -1314,21 +1315,32 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         };
         
         // I2I parameters for reference images (image mode)
-        // CRITICAL: Always include image_url if effRefUrl exists (even if empty string, check explicitly)
         if (!isFalVideo) {
+          // Build image_urls array from all ref slots (multi-ref support)
+          const allRefUrls: string[] = [];
           if (effRefUrl && typeof effRefUrl === 'string' && effRefUrl.trim() !== '') {
-            inputObj.image_url = effRefUrl;
+            allRefUrls.push(effRefUrl);
+          }
+          if (additionalImageUrls && additionalImageUrls.length > 0) {
+            for (const url of additionalImageUrls) {
+              if (url && typeof url === 'string' && url.trim() !== '') {
+                allRefUrls.push(url);
+              }
+            }
+          }
+
+          if (allRefUrls.length > 1) {
+            // Multi-ref: send as image_urls array (for Seedream, Flux-2 etc.)
+            inputObj.image_urls = allRefUrls;
             inputObj.strength = computedReferenceStrength;
-            console.log('✅ MOBILE DEBUG: Added image_url to inputObj:', effRefUrl.substring(0, 60) + '...');
+            console.log('✅ Multi-ref: Added image_urls array with', allRefUrls.length, 'images');
+          } else if (allRefUrls.length === 1) {
+            // Single ref: send as image_url (standard I2I)
+            inputObj.image_url = allRefUrls[0];
+            inputObj.strength = computedReferenceStrength;
+            console.log('✅ Single ref: Added image_url to inputObj:', allRefUrls[0].substring(0, 60) + '...');
           } else {
-            console.error('❌ MOBILE DEBUG: effRefUrl is missing or invalid:', {
-              effRefUrl,
-              type: typeof effRefUrl,
-              isString: typeof effRefUrl === 'string',
-              isEmpty: effRefUrl === '',
-              isUndefined: effRefUrl === undefined,
-              isNull: effRefUrl === null
-            });
+            console.log('ℹ️ No reference images for this generation');
           }
         }
         
