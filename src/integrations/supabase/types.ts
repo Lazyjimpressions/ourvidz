@@ -86,7 +86,7 @@ export type Database = {
           pricing: Json
           priority: number
           provider_id: string
-          task: string
+          tasks: string[]
           updated_at: string
           version: string | null
         }
@@ -110,7 +110,7 @@ export type Database = {
           pricing?: Json
           priority?: number
           provider_id: string
-          task: string
+          tasks?: string[]
           updated_at?: string
           version?: string | null
         }
@@ -134,7 +134,7 @@ export type Database = {
           pricing?: Json
           priority?: number
           provider_id?: string
-          task?: string
+          tasks?: string[]
           updated_at?: string
           version?: string | null
         }
@@ -2440,6 +2440,7 @@ export type Database = {
         Args: { p_end_date?: string; p_start_date?: string }
         Returns: number
       }
+      check_valid_tasks: { Args: { arr: string[] }; Returns: boolean }
       clean_orphaned_jobs: { Args: never; Returns: number }
       cleanup_expired_workspace_assets: { Args: never; Returns: number }
       cleanup_old_profile_audit_logs: { Args: never; Returns: number }
