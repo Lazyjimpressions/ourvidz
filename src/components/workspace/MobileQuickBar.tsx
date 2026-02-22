@@ -245,6 +245,57 @@ const ModelDropdownItem: React.FC<{
   </button>
 );
 
+/** Compact popover that shows current value and reveals options on click */
+function CompactPopover<T extends string | number>({
+  label,
+  options,
+  value,
+  onSelect,
+  renderLabel,
+  className,
+}: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  onSelect: (v: T) => void;
+  renderLabel?: (v: T) => string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "h-7 px-2 gap-1 text-[10px] font-medium rounded border bg-muted/50 flex items-center transition-colors hover:bg-muted",
+            className
+          )}
+        >
+          <span>{label}</span>
+          <ChevronDown className="h-2.5 w-2.5 opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={6}
+        className="min-w-[80px] w-auto p-1 z-[100] bg-popover border border-border shadow-lg"
+      >
+        <div className="space-y-0.5">
+          {options.map((opt) => (
+            <ModelDropdownItem
+              key={String(opt)}
+              label={renderLabel ? renderLabel(opt) : String(opt)}
+              selected={value === opt}
+              onClick={() => { onSelect(opt); setOpen(false); }}
+            />
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   currentMode,
   onModeToggle,
@@ -336,70 +387,35 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
         )}
       </div>
 
-      {/* Desktop-only inline controls */}
+      {/* Desktop-only compact popover controls */}
       {onContentTypeChange && (
-        <div className="hidden md:flex items-center gap-1.5">
-          {/* Content Type */}
-          <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
-            {(['sfw', 'nsfw'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => onContentTypeChange(t)}
-                className={cn(
-                  "px-2 py-1 text-[10px] font-medium uppercase transition-colors",
-                  contentType === t
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-
-          {/* Aspect Ratio */}
-          {onAspectRatioChange && (
-            <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
-              {(['1:1', '16:9', '9:16'] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => onAspectRatioChange(r)}
-                  className={cn(
-                    "px-2 py-1 text-[10px] font-medium transition-colors",
-                    aspectRatio === r
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Batch Size - hidden in video mode */}
-          {onBatchSizeChange && currentMode !== 'video' && (
-            <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
-              {[1, 3, 6].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => onBatchSizeChange(n)}
-                  className={cn(
-                    "px-2 py-1 text-[10px] font-medium transition-colors min-w-[24px]",
-                    batchSize === n
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {n}×
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <CompactPopover
+          className="hidden md:inline-flex"
+          label={contentType.toUpperCase()}
+          options={['sfw', 'nsfw']}
+          value={contentType}
+          onSelect={(v) => onContentTypeChange(v as 'sfw' | 'nsfw')}
+          renderLabel={(v) => v.toUpperCase()}
+        />
+      )}
+      {onAspectRatioChange && (
+        <CompactPopover
+          className="hidden md:inline-flex"
+          label={aspectRatio}
+          options={['1:1', '16:9', '9:16'] as const}
+          value={aspectRatio}
+          onSelect={(v) => onAspectRatioChange(v as '16:9' | '1:1' | '9:16')}
+        />
+      )}
+      {onBatchSizeChange && currentMode !== 'video' && (
+        <CompactPopover
+          className="hidden md:inline-flex"
+          label={`${batchSize}×`}
+          options={[1, 3, 6]}
+          value={batchSize}
+          onSelect={(v) => onBatchSizeChange(v as number)}
+          renderLabel={(v) => `${v}×`}
+        />
       )}
       
       {/* Spacer */}
