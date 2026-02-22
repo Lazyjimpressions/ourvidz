@@ -398,7 +398,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     }
 
     if (displayUrl) {
-      const cached = new Image();
+      const cached = new globalThis.Image();
       cached.crossOrigin = 'anonymous';
       cached.src = displayUrl;
       if (cached.complete && cached.naturalWidth > 0) {

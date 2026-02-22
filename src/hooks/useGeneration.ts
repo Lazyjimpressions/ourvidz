@@ -169,10 +169,7 @@ export const useGeneration = () => {
           setIsGenerating(true);
           setGenerationProgress(job.status === 'processing' ? 50 : 10);
           
-          toast({
-            title: "Generation Resumed",
-            description: "Your generation is still in progress.",
-          });
+          // No toast for resume - UI already shows generating state
         }
       } catch (error) {
         console.error('❌ Failed to verify stored job:', error);
@@ -286,12 +283,7 @@ export const useGeneration = () => {
 
       console.log('✅ Job queued:', { jobId, format: request.format });
 
-      if (config.isSDXL) {
-        toast({
-          title: "SDXL Generation Started",
-          description: `Ultra-fast ${config.displayName} generation queued (${config.estimatedTime})`,
-        });
-      }
+      // No toast for generation start - UI already shows generating state
       
     } catch (error) {
       console.error('❌ Generation failed:', error);
