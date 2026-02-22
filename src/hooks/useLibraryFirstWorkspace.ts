@@ -1488,6 +1488,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         setOptimisticAssets(prev => [...placeholders, ...prev]);
         setActiveJobId(jobId);
       }
+
+      // CRITICAL: Force cache invalidation after generation to catch completed assets
+      // API routes (fal/replicate) complete synchronously - their workspace_asset row
+      // may already exist by the time this runs. Staggered invalidations ensure we
+      // catch both fast (API) and slow (queue) completions even if Realtime misses.
+      const invalidateCache = () => {
+        queryClient.invalidateQueries({ queryKey: ['assets', true] });
+      };
+      // Immediate + staggered invalidations for reliability
+      setTimeout(invalidateCache, 1500);
+      setTimeout(invalidateCache, 4000);
+      setTimeout(invalidateCache, 8000);
+      // For queue-based jobs, also invalidate after longer delays
+      if (edgeFunction === 'queue-job') {
+        setTimeout(invalidateCache, 15000);
+        setTimeout(invalidateCache, 30000);
+      }
       
       // Show success message with model info
       const modelLabel = selectedModel?.type === 'fal'
