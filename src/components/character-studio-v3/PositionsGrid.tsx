@@ -7,9 +7,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2 } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CharacterCanon } from '@/hooks/useCharacterStudio';
+import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { useSignedUrl } from '@/hooks/useSignedUrl';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -19,6 +19,8 @@ type OutputTypeFilter = typeof OUTPUT_TYPES[number];
 
 const COMMON_TAGS = ['front', 'side', 'rear', '3/4', 'full-body', 'half-body', 'close-up', 'casual', 'formal', 'action', 'seated', 'standing'];
 
+const POSE_KEY_ORDER = ['front_neutral', 'side_left', 'side_right', 'rear', 'three_quarter', 'bust'];
+
 interface PositionsGridProps {
   canonImages: CharacterCanon[];
   isNewCharacter: boolean;
@@ -27,6 +29,77 @@ interface PositionsGridProps {
   onSetPrimary: (id: string) => void;
   onUpdateTags: (id: string, tags: string[]) => void;
   isUploading?: boolean;
+  // Canon position generation
+  canonPosePresets?: Record<string, CanonPosePreset>;
+  onGeneratePosition?: (poseKey: string) => Promise<string | null>;
+  generatingPoseKey?: string | null;
+  hasReferenceImage?: boolean;
+}
+
+// Fixed position slot component
+function PositionSlot({
+  poseKey,
+  preset,
+  filledCanon,
+  isGenerating,
+  onGenerate,
+  hasReferenceImage,
+}: {
+  poseKey: string;
+  preset: CanonPosePreset;
+  filledCanon: CharacterCanon | null;
+  isGenerating: boolean;
+  onGenerate: (poseKey: string) => void;
+  hasReferenceImage: boolean;
+}) {
+  const { signedUrl } = useSignedUrl(filledCanon?.output_url || null);
+
+  if (isGenerating) {
+    return (
+      <div className="aspect-[3/4] rounded-md border border-border bg-muted/50 flex flex-col items-center justify-center gap-1">
+        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+        <span className="text-[9px] text-muted-foreground">Generating...</span>
+      </div>
+    );
+  }
+
+  if (filledCanon && signedUrl) {
+    return (
+      <div className="aspect-[3/4] rounded-md overflow-hidden bg-muted relative group">
+        <img src={signedUrl} alt={preset.label} className="absolute inset-0 w-full h-full object-cover" />
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
+          <span className="text-[9px] text-white/90 font-medium">{preset.label}</span>
+        </div>
+        {/* Regenerate overlay */}
+        <button
+          onClick={() => onGenerate(poseKey)}
+          className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+          title={`Regenerate ${preset.label}`}
+          disabled={!hasReferenceImage}
+        >
+          <RefreshCw className="w-4 h-4 text-white" />
+        </button>
+      </div>
+    );
+  }
+
+  // Empty state
+  return (
+    <button
+      onClick={() => onGenerate(poseKey)}
+      disabled={!hasReferenceImage}
+      className={cn(
+        'aspect-[3/4] rounded-md border-2 border-dashed flex flex-col items-center justify-center gap-0.5 transition-colors',
+        hasReferenceImage
+          ? 'border-muted-foreground/30 hover:border-primary/50 text-muted-foreground hover:text-foreground cursor-pointer'
+          : 'border-muted/30 text-muted-foreground/40 cursor-not-allowed'
+      )}
+      title={hasReferenceImage ? `Generate ${preset.label}` : 'Lock a reference image first'}
+    >
+      <Plus className="w-3.5 h-3.5" />
+      <span className="text-[9px] font-medium">{preset.label}</span>
+    </button>
+  );
 }
 
 function CanonThumbnail({
@@ -51,10 +124,7 @@ function CanonThumbnail({
   const handleSendToWorkspace = () => {
     if (signedUrl) {
       const encoded = encodeURIComponent(signedUrl);
-      toast({
-        title: 'Reference ready',
-        description: 'Opening workspace with reference...',
-      });
+      toast({ title: 'Reference ready', description: 'Opening workspace with reference...' });
       navigate(`/workspace?mode=image&ref=${encoded}`);
     }
   };
@@ -120,68 +190,35 @@ function CanonThumbnail({
       {/* Hover actions */}
       {showActions && (
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity">
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }}
-            className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground"
-            title="Delete"
-          >
+          <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
             <Trash2 className="w-3 h-3" />
           </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }}
-            className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')}
-            title="Set as primary"
-          >
+          <button onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }} className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')} title="Set as primary">
             <Star className="w-3 h-3" />
           </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); handleSendToWorkspace(); }}
-            className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white"
-            title="Send to Workspace"
-          >
+          <button onClick={(e) => { e.stopPropagation(); handleSendToWorkspace(); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Send to Workspace">
             <ExternalLink className="w-3 h-3" />
           </button>
           <Popover open={editingTags} onOpenChange={setEditingTags}>
             <PopoverTrigger asChild>
-              <button
-                onClick={(e) => { e.stopPropagation(); setEditingTags(true); }}
-                className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white"
-                title="Edit tags"
-              >
+              <button onClick={(e) => { e.stopPropagation(); setEditingTags(true); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
                 <Tag className="w-3 h-3" />
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-56 p-2 space-y-2" align="start" onClick={(e) => e.stopPropagation()}>
               <div className="flex flex-wrap gap-1">
                 {COMMON_TAGS.map(tag => (
-                  <PillFilter
-                    key={tag}
-                    active={localTags.includes(tag)}
-                    onClick={() => handleToggleCommonTag(tag)}
-                    size="sm"
-                  >
-                    {tag}
-                  </PillFilter>
+                  <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
                 ))}
               </div>
               <div className="flex gap-1">
-                <Input
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                  placeholder="Custom tag..."
-                  className="h-6 text-xs"
-                />
-                <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={handleAddTag}>
-                  <Plus className="w-3 h-3" />
-                </Button>
+                <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Custom tag..." className="h-6 text-xs" />
+                <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={handleAddTag}><Plus className="w-3 h-3" /></Button>
               </div>
               {localTags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {localTags.map(tag => (
-                    <Badge key={tag} variant="secondary" className="text-[9px] cursor-pointer hover:bg-destructive/20" onClick={() => handleRemoveTag(tag)}>
-                      {tag} ×
-                    </Badge>
+                    <Badge key={tag} variant="secondary" className="text-[9px] cursor-pointer hover:bg-destructive/20" onClick={() => handleRemoveTag(tag)}>{tag} ×</Badge>
                   ))}
                 </div>
               )}
@@ -201,6 +238,10 @@ export function PositionsGrid({
   onSetPrimary,
   onUpdateTags,
   isUploading,
+  canonPosePresets,
+  onGeneratePosition,
+  generatingPoseKey,
+  hasReferenceImage,
 }: PositionsGridProps) {
   const [typeFilter, setTypeFilter] = useState<OutputTypeFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
@@ -212,6 +253,14 @@ export function PositionsGrid({
   const [newLabel, setNewLabel] = useState('');
   const navigate = useNavigate();
 
+  // Match canon images to fixed position slots by pose_key in metadata
+  const getCanonForPoseKey = (poseKey: string): CharacterCanon | null => {
+    return canonImages.find(c => {
+      const meta = c.metadata as Record<string, any> | null;
+      return meta?.pose_key === poseKey;
+    }) || null;
+  };
+
   const filtered = canonImages.filter(c => {
     if (typeFilter !== 'all' && c.output_type !== typeFilter) return false;
     if (tagFilter && !c.tags?.some(t => t.includes(tagFilter.toLowerCase()))) return false;
@@ -220,10 +269,7 @@ export function PositionsGrid({
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setPendingFile(file);
-      setUploadPopover(true);
-    }
+    if (file) { setPendingFile(file); setUploadPopover(true); }
     e.target.value = '';
   };
 
@@ -237,6 +283,10 @@ export function PositionsGrid({
     setNewLabel('');
   };
 
+  const handleGeneratePosition = (poseKey: string) => {
+    if (onGeneratePosition) onGeneratePosition(poseKey);
+  };
+
   if (isNewCharacter) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
@@ -245,38 +295,54 @@ export function PositionsGrid({
     );
   }
 
+  const orderedPresets = canonPosePresets
+    ? POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => ({ key: k, preset: canonPosePresets[k] }))
+    : [];
+
   return (
     <div className="space-y-3 p-3">
+      {/* Fixed position slots */}
+      {orderedPresets.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Base Positions</span>
+            {!hasReferenceImage && (
+              <span className="text-[9px] text-destructive">Lock a reference image first</span>
+            )}
+          </div>
+          <div className="grid grid-cols-6 gap-1.5">
+            {orderedPresets.map(({ key, preset }) => (
+              <PositionSlot
+                key={key}
+                poseKey={key}
+                preset={preset}
+                filledCanon={getCanonForPoseKey(key)}
+                isGenerating={generatingPoseKey === key}
+                onGenerate={handleGeneratePosition}
+                hasReferenceImage={!!hasReferenceImage}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Divider */}
+      {orderedPresets.length > 0 && <div className="border-t border-border" />}
+
       {/* Filter bar */}
       <div className="flex items-center gap-1.5 flex-wrap">
         {OUTPUT_TYPES.map(type => (
-          <PillFilter
-            key={type}
-            active={typeFilter === type}
-            onClick={() => setTypeFilter(type)}
-            size="sm"
-          >
+          <PillFilter key={type} active={typeFilter === type} onClick={() => setTypeFilter(type)} size="sm">
             {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
           </PillFilter>
         ))}
-        <Input
-          value={tagFilter}
-          onChange={(e) => setTagFilter(e.target.value)}
-          placeholder="Filter tags..."
-          className="h-6 w-24 text-xs ml-auto"
-        />
+        <Input value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} placeholder="Filter tags..." className="h-6 w-24 text-xs ml-auto" />
       </div>
 
       {/* Grid */}
       <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
         {filtered.map(canon => (
-          <CanonThumbnail
-            key={canon.id}
-            canon={canon}
-            onDelete={onDelete}
-            onSetPrimary={onSetPrimary}
-            onUpdateTags={onUpdateTags}
-          />
+          <CanonThumbnail key={canon.id} canon={canon} onDelete={onDelete} onSetPrimary={onSetPrimary} onUpdateTags={onUpdateTags} />
         ))}
 
         {/* Upload button */}
@@ -286,14 +352,7 @@ export function PositionsGrid({
               onClick={() => fileInputRef.current?.click()}
               className="aspect-[3/4] rounded-md border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
             >
-              {isUploading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <>
-                  <Upload className="w-5 h-5" />
-                  <span className="text-[10px]">Upload</span>
-                </>
-              )}
+              {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Upload className="w-5 h-5" /><span className="text-[10px]">Upload</span></>}
             </button>
           </PopoverTrigger>
           {pendingFile && (
@@ -319,20 +378,12 @@ export function PositionsGrid({
                 <Label className="text-xs">Tags</Label>
                 <div className="flex flex-wrap gap-1">
                   {COMMON_TAGS.slice(0, 8).map(tag => (
-                    <PillFilter
-                      key={tag}
-                      active={newTags.includes(tag)}
-                      onClick={() => setNewTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])}
-                      size="sm"
-                    >
-                      {tag}
-                    </PillFilter>
+                    <PillFilter key={tag} active={newTags.includes(tag)} onClick={() => setNewTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} size="sm">{tag}</PillFilter>
                   ))}
                 </div>
               </div>
               <Button size="sm" className="w-full h-7 text-xs" onClick={handleConfirmUpload} disabled={isUploading}>
-                {isUploading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                Save
+                {isUploading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Save
               </Button>
             </PopoverContent>
           )}
@@ -342,10 +393,7 @@ export function PositionsGrid({
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
 
       {/* Create in Workspace link */}
-      <button
-        onClick={() => navigate('/workspace?mode=image')}
-        className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2"
-      >
+      <button onClick={() => navigate('/workspace?mode=image')} className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2">
         Create in Workspace →
       </button>
     </div>

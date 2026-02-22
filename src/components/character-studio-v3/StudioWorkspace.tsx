@@ -9,7 +9,7 @@ import { PosePresets } from '@/components/character-studio/PosePresets';
 import { CharacterStudioPromptBar } from '@/components/character-studio/CharacterStudioPromptBar';
 import { PositionsGrid } from '@/components/character-studio-v3/PositionsGrid';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
-import { CharacterData, CharacterScene, CharacterCanon } from '@/hooks/useCharacterStudio';
+import { CharacterData, CharacterScene, CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { ImageModelOption } from '@/hooks/useImageModels';
 
 interface StudioWorkspaceProps {
@@ -56,6 +56,11 @@ interface StudioWorkspaceProps {
   onCanonDelete?: (id: string) => void;
   onCanonSetPrimary?: (id: string) => void;
   onCanonUpdateTags?: (id: string, tags: string[]) => void;
+  // Canon position generation
+  canonPosePresets?: Record<string, CanonPosePreset>;
+  onGeneratePosition?: (poseKey: string) => Promise<string | null>;
+  generatingPoseKey?: string | null;
+  hasReferenceImage?: boolean;
 }
 
 export function StudioWorkspace({
@@ -69,6 +74,7 @@ export function StudioWorkspace({
   onEnhancePrompt, onCopyPrompt, characterData, mobileMode, scenesOnly, positionsOnly,
   referenceStrength,
   canonImages, isCanonUploading, onCanonUpload, onCanonDelete, onCanonSetPrimary, onCanonUpdateTags,
+  canonPosePresets, onGeneratePosition, generatingPoseKey, hasReferenceImage,
 }: StudioWorkspaceProps) {
 
   // Scenes-only mode for mobile scenes tab
@@ -91,7 +97,7 @@ export function StudioWorkspace({
   if (positionsOnly && onCanonUpload && onCanonDelete && onCanonSetPrimary && onCanonUpdateTags) {
     return (
       <ScrollArea className="h-full">
-        <PositionsGrid
+      <PositionsGrid
           canonImages={canonImages || []}
           isNewCharacter={isNewCharacter}
           onUpload={onCanonUpload}
@@ -99,6 +105,10 @@ export function StudioWorkspace({
           onSetPrimary={onCanonSetPrimary}
           onUpdateTags={onCanonUpdateTags}
           isUploading={isCanonUploading}
+          canonPosePresets={canonPosePresets}
+          onGeneratePosition={onGeneratePosition}
+          generatingPoseKey={generatingPoseKey}
+          hasReferenceImage={hasReferenceImage}
         />
       </ScrollArea>
     );
@@ -244,6 +254,10 @@ export function StudioWorkspace({
                 onSetPrimary={onCanonSetPrimary}
                 onUpdateTags={onCanonUpdateTags}
                 isUploading={isCanonUploading}
+                canonPosePresets={canonPosePresets}
+                onGeneratePosition={onGeneratePosition}
+                generatingPoseKey={generatingPoseKey}
+                hasReferenceImage={hasReferenceImage}
               />
             ) : (
               <p className="text-xs text-muted-foreground">Positions not available.</p>

@@ -26,7 +26,8 @@ serve(async (req) => {
       characterData,
       promptOverride,
       referenceStrength, // 0.1–1.0, controls how much the reference image influences output
-      numImages // 1-4, batch generation count (default 1)
+      numImages, // 1-4, batch generation count (default 1)
+      canonPoseKey // e.g. "front_neutral" — triggers canon position generation
     } = body;
     
     console.log('📥 character-portrait request:', {
@@ -36,7 +37,8 @@ serve(async (req) => {
       apiModelId,
       hasCharacterData: !!characterData,
       promptOverrideLength: promptOverride?.length || 0,
-      numImages: numImages || 1
+      numImages: numImages || 1,
+      canonPoseKey: canonPoseKey || null
     });
 
     // Get authenticated user
@@ -150,14 +152,65 @@ serve(async (req) => {
     }
 
     // Determine generation intent based on reference image presence
-    const generationIntent = isI2I ? 'direct' : 'explore';
+    const generationIntent = canonPoseKey ? 'canon_position' : isI2I ? 'direct' : 'explore';
     console.log(`🎯 Generation intent: ${generationIntent}`);
+
+    // === Canon Position Generation ===
+    let canonPosePreset: any = null;
+    let canonPromptOverride: string | null = null;
+    let canonReferenceStrength: number | null = null;
+
+    if (canonPoseKey) {
+      console.log(`📐 Canon position generation: ${canonPoseKey}`);
+
+      // Fetch canon_position template from prompt_templates
+      const { data: canonTemplate, error: canonTemplateError } = await supabase
+        .from('prompt_templates')
+        .select('*')
+        .eq('use_case', 'canon_position')
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+
+      if (canonTemplateError || !canonTemplate) {
+        console.error('❌ Canon position template not found:', canonTemplateError);
+        return new Response(
+          JSON.stringify({ error: 'Canon position template not configured' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const metadata = canonTemplate.metadata as Record<string, any> || {};
+      const posePresets = metadata.pose_presets || {};
+      canonPosePreset = posePresets[canonPoseKey];
+
+      if (!canonPosePreset) {
+        console.error('❌ Unknown canon pose key:', canonPoseKey, 'Available:', Object.keys(posePresets));
+        return new Response(
+          JSON.stringify({ error: `Unknown canon pose key: ${canonPoseKey}`, available: Object.keys(posePresets) }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Build [PRESERVE]/[CHANGE] prompt directly (no LLM enhancer needed for base poses)
+      const appearanceTags = (character.appearance_tags || []).join(', ');
+      const clothingTags = (character.clothing_tags || []).join(', ');
+      const preserveBlock = `same character identity, face${appearanceTags ? `, ${appearanceTags}` : ''}${clothingTags ? `, clothing: ${clothingTags}` : ''}`;
+      canonPromptOverride = `[PRESERVE] ${preserveBlock} [CHANGE] ${canonPosePreset.prompt_fragment}`;
+      canonReferenceStrength = canonPosePreset.reference_strength || 0.8;
+
+      console.log('📐 Canon prompt:', canonPromptOverride);
+      console.log('📐 Canon ref strength:', canonReferenceStrength);
+    }
 
     // Build portrait prompt — conditional on T2I vs I2I
     const promptParts: string[] = [];
     const gender = character.gender?.toLowerCase() || 'unspecified';
 
-    if (isI2I) {
+    if (canonPoseKey && canonPromptOverride) {
+      // Canon position mode: use the [PRESERVE]/[CHANGE] prompt directly
+      promptParts.push(canonPromptOverride);
+    } else if (isI2I) {
       // === I2I (Directing Mode) ===
       // Reference image handles identity and style. Prompt describes ONLY what changes.
       // No style boilerplate — it fights the reference image.
@@ -295,7 +348,8 @@ serve(async (req) => {
       // Map user-facing referenceStrength to fal.ai prompt_strength (inverse)
       // referenceStrength 0.8 = strong ref = low prompt influence = prompt_strength 0.2
       // Default to 0.75 for I2I directing mode (was 0.65) — reference should dominate
-      const effectiveRefStrength = typeof referenceStrength === 'number' ? referenceStrength : 0.75;
+      // Canon poses override with their own strength from the template metadata
+      const effectiveRefStrength = canonReferenceStrength ?? (typeof referenceStrength === 'number' ? referenceStrength : 0.75);
       const promptStrength = Math.round((1 - effectiveRefStrength) * 100) / 100;
       modelInput.prompt_strength = promptStrength;
       console.log(`🎛️ Reference strength: ${effectiveRefStrength} → prompt_strength: ${promptStrength}`);
@@ -543,6 +597,41 @@ serve(async (req) => {
         .eq('id', characterId);
     }
 
+    // === Auto-save to character_canon for canon position generation ===
+    let canonId: string | null = null;
+    if (canonPoseKey && canonPosePreset && characterId && processedImages.length > 0) {
+      try {
+        const { data: canonData, error: canonError } = await supabase
+          .from('character_canon')
+          .insert({
+            character_id: characterId,
+            output_type: 'position',
+            output_url: processedImages[0].storagePath || processedImages[0].imageUrl,
+            tags: canonPosePreset.tags || [],
+            label: canonPosePreset.label || canonPoseKey,
+            is_pinned: false,
+            is_primary: false,
+            metadata: {
+              pose_key: canonPoseKey,
+              job_id: jobData.id,
+              generation_time_ms: generationTime,
+              model_key: apiModel.model_key,
+            }
+          })
+          .select('id')
+          .single();
+
+        if (canonError) {
+          console.error('⚠️ Failed to auto-save canon position:', canonError);
+        } else {
+          canonId = canonData.id;
+          console.log('📐 Canon position auto-saved:', canonId);
+        }
+      } catch (canonErr) {
+        console.error('⚠️ Canon auto-save error:', canonErr);
+      }
+    }
+
     // Update job as completed
     await supabase
       .from('jobs')
@@ -571,7 +660,9 @@ serve(async (req) => {
       portraitIds: processedImages.map(p => p.portraitId).filter(Boolean),
       generationTimeMs: generationTime,
       storagePath: processedImages[0]?.storagePath,
-      batchCount: processedImages.length
+      batchCount: processedImages.length,
+      canonId: canonId || null,
+      canonPoseKey: canonPoseKey || null
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

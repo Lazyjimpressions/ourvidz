@@ -34,7 +34,8 @@ export default function CharacterStudioV3() {
     savedCharacterId, saveCharacter, clearSuggestions, portraits, primaryPortrait, setPrimaryPortrait,
     deletePortrait, scenes, isGenerating, generationProgress, generatePortrait,
     selectItem, selectedItemId, selectedItemType,
-    canonImages, isCanonUploading, uploadCanon, deleteCanon, updateCanonTags, setCanonPrimary
+    canonImages, isCanonUploading, uploadCanon, deleteCanon, updateCanonTags, setCanonPrimary,
+    canonPosePresets, generateCanonPosition, generatingPoseKey
   } = studio;
 
   // Prevent auto-save retry loop after failure
@@ -235,6 +236,10 @@ export default function CharacterStudioV3() {
     onCanonDelete: deleteCanon,
     onCanonSetPrimary: setCanonPrimary,
     onCanonUpdateTags: updateCanonTags,
+    canonPosePresets,
+    onGeneratePosition: generateCanonPosition,
+    generatingPoseKey,
+    hasReferenceImage,
   };
 
   // MOBILE
