@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Camera, Video, Settings, X, Plus, Film } from 'lucide-react';
+import { Camera, Video, Settings, X, Plus, Film, ChevronDown, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { cn } from '@/lib/utils';
 
@@ -53,6 +54,13 @@ export interface MobileQuickBarProps {
   onAspectRatioChange?: (ratio: '16:9' | '1:1' | '9:16') => void;
   batchSize?: number;
   onBatchSizeChange?: (size: number) => void;
+  
+  // Model selector dropdown
+  selectedModel?: { id: string; type: string; display_name: string } | null;
+  onModelChange?: (model: { id: string; type: string; display_name: string }) => void;
+  imageModels?: Array<{ id: string; display_name: string; provider_name: string }>;
+  videoModels?: Array<{ id: string; display_name: string; api_providers?: { name: string } }>;
+  modelsLoading?: boolean;
   
   // Disabled state
   disabled?: boolean;
@@ -210,6 +218,27 @@ const AddSlotButton: React.FC<{ onClick: () => void; disabled?: boolean }> = ({ 
   </button>
 );
 
+/** Single item in the model dropdown */
+const ModelDropdownItem: React.FC<{
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}> = ({ label, selected, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cn(
+      "w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-[11px] transition-colors text-left",
+      selected
+        ? "bg-primary text-primary-foreground"
+        : "text-foreground hover:bg-accent"
+    )}
+  >
+    <Check className={cn("h-3 w-3 shrink-0", selected ? "opacity-100" : "opacity-0")} />
+    <span className="truncate">{label}</span>
+  </button>
+);
+
 export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   currentMode,
   onModeToggle,
@@ -232,6 +261,11 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onAspectRatioChange,
   batchSize = 1,
   onBatchSizeChange,
+  selectedModel,
+  onModelChange,
+  imageModels = [],
+  videoModels = [],
+  modelsLoading = false,
   disabled = false,
 }) => {
   const allFilled = refSlots.length > 0 && refSlots.every(s => !!s.url);
@@ -365,15 +399,64 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
       {/* Spacer */}
       <div className="flex-1" />
       
-      {/* Model Chip */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onOpenSettings}
-        className="h-9 px-2 gap-1.5 text-xs font-normal max-w-[100px]"
-      >
-        <span className="truncate">{selectedModelName}</span>
-      </Button>
+      {/* Model Selector Dropdown */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 px-2 gap-1 text-xs font-normal max-w-[140px]"
+          >
+            <span className="truncate">{selectedModelName}</span>
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          sideOffset={6}
+          className="min-w-[180px] max-w-[240px] p-1.5 z-[100] bg-popover border border-border shadow-lg"
+        >
+          {modelsLoading ? (
+            <div className="flex items-center justify-center py-3">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="max-h-[240px] overflow-y-auto space-y-0.5">
+              {/* Local model option */}
+              {currentMode === 'image' && (
+                <ModelDropdownItem
+                  label="SDXL (Local)"
+                  selected={selectedModel?.type === 'sdxl'}
+                  onClick={() => onModelChange?.({ id: 'local-sdxl', type: 'sdxl', display_name: 'SDXL (Local)' })}
+                />
+              )}
+              {currentMode === 'video' && (
+                <ModelDropdownItem
+                  label="WAN (Local)"
+                  selected={selectedModel?.id === 'local-wan'}
+                  onClick={() => onModelChange?.({ id: 'local-wan', type: 'sdxl', display_name: 'WAN (Local)' })}
+                />
+              )}
+              {/* API models */}
+              {(currentMode === 'image' ? imageModels : videoModels).map((m) => (
+                <ModelDropdownItem
+                  key={m.id}
+                  label={m.display_name}
+                  selected={selectedModel?.id === m.id}
+                  onClick={() => onModelChange?.({
+                    id: m.id,
+                    type: ('provider_name' in m ? m.provider_name : (m as any).api_providers?.name) || 'fal',
+                    display_name: m.display_name,
+                  })}
+                />
+              ))}
+              {(currentMode === 'image' ? imageModels : videoModels).length === 0 && !modelsLoading && (
+                <p className="text-[10px] text-muted-foreground text-center py-2">No models available</p>
+              )}
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
       
       {/* Settings Button */}
       <Button
