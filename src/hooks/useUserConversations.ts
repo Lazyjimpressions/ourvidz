@@ -192,54 +192,63 @@ export const useUserConversations = (limit: number = 10, excludeEmpty: boolean =
         processedData = processedData.filter(conv => conv.message_count > 0);
       }
 
-      // Step 4: Sign scene image URLs (they're storage paths, not full URLs)
+      // Step 4: Sign scene image URLs AND character image URLs (they're storage paths, not full URLs)
       const signedData = await Promise.all(
         processedData.map(async conv => {
-          if (!conv.last_scene_image) return conv;
+          let signedConv = { ...conv };
 
-          // Check if already a full URL (https://) or needs signing
-          if (conv.last_scene_image.startsWith('http')) {
-            return conv;
-          }
+          // Sign last_scene_image if it's a storage path
+          if (signedConv.last_scene_image && !signedConv.last_scene_image.startsWith('http')) {
+            const isUserLibrary = signedConv.last_scene_image.includes('/scene-thumbnails/');
+            const bucket = isUserLibrary ? 'user-library' : 'workspace-temp';
+            const ttl = isUserLibrary ? 86400 : 3600;
 
-          // Determine bucket based on path pattern
-          // user-library paths: {userId}/scene-thumbnails/...
-          // workspace-temp paths: everything else
-          const isUserLibrary = conv.last_scene_image.includes('/scene-thumbnails/');
-          const bucket = isUserLibrary ? 'user-library' : 'workspace-temp';
-          // Use longer TTL for user-library (24 hours) vs workspace-temp (1 hour)
-          const ttl = isUserLibrary ? 86400 : 3600;
-
-          try {
-            const { data: signedData, error: signError } = await supabase.storage
-              .from(bucket)
-              .createSignedUrl(conv.last_scene_image, ttl);
-            
-            if (signError) {
-              // If file doesn't exist (400 error), clear the scene image reference
-              if ((signError as any).statusCode === 400 || signError.message?.includes('not found')) {
-                console.warn(`⚠️ Scene image not found for conversation ${conv.id}, clearing reference`);
-                // Optionally update the conversation to clear last_scene_image
-                // For now, just return without the image
-                return { ...conv, last_scene_image: null };
+            try {
+              const { data: sd, error: signError } = await supabase.storage
+                .from(bucket)
+                .createSignedUrl(signedConv.last_scene_image, ttl);
+              
+              if (signError) {
+                if ((signError as any).statusCode === 400 || signError.message?.includes('not found')) {
+                  console.warn(`⚠️ Scene image not found for conversation ${conv.id}, clearing reference`);
+                  signedConv.last_scene_image = null;
+                } else {
+                  throw signError;
+                }
+              } else if (sd?.signedUrl) {
+                signedConv.last_scene_image = normalizeSignedUrl(sd.signedUrl);
               }
-              throw signError;
+            } catch (err: any) {
+              if (err?.statusCode === 400 || err?.message?.includes('not found')) {
+                signedConv.last_scene_image = null;
+              } else {
+                console.error(`Failed to sign scene URL for conversation ${conv.id}:`, err);
+              }
             }
-            
-            if (signedData?.signedUrl) {
-              const absoluteUrl = normalizeSignedUrl(signedData.signedUrl);
-              return { ...conv, last_scene_image: absoluteUrl };
-            }
-          } catch (err: any) {
-            // Handle 400 errors gracefully (file doesn't exist)
-            if (err?.statusCode === 400 || err?.message?.includes('not found')) {
-              console.warn(`⚠️ Scene image not found for conversation ${conv.id}, clearing reference`);
-              return { ...conv, last_scene_image: null };
-            }
-            console.error(`Failed to sign URL for conversation ${conv.id} from ${bucket}:`, err);
           }
 
-          return conv;
+          // Sign character.image_url if it's a storage path (not already http)
+          if (signedConv.character?.image_url && !signedConv.character.image_url.startsWith('http')) {
+            try {
+              const { data: charSd } = await supabase.storage
+                .from('user-library')
+                .createSignedUrl(signedConv.character.image_url, 86400);
+              
+              if (charSd?.signedUrl) {
+                signedConv = {
+                  ...signedConv,
+                  character: {
+                    ...signedConv.character,
+                    image_url: normalizeSignedUrl(charSd.signedUrl)
+                  }
+                };
+              }
+            } catch (err) {
+              console.warn(`Failed to sign character image for conversation ${conv.id}:`, err);
+            }
+          }
+
+          return signedConv;
         })
       );
 

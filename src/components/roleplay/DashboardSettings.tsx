@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { useImageModels } from '@/hooks/useImageModels';
+import { useI2IModels } from '@/hooks/useI2IModels';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
@@ -52,7 +52,7 @@ export const DashboardSettings: React.FC<DashboardSettingsProps> = ({
   imageGenerationMode,
   onImageGenerationModeChange,
 }) => {
-  const { modelOptions: imageModelOptions, isLoading: imageLoading, defaultModel: defaultImageModel } = useImageModels();
+  const { modelOptions: imageModelOptions, isLoading: imageLoading, defaultModel: defaultImageModel } = useI2IModels();
   const { allModelOptions: chatModelOptions, isLoading: chatLoading, defaultModel: defaultChatModel } = useRoleplayModels();
 
   // Set defaults if not already set
@@ -75,7 +75,7 @@ export const DashboardSettings: React.FC<DashboardSettingsProps> = ({
         <div className="space-y-2 pb-4">
           {/* Image Model Selector */}
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Image Model</Label>
+            <Label className="text-xs text-muted-foreground">I2I Model</Label>
             {imageLoading ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -94,8 +94,8 @@ export const DashboardSettings: React.FC<DashboardSettingsProps> = ({
                       disabled={!model.isAvailable}
                     >
                       <span>{model.label}</span>
-                      {!model.isAvailable && (
-                        <Badge variant="outline" className="text-xs ml-2">Offline</Badge>
+                      {model.isDefault && model.value !== 'auto' && (
+                        <Badge variant="outline" className="text-xs ml-2">Default</Badge>
                       )}
                     </SelectItem>
                   ))}
