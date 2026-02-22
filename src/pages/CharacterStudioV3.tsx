@@ -35,6 +35,7 @@ export default function CharacterStudioV3() {
     deletePortrait, scenes, isGenerating, generationProgress, generatePortrait,
     selectItem, selectedItemId, selectedItemType,
     canonImages, isCanonUploading, uploadCanon, deleteCanon, updateCanonTags, setCanonPrimary,
+    saveCanonFromUrl, assignCanonPoseKey,
     canonPosePresets, generateCanonPosition, generatingPoseKey
   } = studio;
 
@@ -236,6 +237,8 @@ export default function CharacterStudioV3() {
     onCanonDelete: deleteCanon,
     onCanonSetPrimary: setCanonPrimary,
     onCanonUpdateTags: updateCanonTags,
+    onSaveAsPosition: (imageUrl: string) => saveCanonFromUrl(imageUrl, 'pose', [], undefined, undefined),
+    onAssignCanonPoseKey: assignCanonPoseKey,
     canonPosePresets,
     onGeneratePosition: generateCanonPosition,
     generatingPoseKey,

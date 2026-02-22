@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { useSignedUrl } from '@/hooks/useSignedUrl';
@@ -28,6 +28,7 @@ interface PositionsGridProps {
   onDelete: (id: string) => void;
   onSetPrimary: (id: string) => void;
   onUpdateTags: (id: string, tags: string[]) => void;
+  onAssignPoseKey?: (canonId: string, poseKey: string) => void;
   isUploading?: boolean;
   // Canon position generation
   canonPosePresets?: Record<string, CanonPosePreset>;
@@ -107,11 +108,15 @@ function CanonThumbnail({
   onDelete,
   onSetPrimary,
   onUpdateTags,
+  onAssignPoseKey,
+  canonPosePresets,
 }: {
   canon: CharacterCanon;
   onDelete: (id: string) => void;
   onSetPrimary: (id: string) => void;
   onUpdateTags: (id: string, tags: string[]) => void;
+  onAssignPoseKey?: (canonId: string, poseKey: string) => void;
+  canonPosePresets?: Record<string, CanonPosePreset>;
 }) {
   const { signedUrl } = useSignedUrl(canon.output_url);
   const navigate = useNavigate();
@@ -224,6 +229,28 @@ function CanonThumbnail({
               )}
             </PopoverContent>
           </Popover>
+          {/* Assign to base position */}
+          {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Assign to position">
+                  <Crosshair className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-1.5" align="start" onClick={(e) => e.stopPropagation()}>
+                <p className="text-[10px] text-muted-foreground font-medium px-1 mb-1">Assign to slot</p>
+                {POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => (
+                  <button
+                    key={k}
+                    onClick={() => onAssignPoseKey(canon.id, k)}
+                    className="w-full text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors"
+                  >
+                    {canonPosePresets[k].label}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
       )}
     </div>
@@ -237,6 +264,7 @@ export function PositionsGrid({
   onDelete,
   onSetPrimary,
   onUpdateTags,
+  onAssignPoseKey,
   isUploading,
   canonPosePresets,
   onGeneratePosition,
@@ -342,7 +370,7 @@ export function PositionsGrid({
       {/* Grid */}
       <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
         {filtered.map(canon => (
-          <CanonThumbnail key={canon.id} canon={canon} onDelete={onDelete} onSetPrimary={onSetPrimary} onUpdateTags={onUpdateTags} />
+          <CanonThumbnail key={canon.id} canon={canon} onDelete={onDelete} onSetPrimary={onSetPrimary} onUpdateTags={onUpdateTags} onAssignPoseKey={onAssignPoseKey} canonPosePresets={canonPosePresets} />
         ))}
 
         {/* Upload button */}

@@ -607,6 +607,57 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     }
   }, [savedCharacterId]);
 
+  // Save an existing image URL as a canon position (no re-upload)
+  const saveCanonFromUrl = useCallback(async (
+    imageUrl: string,
+    outputType: string,
+    tags: string[],
+    label?: string,
+    poseKey?: string
+  ) => {
+    if (!savedCharacterId) return;
+    try {
+      const metadata = poseKey ? { pose_key: poseKey } : null;
+      const { error } = await supabase
+        .from('character_canon')
+        .insert({
+          character_id: savedCharacterId,
+          output_type: outputType,
+          output_url: imageUrl,
+          tags,
+          label: label || null,
+          metadata,
+        });
+      if (error) throw error;
+      await loadCanon();
+      toast({ title: 'Saved as position', description: label || outputType });
+    } catch (err) {
+      console.error('❌ Error saving canon from URL:', err);
+      toast({ title: 'Save failed', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' });
+    }
+  }, [savedCharacterId, loadCanon, toast]);
+
+  // Assign or change the pose_key on an existing canon entry
+  const assignCanonPoseKey = useCallback(async (canonId: string, poseKey: string) => {
+    try {
+      // Get current metadata
+      const canon = canonImages.find(c => c.id === canonId);
+      const currentMeta = (canon?.metadata as Record<string, any>) || {};
+      const newMeta = { ...currentMeta, pose_key: poseKey };
+      
+      const { error } = await supabase
+        .from('character_canon')
+        .update({ metadata: newMeta as any })
+        .eq('id', canonId);
+      if (error) throw error;
+      await loadCanon();
+      toast({ title: 'Position assigned', description: `Set as ${poseKey.replace('_', ' ')}` });
+    } catch (err) {
+      console.error('❌ Error assigning pose key:', err);
+      toast({ title: 'Assignment failed', variant: 'destructive' });
+    }
+  }, [canonImages, loadCanon, toast]);
+
   // === Canon Pose Presets (from prompt_templates metadata) ===
   const [canonPosePresets, setCanonPosePresets] = useState<Record<string, CanonPosePreset>>({});
   const [generatingPoseKey, setGeneratingPoseKey] = useState<string | null>(null);
@@ -712,6 +763,8 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     deleteCanon,
     updateCanonTags,
     setCanonPrimary,
+    saveCanonFromUrl,
+    assignCanonPoseKey,
     canonPosePresets,
     generateCanonPosition,
     generatingPoseKey,

@@ -40,15 +40,19 @@ export function useSignedUrl(url: string | null | undefined): {
     const needsSigning =
       url.includes('user-library/') || url.includes('workspace-temp/');
 
-    if (!needsSigning) {
+    // Detect bare storage paths (e.g. "userId/portraits/file.png") — no protocol, no leading slash
+    const isBareStoragePath =
+      !url.startsWith('http') && !url.startsWith('/') && !url.startsWith('data:') && !needsSigning;
+
+    if (!needsSigning && !isBareStoragePath) {
       setSignedUrl(url);
       return;
     }
 
-    // Auto-detect bucket
-    const bucket: 'user-library' | 'workspace-temp' = url.includes('user-library/')
-      ? 'user-library'
-      : 'workspace-temp';
+    // Auto-detect bucket: bare paths default to user-library
+    const bucket: 'user-library' | 'workspace-temp' = url.includes('workspace-temp/')
+      ? 'workspace-temp'
+      : 'user-library';
 
     let cancelled = false;
     setIsLoading(true);
