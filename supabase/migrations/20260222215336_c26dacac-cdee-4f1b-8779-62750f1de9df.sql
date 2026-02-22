@@ -1,0 +1,2 @@
+ALTER TABLE public.character_canon DROP CONSTRAINT character_canon_output_type_check;
+ALTER TABLE public.character_canon ADD CONSTRAINT character_canon_output_type_check CHECK (output_type = ANY (ARRAY['image'::text, 'video'::text, 'pose'::text, 'outfit'::text, 'style'::text, 'position'::text]));

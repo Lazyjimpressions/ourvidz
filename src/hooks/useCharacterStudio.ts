@@ -643,6 +643,10 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
         referenceImageUrl: character.reference_image_url,
         canonPoseKey: poseKey
       });
+      // Refetch canon images so the position slot populates
+      if (savedCharacterId) {
+        await loadCanon();
+      }
       return result;
     } finally {
       setGeneratingPoseKey(null);
