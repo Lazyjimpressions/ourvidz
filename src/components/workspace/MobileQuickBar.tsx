@@ -43,6 +43,8 @@ export interface MobileQuickBarProps {
   onFixedSlotAdd?: (index: number) => void;
   onFixedSlotRemove?: (index: number) => void;
   onFixedSlotDrop?: (index: number, file: File) => void;
+  /** Handle URL-based drops (from grid tile drag) — no upload needed */
+  onFixedSlotDropUrl?: (index: number, url: string) => void;
   
   // Desktop inline controls
   contentType?: 'sfw' | 'nsfw';
@@ -63,11 +65,13 @@ const RefSlot: React.FC<{
   onAdd: () => void;
   onRemove: () => void;
   onDrop: (file: File) => void;
+  onDropUrl?: (url: string) => void;
   label: string;
   disabled?: boolean;
   showLabel?: boolean;
-}> = ({ url, isVideo, onAdd, onRemove, onDrop, label, disabled, showLabel = false }) => {
+}> = ({ url, isVideo, onAdd, onRemove, onDrop, onDropUrl, label, disabled, showLabel = false }) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [justDropped, setJustDropped] = useState(false);
   const [videoError, setVideoError] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -86,8 +90,29 @@ const RefSlot: React.FC<{
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
+
+    // Check for custom ref-image MIME (from grid tile drag) first
+    const refData = e.dataTransfer.getData('application/x-ref-image');
+    if (refData && onDropUrl) {
+      try {
+        const { url: droppedUrl } = JSON.parse(refData);
+        if (droppedUrl) {
+          onDropUrl(droppedUrl);
+          // Brief green flash feedback
+          setJustDropped(true);
+          setTimeout(() => setJustDropped(false), 400);
+          return;
+        }
+      } catch { /* fall through to file drop */ }
+    }
+
+    // Fallback: OS file drop
     const file = e.dataTransfer.files?.[0];
-    if (file) onDrop(file);
+    if (file) {
+      onDrop(file);
+      setJustDropped(true);
+      setTimeout(() => setJustDropped(false), 400);
+    }
   };
 
   const slotSize = showLabel ? 'h-10 w-10' : 'h-8 w-8';
@@ -97,8 +122,12 @@ const RefSlot: React.FC<{
       <div className="flex flex-col items-center shrink-0">
         <div
           className={cn(
-            `relative ${slotSize} rounded border overflow-hidden bg-muted/20`,
-            isDragOver ? "border-primary ring-1 ring-primary/50" : "border-border/50"
+            `relative ${slotSize} rounded border overflow-hidden bg-muted/20 transition-all duration-200`,
+            isDragOver
+              ? "border-primary ring-2 ring-primary/50 scale-110 bg-primary/20"
+              : justDropped
+                ? "border-green-500 ring-2 ring-green-500/50 scale-105"
+                : "border-border/50"
           )}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -151,8 +180,12 @@ const RefSlot: React.FC<{
         onDragLeave={handleDragLeave}
         onDrop={handleDropEvent}
         className={cn(
-          `${slotSize} rounded border border-dashed flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-colors disabled:opacity-30`,
-          isDragOver ? "border-primary bg-primary/10" : "border-muted-foreground/40"
+          `${slotSize} rounded border border-dashed flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-all duration-200 disabled:opacity-30`,
+          isDragOver
+            ? "border-primary bg-primary/20 scale-110 ring-2 ring-primary/50"
+            : justDropped
+              ? "border-green-500 ring-2 ring-green-500/50 scale-105"
+              : "border-muted-foreground/40"
         )}
       >
         <Plus className="h-3 w-3 text-muted-foreground" />
@@ -192,6 +225,7 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onFixedSlotAdd,
   onFixedSlotRemove,
   onFixedSlotDrop,
+  onFixedSlotDropUrl,
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
@@ -234,6 +268,7 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
               onAdd={() => onFixedSlotAdd!(i)}
               onRemove={() => onFixedSlotRemove!(i)}
               onDrop={(file) => onFixedSlotDrop!(i, file)}
+              onDropUrl={onFixedSlotDropUrl ? (url) => onFixedSlotDropUrl(i, url) : undefined}
               label={slotDef.label}
               disabled={disabled}
               showLabel

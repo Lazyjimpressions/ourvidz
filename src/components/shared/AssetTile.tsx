@@ -27,6 +27,12 @@ export interface AssetTileProps {
   videoSrc?: string | null;
   /** Whether this tile represents a video asset */
   isVideo?: boolean;
+  /** Enable native HTML drag on this tile */
+  draggable?: boolean;
+  /** Drag start handler — caller sets dataTransfer */
+  onDragStart?: (e: React.DragEvent) => void;
+  /** Drag end handler — caller resets visual state */
+  onDragEnd?: (e: React.DragEvent) => void;
 }
 
 const aspectMap: Record<string, string> = {
@@ -60,8 +66,12 @@ export const AssetTile: React.FC<AssetTileProps> = ({
   innerRef,
   videoSrc,
   isVideo,
+  draggable,
+  onDragStart,
+  onDragEnd,
 }) => {
   const [isHovering, setIsHovering] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const showVideo = isVideo && !!videoSrc && isHovering;
@@ -78,9 +88,22 @@ export const AssetTile: React.FC<AssetTileProps> = ({
     onMouseLeave?.(e);
   }, [onMouseLeave]);
 
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    setIsDragging(true);
+    onDragStart?.(e);
+  }, [onDragStart]);
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    setIsDragging(false);
+    onDragEnd?.(e);
+  }, [onDragEnd]);
+
   return (
     <div
       ref={innerRef}
+      draggable={draggable}
+      onDragStart={draggable ? handleDragStart : undefined}
+      onDragEnd={draggable ? handleDragEnd : undefined}
       className={cn(
         'relative group cursor-pointer',
         aspectMap[aspectRatio] || 'aspect-[3/4]',
@@ -88,6 +111,7 @@ export const AssetTile: React.FC<AssetTileProps> = ({
         'bg-card border border-border',
         'transition-all duration-200',
         hoverEffect && 'hover:shadow-lg hover:scale-[1.01] hover:border-primary/50',
+        isDragging && 'opacity-40 scale-95',
         'shadow-sm',
         className
       )}
