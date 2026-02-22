@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Camera, Video, Settings, X, Plus, Film } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -24,6 +24,8 @@ export interface MobileQuickBarProps {
   onAddRef2?: () => void;
   onRemoveRef1?: () => void;
   onRemoveRef2?: () => void;
+  onDropRef1?: (file: File) => void;
+  onDropRef2?: (file: File) => void;
   
   // Desktop inline controls
   contentType?: 'sfw' | 'nsfw';
@@ -37,20 +39,76 @@ export interface MobileQuickBarProps {
   disabled?: boolean;
 }
 
-/** Single ref slot: empty = dashed +, filled = thumbnail with X */
+/** Single ref slot: empty = dashed +, filled = thumbnail with X. Supports drag-and-drop. */
 const RefSlot: React.FC<{
   url?: string | null;
   isVideo?: boolean;
   onAdd?: () => void;
   onRemove?: () => void;
+  onDrop?: (file: File) => void;
+  onOverflowDrop?: (file: File) => void; // When dropping on a filled slot, overflow to ref2
   label: string;
   disabled?: boolean;
-}> = ({ url, isVideo, onAdd, onRemove, label, disabled }) => {
+}> = ({ url, isVideo, onAdd, onRemove, onDrop, onOverflowDrop, label, disabled }) => {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (url && onOverflowDrop) {
+      // Slot is filled → overflow to ref2
+      onOverflowDrop(file);
+    } else if (onDrop) {
+      onDrop(file);
+    }
+  };
+
   if (url) {
     return (
-      <div className="relative h-8 w-8 rounded border border-border/50 overflow-hidden bg-muted/20 shrink-0">
-        <img src={url} alt={label} className="h-full w-full object-cover" />
-        {isVideo && (
+      <div
+        className={cn(
+          "relative h-8 w-8 rounded border overflow-hidden bg-muted/20 shrink-0",
+          isDragOver ? "border-primary ring-1 ring-primary/50" : "border-border/50"
+        )}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isVideo ? (
+          videoError ? (
+            // Fallback: styled placeholder with Film icon
+            <div className="h-full w-full flex items-center justify-center bg-muted/40">
+              <Film className="h-4 w-4 text-muted-foreground" />
+            </div>
+          ) : (
+            <video
+              src={url}
+              muted
+              preload="metadata"
+              className="h-full w-full object-cover"
+              onError={() => setVideoError(true)}
+            />
+          )
+        ) : (
+          <img src={url} alt={label} className="h-full w-full object-cover" />
+        )}
+        {isVideo && !videoError && (
           <div className="absolute bottom-0 left-0 bg-black/60 px-0.5">
             <Film className="h-2.5 w-2.5 text-white" />
           </div>
@@ -73,7 +131,13 @@ const RefSlot: React.FC<{
       type="button"
       onClick={onAdd}
       disabled={disabled}
-      className="h-8 w-8 rounded border border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-colors shrink-0 disabled:opacity-30"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={cn(
+        "h-8 w-8 rounded border border-dashed flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-colors shrink-0 disabled:opacity-30",
+        isDragOver ? "border-primary bg-primary/10" : "border-muted-foreground/40"
+      )}
     >
       <Plus className="h-3 w-3 text-muted-foreground" />
     </button>
@@ -93,6 +157,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onAddRef2,
   onRemoveRef1,
   onRemoveRef2,
+  onDropRef1,
+  onDropRef2,
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
@@ -118,8 +184,25 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
       />
       
       {/* Ref Slots */}
-      <RefSlot url={ref1Url} isVideo={ref1IsVideo} onAdd={onAddRef1} onRemove={onRemoveRef1} label="Ref 1" disabled={disabled} />
-      <RefSlot url={ref2Url} isVideo={ref2IsVideo} onAdd={onAddRef2} onRemove={onRemoveRef2} label="Ref 2" disabled={disabled} />
+      <RefSlot
+        url={ref1Url}
+        isVideo={ref1IsVideo}
+        onAdd={onAddRef1}
+        onRemove={onRemoveRef1}
+        onDrop={onDropRef1}
+        onOverflowDrop={onDropRef2}
+        label="Ref 1"
+        disabled={disabled}
+      />
+      <RefSlot
+        url={ref2Url}
+        isVideo={ref2IsVideo}
+        onAdd={onAddRef2}
+        onRemove={onRemoveRef2}
+        onDrop={onDropRef2}
+        label="Ref 2"
+        disabled={disabled}
+      />
 
       {/* Desktop-only inline controls */}
       {onContentTypeChange && (

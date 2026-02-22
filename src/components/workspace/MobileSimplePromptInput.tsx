@@ -379,6 +379,30 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     toast.success('Reference image removed');
   };
 
+  /** Process a dropped file through the same upload pipeline as file input */
+  const processDroppedFile = async (file: File, slot: 'ref1' | 'ref2') => {
+    // Auto-overflow: if dropping on ref1 but it's filled, redirect to ref2
+    const ref1Filled = currentMode === 'image' ? !!referenceImageUrl : !!beginningRefImageUrl;
+    const effectiveSlot = (slot === 'ref1' && ref1Filled) ? 'ref2' : slot;
+    
+    // Map slot to pendingFileType and trigger the same pipeline
+    if (effectiveSlot === 'ref2') {
+      pendingFileTypeRef.current = currentMode === 'image' ? 'ref2' : 'end';
+    } else {
+      pendingFileTypeRef.current = currentMode === 'image' ? 'single' : 'start';
+    }
+    
+    // Create a synthetic change event by setting a DataTransfer on the input
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.files = dt.files;
+      // Trigger the handler manually
+      const syntheticEvent = { target: { files: dt.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
+      await handleFileInputChange(syntheticEvent);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -435,8 +459,18 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         ref2Url={ref2Url}
         ref1IsVideo={ref1IsVideo}
         ref2IsVideo={ref2IsVideo}
-        onAddRef1={() => handleFileSelect(currentMode === 'image' ? 'single' : 'start')}
+        onAddRef1={() => {
+          // Auto-overflow: if ref1 is already filled, redirect to ref2
+          const ref1Filled = currentMode === 'image' ? !!referenceImageUrl : !!beginningRefImageUrl;
+          if (ref1Filled) {
+            handleFileSelect(currentMode === 'image' ? 'ref2' : 'end');
+          } else {
+            handleFileSelect(currentMode === 'image' ? 'single' : 'start');
+          }
+        }}
         onAddRef2={() => handleFileSelect(currentMode === 'image' ? 'ref2' : 'end')}
+        onDropRef1={(file: File) => processDroppedFile(file, 'ref1')}
+        onDropRef2={(file: File) => processDroppedFile(file, 'ref2')}
         onRemoveRef1={() => removeReferenceImage(currentMode === 'image' ? 'single' : 'start')}
         onRemoveRef2={() => {
           if (currentMode === 'image') {
