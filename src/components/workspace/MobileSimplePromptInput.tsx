@@ -588,7 +588,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               ? "Optional: Describe modifications (or leave blank for exact copy)" 
               : "Describe what you want to create..."
             }
-            className="min-h-[60px] max-h-[120px] resize-none text-base pr-10"
+            className="min-h-[80px] max-h-[120px] resize-none text-base pr-10"
             disabled={isGenerating}
           />
           <div className="absolute right-2 top-2 flex flex-col items-center gap-1">
