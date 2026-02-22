@@ -1,81 +1,53 @@
 
 
-# Expand Workspace Reference Slots from 4 to 10
+# Convert Inline Control Groups to Compact Popover Buttons
 
-## Current State
+## Problem
 
-- **Quick Bar** renders exactly 4 fixed slots: Char 1, Char 2, Char 3, Pose
-- **Settings Tray** renders a 10-slot grid but slots 5-10 show a Lock icon and are non-functional
-- **Data layer** stores refs across 3 separate variables: `referenceImageUrl` (slot 0), `referenceImage2Url` (slot 1), `additionalRefUrls[]` (slots 2-3 only, length 2)
-- **Figure notation** in `useLibraryFirstWorkspace.ts` is hardcoded for max 4 refs (3 chars + 1 pose)
-- Labels already exist for all 10 slots in the Settings Tray: Char 1-3, Pose, Ref 5-10
+The three inline control groups (SFW/NSFW, aspect ratio, batch size) each display all options side-by-side, consuming significant horizontal space in the Quick Bar. With 10 ref slots now present, horizontal real estate is at a premium.
 
-## What Changes
+## Solution
 
-### 1. Quick Bar -- Show scrollable 10 slots (`MobileQuickBar.tsx`)
+Replace each multi-button group with a single compact button showing the current value. Clicking it opens a small Popover with the options. This reduces each control from ~3 buttons wide to 1 button wide.
 
-Expand `FIXED_IMAGE_SLOTS` from 4 entries to 10:
+### Before (3 separate groups, ~9 buttons total):
 ```
-Char 1, Char 2, Char 3, Pose, Ref 5, Ref 6, Ref 7, Ref 8, Ref 9, Ref 10
+[SFW][NSFW]  [1:1][16:9][9:16]  [1x][3x][6x]
 ```
 
-The Quick Bar already has `overflow-x-auto scrollbar-hide` on the slot container, so 10 small slots will scroll horizontally without layout issues. Empty slots beyond the first few will be compact dashed-border `+` buttons.
-
-### 2. Settings Tray -- Unlock all 10 slots (`MobileSettingsSheet.tsx`)
-
-Remove the `isActive = i < activeCount` gating (lines 540-541) that locks slots 5-10 behind a Lock icon. All 10 slots will be functional: clickable to add, showing thumbnails when filled, removable.
-
-Change the grid from `grid-cols-5` to `grid-cols-5` (keep as-is, 2 rows of 5 fits perfectly).
-
-### 3. Data layer -- Extend `additionalRefUrls` to hold 8 items (`MobileSimplifiedWorkspace.tsx`)
-
-Currently `additionalRefUrls` stores slots 2-3 (2 items). Expand to store slots 2-9 (up to 8 items). The mapping stays the same:
-- Slot 0 = `referenceImageUrl`
-- Slot 1 = `referenceImage2Url`
-- Slots 2-9 = `additionalRefUrls[0]` through `additionalRefUrls[7]`
-
-No schema changes needed -- `additionalRefUrls` is already a `string[]` in React state.
-
-### 4. Slot wiring -- Map all 10 slots (`MobileSimplePromptInput.tsx`)
-
-Update the `fixedSlots` array (line 472) from 4 entries to 10, mapping slots 4-9 to `additionalRefUrls[2]` through `additionalRefUrls[7]`.
-
-Update `handleRemoveSlot` and `onFixedSlotDropUrl` handler to handle indices 0-9.
-
-Update the Settings Tray `refSlots` builder (line 649) to populate URL data for all 10 slots instead of only the first 4.
-
-### 5. Figure notation -- Generalize for N refs (`useLibraryFirstWorkspace.ts`)
-
-Replace the hardcoded `if charCount === 1/2/3` Figure prefix logic (lines 1357-1368) with a dynamic builder:
-
+### After (3 compact buttons):
 ```
-// Build Figure notation dynamically for any number of refs
-const charRefs = allRefUrls.slice(0, -1); // all except last = characters
-const poseRef = allRefUrls[allRefUrls.length - 1]; // last = pose
-const charList = charRefs.map((_, i) => `Figure ${i + 1}`).join(', ');
-figurePrefix = `Show the character(s) from ${charList} in the pose from Figure ${allRefUrls.length}: `;
+[NSFW v]  [1:1 v]  [3x v]
 ```
 
-This handles 1-9 character refs + 1 pose ref without hardcoding.
+Each button click opens a popover with the full option list using the existing `ModelDropdownItem`-style rows.
 
-### 6. Settings Tray slot add -- Support file picker for any index
+---
 
-The `handleFileSelectForSlot(index)` in `MobileSimplePromptInput.tsx` already routes by index. The upload handler at line 259 already handles `index >= 2` via the `additionalRefUrls` array. No changes needed here beyond ensuring the array expands properly (which it already does with the `while (newAdditional.length <= additionalIndex)` pattern).
+## Changes
 
-## Files Changed
+### File: `src/components/workspace/MobileQuickBar.tsx`
 
-| File | Change |
-|------|--------|
-| `src/components/workspace/MobileQuickBar.tsx` | Expand `FIXED_IMAGE_SLOTS` from 4 to 10 entries |
-| `src/components/workspace/MobileSettingsSheet.tsx` | Remove Lock gating on slots 5-10, make all active |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Expand `fixedSlots` array to 10 entries, update refSlots builder |
-| `src/hooks/useLibraryFirstWorkspace.ts` | Replace hardcoded Figure notation with dynamic N-ref builder |
+**Replace the three inline button groups** (lines 339-402) with three Popover components:
 
-## What Does NOT Change
+1. **Content Type Popover** -- Button shows current value ("SFW" or "NSFW"), popover lists both options with a checkmark on the active one
+2. **Aspect Ratio Popover** -- Button shows current ratio ("1:1", "16:9", "9:16"), popover lists all three
+3. **Batch Size Popover** -- Button shows current size ("1x", "3x", "6x"), popover lists all three (hidden in video mode, same as today)
 
-- No database schema changes
-- No new components
-- No changes to the edge function or API layer
-- Video mode slots (Start/End) unchanged
-- Upload, remove, drag-drop mechanics all work as-is (they are index-based)
+Each popover will:
+- Use the same `Popover`/`PopoverContent` already imported
+- Auto-close on selection (using Popover's `open` state)
+- Style the trigger button consistently: `h-7 px-2 text-[10px] font-medium rounded border bg-muted/50` with a small ChevronDown icon
+- Keep the `hidden md:flex` visibility (desktop-only, same as current)
+- Use `bg-popover border border-border shadow-lg` on the content to avoid transparency issues
 
+**Remove the `hidden md:flex` wrapper div** and make each popover individually `hidden md:inline-flex` so they sit in the same flex row without a wrapper.
+
+No prop changes needed -- all the same props (`contentType`, `onContentTypeChange`, `aspectRatio`, `onAspectRatioChange`, `batchSize`, `onBatchSizeChange`) are used, just rendered differently.
+
+## Technical Notes
+
+- The Popover component is already imported and used for the model selector in this file
+- Each popover uses controlled `open` state so it closes on option select
+- The `PopoverContent` gets `z-[100] bg-popover border border-border shadow-lg` to prevent the known transparency issue
+- No changes to any other files -- this is purely a rendering change within `MobileQuickBar.tsx`
