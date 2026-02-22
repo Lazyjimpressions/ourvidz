@@ -469,28 +469,48 @@ const MobileSimplifiedWorkspace = () => {
         if (mode !== 'video') {
           updateMode('video');
         }
-        setBeginningRefImage(file);
-        setBeginningRefImageUrl(referenceUrl);
-        applySmartDefault('extend');
-        toast.success('Video set as reference for extension');
-      } else {
-        // Image → existing behavior
-        setReferenceImage(file);
-        setReferenceImageUrl(referenceUrl);
-        setReferenceMetadata(null);
-        setExactCopyMode(false);
-        
-        if (asset.prompt) {
-          setPrompt(asset.prompt);
+        // Auto-overflow: if start ref is filled, put in end ref
+        if (beginningRefImageUrl) {
+          setEndingRefImage(file);
+          setEndingRefImageUrl(referenceUrl);
+          applySmartDefault('multi');
+          toast.success('Video set as second reference');
+        } else {
+          setBeginningRefImage(file);
+          setBeginningRefImageUrl(referenceUrl);
+          applySmartDefault('extend');
+          toast.success('Video set as reference for extension');
         }
-        
-        toast.success('Workspace image set as reference');
+      } else {
+        // Image → auto-overflow: if ref1 is occupied, fill ref2
+        if (mode === 'image' && referenceImageUrl) {
+          setReferenceImage2(null);
+          setReferenceImage2Url(referenceUrl);
+          applySmartDefault('i2i_multi');
+          toast.success('Image set as second reference');
+        } else if (mode === 'video' && beginningRefImageUrl) {
+          setEndingRefImage(file);
+          setEndingRefImageUrl(referenceUrl);
+          applySmartDefault('multi');
+          toast.success('Image set as second reference');
+        } else {
+          setReferenceImage(file);
+          setReferenceImageUrl(referenceUrl);
+          setReferenceMetadata(null);
+          setExactCopyMode(false);
+          
+          if (asset.prompt) {
+            setPrompt(asset.prompt);
+          }
+          
+          toast.success('Workspace image set as reference');
+        }
       }
     } catch (error) {
       console.error('❌ MOBILE: Failed to use asset as reference:', error);
       toast.error('Failed to use as reference');
     }
-  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode]);
+  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url]);
 
   // Workspace actions - Save to library WITHOUT removing from workspace
   const handleSaveToLibrary = useCallback(async (asset: any) => {
