@@ -101,6 +101,8 @@ export const AssetTile: React.FC<AssetTileProps> = ({
   return (
     <div
       ref={innerRef}
+      role={draggable ? 'group' : undefined}
+      aria-label={draggable ? 'Workspace image' : undefined}
       draggable={draggable}
       onDragStart={draggable ? handleDragStart : undefined}
       onDragEnd={draggable ? handleDragEnd : undefined}
@@ -111,7 +113,7 @@ export const AssetTile: React.FC<AssetTileProps> = ({
         'bg-card border border-border',
         'transition-all duration-200',
         hoverEffect && 'hover:shadow-lg hover:scale-[1.01] hover:border-primary/50',
-        isDragging && 'opacity-40 scale-95',
+        isDragging && 'opacity-40 scale-[0.28]',
         'shadow-sm',
         className
       )}
@@ -124,6 +126,7 @@ export const AssetTile: React.FC<AssetTileProps> = ({
           <img
             src={src}
             alt={alt}
+            crossOrigin="anonymous"
             className={cn(
               "absolute inset-0 w-full h-full object-cover",
               showVideo && "opacity-0"

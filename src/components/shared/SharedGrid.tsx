@@ -364,7 +364,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   const isWorkspace = asset.metadata?.source === 'workspace';
   const isLibrary = asset.metadata?.source === 'library';
 
-  // Create a small canvas drag ghost from the tile's image
+  // Create a small canvas drag ghost (40×53) from the tile's image for ref-slot drops.
+  // Use in-DOM img only when loaded; fallback to cached Image(displayUrl) when tile shows fallback UI.
   const handleDragStart = useCallback((e: React.DragEvent) => {
     const displayUrl = asset.thumbUrl || generatedVideoThumbnail || (asset.type === 'image' ? fallbackUrl : null);
     // Set custom MIME data for ref slot drops
@@ -375,16 +376,33 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     }));
     e.dataTransfer.effectAllowed = 'copy';
 
-    // Create canvas drag ghost (40×53 = 3:4 ratio)
-    const img = cardRef.current?.querySelector('img');
-    if (img) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 40;
-      canvas.height = 53;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0, 40, 53);
+    const canvas = document.createElement('canvas');
+    canvas.width = 40;
+    canvas.height = 53;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const setDragImageFromSource = (source: HTMLImageElement | HTMLVideoElement) => {
+      try {
+        ctx.drawImage(source, 0, 0, 40, 53);
         e.dataTransfer.setDragImage(canvas, 20, 26);
+      } catch {
+        // Tainted canvas or draw failed; skip custom drag image
+      }
+    };
+
+    const img = cardRef.current?.querySelector('img') as HTMLImageElement | null;
+    if (img && img.complete && img.naturalWidth > 0) {
+      setDragImageFromSource(img);
+      return;
+    }
+
+    if (displayUrl) {
+      const cached = new Image();
+      cached.crossOrigin = 'anonymous';
+      cached.src = displayUrl;
+      if (cached.complete && cached.naturalWidth > 0) {
+        setDragImageFromSource(cached);
       }
     }
   }, [asset, generatedVideoThumbnail, fallbackUrl]);
