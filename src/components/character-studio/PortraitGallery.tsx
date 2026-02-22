@@ -18,6 +18,7 @@ import {
   ChevronUp,
   Info,
   X,
+  Crosshair,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -74,6 +75,7 @@ interface PortraitGalleryProps {
   onUseAsReference: (portrait: CharacterPortrait) => void;
   onRegenerate?: (prompt: string, referenceUrl: string) => void;
   onCopyPrompt?: (prompt: string) => void;
+  onSaveAsPosition?: (imageUrl: string) => void;
   characterAppearanceTags?: string[];
 }
 
@@ -90,6 +92,7 @@ export function PortraitGallery({
   onUseAsReference,
   onRegenerate,
   onCopyPrompt,
+  onSaveAsPosition,
   characterAppearanceTags = [],
 }: PortraitGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -281,6 +284,11 @@ export function PortraitGallery({
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleDownload(portrait); }}>
                           <Download className="w-4 h-4 mr-2" />Download
                         </DropdownMenuItem>
+                        {onSaveAsPosition && (
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSaveAsPosition(portrait.image_url); }}>
+                            <Crosshair className="w-4 h-4 mr-2" />Save as Position
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(portrait.id); }}>
                           <Trash2 className="w-4 h-4 mr-2" />Delete

@@ -56,6 +56,8 @@ interface StudioWorkspaceProps {
   onCanonDelete?: (id: string) => void;
   onCanonSetPrimary?: (id: string) => void;
   onCanonUpdateTags?: (id: string, tags: string[]) => void;
+  onSaveAsPosition?: (imageUrl: string) => void;
+  onAssignCanonPoseKey?: (canonId: string, poseKey: string) => void;
   // Canon position generation
   canonPosePresets?: Record<string, CanonPosePreset>;
   onGeneratePosition?: (poseKey: string) => Promise<string | null>;
@@ -74,6 +76,7 @@ export function StudioWorkspace({
   onEnhancePrompt, onCopyPrompt, characterData, mobileMode, scenesOnly, positionsOnly,
   referenceStrength,
   canonImages, isCanonUploading, onCanonUpload, onCanonDelete, onCanonSetPrimary, onCanonUpdateTags,
+  onSaveAsPosition, onAssignCanonPoseKey,
   canonPosePresets, onGeneratePosition, generatingPoseKey, hasReferenceImage,
 }: StudioWorkspaceProps) {
 
@@ -104,6 +107,7 @@ export function StudioWorkspace({
           onDelete={onCanonDelete}
           onSetPrimary={onCanonSetPrimary}
           onUpdateTags={onCanonUpdateTags}
+          onAssignPoseKey={onAssignCanonPoseKey}
           isUploading={isCanonUploading}
           canonPosePresets={canonPosePresets}
           onGeneratePosition={onGeneratePosition}
@@ -134,6 +138,7 @@ export function StudioWorkspace({
               onUseAsReference={onUseAsReference}
               onRegenerate={onRegenerate}
               onCopyPrompt={onCopyPrompt}
+              onSaveAsPosition={onSaveAsPosition}
               characterAppearanceTags={characterAppearanceTags}
             />
           </div>
@@ -219,6 +224,7 @@ export function StudioWorkspace({
                 onUseAsReference={onUseAsReference}
                 onRegenerate={onRegenerate}
                 onCopyPrompt={onCopyPrompt}
+                onSaveAsPosition={onSaveAsPosition}
                 characterAppearanceTags={characterAppearanceTags}
               />
             </div>
@@ -253,6 +259,7 @@ export function StudioWorkspace({
                 onDelete={onCanonDelete}
                 onSetPrimary={onCanonSetPrimary}
                 onUpdateTags={onCanonUpdateTags}
+                onAssignPoseKey={onAssignCanonPoseKey}
                 isUploading={isCanonUploading}
                 canonPosePresets={canonPosePresets}
                 onGeneratePosition={onGeneratePosition}
