@@ -93,12 +93,21 @@ async function updateAggregates(supabase: any, data: UsageLogData): Promise<void
   }
 }
 
-function extractReplicateUsage(response: any): Partial<UsageLogData> {
-  const predictTime = response.metrics?.predict_time;
-  const estimatedCost = predictTime ? predictTime * 0.0001 : null;
+function extractReplicateUsage(response: any, modelPricing?: any): Partial<UsageLogData> {
+  // At prediction creation, Replicate doesn't provide cost yet.
+  // Use the model's pricing from api_models.pricing as the initial estimate.
+  // The actual cost will be backfilled by replicate-webhook when the prediction completes.
+  let estimatedCost: number | null = null;
+  if (response.cost) {
+    estimatedCost = response.cost;
+  } else if (modelPricing) {
+    // Use per-generation price from api_models.pricing JSONB
+    const pricing = typeof modelPricing === 'object' ? modelPricing : {};
+    estimatedCost = pricing.per_generation || pricing.cost_per_use || null;
+  }
   
   return {
-    costUsd: response.cost || estimatedCost,
+    costUsd: estimatedCost,
     providerMetadata: {
       prediction_id: response.id,
       status: response.status,
@@ -915,7 +924,7 @@ serve(async (req) => {
       });
 
       // Log usage for prediction creation
-      const usageData = extractReplicateUsage(prediction);
+      const usageData = extractReplicateUsage(prediction, apiModel.pricing);
       logApiUsage(supabase, {
         providerId: apiModel.api_providers.id,
         modelId: apiModel.id,
