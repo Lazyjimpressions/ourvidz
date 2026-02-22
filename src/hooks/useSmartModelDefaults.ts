@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useAllVisualModels } from './useApiModels';
 
-type VisualTask = 't2i' | 'i2i' | 't2v' | 'i2v' | 'extend' | 'multi';
+type VisualTask = 't2i' | 'i2i' | 'i2i_multi' | 't2v' | 'i2v' | 'extend' | 'multi';
 
 /**
  * Smart model defaults hook.

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Loader2, X } from 'lucide-react';
+import { Sparkles, Loader2, X, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
 import { supabase } from '@/integrations/supabase/client';
@@ -69,6 +69,12 @@ export interface MobileSimplePromptInputProps {
   onVideoDurationChange?: (duration: number) => void;
   motionIntensity?: number;
   onMotionIntensityChange?: (intensity: number) => void;
+  // Ref 2 for image mode (i2i_multi)
+  referenceImage2?: File | null;
+  referenceImage2Url?: string | null;
+  onReferenceImage2Set?: (file: File) => void;
+  onReferenceImage2UrlSet?: (url: string) => void;
+  onReferenceImage2Remove?: () => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -120,6 +126,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onVideoDurationChange,
   motionIntensity = 0.5,
   onMotionIntensityChange,
+  referenceImage2,
+  referenceImage2Url,
+  onReferenceImage2Set,
+  onReferenceImage2UrlSet,
+  onReferenceImage2Remove,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -165,14 +176,14 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   
   // File input refs for reference images
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingFileTypeRef = useRef<'single' | 'start' | 'end'>('single');
+  const pendingFileTypeRef = useRef<'single' | 'start' | 'end' | 'ref2'>('single');
 
   // Notify parent of settings sheet state (for keyboard handling)
   React.useEffect(() => {
     onCollapsedChange?.(isSettingsOpen);
   }, [isSettingsOpen, onCollapsedChange]);
 
-  const handleFileSelect = (type: 'single' | 'start' | 'end') => {
+  const handleFileSelect = (type: 'single' | 'start' | 'end' | 'ref2') => {
     pendingFileTypeRef.current = type;
     fileInputRef.current?.click();
   };
@@ -180,7 +191,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const type = pendingFileTypeRef.current;
-    
+    const isRef2 = type === 'ref2';
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -230,8 +241,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       try {
         const { uploadAndSignReferenceImage: uploadRef } = await import('@/lib/storage');
         const signedUrl = await uploadRef(file);
-        if (onReferenceImageUrlSet) {
-          onReferenceImageUrlSet(signedUrl, type);
+        if (isRef2 && onReferenceImage2UrlSet) {
+          onReferenceImage2UrlSet(signedUrl);
+        } else if (onReferenceImageUrlSet) {
+          onReferenceImageUrlSet(signedUrl, type as 'single' | 'start' | 'end');
         }
         toast.success('Video source uploaded');
       } catch (uploadError) {
@@ -335,13 +348,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       try {
         const signedUrl = await uploadAndSignReferenceImage(persistedFile);
         
-        if (onReferenceImageUrlSet) {
-          onReferenceImageUrlSet(signedUrl, type);
+        if (isRef2 && onReferenceImage2UrlSet) {
+          onReferenceImage2UrlSet(signedUrl);
+        } else if (onReferenceImageUrlSet) {
+          onReferenceImageUrlSet(signedUrl, type as 'single' | 'start' | 'end');
         } else if (onReferenceImageSet) {
-          onReferenceImageSet(persistedFile, type);
+          onReferenceImageSet(persistedFile, type as 'single' | 'start' | 'end');
         }
         
-        toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image uploaded`);
+        toast.success(`${isRef2 ? 'Ref 2' : type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image uploaded`);
       } catch (uploadError) {
         const errorMessage = uploadError instanceof Error ? uploadError.message : 'Unknown error';
         if (errorMessage.includes('authenticated')) {
@@ -390,13 +405,13 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     });
   };
 
-  // Determine which reference is set for indicator
-  const displayReferenceUrl = currentMode === 'image' 
-    ? referenceImageUrl 
-    : beginningRefImageUrl;
-  const hasDisplayReference = currentMode === 'image'
-    ? (!!referenceImage || !!referenceImageUrl)
-    : (!!beginningRefImage || !!beginningRefImageUrl);
+  // Compute ref slot URLs for QuickBar
+  const ref1Url = currentMode === 'image' ? referenceImageUrl : beginningRefImageUrl;
+  const ref2Url = currentMode === 'image' ? referenceImage2Url : endingRefImageUrl;
+  const ref1IsVideo = currentMode === 'video' && !!beginningRefImageUrl && beginningRefImage?.type?.startsWith('video/');
+  const ref2IsVideo = currentMode === 'video' && !!endingRefImageUrl && endingRefImage?.type?.startsWith('video/');
+
+  const hasDisplayReference = !!ref1Url;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
@@ -416,9 +431,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onModeToggle={onModeToggle}
         selectedModelName={selectedModel?.display_name || 'Select Model'}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        hasReferenceImage={hasDisplayReference}
-        referenceImageUrl={displayReferenceUrl}
-        onRemoveReference={() => removeReferenceImage(currentMode === 'image' ? 'single' : 'start')}
+        ref1Url={ref1Url}
+        ref2Url={ref2Url}
+        ref1IsVideo={ref1IsVideo}
+        ref2IsVideo={ref2IsVideo}
+        onAddRef1={() => handleFileSelect(currentMode === 'image' ? 'single' : 'start')}
+        onAddRef2={() => handleFileSelect(currentMode === 'image' ? 'ref2' : 'end')}
+        onRemoveRef1={() => removeReferenceImage(currentMode === 'image' ? 'single' : 'start')}
+        onRemoveRef2={() => {
+          if (currentMode === 'image') {
+            onReferenceImage2Remove?.();
+          } else {
+            removeReferenceImage('end');
+          }
+        }}
         disabled={isGenerating}
         contentType={contentType}
         onContentTypeChange={onContentTypeChange}
@@ -428,8 +454,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onBatchSizeChange={onBatchSizeChange}
       />
       
-      {/* Prompt Input + Generate Button */}
-      <form onSubmit={handleSubmit} className="px-3 pb-3 space-y-2">
+      {/* Prompt Input + Inline Generate */}
+      <form onSubmit={handleSubmit} className="px-3 pb-3">
         <div className="relative">
           <Textarea
             value={prompt}
@@ -441,7 +467,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             className="min-h-[60px] max-h-[120px] resize-none text-base pr-10"
             disabled={isGenerating}
           />
-          <div className="absolute right-2 top-2 flex items-center gap-1">
+          <div className="absolute right-2 top-2 flex flex-col items-center gap-1">
             {prompt.trim() && (
               <button
                 type="button"
@@ -459,27 +485,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             >
               {isEnhancing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
             </button>
+            <button
+              type="submit"
+              disabled={isGenerating}
+              className="text-primary hover:text-primary/80 p-1 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+            </button>
           </div>
         </div>
-        
-        <Button
-          type="submit"
-          size="lg"
-          className="w-full min-h-[48px] gap-2 text-base font-medium"
-          disabled={isGenerating}
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-5 w-5" />
-              Generate
-            </>
-          )}
-        </Button>
       </form>
       
       {/* Settings Bottom Sheet */}

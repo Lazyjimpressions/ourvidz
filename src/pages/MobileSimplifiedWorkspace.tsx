@@ -97,10 +97,14 @@ const MobileSimplifiedWorkspace = () => {
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
 
+  // Ref 2 for image mode (i2i_multi) - managed locally since hook doesn't have this
+  const [referenceImage2, setReferenceImage2] = useState<File | null>(null);
+  const [referenceImage2Url, setReferenceImage2Url] = useState<string | null>(null);
+
   // Smart model auto-switching helper
-  const applySmartDefault = useCallback((task: 't2i' | 'i2i' | 't2v' | 'i2v' | 'extend') => {
+  const applySmartDefault = useCallback((task: 't2i' | 'i2i' | 'i2i_multi' | 't2v' | 'i2v' | 'extend' | 'multi') => {
     if (userOverrodeModel) return;
-    const defaultModel = getDefault(task);
+    const defaultModel = getDefault(task as any);
     if (!defaultModel) return;
     const providerName = (defaultModel as any).api_providers?.name || 'fal';
     const modelType = providerName === 'replicate' ? 'replicate' : providerName === 'fal' ? 'fal' : 'sdxl';
@@ -119,22 +123,52 @@ const MobileSimplifiedWorkspace = () => {
       case 'single':
         setReferenceImage(null);
         setReferenceImageUrl(url);
-        // Auto-switch to I2I model when ref image added
-        if (mode === 'image') applySmartDefault('i2i');
-        else applySmartDefault('i2v');
+        // Auto-switch: check if ref2 also exists for i2i_multi
+        if (mode === 'image') {
+          applySmartDefault(referenceImage2Url ? 'i2i_multi' : 'i2i');
+        } else {
+          applySmartDefault('i2v');
+        }
         break;
       case 'start':
         setBeginningRefImage(null);
         setBeginningRefImageUrl(url);
-        // For video start ref, switch to I2V
-        applySmartDefault('i2v');
+        // Check if ending ref exists for multi
+        if (endingRefImageUrl) {
+          applySmartDefault('multi');
+        } else {
+          applySmartDefault('i2v');
+        }
         break;
       case 'end':
         setEndingRefImage(null);
         setEndingRefImageUrl(url);
+        // Start + end = multi
+        if (beginningRefImageUrl) {
+          applySmartDefault('multi');
+        }
         break;
     }
-  }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage, mode, applySmartDefault]);
+  }, [setReferenceImageUrl, setBeginningRefImageUrl, setEndingRefImageUrl, setReferenceImage, setBeginningRefImage, setEndingRefImage, mode, applySmartDefault, referenceImage2Url, endingRefImageUrl, beginningRefImageUrl]);
+
+  // Handle ref2 URL set (image mode only, for i2i_multi)
+  const handleReferenceImage2UrlSet = useCallback((url: string) => {
+    setReferenceImage2(null);
+    setReferenceImage2Url(url);
+    // If ref1 also exists, switch to i2i_multi
+    if (referenceImageUrl) {
+      applySmartDefault('i2i_multi');
+    }
+  }, [referenceImageUrl, applySmartDefault]);
+
+  const handleReferenceImage2Remove = useCallback(() => {
+    setReferenceImage2(null);
+    setReferenceImage2Url(null);
+    // Revert: if ref1 still exists, go back to i2i
+    if (referenceImageUrl) {
+      applySmartDefault('i2i');
+    }
+  }, [referenceImageUrl, applySmartDefault]);
 
   // LEGACY: Handle File object (fallback for backward compatibility)
   const handleReferenceImageSet = useCallback((file: File, type: 'single' | 'start' | 'end') => {
@@ -192,7 +226,9 @@ const MobileSimplifiedWorkspace = () => {
         setExactCopyMode(false);
         setBeginningRefImage(null);
         setBeginningRefImageUrl(null);
-        // Revert to no-ref default
+        // Revert: check if ref2 exists (shouldn't without ref1, but clear it too)
+        setReferenceImage2(null);
+        setReferenceImage2Url(null);
         if (mode === 'image') applySmartDefault('t2i');
         else applySmartDefault('t2v');
         break;
@@ -208,9 +244,13 @@ const MobileSimplifiedWorkspace = () => {
       case 'end':
         setEndingRefImage(null);
         setEndingRefImageUrl(null);
+        // If start still exists, revert to i2v
+        if (beginningRefImageUrl) {
+          applySmartDefault('i2v');
+        }
         break;
     }
-  }, [setReferenceImage, setReferenceImageUrl, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, setReferenceMetadata, setExactCopyMode, mode, applySmartDefault]);
+  }, [setReferenceImage, setReferenceImageUrl, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, setReferenceMetadata, setExactCopyMode, mode, applySmartDefault, beginningRefImageUrl]);
 
   // DEBUG: Track reference image state changes
   useEffect(() => {
@@ -621,6 +661,10 @@ const MobileSimplifiedWorkspace = () => {
           onVideoDurationChange={setVideoDuration}
           motionIntensity={motionIntensity}
           onMotionIntensityChange={setMotionIntensity}
+          referenceImage2={referenceImage2}
+          referenceImage2Url={referenceImage2Url}
+          onReferenceImage2UrlSet={handleReferenceImage2UrlSet}
+          onReferenceImage2Remove={handleReferenceImage2Remove}
         />
 
         {/* Lightbox */}
