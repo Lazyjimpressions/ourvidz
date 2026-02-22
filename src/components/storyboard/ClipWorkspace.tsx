@@ -182,21 +182,33 @@ export const ClipWorkspace: React.FC<ClipWorkspaceProps> = ({
     // Try AI-powered prompt generation first
     setIsAIPromptLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('playground-chat', {
-        body: {
-          system_prompt_override: `You are a cinematic video prompt engineer for WAN 2.1 I2V model. Generate a single concise prompt (2-3 sentences max) for a video clip. Focus on: character appearance, motion/action, setting, lighting, and mood. Do NOT include technical tags. Write naturally. Return ONLY the prompt text, nothing else.`,
-          messages: [
-            {
-              role: 'user',
-              content: `Generate a video prompt for this context:
+      // Create ephemeral conversation for prompt generation
+      const { data: convData, error: convError } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: (await supabase.auth.getUser()).data.user!.id,
+          title: 'Clip Prompt Generation',
+          conversation_type: 'general',
+          status: 'active',
+        })
+        .select('id')
+        .single();
+
+      if (convError || !convData) throw convError || new Error('Failed to create conversation');
+
+      const userMessage = `Generate a video prompt for this context:
 Scene: ${scene.title || 'Untitled'} - ${scene.description || 'No description'}
 Setting: ${scene.setting || 'unspecified'}
 Mood: ${scene.mood || 'natural'}
 ${character ? `Character: ${character.name} - ${character.appearance_tags?.join(', ') || character.description}` : ''}
 Clip #${clips.length + 1} in scene${previousClip ? `\nPrevious clip prompt: "${previousClip.prompt}"` : ''}
-${clips.length === 0 ? 'This is the FIRST clip - include full character description and environment.' : 'This is a CHAINED clip - focus on motion continuation, the reference frame handles identity.'}`,
-            },
-          ],
+${clips.length === 0 ? 'This is the FIRST clip - include full character description and environment.' : 'This is a CHAINED clip - focus on motion continuation, the reference frame handles identity.'}`;
+
+      const { data, error } = await supabase.functions.invoke('playground-chat', {
+        body: {
+          conversation_id: convData.id,
+          message: userMessage,
+          system_prompt_override: `You are a cinematic video prompt engineer for WAN 2.1 I2V model. Generate a single concise prompt (2-3 sentences max) for a video clip. Focus on: character appearance, motion/action, setting, lighting, and mood. Do NOT include technical tags. Write naturally. Return ONLY the prompt text, nothing else.`,
         },
       });
 
