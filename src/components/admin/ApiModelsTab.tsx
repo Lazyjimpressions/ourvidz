@@ -332,13 +332,12 @@ export const ApiModelsTab = () => {
                     <TableRow className="text-[10px]">
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="display_name" label="Name" onClick={handleSort} />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="provider" label="Provider" onClick={handleSort} className="w-[90px]" />
-                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="task" label="Task" onClick={handleSort} className="w-[80px]" />
+                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="task" label="Tasks" onClick={handleSort} className="w-[130px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="model_key" label="Model Key" onClick={handleSort} className="w-[160px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="model_family" label="Family" onClick={handleSort} className="w-[70px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="avg_cost" label="Avg Cost" onClick={handleSort} className="w-[70px] text-right" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="avg_time" label="Avg Time" onClick={handleSort} className="w-[70px] text-right" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="priority" label="Pri" onClick={handleSort} className="w-[45px]" />
-                      <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_default" label="Defaults" onClick={handleSort} className="w-[90px]" />
                       <SortableHead sortKey={sortKey} sortDir={sortDir} column="is_active" label="On" onClick={handleSort} className="w-[45px]" />
                       <TableHead className="h-7 px-2 text-[10px] w-[55px]">Acts</TableHead>
                     </TableRow>
@@ -435,14 +434,56 @@ function ModelRow({ model, avgCost, avgTime, editingCellId, setEditingCellId, on
         </Badge>
       </TableCell>
 
-      {/* Tasks */}
+      {/* Tasks - unified interactive badges */}
       <TableCell className="p-1">
-        <div className="flex flex-wrap gap-0.5">
-          {model.tasks?.map(t => (
-            <Badge key={t} variant="outline" className="text-[9px] h-3.5 px-1 font-mono">
-              {TASK_ABBREVIATIONS[t] || t.slice(0, 3).toUpperCase()}
-            </Badge>
-          ))}
+        <div className="flex flex-wrap gap-0.5 items-center">
+          {model.tasks?.map(t => {
+            const isDefault = model.default_for_tasks?.includes(t) ?? false;
+            return (
+              <Badge
+                key={t}
+                variant={isDefault ? "default" : "outline"}
+                className={`text-[9px] h-3.5 px-1 font-mono cursor-pointer transition-colors ${isDefault ? '' : 'opacity-60 hover:opacity-100'}`}
+                onClick={() => {
+                  const current = model.default_for_tasks || [];
+                  const next = isDefault ? current.filter(d => d !== t) : [...current, t];
+                  onUpdate({ default_for_tasks: next, is_default: next.length > 0 } as any);
+                }}
+              >
+                {TASK_ABBREVIATIONS[t] || t.slice(0, 3).toUpperCase()}
+              </Badge>
+            );
+          })}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="h-3.5 w-3.5 flex items-center justify-center rounded-full border border-dashed border-muted-foreground/30 hover:border-muted-foreground/60 hover:bg-muted/50 transition-colors">
+                <Plus className="h-2 w-2 text-muted-foreground/50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-44 p-2" align="start">
+              <div className="text-[10px] font-semibold text-muted-foreground mb-1.5">Assign tasks</div>
+              <div className="space-y-1">
+                {TASKS.map(task => {
+                  const checked = model.tasks?.includes(task) ?? false;
+                  return (
+                    <label key={task} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(c) => {
+                          const currentTasks = model.tasks || [];
+                          const nextTasks = c ? [...currentTasks, task] : currentTasks.filter(t => t !== task);
+                          const nextDefaults = (model.default_for_tasks || []).filter(t => nextTasks.includes(t));
+                          onUpdate({ tasks: nextTasks, default_for_tasks: nextDefaults, is_default: nextDefaults.length > 0 } as any);
+                        }}
+                        className="h-3 w-3"
+                      />
+                      <span>{task}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </TableCell>
 
@@ -502,46 +543,6 @@ function ModelRow({ model, avgCost, avgTime, editingCellId, setEditingCellId, on
         />
       </TableCell>
 
-      {/* Default tasks - popover with checkboxes */}
-      <TableCell className="p-1">
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="flex flex-wrap gap-0.5 min-w-[60px] cursor-pointer hover:opacity-80 transition-opacity">
-              {(model.default_for_tasks?.length > 0) ? (
-                model.default_for_tasks.map(t => (
-                  <Badge key={t} variant="secondary" className="text-[9px] h-3.5 px-1 font-mono">
-                    {TASK_ABBREVIATIONS[t] || t.slice(0, 3).toUpperCase()}
-                  </Badge>
-                ))
-              ) : (
-                <span className="text-[10px] text-muted-foreground/40">---</span>
-              )}
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-44 p-2" align="start">
-            <div className="text-[10px] font-semibold text-muted-foreground mb-1.5">Default for tasks</div>
-            <div className="space-y-1">
-              {TASKS.map(task => {
-                const checked = model.default_for_tasks?.includes(task) ?? false;
-                return (
-                  <label key={task} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(c) => {
-                        const current = model.default_for_tasks || [];
-                        const next = c ? [...current, task] : current.filter(t => t !== task);
-                        onUpdate({ default_for_tasks: next, is_default: next.length > 0 } as any);
-                      }}
-                      className="h-3 w-3"
-                    />
-                    <span>{task}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </TableCell>
 
       {/* Active - switch toggle */}
       <TableCell className="p-1 text-center">
@@ -656,43 +657,56 @@ function ModelForm({ model, providers, onSubmit, onCancel }: {
               <SelectContent>{MODALITIES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div>
-            <Label className="text-[10px] text-muted-foreground">Tasks</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <button className="flex flex-wrap gap-0.5 min-w-[80px] h-7 items-center border rounded px-2 text-xs w-full hover:bg-muted/50">
-                  {formData.tasks?.length > 0 ? formData.tasks.map(t => (
-                    <Badge key={t} variant="secondary" className="text-[9px] h-3.5 px-1 font-mono">
-                      {TASK_ABBREVIATIONS[t] || t}
+          <div className="col-span-2">
+            <Label className="text-[10px] text-muted-foreground">Tasks <span className="text-muted-foreground/50">(filled = default)</span></Label>
+            <div className="flex flex-wrap gap-1 min-h-[28px] items-center border rounded px-2 py-1">
+              {TASKS.map(task => {
+                const isEligible = formData.tasks?.includes(task) ?? false;
+                const isDefault = formData.default_for_tasks?.includes(task) ?? false;
+                if (!isEligible && !isDefault) {
+                  return (
+                    <Badge
+                      key={task}
+                      variant="outline"
+                      className="text-[9px] h-3.5 px-1 font-mono cursor-pointer opacity-20 hover:opacity-50 transition-opacity"
+                      onClick={() => {
+                        const nextTasks = [...(formData.tasks || []), task];
+                        setFormData(prev => ({ ...prev, tasks: nextTasks }));
+                      }}
+                    >
+                      {TASK_ABBREVIATIONS[task] || task}
                     </Badge>
-                  )) : <span className="text-muted-foreground">Select...</span>}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-2" align="start">
-                <div className="text-[10px] font-semibold text-muted-foreground mb-1.5">Eligible tasks</div>
-                <div className="space-y-1">
-                  {TASKS.map(task => {
-                    const checked = formData.tasks?.includes(task) ?? false;
-                    return (
-                      <label key={task} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(c) => {
-                            const current = formData.tasks || [];
-                            const next = c ? [...current, task] : current.filter(t => t !== task);
-                            // Also remove from default_for_tasks if unchecked
-                            const nextDefaults = (formData.default_for_tasks || []).filter(t => next.includes(t));
-                            setFormData(prev => ({ ...prev, tasks: next, default_for_tasks: nextDefaults, is_default: nextDefaults.length > 0 }));
-                          }}
-                          className="h-3 w-3"
-                        />
-                        <span>{task}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </PopoverContent>
-            </Popover>
+                  );
+                }
+                return (
+                  <Badge
+                    key={task}
+                    variant={isDefault ? "default" : "outline"}
+                    className={`text-[9px] h-3.5 px-1 font-mono cursor-pointer transition-colors ${isDefault ? '' : 'opacity-60 hover:opacity-100'}`}
+                    onClick={() => {
+                      if (isDefault) {
+                        // Demote from default
+                        const nextDefaults = (formData.default_for_tasks || []).filter(t => t !== task);
+                        setFormData(prev => ({ ...prev, default_for_tasks: nextDefaults, is_default: nextDefaults.length > 0 }));
+                      } else {
+                        // Promote to default
+                        const nextDefaults = [...(formData.default_for_tasks || []), task];
+                        setFormData(prev => ({ ...prev, default_for_tasks: nextDefaults, is_default: true }));
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      // Right-click removes from tasks entirely
+                      const nextTasks = (formData.tasks || []).filter(t => t !== task);
+                      const nextDefaults = (formData.default_for_tasks || []).filter(t => t !== task);
+                      setFormData(prev => ({ ...prev, tasks: nextTasks, default_for_tasks: nextDefaults, is_default: nextDefaults.length > 0 }));
+                    }}
+                  >
+                    {TASK_ABBREVIATIONS[task] || task}
+                  </Badge>
+                );
+              })}
+            </div>
           </div>
           <div>
             <Label className="text-[10px] text-muted-foreground">Priority</Label>
@@ -740,26 +754,6 @@ function ModelForm({ model, providers, onSubmit, onCancel }: {
             <div className="flex items-center gap-1.5">
               <Switch checked={formData.is_active} onCheckedChange={(v) => set('is_active', v)} className="scale-75" />
               <Label className="text-[10px]">Active</Label>
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <Label className="text-[10px] text-muted-foreground mr-1">Defaults:</Label>
-              {TASKS.map(task => {
-                const checked = formData.default_for_tasks?.includes(task) ?? false;
-                return (
-                  <label key={task} className="flex items-center gap-0.5 text-[10px] cursor-pointer">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={(c) => {
-                        const current = formData.default_for_tasks || [];
-                        const next = c ? [...current, task] : current.filter(t => t !== task);
-                        setFormData(prev => ({ ...prev, default_for_tasks: next, is_default: next.length > 0 }));
-                      }}
-                      className="h-3 w-3"
-                    />
-                    <span>{TASK_ABBREVIATIONS[task] || task}</span>
-                  </label>
-                );
-              })}
             </div>
           </div>
           <div className="flex gap-2">
