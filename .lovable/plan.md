@@ -1,82 +1,96 @@
 
 
-# Fixed-Role Reference Slots: 3 Characters + 1 Pose
+# Drag-and-Drop from Grid Tiles to Reference Slots
 
-## Summary
+## What Changes
 
-Replace the current generic, progressive ref slots with 4 fixed-role slots that are always visible in image mode:
-- **Char 1** / **Char 2** / **Char 3** (character/face references)
-- **Pose** (position/pose reference)
+### 1. Make Grid Tiles Draggable (AssetTile + SharedGrid)
 
-Each slot gets a small label underneath. The Quick Bar height increases slightly to accommodate labels. Auto-injected Figure notation in the prompt tells the model exactly what each image represents.
+**AssetTile.tsx** -- Add optional drag support:
+- New props: `draggable`, `onDragStart`, `onDragEnd`
+- On drag start, create a small canvas-based drag ghost (~40x53px, matching the ref slot size) from the tile's image
+- Set `dataTransfer` with a custom MIME type (`application/x-ref-image`) containing a JSON payload: `{ url, assetId, type }`
+- Apply a CSS class during drag: reduce opacity to 0.4 on the source tile
 
-## UI Changes
+**SharedGrid.tsx** -- Wire drag props for workspace tiles:
+- When `actions.onSendToRef` exists (workspace mode), make tiles draggable
+- Pass a `dragData` prop containing the asset's thumb/signed URL
+- On drag start, set the drag image to a shrunken canvas snapshot of the tile
 
-### MobileQuickBar.tsx
-- Remove the dynamic `refSlots` / `maxSlots` / `onAddSlot` progressive system
-- Replace with 4 fixed slots, each with a `role` label displayed below the thumbnail:
-  - Slot 0: "Char 1"
-  - Slot 1: "Char 2"  
-  - Slot 2: "Char 3"
-  - Slot 3: "Pose"
-- Increase slot height from `h-8 w-8` to `h-10 w-10` with a `text-[8px]` label underneath
-- All 4 slots always visible (no progressive reveal, no "+" button)
-- Empty slots show the role label + dashed border
-- In **video mode**, keep existing behavior (start/end ref only, no fixed slots)
+### 2. Enhance Ref Slot Drop Targets (MobileQuickBar.tsx)
 
-### MobileSimplePromptInput.tsx
-- Replace the `refSlots` builder with fixed 4-slot structure
-- Map slots to state:
-  - Slot 0 -> `referenceImageUrl` (existing Ref 1)
-  - Slot 1 -> `referenceImage2Url` (existing Ref 2)
-  - Slot 2 -> `additionalRefUrls[0]` (Char 3)
-  - Slot 3 -> `additionalRefUrls[1]` (Pose)
-- Remove `handleAddSlot` / progressive logic
-- Remove `maxSlots` detection from model capabilities (fixed at 4 for image mode)
-- Update `handleRemoveSlot` and `handleFileSelectForSlot` for the 4-slot mapping
+**RefSlot component** -- Accept both file drops and URL drops:
+- In `handleDropEvent`, check for custom MIME `application/x-ref-image` first, then fall back to `files[0]`
+- New prop: `onDropUrl: (url: string) => void` for handling URL-based drops (no upload needed)
+- Enhanced drag-over visuals:
+  - Scale up the slot slightly: `scale-110`
+  - Brighter ring: `ring-2 ring-primary` with a subtle pulse animation
+  - Background glow: `bg-primary/20`
+- On drag leave, smoothly transition back
 
-### useLibraryFirstWorkspace.ts - Auto Figure Notation
-In the `generate()` function, when `allRefUrls.length > 1`, build a Figure prefix based on which slots are filled:
+### 3. Wire Drop-URL Handler (MobileSimplePromptInput + MobileSimplifiedWorkspace)
 
-**Examples:**
-- Char 1 + Pose: `"Show the character from Figure 1 in the pose/position shown in Figure 2:"`
-- Char 1 + Char 2 + Pose: `"Show the character from Figure 1 and the character from Figure 2 in the pose/position shown in Figure 3:"`
-- Char 1 + Char 2 + Char 3 + Pose: `"Show the characters from Figure 1, Figure 2, and Figure 3 in the pose/position shown in Figure 4:"`
-- Char 1 + Char 2 (no pose): `"Show the character from Figure 1 and the character from Figure 2 together:"`
+**MobileSimplePromptInput.tsx** -- Add `onFixedSlotDropUrl` callback:
+- When a URL is dropped (not a file), call a new handler that sets the ref slot URL directly without uploading
+- This avoids re-uploading an already-signed workspace image
 
-The key insight: the **pose image is always last** in the `image_urls` array, regardless of how many character slots are filled. Empty character slots are skipped (not sent).
+**MobileSimplifiedWorkspace.tsx** -- Implement `handleFixedSlotDropUrl`:
+- Receives `(slotIndex: number, url: string)`
+- Maps slot index to the correct state setter (`setReferenceImageUrl`, `setReferenceImage2Url`, or `setAdditionalRefUrls`)
 
-### MobileSimplifiedWorkspace.tsx
-- Update `handleGenerate` to pass slot role metadata along with URLs so the generate function knows which is pose vs character
-- Update drag-from-grid overflow logic: fill Char 1 -> Char 2 -> Char 3 -> Pose in order
+### 4. Drag Ghost (Custom Drag Image)
+
+The drag ghost is created using a temporary canvas element:
+- On `dragStart`, get the tile's `img` element
+- Draw it to a 40x53 canvas (3:4 ratio matching ref slots)
+- Add a subtle border radius effect and shadow
+- Use `e.dataTransfer.setDragImage(canvas, 20, 26)` to center the ghost under the cursor
+- Clean up the canvas after a frame
+
+## Visual Feedback Summary
+
+| State | Visual |
+|-------|--------|
+| Idle tile | Normal appearance |
+| Dragging tile | Opacity 0.4, no scale effect |
+| Ref slot idle | Current dashed border |
+| Ref slot drag-over | Scale 1.1, ring-2 ring-primary, bg-primary/20, subtle pulse |
+| Drop complete | Brief green flash on the slot, then normal filled state |
 
 ## Technical Details
 
-### Slot-to-URL mapping for API call
-```text
-Filled slots example: Char1=url_a, Char3=url_b, Pose=url_c
-  -> image_urls: [url_a, url_b, url_c]
-  -> prompt prefix: "Show the character from Figure 1 and the character 
-     from Figure 2 in the pose/position shown in Figure 3:"
-```
+### Files Changed
 
-The generate function receives a structured object instead of flat arrays:
+1. **`src/components/shared/AssetTile.tsx`** -- Add `draggable`, `onDragStart`, `onDragEnd` props; apply opacity during drag
+2. **`src/components/shared/SharedGrid.tsx`** -- Wire draggable behavior on workspace tiles; create canvas drag ghost in `onDragStart`
+3. **`src/components/workspace/MobileQuickBar.tsx`** -- Enhanced drop target visuals; accept URL drops via custom MIME type; add `onDropUrl` prop to RefSlot; export updated props interface
+4. **`src/components/workspace/MobileSimplePromptInput.tsx`** -- Add `onFixedSlotDropUrl` handler; pass it through to MobileQuickBar
+5. **`src/pages/MobileSimplifiedWorkspace.tsx`** -- Implement `handleFixedSlotDropUrl` to set ref slot URL directly from dropped asset data
+
+### Drag Data Format
 ```typescript
-interface RefSlotData {
-  url: string;
-  role: 'character' | 'pose';
+// Set on dragStart:
+e.dataTransfer.setData('application/x-ref-image', JSON.stringify({
+  url: asset.thumbUrl || asset.signedUrl,
+  assetId: asset.id,
+  type: asset.type
+}));
+
+// Read on drop:
+const refData = e.dataTransfer.getData('application/x-ref-image');
+if (refData) {
+  const { url } = JSON.parse(refData);
+  onDropUrl(url);  // Direct URL set, no upload
 }
 ```
 
-This lets it build the correct Figure notation: characters listed first, pose always referenced last.
-
-### Props changes
-- `MobileQuickBar`: replace `refSlots`/`maxSlots`/`onAddSlot` with 4 fixed slot props (or a `fixedSlots` array with role labels)
-- `RefSlotData` type updated to include `role` and `label`
-
-## Files Changed
-1. `src/components/workspace/MobileQuickBar.tsx` - Fixed 4 labeled slots, increased height, remove "+" button
-2. `src/components/workspace/MobileSimplePromptInput.tsx` - Fixed slot mapping, remove progressive logic
-3. `src/pages/MobileSimplifiedWorkspace.tsx` - Update generate call with role metadata, update drag overflow
-4. `src/hooks/useLibraryFirstWorkspace.ts` - Auto-inject Figure notation based on slot roles
-
+### Canvas Drag Ghost Creation
+```typescript
+const img = tileElement.querySelector('img');
+const canvas = document.createElement('canvas');
+canvas.width = 40;
+canvas.height = 53; // 3:4 ratio
+const ctx = canvas.getContext('2d');
+ctx.drawImage(img, 0, 0, 40, 53);
+e.dataTransfer.setDragImage(canvas, 20, 26);
+```
