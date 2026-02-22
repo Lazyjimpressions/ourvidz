@@ -142,7 +142,7 @@ function ModelChipPopover({ currentMode, selectedModel, onModelChange, imageMode
 
   // Truncate model name for chip display
   const displayName = selectedModel?.display_name || 'Select';
-  const shortName = displayName.length > 12 ? displayName.slice(0, 12) + '…' : displayName;
+  const shortName = displayName.length > 20 ? displayName.slice(0, 20) + '…' : displayName;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -150,7 +150,7 @@ function ModelChipPopover({ currentMode, selectedModel, onModelChange, imageMode
         <button
           type="button"
           className={cn(
-            "flex items-center gap-0.5 px-2 py-1 text-[10px] font-medium rounded-md border transition-colors",
+            "flex items-center gap-0.5 px-2 py-1 text-[10px] font-medium rounded-md border transition-colors min-w-[140px]",
             "bg-muted/50 text-foreground border-border hover:bg-accent"
           )}
         >
