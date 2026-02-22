@@ -35,7 +35,7 @@
 
 - **characters** (31 cols, 10 rows) - Character definitions & metadata (includes `clothing_tags` Feb 2026)
 - **character_scenes** (13 cols, 3 rows) - Character-scene relationships
-- **scenes** (10 cols, 0 rows) - Scene definitions within projects
+- **scenes** (12 cols, 0 rows) - Scene definitions (includes `default_clothing`, `character_clothing_overrides` Feb 2026)
 - **projects** (14 cols, 23 rows) - Project management & workflow
 
 ### **Chat System (2 tables)**
@@ -46,7 +46,7 @@
 ### **System Configuration (6 tables)**
 
 - **api_providers** (12 cols, 1 row) - External API configuration
-- **api_models** (19 cols, 1 row) - Model configurations & capabilities
+- **api_models** (19 cols, 1 row) - Model configurations & capabilities (`tasks` array replaces `task` Feb 2026)
 - **prompt_templates** (18 cols, 19 rows) - Prompt enhancement templates
 - **negative_prompts** (11 cols, 12 rows) - Negative prompt presets with generation mode support
 - **enhancement_presets** (13 cols, 4 rows) - Quality enhancement presets
@@ -628,6 +628,57 @@ supabase functions deploy [function-name]
 - `roleplay-chat/index.ts`: Constructs `${physicalAppearance}, wearing ${outfitTags}` for scenes
 
 **Migration Guide:** See `docs/08-DATABASE/MIGRATIONS/20260220_clothing_tags.md`
+
+---
+
+### **Multi-Task Model Support (February 2026)** - BREAKING CHANGE
+
+**Migration:** `20260222010148_fd9d085b-6791-4b74-8050-b52582c8e1ed.sql`
+
+**Change:** Replaced `api_models.task` (string) with `api_models.tasks` (text array)
+
+**Breaking:** All queries using `.eq('task', x)` must change to `.contains('tasks', [x])`
+
+**New Features:**
+
+- Models can now declare multiple capabilities (e.g., `['i2i', 'i2i_multi']`)
+- New `i2i_multi` task for multi-reference scenarios
+- `check_valid_tasks()` database function validates task values
+- GIN index `idx_api_models_tasks_gin` for efficient queries
+
+**Valid Tasks:** t2i, i2i, i2i_multi, t2v, i2v, extend, multi, upscale, roleplay, reasoning, enhancement, embedding, vision
+
+**Migration Guide:** See `docs/08-DATABASE/MIGRATIONS/20260221_multi_task_models.md`
+
+---
+
+### **Scene Clothing Overrides (February 2026)**
+
+**Migration:** `20260221043632_f1d4b051-8724-448c-ba43-dc2641df6b73.sql`
+
+**Change:** Added clothing columns to `scenes` table:
+
+- `default_clothing` (text) - Scene-wide default outfit
+- `character_clothing_overrides` (jsonb) - Per-character clothing overrides
+
+**Priority Order:** AI-extracted > per-char override > scene default > character tags
+
+**Migration Guide:** See `docs/08-DATABASE/MIGRATIONS/20260220_clothing_tags.md` (Scene Clothing Overrides section)
+
+---
+
+### **Webhook Async Video Processing (February 2026)**
+
+**New Edge Function:** `fal-webhook` - Handles async video generation callbacks
+
+**Database:**
+
+- `api_models.endpoint_path` - Set to `'fal-webhook'` for async models
+- `jobs.metadata.fal_request_id` - Correlates webhook callbacks to jobs
+
+**Security:** `FAL_WEBHOOK_SECRET` environment variable required
+
+**Documentation:** See `docs/05-APIS/WEBHOOK_ASYNC_VIDEO.md`
 
 ---
 

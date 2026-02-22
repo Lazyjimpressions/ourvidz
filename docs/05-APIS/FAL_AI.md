@@ -1,6 +1,6 @@
 # fal.ai API Integration
 
-**Last Updated:** January 3, 2026
+**Last Updated:** February 21, 2026
 **Status:** ✅ IMPLEMENTED - Edge function created, NSFW capabilities pending testing
 
 ## Overview
@@ -396,9 +396,124 @@ const response = await fetch(`https://fal.run/${model.model_key}`, {
 // Note: queue.fal.run is for async/polling, fal.run is for sync
 ```
 
-### Webhook Support (Future)
+### Webhook Support (Feb 2026 - IMPLEMENTED)
 
-fal.ai supports webhooks for long-running predictions. Not currently implemented - uses polling via `fal.subscribe()` pattern instead.
+fal.ai supports webhooks for long-running video predictions. Now implemented via `fal-webhook` edge function.
+
+**Workflow:**
+```
+fal-image → queue.fal.run (with webhook_url) → fal.ai processes
+                                                    ↓
+                                              fal-webhook ← callback
+                                                    ↓
+                                              Job completion + post-processing
+```
+
+**Edge Functions:**
+- `supabase/functions/fal-image/index.ts` - Initiates async requests
+- `supabase/functions/fal-webhook/index.ts` - Handles callbacks
+
+**Environment Variable:**
+```bash
+FAL_WEBHOOK_SECRET=your_webhook_secret  # Required for callback verification
+```
+
+**Async Model Detection:**
+Models with `endpoint_path = 'fal-webhook'` in `api_models` table use async workflow.
+
+For complete webhook documentation, see [WEBHOOK_ASYNC_VIDEO.md](./WEBHOOK_ASYNC_VIDEO.md).
+
+---
+
+## Helper Functions (Feb 2026 Refactor)
+
+The fal-image edge function was refactored into modular helper functions:
+
+### signIfStoragePath()
+
+Signs Supabase storage URLs if needed:
+
+```typescript
+async function signIfStoragePath(
+  url: string,
+  supabaseClient: SupabaseClient
+): Promise<string> {
+  // If already signed or external URL, return as-is
+  if (!url.includes('/storage/v1/object/public/')) {
+    return url;
+  }
+
+  // Extract bucket/path and sign
+  const pathMatch = url.match(/\/storage\/v1\/object\/public\/(.+)/);
+  if (pathMatch) {
+    const { data } = await supabaseClient.storage
+      .from(bucket)
+      .createSignedUrl(path, 3600);
+    return data?.signedUrl ?? url;
+  }
+  return url;
+}
+```
+
+### buildModelInput()
+
+Constructs model-specific input payload:
+
+```typescript
+function buildModelInput(
+  model: ApiModel,
+  prompt: string,
+  options: InputOptions
+): Record<string, unknown> {
+  const baseInput = {
+    prompt,
+    ...model.input_defaults,
+    ...options.input
+  };
+
+  // Handle image field naming dynamically
+  if (options.imageUrl) {
+    const fieldName = model.capabilities?.requires_image_urls_array
+      ? 'image_urls'
+      : model.input_schema?.properties?.image_url
+        ? 'image_url'
+        : 'image';
+
+    baseInput[fieldName] = model.capabilities?.requires_image_urls_array
+      ? [options.imageUrl]
+      : options.imageUrl;
+  }
+
+  return baseInput;
+}
+```
+
+### handlePostProcessing()
+
+Handles destination routing after generation:
+
+```typescript
+async function handlePostProcessing(
+  resultUrl: string,
+  jobId: string,
+  destinations: string[]
+): Promise<void> {
+  // Fire-and-forget post-processing
+  for (const destination of destinations) {
+    switch (destination) {
+      case 'workspace':
+        await createWorkspaceAsset(resultUrl, jobId);
+        break;
+      case 'library':
+        await createLibraryAsset(resultUrl, jobId);
+        break;
+      case 'character':
+        await updateCharacterPortrait(resultUrl, jobId);
+        break;
+    }
+  }
+}
+```
 
 ---
 

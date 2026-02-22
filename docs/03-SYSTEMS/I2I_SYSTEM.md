@@ -1,6 +1,6 @@
 # Image-to-Image (I2I) System
 
-**Last Updated:** February 20, 2026
+**Last Updated:** February 21, 2026
 **Status:** ✅ PRODUCTION - Local SDXL + Replicate API fallback
 
 ## Overview
@@ -132,14 +132,16 @@ const copyDefaults = {
 
 ## Frontend Components
 
-### SimplePromptInput
+### MobileQuickBar (Primary)
 
-**File:** `src/components/workspace/SimplePromptInput.tsx`
+**File:** `src/components/workspace/MobileQuickBar.tsx`
 
-- Reference image upload and display
+- Dual reference slots (ref1/ref2) with drag-and-drop
 - Mode switching (MODIFY ↔ COPY)
 - Reference strength slider
-- Style control toggles
+- Video reference support
+
+**Note:** `SimplePromptInput.tsx` was deleted in Feb 2026 cleanup. MobileQuickBar is now the primary reference UI.
 
 ### Mode Toggle Behavior
 
@@ -347,6 +349,173 @@ Reference images in long conversations may have expired signed URLs. The `ensure
 4. Falls back to original URL on error
 
 **Location:** `supabase/functions/roleplay-chat/index.ts` lines 120-171
+
+---
+
+## Dual Reference Slot System (Feb 2026)
+
+### Overview
+
+The workspace now supports two reference image slots (ref1/ref2) for multi-reference I2I workflows, particularly for models like Flux-2 Flash Edit that accept `image_urls` arrays.
+
+### MobileQuickBar Implementation
+
+**File:** `src/components/workspace/MobileQuickBar.tsx`
+
+```typescript
+// Dual slot state management
+const [ref1, setRef1] = useState<ReferenceImage | null>(null);
+const [ref2, setRef2] = useState<ReferenceImage | null>(null);
+
+// Drag-and-drop reordering
+const handleDragEnd = (result: DropResult) => {
+  if (result.source.index === 0 && result.destination?.index === 1) {
+    // Swap ref1 ↔ ref2
+    setRef1(ref2);
+    setRef2(ref1);
+  }
+};
+```
+
+### Auto-Fill Behavior
+
+When adding references:
+1. First image → fills ref1
+2. Second image → fills ref2
+3. Additional images → replaces ref2 (ref1 preserved)
+
+### Video Reference Support
+
+Reference slots support both images and videos for I2V workflows:
+
+```typescript
+interface ReferenceImage {
+  url: string;
+  type: 'image' | 'video';
+  thumbnailUrl?: string;  // For video preview
+}
+```
+
+### Multi-Reference Model Detection
+
+Models requiring multiple references are detected via `i2i_multi` task:
+
+```typescript
+// Check if model supports multi-reference
+const supportsMultiRef = model.tasks?.includes('i2i_multi');
+if (supportsMultiRef && ref2) {
+  payload.image_urls = [ref1.url, ref2.url];
+} else {
+  payload.image_url = ref1.url;
+}
+```
+
+---
+
+## Model-Driven Image Field Selection (Feb 2026)
+
+### Overview
+
+Rather than hardcoding image field names per model, the system now dynamically determines the correct field name by examining the model's `input_schema` from the `api_models` table.
+
+### Detection Logic
+
+**File:** `supabase/functions/character-portrait/index.ts`
+
+```typescript
+// Priority order for detecting image field name
+function getImageFieldName(model: ApiModel): string {
+  const schema = model.input_schema;
+
+  // 1. Check for image_urls array (multi-reference models)
+  if (schema?.properties?.image_urls) {
+    return 'image_urls';
+  }
+
+  // 2. Check for singular image_url
+  if (schema?.properties?.image_url) {
+    return 'image_url';
+  }
+
+  // 3. Fallback to generic 'image'
+  return 'image';
+}
+```
+
+### Capability Flag Override
+
+The `requires_image_urls_array` capability flag provides explicit override:
+
+```typescript
+// capabilities JSONB in api_models table
+{
+  "requires_image_urls_array": true  // Forces image_urls[] even if schema ambiguous
+}
+
+// Usage in edge function
+if (model.capabilities?.requires_image_urls_array) {
+  payload.image_urls = [signedUrl];
+} else {
+  payload[getImageFieldName(model)] = signedUrl;
+}
+```
+
+### Models Using Array Format
+
+| Model | Field | Reason |
+|-------|-------|--------|
+| Flux-2 Flash Edit | `image_urls[]` | Multi-reference editing |
+| Seedream v4 Edit | `image_urls[]` | Dual image support |
+| Seedream v4.5 Edit | `image_urls[]` | Dual image support |
+
+---
+
+## I2V Identity Handling (Feb 2026)
+
+### Overview
+
+Image-to-Video (I2V) generation has different identity handling than Image-to-Image (I2I). Character identity prompts are NOT injected for video generation to avoid conflicts with the video model's own understanding.
+
+### Rationale
+
+Video models (WAN 2.1 I2V) derive visual identity from the source image itself. Injecting character prompts like "woman with blonde hair" can:
+1. Conflict with what the model sees in the image
+2. Cause unwanted style shifts during video
+3. Reduce motion quality
+
+### Implementation
+
+**File:** `supabase/functions/roleplay-chat/index.ts`
+
+```typescript
+// Check if generating video vs image
+const isVideoGeneration = model.tasks?.includes('i2v') ||
+                          model.modality === 'video';
+
+// Build character description
+let characterPrompt = '';
+if (!isVideoGeneration) {
+  // I2I: Include identity for style consistency
+  characterPrompt = buildCharacterIdentity(character);
+}
+
+// For I2V, prompt focuses on action/motion only
+const finalPrompt = isVideoGeneration
+  ? actionDescription  // "walking through garden"
+  : `${characterPrompt}, ${actionDescription}`;  // "blonde woman walking..."
+```
+
+### Task Detection
+
+The `i2v` task in `api_models.tasks` array triggers video mode:
+
+```sql
+-- Models with I2V capability
+SELECT model_key, tasks FROM api_models
+WHERE 'i2v' = ANY(tasks);
+
+-- Returns: fal-ai/wan/v2.1/i2v, etc.
+```
 
 ---
 

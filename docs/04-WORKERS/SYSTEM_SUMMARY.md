@@ -358,6 +358,44 @@ const response = await fetch(`${UPSTASH_REDIS_REST_URL}/rpush/${queueKey}`, {
 
 **Location:** `supabase/functions/queue-job/index.ts` lines 606-614
 
+### **Workspace Cache Invalidation (Feb 2026)**
+
+The `useLibraryFirstWorkspace` hook uses staged cache invalidation to handle database write delays and missed realtime events.
+
+**Staged Invalidation Delays:**
+
+```typescript
+const INVALIDATION_DELAYS = [1500, 4000, 8000]; // ms
+
+const invalidateWithRetry = () => {
+  INVALIDATION_DELAYS.forEach(delay => {
+    setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+    }, delay);
+  });
+};
+```
+
+**Rationale:**
+
+- **1500ms**: Catches most quick database writes
+- **4000ms**: Handles typical storage upload completion
+- **8000ms**: Final safety net for slow operations
+
+**Polling Fallback:**
+
+Additionally, a 5-second polling interval catches any updates missed by realtime subscriptions:
+
+```typescript
+const { data, refetch } = useQuery({
+  queryKey: ['workspace-assets'],
+  refetchInterval: 5000, // Polling fallback
+  // ...
+});
+```
+
+**Location:** `src/hooks/useLibraryFirstWorkspace.ts`
+
 ```text
 HF_TOKEN=                  # HuggingFace token (optional)
 ```
@@ -488,4 +526,4 @@ HF_TOKEN=                  # HuggingFace token (optional)
 
 ---
 
-**🎯 This summary provides the frontend API with complete context of the current OurVidz Worker system structure, capabilities, and integration patterns including I2I pipeline, thumbnail generation, and pure inference chat worker architecture as of August 31, 2025.**
+**🎯 This summary provides the frontend API with complete context of the current OurVidz Worker system structure, capabilities, and integration patterns including I2I pipeline, thumbnail generation, pure inference chat worker architecture, and cache invalidation patterns as of February 2026.**

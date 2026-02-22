@@ -86,6 +86,40 @@ This ensures character portraits always work regardless of local worker health.
 - Use `api_models` table for model configuration, `api_providers` for provider details
 - Health cache keys: `chatWorker`, `wanWorker` in `system_config.config.workerHealthCache`
 
+### Multi-Task Model Support (Feb 2026 - BREAKING)
+
+**BREAKING CHANGE:** `api_models.task` (string) replaced with `api_models.tasks` (text array)
+
+**Query Migration:**
+```typescript
+// OLD (broken): .eq('task', 'i2i')
+// NEW (correct): .contains('tasks', ['i2i'])
+```
+
+**Valid tasks:** t2i, i2i, i2i_multi, t2v, i2v, extend, multi, upscale, roleplay, reasoning, enhancement, embedding, vision
+
+**New capability:** `i2i_multi` for models supporting multiple reference images (e.g., Seedream v4/v4.5 edit)
+
+### Async Video Processing (Feb 2026)
+
+- `supabase/functions/fal-webhook/index.ts` - Handles async video callbacks from fal.ai
+- Models with `endpoint_path = 'fal-webhook'` use async submission via `queue.fal.run`
+- Requires `FAL_WEBHOOK_SECRET` environment variable
+
+### Dual Reference System
+
+- `src/components/workspace/MobileQuickBar.tsx` - ref1/ref2 slots with drag-and-drop
+- Auto-fill: overflow from ref1 to ref2 on selection
+- Video reference: auto-switches to video mode + extend model
+
+### Code Cleanup (Feb 2026)
+
+**Deleted Files:**
+- `src/pages/SimplifiedWorkspace.tsx` (1,562 lines) - Replaced by `MobileSimplifiedWorkspace.tsx`
+- `src/components/workspace/SimplePromptInput.tsx` (648 lines) - Replaced by `MobileSimplePromptInput.tsx`
+
+Desktop and mobile now share unified responsive workspace components.
+
 ## Architecture
 
 **Pages** (`src/pages/`): Route components including mobile variants (`MobileRoleplayChat.tsx`, `MobileSimplifiedWorkspace.tsx`)

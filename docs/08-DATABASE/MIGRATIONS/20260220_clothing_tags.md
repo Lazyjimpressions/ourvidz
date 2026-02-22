@@ -140,6 +140,85 @@ appearance_tags = ARRAY(
 WHERE appearance_tags IS NOT NULL AND array_length(appearance_tags, 1) > 0;
 ```
 
+---
+
+## Scene Clothing Overrides (Feb 21, 2026)
+
+### Additional Migration
+
+**Migration ID:** `f1d4b051-8724-448c-ba43-dc2641df6b73`
+**File:** `20260221043632_f1d4b051-8724-448c-ba43-dc2641df6b73.sql`
+
+```sql
+ALTER TABLE scenes ADD COLUMN default_clothing text;
+ALTER TABLE scenes ADD COLUMN character_clothing_overrides jsonb DEFAULT '{}';
+```
+
+### New Columns on `scenes` Table
+
+| Column | Type | Default | Purpose |
+|--------|------|---------|---------|
+| `default_clothing` | `text` | `null` | Scene-wide default outfit for all characters |
+| `character_clothing_overrides` | `jsonb` | `'{}'` | Per-character clothing overrides |
+
+### character_clothing_overrides Structure
+
+```typescript
+{
+  "char-uuid-1": "red evening dress, high heels",
+  "char-uuid-2": "casual jeans and t-shirt"
+}
+```
+
+### Clothing Priority Order
+
+When building scene prompts, clothing is resolved in this priority (highest to lowest):
+
+1. **AI-extracted clothing** - From character description analysis
+2. **Per-character scene overrides** - `character_clothing_overrides[charId]`
+3. **Scene default clothing** - `default_clothing`
+4. **Character's default tags** - `character.clothing_tags`
+
+### Related Files
+
+**UI Components:**
+
+- `src/components/roleplay/SceneCreationModal.tsx` - Scene Clothing section UI
+- `src/hooks/useSceneCreation.ts` - Saves clothing fields to database
+
+**Edge Function:**
+
+- `supabase/functions/roleplay-chat/index.ts` - Applies clothing in prompt builder
+
+```typescript
+// Resolve clothing with priority
+const resolveClothing = (characterId: string, sceneData: Scene) => {
+  // Priority 1: Per-character override
+  if (sceneData.character_clothing_overrides?.[characterId]) {
+    return sceneData.character_clothing_overrides[characterId];
+  }
+  // Priority 2: Scene default
+  if (sceneData.default_clothing) {
+    return sceneData.default_clothing;
+  }
+  // Priority 3: Character default tags
+  return character.clothing_tags?.join(', ') || '';
+};
+```
+
+**Frontend Integration:**
+
+- `src/pages/MobileRoleplayChat.tsx` - Passes clothing fields to edge function
+
+### UI Implementation
+
+SceneCreationModal includes:
+
+1. **Scene Clothing** text input - Default outfit for all characters
+2. **Per-Character Overrides** - Expandable section for character-specific clothing
+
+---
+
 ## Testing Checklist
 
 - [ ] Character creation with clothing tags
@@ -148,3 +227,6 @@ WHERE appearance_tags IS NOT NULL AND array_length(appearance_tags, 1) > 0;
 - [ ] Scene generation includes clothing in prompts
 - [ ] Portrait generation includes both tag types
 - [ ] Existing characters (pre-migration) work correctly
+- [ ] Scene clothing overrides apply correctly
+- [ ] Per-character overrides take priority over scene default
+- [ ] Scene default takes priority over character tags

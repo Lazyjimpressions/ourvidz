@@ -1,7 +1,7 @@
 # Roleplay Purpose & PRD (Product Requirements Document)
 
-**Last Updated:** February 6, 2026
-**Status:** ✅ **95% Complete - Production Ready**
+**Last Updated:** February 21, 2026
+**Status:** ✅ **97% Complete - Production Ready**
 **Priority:** **HIGH** - Core MVP Feature
 
 ## **🎯 Purpose Statement**
@@ -661,6 +661,67 @@ const canEdit = isOwner || isAdmin;
 - **User notifications**: Toast messages for connection issues
 - **Unmount cleanup**: Proper channel removal prevents orphaned connections
 
+### **Scene Clothing Overrides (Feb 2026)** ✅
+
+Scene-level control over character clothing, independent of character defaults.
+
+**Database Columns (`scenes` table):**
+
+- `default_clothing` (text): Scene-wide default outfit for all characters
+- `character_clothing_overrides` (jsonb): Per-character clothing overrides
+
+**Structure:**
+
+```json
+{
+  "char-uuid-1": "red evening dress, high heels",
+  "char-uuid-2": "casual jeans and t-shirt"
+}
+```
+
+**Clothing Priority Order:**
+
+1. AI-extracted clothing (from character description analysis)
+2. Per-character scene overrides (`character_clothing_overrides[charId]`)
+3. Scene default clothing (`default_clothing`)
+4. Character's default tags (`character.clothing_tags`)
+
+**UI Components:**
+
+- `SceneCreationModal`: "Scene Clothing" section with default outfit input
+- Per-character override inputs for each character in scene
+
+**See:** [clothing_tags Migration Guide](../../08-DATABASE/MIGRATIONS/20260220_clothing_tags.md)
+
+### **I2V Identity Handling (Feb 2026)** ✅
+
+Video generation (I2V) differs from image generation (I2I) in identity handling.
+
+**Key Change:** Character identity prompts are NOT injected for video generation.
+
+**Rationale:**
+
+- Video models derive visual identity from source image
+- Text prompts can conflict with what model sees in image
+- Reduces unwanted style shifts during video
+- Improves motion quality
+
+**Detection Logic:**
+
+```typescript
+const isVideoGeneration = model.tasks?.includes('i2v') ||
+                          model.modality === 'video';
+
+// For I2V, prompt focuses on action/motion only
+const finalPrompt = isVideoGeneration
+  ? actionDescription  // "walking through garden"
+  : `${characterPrompt}, ${actionDescription}`;  // "blonde woman walking..."
+```
+
+**Task Detection:**
+
+Models with `i2v` in `api_models.tasks` array trigger video mode.
+
 ## **🚀 Upcoming Features (Q2 2026)**
 
 ### **Phase 3: Advanced Features**
@@ -673,6 +734,6 @@ const canEdit = isOwner || isAdmin;
 
 ---
 
-**Status**: PRD updated February 6, 2026. 95% complete, production ready. Scene continuity, multi-reference generation, user personas, and enhanced scene creation are fully implemented.
+**Status**: PRD updated February 21, 2026. 97% complete, production ready. Scene continuity, multi-reference generation, user personas, enhanced scene creation, scene clothing overrides, and I2V identity handling are fully implemented.
 
 **Document Purpose**: This is the definitive Product Requirements Document (PRD) that defines the business goals, user requirements, and success criteria for the roleplay feature. It serves as the strategic foundation for all development decisions.

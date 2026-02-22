@@ -1,6 +1,6 @@
 # System Architecture - Consolidated
 
-**Last Updated:** August 3, 2025  
+**Last Updated:** February 21, 2026
 **Status:** Production Active with Unified Session Storage System
 
 ## 🎯 **MASSIVE WORKSPACE REFACTORING COMPLETED**
@@ -10,6 +10,43 @@
 - **Architecture**: Unified session storage based workspace system
 - **Complexity Reduction**: 87% reduction in workspace page complexity
 - **Performance**: 68% reduction in state management variables
+
+---
+
+## 🆕 **Recent Changes (February 2026)**
+
+### **Desktop Workspace Consolidation**
+
+Further cleanup of workspace architecture - removed desktop-specific components in favor of responsive mobile-first design.
+
+**Files Deleted:**
+
+| File | Lines | Reason |
+|------|-------|--------|
+| `src/pages/SimplifiedWorkspace.tsx` | 1,562 | Replaced by MobileSimplifiedWorkspace |
+| `src/components/workspace/SimplePromptInput.tsx` | 648 | Replaced by MobileQuickBar |
+
+**Changes:**
+
+- **Unified Responsive Workspace**: `MobileSimplifiedWorkspace.tsx` now serves both mobile and desktop
+- **Collapsible Left Sidebar**: Desktop view has collapsible sidebar instead of separate layout
+- **MobileQuickBar as Primary**: Reference slots, mode switching, and prompt input unified in one component
+- **Dual Reference Slots**: New ref1/ref2 system with drag-and-drop reordering
+
+**Component Architecture (Updated):**
+
+```
+Workspace Page
+├── OurVidzDashboardLayout.tsx (Responsive shell)
+│   └── Collapsible left sidebar (desktop)
+├── MobileSimplifiedWorkspace.tsx (Primary workspace - mobile & desktop)
+│   ├── MobileQuickBar.tsx (Prompt input, ref slots, mode toggle)
+│   ├── WorkspaceGrid.tsx (Content grid)
+│   └── useLibraryFirstWorkspace.ts (State management)
+└── useRealtimeWorkspace.ts (Real-time updates)
+```
+
+**See:** [CLAUDE.md Code Cleanup Section](../../CLAUDE.md)
 
 ---
 
