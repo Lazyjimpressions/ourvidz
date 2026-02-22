@@ -4,6 +4,11 @@ import { Button } from '@/components/ui/button';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { cn } from '@/lib/utils';
 
+export interface RefSlotData {
+  url?: string | null;
+  isVideo?: boolean;
+}
+
 export interface MobileQuickBarProps {
   // Mode
   currentMode: 'image' | 'video';
@@ -15,17 +20,13 @@ export interface MobileQuickBarProps {
   // Settings sheet trigger
   onOpenSettings: () => void;
   
-  // Dual reference slots
-  ref1Url?: string | null;
-  ref2Url?: string | null;
-  ref1IsVideo?: boolean;
-  ref2IsVideo?: boolean;
-  onAddRef1?: () => void;
-  onAddRef2?: () => void;
-  onRemoveRef1?: () => void;
-  onRemoveRef2?: () => void;
-  onDropRef1?: (file: File) => void;
-  onDropRef2?: (file: File) => void;
+  // Dynamic ref slots
+  refSlots: RefSlotData[];
+  maxSlots: number;
+  onAddRef: (index: number) => void;
+  onRemoveRef: (index: number) => void;
+  onDropRef: (index: number, file: File) => void;
+  onAddSlot: () => void;
   
   // Desktop inline controls
   contentType?: 'sfw' | 'nsfw';
@@ -43,13 +44,12 @@ export interface MobileQuickBarProps {
 const RefSlot: React.FC<{
   url?: string | null;
   isVideo?: boolean;
-  onAdd?: () => void;
-  onRemove?: () => void;
-  onDrop?: (file: File) => void;
-  onOverflowDrop?: (file: File) => void; // When dropping on a filled slot, overflow to ref2
+  onAdd: () => void;
+  onRemove: () => void;
+  onDrop: (file: File) => void;
   label: string;
   disabled?: boolean;
-}> = ({ url, isVideo, onAdd, onRemove, onDrop, onOverflowDrop, label, disabled }) => {
+}> = ({ url, isVideo, onAdd, onRemove, onDrop, label, disabled }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [videoError, setVideoError] = useState(false);
 
@@ -65,18 +65,12 @@ const RefSlot: React.FC<{
     setIsDragOver(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDropEvent = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    if (url && onOverflowDrop) {
-      // Slot is filled → overflow to ref2
-      onOverflowDrop(file);
-    } else if (onDrop) {
-      onDrop(file);
-    }
+    if (file) onDrop(file);
   };
 
   if (url) {
@@ -88,11 +82,10 @@ const RefSlot: React.FC<{
         )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        onDrop={handleDropEvent}
       >
         {isVideo ? (
           videoError ? (
-            // Fallback: styled placeholder with Film icon
             <div className="h-full w-full flex items-center justify-center bg-muted/40">
               <Film className="h-4 w-4 text-muted-foreground" />
             </div>
@@ -113,15 +106,13 @@ const RefSlot: React.FC<{
             <Film className="h-2.5 w-2.5 text-white" />
           </div>
         )}
-        {onRemove && (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-destructive/80 flex items-center justify-center"
-          >
-            <X className="h-2 w-2 text-destructive-foreground" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-destructive/80 flex items-center justify-center"
+        >
+          <X className="h-2 w-2 text-destructive-foreground" />
+        </button>
       </div>
     );
   }
@@ -133,7 +124,7 @@ const RefSlot: React.FC<{
       disabled={disabled}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      onDrop={handleDropEvent}
       className={cn(
         "h-8 w-8 rounded border border-dashed flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-colors shrink-0 disabled:opacity-30",
         isDragOver ? "border-primary bg-primary/10" : "border-muted-foreground/40"
@@ -144,21 +135,30 @@ const RefSlot: React.FC<{
   );
 };
 
+/** "+" button to add more ref slots */
+const AddSlotButton: React.FC<{ onClick: () => void; disabled?: boolean }> = ({ onClick, disabled }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    className="h-8 w-8 rounded-full border border-dashed border-primary/40 flex items-center justify-center hover:bg-primary/10 hover:border-primary transition-colors shrink-0 disabled:opacity-30"
+    title="Add reference slot"
+  >
+    <Plus className="h-3.5 w-3.5 text-primary/70" />
+  </button>
+);
+
 export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   currentMode,
   onModeToggle,
   selectedModelName,
   onOpenSettings,
-  ref1Url,
-  ref2Url,
-  ref1IsVideo = false,
-  ref2IsVideo = false,
-  onAddRef1,
-  onAddRef2,
-  onRemoveRef1,
-  onRemoveRef2,
-  onDropRef1,
-  onDropRef2,
+  refSlots,
+  maxSlots,
+  onAddRef,
+  onRemoveRef,
+  onDropRef,
+  onAddSlot,
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
@@ -167,6 +167,9 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onBatchSizeChange,
   disabled = false,
 }) => {
+  const allFilled = refSlots.length > 0 && refSlots.every(s => !!s.url);
+  const canAddMore = refSlots.length < maxSlots;
+
   return (
     <div className={cn(
       "flex items-center gap-2 px-3 py-2",
@@ -183,26 +186,24 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
         size="sm"
       />
       
-      {/* Ref Slots */}
-      <RefSlot
-        url={ref1Url}
-        isVideo={ref1IsVideo}
-        onAdd={onAddRef1}
-        onRemove={onRemoveRef1}
-        onDrop={onDropRef1}
-        onOverflowDrop={onDropRef2}
-        label="Ref 1"
-        disabled={disabled}
-      />
-      <RefSlot
-        url={ref2Url}
-        isVideo={ref2IsVideo}
-        onAdd={onAddRef2}
-        onRemove={onRemoveRef2}
-        onDrop={onDropRef2}
-        label="Ref 2"
-        disabled={disabled}
-      />
+      {/* Ref Slots - scrollable */}
+      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+        {refSlots.map((slot, i) => (
+          <RefSlot
+            key={i}
+            url={slot.url}
+            isVideo={slot.isVideo}
+            onAdd={() => onAddRef(i)}
+            onRemove={() => onRemoveRef(i)}
+            onDrop={(file) => onDropRef(i, file)}
+            label={`Ref ${i + 1}`}
+            disabled={disabled}
+          />
+        ))}
+        {allFilled && canAddMore && (
+          <AddSlotButton onClick={onAddSlot} disabled={disabled} />
+        )}
+      </div>
 
       {/* Desktop-only inline controls */}
       {onContentTypeChange && (
