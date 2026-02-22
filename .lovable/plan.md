@@ -1,55 +1,82 @@
 
 
-## Fix Multi-Reference Slot Issues
+# Fixed-Role Reference Slots: 3 Characters + 1 Pose
 
-### Issue 1 & 2: Race condition + auto-fill Ref 2
+## Summary
 
-**Root cause**: When Ref 1 is already populated, clicking the Ref 1 slot (or using "Use as Reference" from the grid) tries to overwrite Ref 1, causing state conflicts. Instead, new references should auto-fill Ref 2 when Ref 1 is occupied.
+Replace the current generic, progressive ref slots with 4 fixed-role slots that are always visible in image mode:
+- **Char 1** / **Char 2** / **Char 3** (character/face references)
+- **Pose** (position/pose reference)
 
-**Changes in `MobileQuickBar.tsx`**:
-- Make the filled Ref 1 slot clickable -- tapping it should trigger `onAddRef2` (not `onAddRef1`) when Ref 1 is already populated. Add an `onClick` to the filled thumbnail div that routes to the appropriate add handler.
-- Actually simpler: when Ref 1 is filled, clicking on it does nothing (keep current). The real fix is in the parent logic.
+Each slot gets a small label underneath. The Quick Bar height increases slightly to accommodate labels. Auto-injected Figure notation in the prompt tells the model exactly what each image represents.
 
-**Changes in `MobileSimplePromptInput.tsx`**:
-- Update `onAddRef1` logic: if ref1 is already populated, redirect the file select to ref2's slot type instead. Change line 438 from always using `'single'/'start'` to checking if ref1 is already filled, and if so, routing to `'ref2'/'end'`.
+## UI Changes
 
-**Changes in `MobileSimplifiedWorkspace.tsx`**:
-- Update `handleUseAsReference`: when an image/video is used as reference and Ref 1 is already occupied, populate Ref 2 instead. Check `referenceImageUrl` (image mode) or `beginningRefImageUrl` (video mode) before deciding which slot to fill.
+### MobileQuickBar.tsx
+- Remove the dynamic `refSlots` / `maxSlots` / `onAddSlot` progressive system
+- Replace with 4 fixed slots, each with a `role` label displayed below the thumbnail:
+  - Slot 0: "Char 1"
+  - Slot 1: "Char 2"  
+  - Slot 2: "Char 3"
+  - Slot 3: "Pose"
+- Increase slot height from `h-8 w-8` to `h-10 w-10` with a `text-[8px]` label underneath
+- All 4 slots always visible (no progressive reveal, no "+" button)
+- Empty slots show the role label + dashed border
+- In **video mode**, keep existing behavior (start/end ref only, no fixed slots)
 
-### Issue 3: Drag and drop on desktop
+### MobileSimplePromptInput.tsx
+- Replace the `refSlots` builder with fixed 4-slot structure
+- Map slots to state:
+  - Slot 0 -> `referenceImageUrl` (existing Ref 1)
+  - Slot 1 -> `referenceImage2Url` (existing Ref 2)
+  - Slot 2 -> `additionalRefUrls[0]` (Char 3)
+  - Slot 3 -> `additionalRefUrls[1]` (Pose)
+- Remove `handleAddSlot` / progressive logic
+- Remove `maxSlots` detection from model capabilities (fixed at 4 for image mode)
+- Update `handleRemoveSlot` and `handleFileSelectForSlot` for the 4-slot mapping
 
-**Changes in `MobileQuickBar.tsx`**:
-- Add `onDragOver` and `onDrop` event handlers to each RefSlot.
-- Empty slot: drop fills that slot.
-- Filled Ref 1 slot: drop fills Ref 2 (auto-overflow).
-- New props: `onDropRef1` and `onDropRef2` callbacks that accept a `File`.
+### useLibraryFirstWorkspace.ts - Auto Figure Notation
+In the `generate()` function, when `allRefUrls.length > 1`, build a Figure prefix based on which slots are filled:
 
-**Changes in `MobileSimplePromptInput.tsx`**:
-- Add drop handler functions that process the dropped file through the same upload pipeline as `handleFileInputChange` (validate, HEIC convert, upload, set URL).
-- Extract the file processing logic from `handleFileInputChange` into a shared `processAndUploadFile(file, slotType)` helper to avoid duplication.
-- Pass drop handlers down to `MobileQuickBar`.
+**Examples:**
+- Char 1 + Pose: `"Show the character from Figure 1 in the pose/position shown in Figure 2:"`
+- Char 1 + Char 2 + Pose: `"Show the character from Figure 1 and the character from Figure 2 in the pose/position shown in Figure 3:"`
+- Char 1 + Char 2 + Char 3 + Pose: `"Show the characters from Figure 1, Figure 2, and Figure 3 in the pose/position shown in Figure 4:"`
+- Char 1 + Char 2 (no pose): `"Show the character from Figure 1 and the character from Figure 2 together:"`
 
-### Issue 4: Video ref shows broken image
+The key insight: the **pose image is always last** in the `image_urls` array, regardless of how many character slots are filled. Empty character slots are skipped (not sent).
 
-**Root cause**: `RefSlot` renders `<img>` for all refs. Video URLs can't render in an `<img>` tag -- they show a broken image icon.
+### MobileSimplifiedWorkspace.tsx
+- Update `handleGenerate` to pass slot role metadata along with URLs so the generate function knows which is pose vs character
+- Update drag-from-grid overflow logic: fill Char 1 -> Char 2 -> Char 3 -> Pose in order
 
-**Changes in `MobileQuickBar.tsx`**:
-- In the `RefSlot` component, when `isVideo` is true, render a `<video>` element instead of `<img>`:
-  - Use `<video src={url} muted preload="metadata" />` to show a thumbnail frame.
-  - Keep the Film icon overlay for visual indication.
-- Alternatively, for a simpler approach: when `isVideo` is true, show a styled placeholder with the Film icon (no broken image), since video thumbnails from signed URLs may not always load in a `<video>` tag either. This is the safer approach.
+## Technical Details
 
-**Recommended approach**: Use a `<video>` tag with `preload="metadata"` which will show the first frame as a poster. Wrap in an error handler that falls back to the Film icon placeholder if it fails to load.
+### Slot-to-URL mapping for API call
+```text
+Filled slots example: Char1=url_a, Char3=url_b, Pose=url_c
+  -> image_urls: [url_a, url_b, url_c]
+  -> prompt prefix: "Show the character from Figure 1 and the character 
+     from Figure 2 in the pose/position shown in Figure 3:"
+```
 
-### Technical Details
+The generate function receives a structured object instead of flat arrays:
+```typescript
+interface RefSlotData {
+  url: string;
+  role: 'character' | 'pose';
+}
+```
 
-**Files modified**:
-1. `src/components/workspace/MobileQuickBar.tsx` -- RefSlot video rendering, drop zone support
-2. `src/components/workspace/MobileSimplePromptInput.tsx` -- auto-overflow ref1->ref2 logic, extract shared file processor, wire drop handlers
-3. `src/pages/MobileSimplifiedWorkspace.tsx` -- handleUseAsReference auto-overflow to ref2
+This lets it build the correct Figure notation: characters listed first, pose always referenced last.
 
-**Auto-overflow logic summary**:
-- `onAddRef1` becomes smart: if ref1 is filled, it calls the ref2 add path instead.
-- `handleUseAsReference`: checks if ref1 slot is occupied before deciding target slot.
-- No changes to the remove logic -- individual X buttons continue to clear their own slot.
+### Props changes
+- `MobileQuickBar`: replace `refSlots`/`maxSlots`/`onAddSlot` with 4 fixed slot props (or a `fixedSlots` array with role labels)
+- `RefSlotData` type updated to include `role` and `label`
+
+## Files Changed
+1. `src/components/workspace/MobileQuickBar.tsx` - Fixed 4 labeled slots, increased height, remove "+" button
+2. `src/components/workspace/MobileSimplePromptInput.tsx` - Fixed slot mapping, remove progressive logic
+3. `src/pages/MobileSimplifiedWorkspace.tsx` - Update generate call with role metadata, update drag overflow
+4. `src/hooks/useLibraryFirstWorkspace.ts` - Auto-inject Figure notation based on slot roles
 
