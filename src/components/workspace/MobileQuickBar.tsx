@@ -7,7 +7,17 @@ import { cn } from '@/lib/utils';
 export interface RefSlotData {
   url?: string | null;
   isVideo?: boolean;
+  role?: 'character' | 'pose';
+  label?: string;
 }
+
+/** Fixed slot definitions for image mode */
+export const FIXED_IMAGE_SLOTS: { role: 'character' | 'pose'; label: string }[] = [
+  { role: 'character', label: 'Char 1' },
+  { role: 'character', label: 'Char 2' },
+  { role: 'character', label: 'Char 3' },
+  { role: 'pose', label: 'Pose' },
+];
 
 export interface MobileQuickBarProps {
   // Mode
@@ -20,13 +30,19 @@ export interface MobileQuickBarProps {
   // Settings sheet trigger
   onOpenSettings: () => void;
   
-  // Dynamic ref slots
+  // Dynamic ref slots (used in video mode)
   refSlots: RefSlotData[];
   maxSlots: number;
   onAddRef: (index: number) => void;
   onRemoveRef: (index: number) => void;
   onDropRef: (index: number, file: File) => void;
   onAddSlot: () => void;
+  
+  // Fixed image slots (used in image mode)
+  fixedSlots?: RefSlotData[];
+  onFixedSlotAdd?: (index: number) => void;
+  onFixedSlotRemove?: (index: number) => void;
+  onFixedSlotDrop?: (index: number, file: File) => void;
   
   // Desktop inline controls
   contentType?: 'sfw' | 'nsfw';
@@ -40,7 +56,7 @@ export interface MobileQuickBarProps {
   disabled?: boolean;
 }
 
-/** Single ref slot: empty = dashed +, filled = thumbnail with X. Supports drag-and-drop. */
+/** Single ref slot with optional label underneath */
 const RefSlot: React.FC<{
   url?: string | null;
   isVideo?: boolean;
@@ -49,7 +65,8 @@ const RefSlot: React.FC<{
   onDrop: (file: File) => void;
   label: string;
   disabled?: boolean;
-}> = ({ url, isVideo, onAdd, onRemove, onDrop, label, disabled }) => {
+  showLabel?: boolean;
+}> = ({ url, isVideo, onAdd, onRemove, onDrop, label, disabled, showLabel = false }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [videoError, setVideoError] = useState(false);
 
@@ -73,69 +90,81 @@ const RefSlot: React.FC<{
     if (file) onDrop(file);
   };
 
+  const slotSize = showLabel ? 'h-10 w-10' : 'h-8 w-8';
+
   if (url) {
     return (
-      <div
-        className={cn(
-          "relative h-8 w-8 rounded border overflow-hidden bg-muted/20 shrink-0",
-          isDragOver ? "border-primary ring-1 ring-primary/50" : "border-border/50"
-        )}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDropEvent}
-      >
-        {isVideo ? (
-          videoError ? (
-            <div className="h-full w-full flex items-center justify-center bg-muted/40">
-              <Film className="h-4 w-4 text-muted-foreground" />
-            </div>
-          ) : (
-            <video
-              src={url}
-              muted
-              preload="metadata"
-              className="h-full w-full object-cover"
-              onError={() => setVideoError(true)}
-            />
-          )
-        ) : (
-          <img src={url} alt={label} className="h-full w-full object-cover" />
-        )}
-        {isVideo && !videoError && (
-          <div className="absolute bottom-0 left-0 bg-black/60 px-0.5">
-            <Film className="h-2.5 w-2.5 text-white" />
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-destructive/80 flex items-center justify-center"
+      <div className="flex flex-col items-center shrink-0">
+        <div
+          className={cn(
+            `relative ${slotSize} rounded border overflow-hidden bg-muted/20`,
+            isDragOver ? "border-primary ring-1 ring-primary/50" : "border-border/50"
+          )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDropEvent}
         >
-          <X className="h-2 w-2 text-destructive-foreground" />
-        </button>
+          {isVideo ? (
+            videoError ? (
+              <div className="h-full w-full flex items-center justify-center bg-muted/40">
+                <Film className="h-4 w-4 text-muted-foreground" />
+              </div>
+            ) : (
+              <video
+                src={url}
+                muted
+                preload="metadata"
+                className="h-full w-full object-cover"
+                onError={() => setVideoError(true)}
+              />
+            )
+          ) : (
+            <img src={url} alt={label} className="h-full w-full object-cover" />
+          )}
+          {isVideo && !videoError && (
+            <div className="absolute bottom-0 left-0 bg-black/60 px-0.5">
+              <Film className="h-2.5 w-2.5 text-white" />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-destructive/80 flex items-center justify-center"
+          >
+            <X className="h-2 w-2 text-destructive-foreground" />
+          </button>
+        </div>
+        {showLabel && (
+          <span className="text-[8px] text-muted-foreground mt-0.5 leading-none">{label}</span>
+        )}
       </div>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={onAdd}
-      disabled={disabled}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDropEvent}
-      className={cn(
-        "h-8 w-8 rounded border border-dashed flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-colors shrink-0 disabled:opacity-30",
-        isDragOver ? "border-primary bg-primary/10" : "border-muted-foreground/40"
+    <div className="flex flex-col items-center shrink-0">
+      <button
+        type="button"
+        onClick={onAdd}
+        disabled={disabled}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDropEvent}
+        className={cn(
+          `${slotSize} rounded border border-dashed flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-colors disabled:opacity-30`,
+          isDragOver ? "border-primary bg-primary/10" : "border-muted-foreground/40"
+        )}
+      >
+        <Plus className="h-3 w-3 text-muted-foreground" />
+      </button>
+      {showLabel && (
+        <span className="text-[8px] text-muted-foreground mt-0.5 leading-none">{label}</span>
       )}
-    >
-      <Plus className="h-3 w-3 text-muted-foreground" />
-    </button>
+    </div>
   );
 };
 
-/** "+" button to add more ref slots */
+/** "+" button to add more ref slots (video mode only) */
 const AddSlotButton: React.FC<{ onClick: () => void; disabled?: boolean }> = ({ onClick, disabled }) => (
   <button
     type="button"
@@ -159,6 +188,10 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onRemoveRef,
   onDropRef,
   onAddSlot,
+  fixedSlots = [],
+  onFixedSlotAdd,
+  onFixedSlotRemove,
+  onFixedSlotDrop,
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
@@ -169,6 +202,9 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
 }) => {
   const allFilled = refSlots.length > 0 && refSlots.every(s => !!s.url);
   const canAddMore = refSlots.length < maxSlots;
+
+  // Use fixed slots in image mode, dynamic slots in video mode
+  const useFixedSlots = currentMode === 'image' && onFixedSlotAdd && onFixedSlotRemove && onFixedSlotDrop;
 
   return (
     <div className={cn(
@@ -186,22 +222,42 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
         size="sm"
       />
       
-      {/* Ref Slots - scrollable */}
+      {/* Ref Slots */}
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
-        {refSlots.map((slot, i) => (
-          <RefSlot
-            key={i}
-            url={slot.url}
-            isVideo={slot.isVideo}
-            onAdd={() => onAddRef(i)}
-            onRemove={() => onRemoveRef(i)}
-            onDrop={(file) => onDropRef(i, file)}
-            label={`Ref ${i + 1}`}
-            disabled={disabled}
-          />
-        ))}
-        {allFilled && canAddMore && (
-          <AddSlotButton onClick={onAddSlot} disabled={disabled} />
+        {useFixedSlots ? (
+          /* Fixed 4 labeled slots for image mode */
+          FIXED_IMAGE_SLOTS.map((slotDef, i) => (
+            <RefSlot
+              key={`fixed-${i}`}
+              url={fixedSlots[i]?.url}
+              isVideo={fixedSlots[i]?.isVideo}
+              onAdd={() => onFixedSlotAdd!(i)}
+              onRemove={() => onFixedSlotRemove!(i)}
+              onDrop={(file) => onFixedSlotDrop!(i, file)}
+              label={slotDef.label}
+              disabled={disabled}
+              showLabel
+            />
+          ))
+        ) : (
+          /* Dynamic slots for video mode */
+          <>
+            {refSlots.map((slot, i) => (
+              <RefSlot
+                key={i}
+                url={slot.url}
+                isVideo={slot.isVideo}
+                onAdd={() => onAddRef(i)}
+                onRemove={() => onRemoveRef(i)}
+                onDrop={(file) => onDropRef(i, file)}
+                label={`Ref ${i + 1}`}
+                disabled={disabled}
+              />
+            ))}
+            {allFilled && canAddMore && (
+              <AddSlotButton onClick={onAddSlot} disabled={disabled} />
+            )}
+          </>
         )}
       </div>
 

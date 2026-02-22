@@ -1334,6 +1334,43 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             inputObj.image_urls = allRefUrls;
             inputObj.strength = computedReferenceStrength;
             console.log('✅ Multi-ref: Added image_urls array with', allRefUrls.length, 'images');
+            
+            // Auto-inject Figure notation for multi-ref
+            // Convention: characters first, pose last (if present)
+            // additionalImageUrls format: [ref2Url, ...additionalRefUrls]
+            // allRefUrls = [effRefUrl (Char1), ref2Url (Char2), additionalRefUrls[0] (Char3), additionalRefUrls[1] (Pose)]
+            // The last additionalRefUrl is the Pose slot if it's the 4th slot
+            const totalSlots = allRefUrls.length;
+            // Determine if the last URL is a pose reference
+            // Pose is slot index 3 (4th slot). It's pose if we have additionalImageUrls and the pose slot was filled.
+            // The pose is always the last item in additionalImageUrls when slot 3 (Pose) is filled.
+            // We detect this by checking if additionalImageUrls has 2+ items (meaning Char3 + Pose both present)
+            // or if there's only 1 additional and no Char2 (meaning it could be just Pose from slot 3)
+            // Simplified: the last URL is pose if totalSlots >= 2 and the last additionalImageUrl corresponds to slot 3
+            const hasAdditional = additionalImageUrls && additionalImageUrls.length > 0;
+            const poseUrlIndex = hasAdditional ? totalSlots - 1 : -1; // pose is always last if additional refs exist
+            
+            // Only inject Figure notation if we have the structured slot data
+            // For now, use the convention: all refs except last are characters, last is pose (if 2+ refs)
+            const charCount = poseUrlIndex >= 0 ? totalSlots - 1 : totalSlots;
+            
+            let figurePrefix = '';
+            if (charCount === 1 && poseUrlIndex >= 0) {
+              figurePrefix = 'Show the character from Figure 1 in the pose/position shown in Figure 2: ';
+            } else if (charCount === 2 && poseUrlIndex >= 0) {
+              figurePrefix = 'Show the character from Figure 1 and the character from Figure 2 in the pose/position shown in Figure 3: ';
+            } else if (charCount === 3 && poseUrlIndex >= 0) {
+              figurePrefix = 'Show the characters from Figure 1, Figure 2, and Figure 3 in the pose/position shown in Figure 4: ';
+            } else if (charCount === 2 && poseUrlIndex < 0) {
+              figurePrefix = 'Show the character from Figure 1 and the character from Figure 2 together: ';
+            } else if (charCount === 3 && poseUrlIndex < 0) {
+              figurePrefix = 'Show the characters from Figure 1, Figure 2, and Figure 3 together: ';
+            }
+            
+            if (figurePrefix && !finalPrompt.includes('Figure ')) {
+              finalPrompt = figurePrefix + finalPrompt;
+              console.log('🎯 Auto-injected Figure notation:', figurePrefix);
+            }
           } else if (allRefUrls.length === 1) {
             // Single ref: send as image_url (standard I2I)
             inputObj.image_url = allRefUrls[0];
