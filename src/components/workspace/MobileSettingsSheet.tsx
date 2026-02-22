@@ -26,6 +26,7 @@ export interface MobileSettingsSheetProps {
   
   // Mode
   currentMode: 'image' | 'video';
+  onModeChange?: (mode: 'image' | 'video') => void;
   
   // Model Selection
   selectedModel: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null;
@@ -106,7 +107,80 @@ const STYLE_PRESETS = [
   'High Contrast', 'Moody', 'Natural Light', 'Shallow DOF',
 ];
 
-/** Single-select popover chip for Shot Type / Camera Angle */
+/** Model selector popover chip */
+function ModelChipPopover({ currentMode, selectedModel, onModelChange, imageModels, videoModels, modelsLoading }: {
+  currentMode: 'image' | 'video';
+  selectedModel: MobileSettingsSheetProps['selectedModel'];
+  onModelChange: MobileSettingsSheetProps['onModelChange'];
+  imageModels: MobileSettingsSheetProps['imageModels'];
+  videoModels: MobileSettingsSheetProps['videoModels'];
+  modelsLoading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const models = currentMode === 'image'
+    ? [{ id: 'sdxl', label: 'SDXL (Local)' }, ...(imageModels || []).map(m => ({ id: m.id, label: m.display_name }))]
+    : [{ id: 'wan', label: 'WAN (Local)' }, ...(videoModels || []).map(m => ({ id: m.id, label: m.display_name }))];
+
+  const handleSelect = (modelId: string) => {
+    if (currentMode === 'image') {
+      if (modelId === 'sdxl') {
+        onModelChange({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
+      } else {
+        const m = (imageModels || []).find(m => m.id === modelId);
+        if (m) onModelChange({ id: m.id, type: m.provider_name as 'replicate' | 'fal', display_name: m.display_name });
+      }
+    } else {
+      if (modelId === 'wan') {
+        onModelChange({ id: 'wan', type: 'sdxl', display_name: 'WAN' });
+      } else {
+        const m = (videoModels || []).find(m => m.id === modelId);
+        if (m) onModelChange({ id: m.id, type: m.api_providers.name as 'replicate' | 'fal', display_name: m.display_name });
+      }
+    }
+    setOpen(false);
+  };
+
+  // Truncate model name for chip display
+  const displayName = selectedModel?.display_name || 'Select';
+  const shortName = displayName.length > 12 ? displayName.slice(0, 12) + '…' : displayName;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center gap-0.5 px-2 py-1 text-[10px] font-medium rounded-md border transition-colors",
+            "bg-muted/50 text-foreground border-border hover:bg-accent"
+          )}
+        >
+          {shortName}
+          <ChevronDown className="h-2.5 w-2.5 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto min-w-[160px] max-w-[220px] p-1" align="start" sideOffset={4}>
+        {modelsLoading ? (
+          <div className="px-2 py-1.5 text-[11px] text-muted-foreground">Loading…</div>
+        ) : models.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => handleSelect(m.id)}
+            className={cn(
+              "flex w-full items-center gap-2 px-2 py-1.5 text-[11px] rounded-sm transition-colors",
+              selectedModel?.id === m.id
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-accent text-foreground"
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function CreativeChipPopover({ label, value, options, selected, onSelect }: {
   label: string;
   value: string;
@@ -125,7 +199,7 @@ function CreativeChipPopover({ label, value, options, selected, onSelect }: {
             "bg-muted/50 text-foreground border-border hover:bg-accent"
           )}
         >
-          {label}: {value}
+          {label ? `${label}: ${value}` : value}
           <ChevronDown className="h-2.5 w-2.5 opacity-50" />
         </button>
       </PopoverTrigger>
@@ -207,6 +281,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   open,
   onClose,
   currentMode,
+  onModeChange,
   selectedModel,
   onModelChange,
   imageModels = [],
@@ -290,151 +365,74 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
         
         {/* Scrollable Content - Compact */}
         <div className="overflow-y-auto px-3 py-2 space-y-3">
-          {/* Model Selection - Compact */}
-          <div className="space-y-1">
+          {/* Output Settings - Single row of chip popovers */}
+          <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
             <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-              Model
+              Output
             </label>
-            <Select
-              value={selectedModel?.id || ''}
-              onValueChange={(modelId) => {
-                if (currentMode === 'image') {
-                  if (modelId === 'sdxl') {
-                    onModelChange({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
-                  } else {
-                    const apiModel = imageModels.find(m => m.id === modelId);
-                    if (apiModel) {
-                      onModelChange({
-                        id: apiModel.id,
-                        type: apiModel.provider_name as 'replicate' | 'fal',
-                        display_name: apiModel.display_name
-                      });
-                    }
-                  }
-                } else {
-                  if (modelId === 'wan') {
-                    onModelChange({ id: 'wan', type: 'sdxl', display_name: 'WAN' });
-                  } else {
-                    const apiModel = videoModels.find(m => m.id === modelId);
-                    if (apiModel) {
-                      onModelChange({
-                        id: apiModel.id,
-                        type: apiModel.api_providers.name as 'replicate' | 'fal',
-                        display_name: apiModel.display_name
-                      });
-                    }
-                  }
-                }
-              }}
-            >
-              <SelectTrigger className="w-full h-8 text-xs bg-background">
-                <SelectValue placeholder="Select Model" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover z-[100]">
-                {currentMode === 'image' ? (
-                  <>
-                    <SelectItem value="sdxl">SDXL (Local)</SelectItem>
-                    {!modelsLoading && imageModels.map(model => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.display_name}
-                      </SelectItem>
-                    ))}
-                  </>
-                ) : (
-                  <>
-                    <SelectItem value="wan">WAN (Local)</SelectItem>
-                    {!modelsLoading && videoModels.map(model => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.display_name}
-                      </SelectItem>
-                    ))}
-                  </>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {/* Quick Settings - 2 column grid */}
-          <div className="grid grid-cols-2 gap-2">
-            {/* Resolution (was Quality) */}
-            <div className="space-y-1">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-                Resolution
-              </label>
-              <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
-                {([
-                  { value: 'fast' as const, label: 'Standard' },
-                  { value: 'high' as const, label: 'HD' },
-                ] as const).map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => onQualityChange(value)}
-                    className={cn(
-                      "flex-1 px-2 py-1 text-[10px] font-medium transition-colors",
-                      quality === value
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Content Type */}
-            <div className="space-y-1">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-                Content
-              </label>
-              <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
-                {(['sfw', 'nsfw'] as const).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => onContentTypeChange(t)}
-                    className={cn(
-                      "flex-1 px-2 py-1 text-[10px] font-medium uppercase transition-colors",
-                      contentType === t
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Mode Chip */}
+              {onModeChange && (
+                <CreativeChipPopover
+                  label="Mode"
+                  value={currentMode === 'image' ? 'Image' : 'Video'}
+                  options={[
+                    { value: 'image', label: 'Image' },
+                    { value: 'video', label: 'Video' },
+                  ]}
+                  selected={currentMode}
+                  onSelect={(v) => onModeChange(v as 'image' | 'video')}
+                />
+              )}
+
+              {/* Model Chip */}
+              <ModelChipPopover
+                currentMode={currentMode}
+                selectedModel={selectedModel}
+                onModelChange={onModelChange}
+                imageModels={imageModels}
+                videoModels={videoModels}
+                modelsLoading={modelsLoading}
+              />
+
+              {/* Resolution Chip */}
+              <CreativeChipPopover
+                label="Res"
+                value={quality === 'high' ? 'HD' : 'Std'}
+                options={[
+                  { value: 'fast', label: 'Standard' },
+                  { value: 'high', label: 'HD' },
+                ]}
+                selected={quality}
+                onSelect={(v) => onQualityChange(v as 'fast' | 'high')}
+              />
+
+              {/* Aspect Ratio Chip */}
+              <CreativeChipPopover
+                label="Ratio"
+                value={aspectRatio}
+                options={[
+                  { value: '1:1', label: '1:1' },
+                  { value: '16:9', label: '16:9' },
+                  { value: '9:16', label: '9:16' },
+                ]}
+                selected={aspectRatio}
+                onSelect={(v) => onAspectRatioChange(v as '16:9' | '1:1' | '9:16')}
+              />
+
+              {/* Content Type Chip */}
+              <CreativeChipPopover
+                label=""
+                value={contentType.toUpperCase()}
+                options={[
+                  { value: 'sfw', label: 'SFW' },
+                  { value: 'nsfw', label: 'NSFW' },
+                ]}
+                selected={contentType}
+                onSelect={(v) => onContentTypeChange(v as 'sfw' | 'nsfw')}
+              />
             </div>
           </div>
-          
-          {/* Aspect Ratio - Compact pills */}
-          <div className="space-y-1">
-            <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-              Aspect Ratio
-            </label>
-            <div className="flex items-center gap-1.5">
-              {(['1:1', '16:9', '9:16'] as const).map((ratio) => (
-                <button
-                  key={ratio}
-                  type="button"
-                  onClick={() => onAspectRatioChange(ratio)}
-                  className={cn(
-                    "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-colors",
-                    aspectRatio === ratio
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-muted/50 text-muted-foreground border-border hover:text-foreground"
-                  )}
-                >
-                  {ratio === '1:1' && <span className="w-2.5 h-2.5 border border-current rounded-[1px]" />}
-                  {ratio === '16:9' && <span className="w-3 h-2 border border-current rounded-[1px]" />}
-                  {ratio === '9:16' && <span className="w-2 h-3 border border-current rounded-[1px]" />}
-                  {ratio}
-                </button>
-              ))}
-            </div>
-          </div>
-          
           {/* Creative Direction (Image mode only) */}
           {currentMode === 'image' && (
             <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">

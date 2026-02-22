@@ -487,6 +487,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         open={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         currentMode={currentMode}
+        onModeChange={onModeToggle}
         selectedModel={selectedModel}
         onModelChange={onModelChange}
         imageModels={imageModels?.map(m => ({
