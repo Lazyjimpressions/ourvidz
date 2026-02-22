@@ -1,69 +1,85 @@
 
 
-# Fix Toast UX: Eliminate Blocking, Non-Dismissing Notifications
+# Make Cost-Per-Generation Table-Driven and Editable
 
 ## Problem
 
-The project runs **two separate toast systems** simultaneously, and the primary one is configured to never auto-dismiss:
-
-- **Radix `useToast`** (used by 60+ files): Has `TOAST_REMOVE_DELAY = 1,000,000ms` (~16 minutes). Toasts effectively never go away on their own, blocking UI on both mobile and desktop.
-- **Sonner** (used by ~8 files): Works fine with sensible auto-dismiss defaults (~4 seconds).
-
-Both `<Toaster />` and `<Sonner />` are mounted in `App.tsx`, meaning users can see overlapping toasts from two different systems.
+- fal.ai does not return cost in its API responses -- all costs are estimates
+- Cost estimates are hardcoded in a `FAL_PRICING` map inside `fal-image/index.ts` (~40 duplicate entries)
+- The `api_models.pricing` JSONB column exists but is empty for every model
+- There is no way for admins to edit cost estimates from the UI
+- Costs shown in the Usage tab are all estimates but not labeled as such
 
 ## Solution
 
-Consolidate onto **Sonner only** and remove the Radix toast system entirely. Sonner is already installed, already mounted, and provides better UX out of the box (auto-dismiss, stacking, swipe-to-dismiss on mobile).
+Move pricing entirely into the `api_models.pricing` column, make it editable in the Admin UI, and read it from the database in the edge function with zero hardcoded fallbacks.
 
-### Step 1: Update `src/hooks/use-toast.ts`
+---
 
-Replace the entire 191-line Radix-based implementation with a thin wrapper around Sonner's `toast()`:
+### Step 1: Add "Est. Cost" editable column to API Models table
 
+**File: `src/components/admin/ApiModelsTab.tsx`**
+
+- Add a new column header "Est. Cost" between existing columns in the table
+- Display `model.pricing.per_generation` as an inline-editable cell
+- On save, update `pricing` JSONB with `{ per_generation: <number>, currency: "USD" }`
+
+### Step 2: Add "Est. Cost" field to the Model Form
+
+**File: `src/components/admin/ApiModelsTab.tsx`**
+
+- Add a numeric input field for "Est. Cost ($)" in the optional fields section
+- Reads/writes `formData.pricing.per_generation`
+- Helper text: "USD per generation (estimate)"
+
+### Step 3: Populate pricing via SQL migration (one-time)
+
+Seed `api_models.pricing` for all existing models using the values currently hardcoded in `FAL_PRICING`. This ensures every model has a cost estimate before the hardcoded map is removed.
+
+```sql
+UPDATE api_models SET pricing = '{"per_generation": 0.025, "currency": "USD"}'
+WHERE model_key LIKE '%seedream%' AND modality = 'image';
+-- ... one UPDATE per model/group
 ```
-import { toast as sonnerToast } from "sonner";
 
-function toast({ title, description, variant, ...props }) {
-  if (variant === "destructive") {
-    sonnerToast.error(title, { description });
-  } else {
-    sonnerToast(title, { description });
-  }
-}
+### Step 4: Replace hardcoded FAL_PRICING with pure table-driven lookup
 
-function useToast() {
-  return { toast, toasts: [], dismiss: () => {} };
-}
+**File: `supabase/functions/fal-image/index.ts`**
+
+- Remove the entire `FAL_PRICING` map (lines 37-77)
+- Remove the `calculateFalCost` function entirely
+- Read cost solely from `apiModel.pricing?.per_generation`
+- If the value is null/undefined/0, log a warning and record cost as `null` -- no hardcoded default
+- This forces admins to populate pricing for every model; missing pricing is surfaced as null in the usage logs rather than silently guessed
+
+Before:
+```typescript
+const falCost = calculateFalCost(modelKey, modelModality);
 ```
 
-This way, all 60+ files that import `useToast` or `toast` from this hook will automatically start using Sonner without any import changes.
+After:
+```typescript
+const falCost = apiModel.pricing?.per_generation || null;
+if (!falCost) console.warn('No pricing configured for model:', modelKey);
+```
 
-### Step 2: Remove the Radix Toaster from `App.tsx`
+### Step 5: Label estimated costs in the Usage tab
 
-- Remove `import { Toaster } from "@/components/ui/toaster"` (line 5)
-- Remove `<Toaster />` from the JSX
-- Keep only `<Sonner />` (already imported as line 7)
+**File: `src/components/admin/ApiUsageTab.tsx`**
 
-### Step 3: Configure Sonner for better UX
+- In the Recent API Calls table, prefix estimated costs with "~" or add an "(est)" suffix when `log.provider_metadata?.cost_source` is `"estimated"` or `"static_pricing"`
+- Costs that are null show as "--" instead of "$0.00"
 
-Update `src/components/ui/sonner.tsx` to set:
-- `duration={3000}` — 3-second auto-dismiss (short, non-blocking)
-- `position="bottom-center"` — less intrusive on mobile
-- `closeButton` — always show close button for manual dismiss
-- `visibleToasts={2}` — limit stack to avoid UI clutter
+---
 
-### Step 4: Reduce toast noise in generation flow
+## Files Changed
 
-In `src/hooks/useGeneration.ts`, remove or downgrade low-value toasts:
-- Remove "SDXL Generation Started" toast (user already sees the generating state in the UI)
-- Remove "Generation Resumed" toast (unnecessary noise on page reload)
-- Keep "Generation Complete", "Generation Failed", and "Generation Timeout" (these are actionable)
+1. `src/components/admin/ApiModelsTab.tsx` -- Add editable "Est. Cost" column and form field
+2. `supabase/functions/fal-image/index.ts` -- Remove `FAL_PRICING` map and `calculateFalCost`; read from `apiModel.pricing.per_generation` only, null if missing
+3. `src/components/admin/ApiUsageTab.tsx` -- Label estimated costs, show "--" for null
+4. SQL migration -- Populate `pricing` column for all existing models from current hardcoded values
 
-### Files Changed
+## Key Principle
 
-1. **`src/hooks/use-toast.ts`** — Replace Radix implementation with Sonner wrapper
-2. **`src/App.tsx`** — Remove Radix `<Toaster />`
-3. **`src/components/ui/sonner.tsx`** — Add duration, position, close button config
-4. **`src/hooks/useGeneration.ts`** — Remove low-value "started" and "resumed" toasts
-5. **`src/components/ui/toaster.tsx`** — Can be deleted (no longer used)
-6. **`src/components/ui/use-toast.ts`** — Keep as-is (it re-exports from the hook)
+Zero hardcoded pricing anywhere in the codebase. The `api_models.pricing.per_generation` column is the single source of truth. If a model lacks pricing, the cost is recorded as null and surfaced clearly in the admin UI, prompting the admin to fill it in.
 
