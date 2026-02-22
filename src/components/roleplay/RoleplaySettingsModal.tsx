@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
-import { useImageModels } from '@/hooks/useImageModels';
+// useImageModels removed - roleplay uses always-I2I architecture
 import { useI2IModels } from '@/hooks/useI2IModels';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useSceneContinuity } from '@/hooks/useSceneContinuity';
@@ -79,8 +79,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   character
 }) => {
   const { allModelOptions, defaultModel: defaultChatModel, isLoading: modelsLoading, chatWorkerHealthy } = useRoleplayModels();
-  const { modelOptions: imageModelOptions, defaultModel: defaultImageModel, isLoading: imageModelsLoading, sdxlWorkerHealthy } = useImageModels();
+  // T2I models removed - roleplay uses always-I2I architecture
   const { modelOptions: i2iModelOptions, isLoading: i2iModelsLoading, defaultModel: defaultI2IModel } = useI2IModels();
+  const { modelOptions: i2iMultiModelOptions, isLoading: i2iMultiModelsLoading, defaultModel: defaultI2IMultiModel } = useI2IModels('i2i_multi');
   const { characters: userCharacters, isLoading: userCharactersLoading, defaultCharacterId, setDefaultCharacter, updateUserCharacter, createUserCharacter } = useUserCharacters();
   const { isEnabled: sceneContinuityEnabled, setEnabled: setSceneContinuityEnabled, defaultStrength, setDefaultStrength } = useSceneContinuity();
   const { toast } = useToast();
@@ -147,7 +148,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
 
   // Helper to validate if an image model is available
   const isValidImageModel = (modelValue: string): boolean => {
-    const model = imageModelOptions.find(m => m.value === modelValue);
+    const model = i2iModelOptions.find(m => m.value === modelValue);
     return model ? model.isAvailable : false;
   };
 
@@ -178,7 +179,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   // Load saved settings from localStorage with validation (only when modal opens)
   const hasLoadedSettingsRef = useRef(false);
   useEffect(() => {
-    if (isOpen && !modelsLoading && !imageModelsLoading && !hasLoadedSettingsRef.current) {
+    if (isOpen && !modelsLoading && !i2iModelsLoading && !hasLoadedSettingsRef.current) {
       const savedSettings = localStorage.getItem('roleplay-settings');
       if (savedSettings) {
         try {
@@ -200,9 +201,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
           const savedImageModel = parsed.selectedImageModel;
           if (savedImageModel && savedImageModel.trim() !== '' && isValidImageModel(savedImageModel)) {
             setLocalSelectedImageModel(savedImageModel);
-          } else if (defaultImageModel) {
-            setLocalSelectedImageModel(defaultImageModel.value);
-            console.log('⚠️ Saved image model unavailable, using default:', defaultImageModel.value);
+          } else if (defaultI2IModel) {
+            setLocalSelectedImageModel(defaultI2IModel.value);
+            console.log('⚠️ Saved image model unavailable, using default:', defaultI2IModel.value);
           } else if (selectedImageModel && selectedImageModel.trim() !== '') {
             setLocalSelectedImageModel(selectedImageModel);
           } else {
@@ -222,8 +223,8 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
         // Use selectedImageModel if valid, otherwise default or empty
         if (selectedImageModel && selectedImageModel.trim() !== '') {
           setLocalSelectedImageModel(selectedImageModel);
-        } else if (defaultImageModel) {
-          setLocalSelectedImageModel(defaultImageModel.value);
+        } else if (defaultI2IModel) {
+          setLocalSelectedImageModel(defaultI2IModel.value);
         } else {
           setLocalSelectedImageModel('');
         }
@@ -233,7 +234,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
     } else if (!isOpen) {
       hasLoadedSettingsRef.current = false;
     }
-  }, [isOpen, modelsLoading, imageModelsLoading, memoryTier, modelProvider, selectedImageModel, consistencySettings, allModelOptions, imageModelOptions, defaultChatModel, defaultImageModel]);
+  }, [isOpen, modelsLoading, i2iModelsLoading, memoryTier, modelProvider, selectedImageModel, consistencySettings, allModelOptions, i2iModelOptions, defaultChatModel, defaultI2IModel]);
 
   // Avatar upload handler
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1057,69 +1058,6 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 )}
               </div>
 
-              {/* T2I Model Selection */}
-              <div className="space-y-1">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">T2I Model</span>
-                <p className="text-[10px] text-muted-foreground">Text-to-Image</p>
-                <Select
-                  key={`image-model-${localSelectedImageModel || 'none'}`}
-                  value={localSelectedImageModel || undefined}
-                  onValueChange={(value) => {
-                    console.log('📸 Image model changed:', value);
-                    setLocalSelectedImageModel(value);
-                  }}
-                >
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Select image model..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {imageModelsLoading ? (
-                      <SelectItem value="__loading__" disabled>Loading image models...</SelectItem>
-                    ) : imageModelOptions.length === 0 ? (
-                      <SelectItem value="__none__" disabled>No image models available</SelectItem>
-                    ) : (
-                      imageModelOptions.map((model) => {
-                        const isLocal = model.type === 'local';
-                        return (
-                          <SelectItem
-                            key={model.value}
-                            value={model.value}
-                            disabled={!model.isAvailable}
-                          >
-                            <div className="flex items-center justify-between w-full gap-2">
-                              <span className={!model.isAvailable ? 'opacity-50' : ''}>{model.label}</span>
-                              {isLocal && !model.isAvailable && (
-                                <Badge variant="destructive" className="ml-2 text-xs flex items-center gap-1">
-                                  <WifiOff className="w-3 h-3" />
-                                  Offline
-                                </Badge>
-                              )}
-                              {isLocal && model.isAvailable && (
-                                <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400 flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Online
-                                </Badge>
-                              )}
-                              {!isLocal && (
-                                <Badge variant="outline" className="ml-2 text-xs text-blue-400 border-blue-400 flex items-center gap-1">
-                                  <Cloud className="w-3 h-3" />
-                                  API
-                                </Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        );
-                      })
-                    )}
-                  </SelectContent>
-                </Select>
-                {imageModelOptions.length === 0 && !imageModelsLoading && (
-                  <p className="text-xs text-yellow-400 mt-1">
-                    ⚠️ No image models configured. Please add models in Admin settings.
-                  </p>
-                )}
-              </div>
-
               {/* I2I Model Selection */}
               <div className="space-y-1">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">I2I Model</span>
@@ -1167,6 +1105,48 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 {localSelectedI2IModel === 'auto' && defaultI2IModel && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Will use: {defaultI2IModel.label}
+                  </p>
+                )}
+              </div>
+
+              {/* I2I Multi Model Selection */}
+              <div className="space-y-1">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">I2I Multi Model</span>
+                <p className="text-[10px] text-muted-foreground">Multi-reference (2+ characters)</p>
+                <Select
+                  value="auto"
+                  onValueChange={(value) => {
+                    console.log('🔄 I2I Multi model changed:', value);
+                    localStorage.setItem('roleplay_i2i_multi_model', value);
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="Select I2I Multi model..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {i2iMultiModelsLoading ? (
+                      <SelectItem value="__loading__" disabled>Loading models...</SelectItem>
+                    ) : i2iMultiModelOptions.length === 0 ? (
+                      <SelectItem value="__none__" disabled>No multi-ref models available</SelectItem>
+                    ) : (
+                      i2iMultiModelOptions.map((model) => (
+                        <SelectItem key={model.value} value={model.value}>
+                          <div className="flex items-center justify-between w-full gap-2">
+                            <span>{model.label}</span>
+                            {model.isDefault && model.value !== 'auto' && (
+                              <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400">
+                                Default
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {defaultI2IMultiModel && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Will use: {defaultI2IMultiModel.label}
                   </p>
                 )}
               </div>
