@@ -101,7 +101,7 @@ export const usePromptScores = (jobId: string | null) => {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      const { data, error: fetchError } = await (supabase as any)
         .from('prompt_scores')
         .select('*')
         .eq('job_id', jobId)
@@ -115,7 +115,7 @@ export const usePromptScores = (jobId: string | null) => {
           throw fetchError;
         }
       } else {
-        setScore(data as PromptScore);
+        setScore(data as unknown as PromptScore);
       }
     } catch (err) {
       console.error('❌ Error fetching prompt score:', err);
@@ -153,7 +153,7 @@ export const usePromptScores = (jobId: string | null) => {
           updateData.user_quality_rating = rating.qualityRating;
         }
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await (supabase as any)
           .from('prompt_scores')
           .update(updateData)
           .eq('job_id', jobId);
@@ -198,7 +198,7 @@ export const usePromptScores = (jobId: string | null) => {
           user_rated_at: new Date().toISOString(),
         };
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await (supabase as any)
           .from('prompt_scores')
           .update(updateData)
           .eq('job_id', jobId);
@@ -254,7 +254,7 @@ export const usePromptScores = (jobId: string | null) => {
           updateData.admin_comment = rating.comment;
         }
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await (supabase as any)
           .from('prompt_scores')
           .update(updateData)
           .eq('job_id', jobId);
@@ -294,7 +294,7 @@ export const usePromptScores = (jobId: string | null) => {
           preserve_reason: preserve ? reason || null : null,
         };
 
-        const { error: updateError } = await supabase
+        const { error: updateError } = await (supabase as any)
           .from('prompt_scores')
           .update(updateData)
           .eq('job_id', jobId);
@@ -331,9 +331,9 @@ export const usePromptScores = (jobId: string | null) => {
 
     try {
       // Get job details
-      const { data: job, error: jobError } = await supabase
+      const { data: job, error: jobError } = await (supabase as any)
         .from('jobs')
-        .select('*, workspace_assets!inner(temp_storage_path)')
+        .select('*, workspace_assets(temp_storage_path)')
         .eq('id', jobId)
         .single();
 
@@ -342,7 +342,7 @@ export const usePromptScores = (jobId: string | null) => {
       }
 
       // Get signed URL for the image
-      const storagePath = job.workspace_assets?.[0]?.temp_storage_path;
+      const storagePath = (job.workspace_assets as any)?.[0]?.temp_storage_path;
       if (!storagePath) {
         throw new Error('No image found for job');
       }
