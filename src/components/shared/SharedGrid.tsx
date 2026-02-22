@@ -364,6 +364,33 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   const isWorkspace = asset.metadata?.source === 'workspace';
   const isLibrary = asset.metadata?.source === 'library';
 
+  // Create a small canvas drag ghost from the tile's image
+  const handleDragStart = useCallback((e: React.DragEvent) => {
+    const displayUrl = asset.thumbUrl || generatedVideoThumbnail || (asset.type === 'image' ? fallbackUrl : null);
+    // Set custom MIME data for ref slot drops
+    e.dataTransfer.setData('application/x-ref-image', JSON.stringify({
+      url: displayUrl || '',
+      assetId: asset.id,
+      type: asset.type,
+    }));
+    e.dataTransfer.effectAllowed = 'copy';
+
+    // Create canvas drag ghost (40×53 = 3:4 ratio)
+    const img = cardRef.current?.querySelector('img');
+    if (img) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 40;
+      canvas.height = 53;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, 40, 53);
+        e.dataTransfer.setDragImage(canvas, 20, 26);
+      }
+    }
+  }, [asset, generatedVideoThumbnail, fallbackUrl]);
+
+  const isDraggable = !!(actions?.onSendToRef);
+
   return (
     <AssetTile
       innerRef={cardRef}
@@ -378,6 +405,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       isVideo={asset.type === 'video'}
       videoSrc={hoverVideoUrl}
       onMouseEnter={handleCardMouseEnter}
+      draggable={isDraggable}
+      onDragStart={isDraggable ? handleDragStart : undefined}
       fallbackIcon={
         (asset.type === 'image' && isLoadingFallback) || (asset.type === 'video' && isGeneratingThumbnail)
           ? <div className="flex flex-col items-center gap-2 animate-pulse">

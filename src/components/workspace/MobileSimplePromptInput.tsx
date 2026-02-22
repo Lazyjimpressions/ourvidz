@@ -551,6 +551,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onFixedSlotAdd={(index) => handleFileSelectForSlot(index)}
         onFixedSlotRemove={handleRemoveSlot}
         onFixedSlotDrop={handleDropSlot}
+        onFixedSlotDropUrl={(index, url) => {
+          // Direct URL drop from grid tile — set ref slot without uploading
+          if (index === 0) {
+            onReferenceImageUrlSet?.(url, 'single');
+          } else if (index === 1) {
+            onReferenceImage2UrlSet?.(url);
+          } else {
+            const additionalIndex = index - 2;
+            const newAdditional = [...additionalRefUrls];
+            while (newAdditional.length <= additionalIndex) newAdditional.push('');
+            newAdditional[additionalIndex] = url;
+            onAdditionalRefsChange?.(newAdditional);
+          }
+        }}
         disabled={isGenerating}
         contentType={contentType}
         onContentTypeChange={onContentTypeChange}
