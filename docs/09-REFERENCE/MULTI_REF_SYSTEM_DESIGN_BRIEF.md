@@ -109,6 +109,8 @@ Seedream combines up to 10 images into a SINGLE output frame (spatial blending).
 
 ## Current OurVidz Implementation (Feb 22, 2026)
 
+> **Note:** The current 4-slot system is intentionally minimal. Per the [Critical Analysis & Decisions](#critical-analysis--decisions-feb-22-2026) section, P0 priority is expanding to 10 slots to unlock Seedream's full capability.
+
 ### Fixed 4-Slot System (Image Mode)
 
 The workspace now uses **4 fixed slots** for image mode multi-reference:
@@ -248,6 +250,8 @@ CREATE INDEX idx_character_anchors_type ON character_anchors(character_id, ancho
 
 ## Global Reference Library (Poses + LoRA Training)
 
+> **FUTURE EXPLORATION:** This section documents a potential feature. Per [Critical Analysis & Decisions](#critical-analysis--decisions-feb-22-2026), `reference_library` table is deferred — existing `character_anchors` + `user_library.content_category` provide sufficient categorization.
+
 ### Design Goal: Unified Curated Image Library
 
 A single curated image library serves DUAL purposes:
@@ -364,6 +368,8 @@ Initial system references (30-50 curated images):
 
 ## Dynamic Reference Slot Roles
 
+> **FUTURE EXPLORATION:** Full dynamic role assignment (6+ role types per slot) is deferred. Per [Critical Analysis & Decisions](#critical-analysis--decisions-feb-22-2026), only Slot 4 toggle (Pose/Scene) is planned for near-term (P2).
+
 ### Current: Fixed Roles
 
 ```typescript
@@ -424,6 +430,8 @@ function buildRoleAwarePrompt(slots: DynamicRefSlot[], userPrompt: string): stri
 ---
 
 ## Vision Model Integration
+
+> **FUTURE EXPLORATION:** Vision-based auto-role assignment and LoRA captioning are deferred. Per [Critical Analysis & Decisions](#critical-analysis--decisions-feb-22-2026), these have no implementation timeline.
 
 ### Opportunity: Auto-Analyze Reference Images
 
@@ -929,6 +937,55 @@ const { data: model } = await supabase
 8. **Single Template Per Model** - Use variable interpolation, not template explosion
 9. **Roleplay Already Uses Multi-Ref** - Figure 1/2/3 notation exists but needs template migration
 10. **Temporal Anchoring for Video** - Use LTX MultiCondition to prevent character drift by re-anchoring identity at keyframes
+
+---
+
+## Critical Analysis & Decisions (Feb 22, 2026)
+
+This section documents architectural decisions made after reviewing the exploration options above.
+
+### Scope Assessment
+
+This design brief intentionally mixes immediately actionable work with speculative future features. The following clarifies what is ready for implementation vs what remains exploratory:
+
+| Category | Items | Status |
+|----------|-------|--------|
+| **Immediate (P0-P1)** | Slot expansion 4→10, Settings tray grid, Studio→Workspace bridge | Ready for implementation |
+| **Near-term (P2-P3)** | Slot 4 role toggle, Template-driven Figure notation | After P0-P1 stable |
+| **Future Exploration** | LoRA training, Vision auto-role, `reference_library` table, Full dynamic roles | Tracked in this doc, no timeline |
+
+### Architecture Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **Keep fixed slot roles** | Deterministic Figure notation, no UX burden, covers 90% of use cases. Dynamic role assignment creates combinatorial prompt construction complexity. |
+| **No `reference_library` table** | `character_anchors` (deployed) + `user_library.content_category` already provide categorized reference storage. A third table creates confusion about where refs "live." |
+| **Slot 4 toggle (Pose/Scene) only** | Minimal dynamic role without complexity explosion. One boolean state, one conditional in Figure injection. |
+| **Defer template migration** | Current hardcoded Figure notation (~20 lines in `useLibraryFirstWorkspace.ts`) works and is tested. Template migration requires N×M permutations and adds DB fetch overhead. Migrate after slots stable and real usage patterns emerge. |
+| **Consolidate canonical refs to `character_anchors`** | Use `anchor_type = 'canonical'` or `is_primary = true` rather than maintaining separate `character_canon` table. Both tables exist in schema, but consolidation reduces query complexity. |
+
+### Prioritized Implementation Order
+
+| Priority | Work Item | Rationale |
+|----------|-----------|-----------|
+| **P0** | Expand slots 4→10 | Unlocks Seedream's full 10-image capability - currently wasting capacity |
+| **P0** | Settings tray ref grid | Desktop users need ref management beyond tiny quick bar |
+| **P1** | Character Studio → Workspace bridge | "Send to Workspace" connects existing anchors to expanded slots |
+| **P1** | Slot label consistency | Quick bar and settings tray labels should match |
+| **P2** | Slot 4 toggle (Pose/Scene) | Minimal dynamic role after slots stable |
+| **P3** | Template-driven Figure notation | After role patterns proven in production |
+| **P4** | LTX MultiCondition temporal UI | Separate feature branch, different input model |
+
+### Deferred to Future Exploration
+
+The following features are documented in this brief for completeness but have no implementation timeline:
+
+- **`reference_library` table** - LoRA eligibility tracking, curated pose library
+- **Vision model auto-role assignment** - Auto-detect if image is character/pose/scene
+- **Motion library for video workflows** - Curated motion refs for MultiCondition
+- **Full dynamic role assignment** - User-selectable role per slot (6+ role types)
+
+These remain in this document as design exploration. Implementation plans will be created separately when these features are prioritized.
 
 ---
 
