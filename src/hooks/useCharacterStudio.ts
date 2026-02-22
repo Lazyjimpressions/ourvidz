@@ -55,6 +55,13 @@ export interface CharacterCanon {
   created_at: string;
 }
 
+export interface CanonPosePreset {
+  label: string;
+  prompt_fragment: string;
+  tags: string[];
+  reference_strength: number;
+}
+
 interface UseCharacterStudioOptions {
   characterId?: string;
   /** Default role for new characters: 'user' for persona, 'ai' for companion */
@@ -349,6 +356,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     model?: string; // This is the api_models.id from database
     referenceStrength?: number; // 0.1–1.0, controls how much the reference image influences output
     numImages?: number; // 1-4, batch generation count
+    canonPoseKey?: string; // e.g. "front_neutral" — triggers canon position generation
   }) => {
     // Auto-save if new character or dirty state
     let charId = savedCharacterId;
@@ -436,7 +444,8 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
           characterData: null,
           promptOverride: prompt || undefined,
           referenceStrength: options?.referenceStrength || undefined,
-          numImages: options?.numImages || undefined
+          numImages: options?.numImages || undefined,
+          canonPoseKey: options?.canonPoseKey || undefined
         }
       });
       
@@ -457,11 +466,16 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
         // Refresh portraits to show the new one
         await fetchPortraits(charId);
 
+        // If canon position was generated, refresh canon list
+        if (data.canonId) {
+          await loadCanon();
+        }
+
         // Update local character state to show the new image immediately in profile holder
         updateCharacter({ image_url: data.imageUrl });
 
         toast({
-          title: "Portrait generated",
+          title: data.canonPoseKey ? "Position generated" : "Portrait generated",
           description: `Completed in ${Math.round((data.generationTimeMs || 0) / 1000)}s`
         });
         setIsGenerating(false);
@@ -593,6 +607,53 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     }
   }, [savedCharacterId]);
 
+  // === Canon Pose Presets (from prompt_templates metadata) ===
+  const [canonPosePresets, setCanonPosePresets] = useState<Record<string, CanonPosePreset>>({});
+  const [generatingPoseKey, setGeneratingPoseKey] = useState<string | null>(null);
+
+  const fetchCanonPresets = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('prompt_templates')
+        .select('metadata')
+        .eq('use_case', 'canon_position')
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+      if (error) throw error;
+      const metadata = data?.metadata as Record<string, any> || {};
+      setCanonPosePresets(metadata.pose_presets || {});
+    } catch (err) {
+      console.error('❌ Error fetching canon presets:', err);
+    }
+  }, []);
+
+  const generateCanonPosition = useCallback(async (poseKey: string) => {
+    if (!character.reference_image_url) {
+      toast({
+        title: 'Reference image required',
+        description: 'Lock a reference image (Style Lock) first for consistent positions.',
+        variant: 'destructive'
+      });
+      return null;
+    }
+    setGeneratingPoseKey(poseKey);
+    try {
+      const result = await generatePortrait('', {
+        referenceImageUrl: character.reference_image_url,
+        canonPoseKey: poseKey
+      });
+      return result;
+    } finally {
+      setGeneratingPoseKey(null);
+    }
+  }, [character.reference_image_url, generatePortrait, toast]);
+
+  // Fetch canon presets on mount
+  useEffect(() => {
+    fetchCanonPresets();
+  }, [fetchCanonPresets]);
+
   // Initialize
   useEffect(() => {
     if (characterId) {
@@ -647,6 +708,9 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     deleteCanon,
     updateCanonTags,
     setCanonPrimary,
+    canonPosePresets,
+    generateCanonPosition,
+    generatingPoseKey,
     
     // Generation
     isGenerating,
