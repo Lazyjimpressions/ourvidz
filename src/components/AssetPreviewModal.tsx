@@ -6,6 +6,7 @@ import { Download, Calendar, Clock, Image as ImageIcon, Video as VideoIcon, Chev
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { useState, useEffect, useCallback } from "react";
 import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
+import { PromptScorePanel } from "@/components/PromptScorePanel";
 import { toast } from "sonner";
 
 interface AssetPreviewModalProps {
@@ -370,6 +371,9 @@ export const AssetPreviewModal = ({
               </div>
             </div>
           </div>
+
+          {/* Prompt Scoring Panel (Admin Only) */}
+          <PromptScorePanel jobId={details?.jobId || null} className="mt-4" />
 
           {/* Actions */}
           {currentAsset.status === 'completed' && currentAsset.url && (

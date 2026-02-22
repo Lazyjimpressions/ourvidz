@@ -13,21 +13,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Settings, 
-  Save, 
-  RefreshCw, 
-  AlertTriangle, 
+import {
+  Settings,
+  Save,
+  RefreshCw,
+  AlertTriangle,
   CheckCircle,
   Shield,
   Zap,
   Database,
   Users,
   Globe,
-  TestTube
+  TestTube,
+  Sparkles
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+
+interface PromptScoringConfig {
+  enabled: boolean;
+  autoAnalysisEnabled: boolean;
+  showQuickRating: boolean;
+  visionModelId: string | null;
+  scoringWeights: {
+    actionMatch: number;
+    appearanceMatch: number;
+    overallQuality: number;
+  };
+}
 
 interface SystemConfig {
   // Generation Settings
@@ -50,30 +63,33 @@ interface SystemConfig {
   detectionMethod?: string;
   lastRegistrationAttempt?: string;
   enableLocalModelHealthCheck?: boolean;  // Toggle for local model health checks
-  
+
   // Storage Settings
   maxFileSizeMB: number;
   maxStoragePerUserGB: number;
   enableCompression: boolean;
-  
+
   // User Settings
   requireEmailVerification: boolean;
   allowGuestAccess: boolean;
   maxGuestJobs: number;
-  
+
   // System Settings
   maintenanceMode: boolean;
   debugMode: boolean;
   enableAnalytics: boolean;
-  
+
   // Rate Limiting
   rateLimitRequestsPerMinute: number;
   rateLimitBurstSize: number;
-  
+
   // Notifications
   emailNotifications: boolean;
   slackWebhookUrl: string;
   discordWebhookUrl: string;
+
+  // Prompt Scoring
+  promptScoring?: PromptScoringConfig;
 }
 
 export const SystemConfigTab = () => {
@@ -102,7 +118,18 @@ export const SystemConfigTab = () => {
     rateLimitBurstSize: 10,
     emailNotifications: true,
     slackWebhookUrl: '',
-    discordWebhookUrl: ''
+    discordWebhookUrl: '',
+    promptScoring: {
+      enabled: false,
+      autoAnalysisEnabled: false,
+      showQuickRating: false,
+      visionModelId: null,
+      scoringWeights: {
+        actionMatch: 0.40,
+        appearanceMatch: 0.35,
+        overallQuality: 0.25,
+      },
+    },
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -441,6 +468,138 @@ export const SystemConfigTab = () => {
                 Content with NSFW score above this threshold will be flagged (0.0 - 1.0)
               </p>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Prompt Scoring */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5" />
+            Prompt Scoring
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="promptScoringEnabled">Enable Prompt Scoring</Label>
+              <p className="text-sm text-gray-500">Analyze generated images against prompts to improve prompt techniques</p>
+            </div>
+            <Switch
+              id="promptScoringEnabled"
+              checked={config.promptScoring?.enabled ?? false}
+              onCheckedChange={(checked) => updateConfig('promptScoring', {
+                ...config.promptScoring,
+                enabled: checked,
+              })}
+            />
+          </div>
+
+          {config.promptScoring?.enabled && (
+            <>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="autoAnalysisEnabled">Auto-Analyze Generations</Label>
+                  <p className="text-sm text-gray-500">Automatically score every new generation using vision model</p>
+                </div>
+                <Switch
+                  id="autoAnalysisEnabled"
+                  checked={config.promptScoring?.autoAnalysisEnabled ?? false}
+                  onCheckedChange={(checked) => updateConfig('promptScoring', {
+                    ...config.promptScoring,
+                    autoAnalysisEnabled: checked,
+                  })}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="showQuickRating">Show Quick Rating on Tiles</Label>
+                  <p className="text-sm text-gray-500">Display 5-star rating overlay on asset tiles</p>
+                </div>
+                <Switch
+                  id="showQuickRating"
+                  checked={config.promptScoring?.showQuickRating ?? false}
+                  onCheckedChange={(checked) => updateConfig('promptScoring', {
+                    ...config.promptScoring,
+                    showQuickRating: checked,
+                  })}
+                />
+              </div>
+
+              <div className="border-t pt-4">
+                <Label className="mb-3 block">Scoring Weights</Label>
+                <p className="text-sm text-gray-500 mb-4">Weights for composite score calculation (must sum to 1.0)</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="weightAction" className="text-xs">Action Match</Label>
+                    <Input
+                      id="weightAction"
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      max="1"
+                      value={config.promptScoring?.scoringWeights?.actionMatch ?? 0.40}
+                      onChange={(e) => updateConfig('promptScoring', {
+                        ...config.promptScoring,
+                        scoringWeights: {
+                          ...config.promptScoring?.scoringWeights,
+                          actionMatch: parseFloat(e.target.value),
+                        },
+                      })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="weightAppearance" className="text-xs">Appearance Match</Label>
+                    <Input
+                      id="weightAppearance"
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      max="1"
+                      value={config.promptScoring?.scoringWeights?.appearanceMatch ?? 0.35}
+                      onChange={(e) => updateConfig('promptScoring', {
+                        ...config.promptScoring,
+                        scoringWeights: {
+                          ...config.promptScoring?.scoringWeights,
+                          appearanceMatch: parseFloat(e.target.value),
+                        },
+                      })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="weightQuality" className="text-xs">Overall Quality</Label>
+                    <Input
+                      id="weightQuality"
+                      type="number"
+                      step="0.05"
+                      min="0"
+                      max="1"
+                      value={config.promptScoring?.scoringWeights?.overallQuality ?? 0.25}
+                      onChange={(e) => updateConfig('promptScoring', {
+                        ...config.promptScoring,
+                        scoringWeights: {
+                          ...config.promptScoring?.scoringWeights,
+                          overallQuality: parseFloat(e.target.value),
+                        },
+                      })}
+                    />
+                  </div>
+                </div>
+                {(() => {
+                  const total = (config.promptScoring?.scoringWeights?.actionMatch ?? 0) +
+                    (config.promptScoring?.scoringWeights?.appearanceMatch ?? 0) +
+                    (config.promptScoring?.scoringWeights?.overallQuality ?? 0);
+                  const isValid = Math.abs(total - 1.0) < 0.01;
+                  return (
+                    <p className={`text-xs mt-2 ${isValid ? 'text-green-600' : 'text-red-500'}`}>
+                      Total: {total.toFixed(2)} {isValid ? '✓' : '(should equal 1.0)'}
+                    </p>
+                  );
+                })()}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

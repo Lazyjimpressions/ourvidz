@@ -33,6 +33,8 @@ interface ImageDetails {
   promptLength?: number;
   promptTruncated?: boolean;
   modelUsed?: string;
+  // ✅ SCORING: Job ID for prompt score lookup
+  jobId?: string;
 }
 
 export const useFetchImageDetails = () => {
@@ -151,6 +153,8 @@ export const useFetchImageDetails = () => {
           promptLength,
           promptTruncated,
           modelUsed: workspaceAsset.model_used || settings?.model_used || settings?.model,
+          // ✅ SCORING: Job ID for prompt score lookup
+          jobId: workspaceAsset.job_id,
         });
         return;
       }
