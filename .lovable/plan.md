@@ -1,78 +1,165 @@
 
 
-# Character Reference Images in Character Studio V3
+# Canon Position Prompt Design
 
-## Design Decision: Single Table
+## Core Principle
 
-**Recommendation: Use `character_canon` as the single source of truth.** It already has a flexible `metadata` JSONB column for rich tagging and `output_type` for categorization. We'll add a `tags` text array column for fast filtering and an `is_primary` boolean (borrowed from `character_anchors`). The `character_anchors` table will be left unused -- no migration needed since it only has 2 dev rows.
+One system prompt template in `prompt_templates` handles ALL canon position generation. Individual pose definitions live in the template's `metadata` JSONB column, making everything adjustable from the database without code changes.
 
-## Schema Change: Expand `character_canon`
+## Why One Template Works
 
-Add three columns to `character_canon`:
+The [PRESERVE]/[CHANGE] structure is identical for every pose -- only the [CHANGE] block differs. The system prompt provides the wrapper; the metadata provides per-pose fragments.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `tags` | `text[]` | Filterable tags: `front`, `side`, `rear`, `3/4`, `full-body`, `casual`, `formal`, `action`, `seated`, etc. |
-| `is_primary` | `boolean DEFAULT false` | Marks the primary reference for this character |
-| `label` | `text` | Optional user-facing name, e.g., "Front neutral", "Red dress side" |
+## Database: prompt_templates Row
 
-The existing `output_type` field will serve as the top-level category: `pose`, `outfit`, `style`, `position`. The `metadata` JSONB remains available for future LoRA-related data (training set membership, quality scores, etc.).
+| Field | Value |
+|-------|-------|
+| template_name | Canon Position - Seedream v4.5 Edit |
+| use_case | canon_position |
+| content_mode | nsfw |
+| target_model | fal-ai/bytedance/seedream/v4.5/edit |
+| enhancer_model | qwen |
+| job_type | image |
+| is_active | true |
+| description | Generates canonical character position references using I2I with Seedream v4.5 Edit. Pose-specific fragments in metadata. |
 
-RLS: Same policy pattern as `character_portraits` -- users can CRUD their own character's canon entries.
+### system_prompt
 
-## New Tab: "Positions" in Character Studio V3
+The system prompt instructs the LLM enhancer to output a Seedream-optimized image prompt. It receives the character identity tags and the target pose as context:
 
-Add a fourth tab alongside Details, Portraits, and Scenes.
+```
+You generate image prompts for Seedream v4.5 Edit (I2I) to create canonical character position references.
 
-**Mobile**: Tab bar becomes `details | portraits | positions | scenes`
+INPUT: You will receive the character's appearance tags and a target pose description.
 
-**Desktop**: Workspace area gets a `portraits | positions | scenes` tab selector (positions tab is new)
+RULES:
+1. Output ONLY the image prompt. No commentary, no dialogue.
+2. Always start with [PRESERVE] block to lock character identity
+3. Follow with [CHANGE] block for the specific pose/angle
+4. Keep prompts concise (under 80 words)
+5. Use plain background/neutral environment unless pose requires context (e.g., seated needs a chair)
+6. Do NOT add style tags, quality tags, or artistic direction -- the reference image handles style
+7. Do NOT add negative prompts -- this model does not support them
+8. Focus on body positioning, camera angle, and framing
 
-### Positions Tab Content
+OUTPUT FORMAT:
+[PRESERVE] same character identity, face, hair, body type, clothing [CHANGE] {pose_description}
+```
 
-- **Filter bar**: Horizontal pill toggles for `output_type` values (All, Pose, Outfit, Style, Position). Below that, a tag cloud or search for the `tags` array.
-- **Grid**: 3-column (mobile) or 4-column (desktop) thumbnail grid of canon images for this character, filtered by the active type/tag.
-- **Each thumbnail**: Shows the image with a small type badge (bottom-left). Hover/tap reveals:
-  - **Delete** (trash icon)
-  - **Set Primary** (star icon, fills when active)
-  - **Send to Workspace** (arrow-right icon) -- copies URL and offers to open workspace with `?ref=` param
-  - **Edit Tags** (tag icon) -- inline popover to add/remove tags
-- **Add button**: Dashed-border upload button at the end of the grid. On click, opens file picker. After upload, shows a small popover to select `output_type` and add tags before saving.
-- **Generate from Workspace**: A subtle "Create in Workspace" link that navigates to `/workspace?mode=image` so users can generate new position images there and later save them back.
+### metadata (JSONB)
 
-### "Send to Workspace" Flow
+Contains the pose preset map. Each key is the pose ID used by the frontend; each value has the prompt fragment, display label, auto-tags, and suggested reference strength.
 
-Same as the previous plan: copies signed URL, shows toast with "Open Workspace" button that navigates to `/workspace?mode=image&ref={encodedUrl}`. The workspace consumes the `?ref=` param and auto-fills the first empty slot.
+```json
+{
+  "pose_presets": {
+    "front_neutral": {
+      "label": "Front",
+      "prompt_fragment": "full body, standing, front view, neutral pose, arms relaxed at sides, looking at camera, plain background",
+      "tags": ["front", "full-body", "standing"],
+      "reference_strength": 0.8
+    },
+    "side_left": {
+      "label": "Left Side",
+      "prompt_fragment": "full body, standing, left side profile view, arms at sides, plain background",
+      "tags": ["side", "full-body", "standing"],
+      "reference_strength": 0.8
+    },
+    "side_right": {
+      "label": "Right Side",
+      "prompt_fragment": "full body, standing, right side profile view, arms at sides, plain background",
+      "tags": ["side", "full-body", "standing"],
+      "reference_strength": 0.8
+    },
+    "rear": {
+      "label": "Rear",
+      "prompt_fragment": "full body, standing, rear view, back facing camera, looking away, plain background",
+      "tags": ["rear", "full-body", "standing"],
+      "reference_strength": 0.8
+    },
+    "three_quarter": {
+      "label": "3/4 View",
+      "prompt_fragment": "full body, standing, three-quarter angle, slight turn, plain background",
+      "tags": ["3/4", "full-body", "standing"],
+      "reference_strength": 0.8
+    },
+    "bust": {
+      "label": "Bust",
+      "prompt_fragment": "upper body portrait, head and shoulders, front view, centered face, plain background",
+      "tags": ["front", "half-body"],
+      "reference_strength": 0.85
+    }
+  }
+}
+```
 
-## Hook: Extend `useCharacterStudio`
+This means you can add, remove, or edit any pose from the database -- no code deployment needed.
 
-Add to the hook:
+## Negative Prompts: Confirmed Not Applicable
 
-- `canonImages: CharacterCanon[]` -- state for loaded canon entries
-- `loadCanon(characterId)` -- fetches from `character_canon` WHERE `character_id`, ordered by `is_primary DESC, created_at DESC`
-- `uploadCanon(file, outputType, tags, label?)` -- uploads to `reference_images` bucket, inserts row, refreshes
-- `deleteCanon(canonId)` -- deletes row + optional storage cleanup, refreshes
-- `updateCanonTags(canonId, tags)` -- updates tags array
-- `setCanonPrimary(canonId)` -- resets all `is_primary` for character, sets target
+Seedream v4.5 (both T2I and Edit) has NO `negative_prompt` in its `input_schema`. The `negative_prompts` table is only used by SDXL models via `queue-job` and `replicate-image`. This is correct behavior -- no changes needed.
 
-Auto-load canon when `savedCharacterId` changes (same pattern as `loadScenes`).
+## How Generation Works
+
+When a user clicks a pose preset button:
+
+1. Frontend sends to `character-portrait` edge function with a new field: `canonPoseKey: "front_neutral"`
+2. Edge function fetches the `canon_position` template from `prompt_templates`
+3. Extracts the pose preset's `prompt_fragment` from `metadata.pose_presets[canonPoseKey]`
+4. Builds the prompt using the template's [PRESERVE]/[CHANGE] structure:
+   - [PRESERVE] block uses character's `appearance_tags` and `clothing_tags`
+   - [CHANGE] block uses the `prompt_fragment`
+5. Calls Seedream v4.5 Edit with the character's Style Lock as reference image
+6. Auto-saves result to `character_canon` with the preset's auto-tags
+
+No LLM enhancer is needed for the base poses (the fragments are pre-written). The `enhancer_model` field is set for future use with creative/custom poses where the user describes a pose in free text and needs it formatted.
+
+## UI: Fixed Position Boxes at Top of Positions Tab
+
+The top of the Positions page shows a fixed row of 6 boxes (one per base pose preset). These are NOT part of the scrollable grid below -- they are persistent slots that show:
+
+- **Empty state**: Dashed border with the pose label (e.g., "Front", "Left Side"). Click to generate.
+- **Filled state**: Thumbnail of the generated position with a subtle regenerate button overlay.
+- **Generating state**: Spinner with progress indication.
+
+Below the fixed boxes, the existing filterable grid shows all character canon images (base poses + user-uploaded + creative poses).
+
+```text
++--------------------------------------------------+
+| [Front] [Left] [Right] [Rear] [3/4] [Bust]      |  <- Fixed position slots
+|  empty   empty  empty   empty  empty  empty       |
++--------------------------------------------------+
+| Filter: [All] [Pose] [Outfit] [Style] [Position] |  <- Existing filter bar
++--------------------------------------------------+
+| [img] [img] [img] [+ Upload]                     |  <- Scrollable grid
+| [img] [img]                                       |
++--------------------------------------------------+
+```
+
+## Edge Function Changes: character-portrait
+
+Add a new code path when `canonPoseKey` is present in the request body:
+
+1. Fetch the `canon_position` template from `prompt_templates` WHERE `use_case = 'canon_position'` AND `target_model` matches
+2. Look up `metadata.pose_presets[canonPoseKey]` for the prompt fragment
+3. Build prompt: `[PRESERVE] same character identity, face: {appearance_tags joined}, clothing: {clothing_tags joined} [CHANGE] {prompt_fragment}`
+4. Override `reference_strength` with the preset's value
+5. After successful generation, auto-insert into `character_canon` with preset tags
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| **SQL migration** | `ALTER TABLE character_canon ADD COLUMN tags text[] DEFAULT '{}', ADD COLUMN is_primary boolean DEFAULT false, ADD COLUMN label text;` + RLS policies |
-| `src/hooks/useCharacterStudio.ts` | Add canon state, CRUD functions, auto-load |
-| `src/pages/CharacterStudioV3.tsx` | Add "positions" to mobile tabs and desktop workspace tabs, wire canon props |
-| `src/components/character-studio-v3/StudioWorkspace.tsx` | Render PositionsGrid when positions tab is active |
-| **New: `src/components/character-studio-v3/PositionsGrid.tsx`** | Grid component with filter bar, thumbnails, upload, tag editing |
-| `src/pages/MobileSimplifiedWorkspace.tsx` | Consume `?ref=` query param to auto-fill first empty slot |
+| **SQL migration** | INSERT into `prompt_templates` with `use_case = 'canon_position'`, system_prompt, and metadata containing pose_presets |
+| `supabase/functions/character-portrait/index.ts` | Add `canonPoseKey` handling: fetch template, build [PRESERVE]/[CHANGE] prompt, auto-save to `character_canon` |
+| `src/components/character-studio-v3/PositionsGrid.tsx` | Add fixed position slots row at top using preset data fetched from template metadata; wire generate callbacks |
+| `src/hooks/useCharacterStudio.ts` | Add `fetchCanonPresets()` to load pose presets from the template metadata; add `generateCanonPosition(poseKey)` |
+| `src/pages/CharacterStudioV3.tsx` | Wire preset generation callbacks |
 
-## What Does NOT Change
+## What This Does NOT Change
 
-- Portraits tab and portrait generation workflow unchanged
-- Scenes tab unchanged
-- No edge function changes
-- No changes to workspace slot system (already supports 10 slots)
-- `character_anchors` table left as-is (deprecated, not deleted)
+- Portraits tab generation flow (still uses hardcoded prompt building)
+- Scene generation
+- The existing `PosePresets.tsx` component (stays as-is for portrait quick-poses)
+- No negative prompt logic anywhere
 
