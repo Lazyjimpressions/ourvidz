@@ -716,7 +716,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     }
   }, [canonTemplateId, toast]);
 
-  const generateCanonPosition = useCallback(async (poseKey: string) => {
+  const generateCanonPosition = useCallback(async (poseKey: string, modelId?: string) => {
     if (!character.reference_image_url) {
       toast({
         title: 'Reference image required',
@@ -729,7 +729,8 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     try {
       const result = await generatePortrait('', {
         referenceImageUrl: character.reference_image_url,
-        canonPoseKey: poseKey
+        canonPoseKey: poseKey,
+        model: modelId || undefined
       });
       // Refetch canon images so the position slot populates
       if (savedCharacterId) {
