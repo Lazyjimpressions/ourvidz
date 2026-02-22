@@ -394,8 +394,9 @@ const MobileSimplifiedWorkspace = () => {
   const handleUseAsReference = useCallback(async (asset: any) => {
     try {
       console.log('🖼️ MOBILE: Use as Reference clicked for asset:', asset);
+      const isVideo = asset.type === 'video';
       
-      // Get signed URL for the asset - use signOriginal from useSignedAssets
+      // Get signed URL for the asset
       let referenceUrl: string | null = null;
       
       if (asset.url) {
@@ -403,7 +404,6 @@ const MobileSimplifiedWorkspace = () => {
       } else if (typeof asset.signOriginal === 'function') {
         referenceUrl = await asset.signOriginal();
       } else if (asset.thumbUrl) {
-        // Fallback: use thumbUrl (which is already signed)
         referenceUrl = asset.thumbUrl;
       }
       
@@ -415,44 +415,42 @@ const MobileSimplifiedWorkspace = () => {
       
       console.log('✅ MOBILE: Got reference URL, converting to File...');
       
-      // Convert URL to File object (like desktop does)
+      // Convert URL to File object
       const response = await fetch(referenceUrl);
       const blob = await response.blob();
-      const file = new File([blob], `reference-${asset.id}.${blob.type.split('/')[1] || 'jpg'}`, {
-        type: blob.type || 'image/jpeg'
-      });
+      const ext = isVideo ? 'mp4' : (blob.type.split('/')[1] || 'jpg');
+      const mimeType = isVideo ? 'video/mp4' : (blob.type || 'image/jpeg');
+      const file = new File([blob], `reference-${asset.id}.${ext}`, { type: mimeType });
       
-      console.log('✅ MOBILE: File created from workspace image:', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      });
+      console.log('✅ MOBILE: File created:', { fileName: file.name, fileSize: file.size, fileType: file.type });
       
-      // Set as reference image - use both file and URL for maximum compatibility
-      console.log('📝 MOBILE: Setting reference image from workspace asset');
-      setReferenceImage(file);
-      setReferenceImageUrl(referenceUrl);
-      
-      // Clear any existing metadata to start fresh
-      setReferenceMetadata(null);
-      setExactCopyMode(false);
-      
-      // Set prompt if available
-      if (asset.prompt) {
-        setPrompt(asset.prompt);
+      if (isVideo) {
+        // Video → set as start frame ref, switch to video mode + extend model
+        if (mode !== 'video') {
+          updateMode('video');
+        }
+        setBeginningRefImage(file);
+        setBeginningRefImageUrl(referenceUrl);
+        applySmartDefault('extend');
+        toast.success('Video set as reference for extension');
+      } else {
+        // Image → existing behavior
+        setReferenceImage(file);
+        setReferenceImageUrl(referenceUrl);
+        setReferenceMetadata(null);
+        setExactCopyMode(false);
+        
+        if (asset.prompt) {
+          setPrompt(asset.prompt);
+        }
+        
+        toast.success('Workspace image set as reference');
       }
-      
-      // Verify state was set (React batches updates, so check in next tick)
-      setTimeout(() => {
-        console.log('✅ MOBILE: Reference image should be set now');
-      }, 0);
-      
-      toast.success('Workspace image set as reference');
     } catch (error) {
-      console.error('❌ MOBILE: Failed to use workspace image as reference:', error);
-      toast.error('Failed to use image as reference');
+      console.error('❌ MOBILE: Failed to use asset as reference:', error);
+      toast.error('Failed to use as reference');
     }
-  }, [setReferenceImage, setReferenceImageUrl, setPrompt]);
+  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode]);
 
   // Workspace actions - Save to library WITHOUT removing from workspace
   const handleSaveToLibrary = useCallback(async (asset: any) => {
@@ -541,19 +539,17 @@ const MobileSimplifiedWorkspace = () => {
               onSaveToLibrary: handleSaveToLibrary,
               onDiscard: handleDiscard,
               onUseAsReference: (asset) => {
-                // Allow using workspace images as reference (like desktop)
-                if (asset.type === 'image') {
+                if (asset.type === 'image' || asset.type === 'video') {
                   handleUseAsReference(asset);
                 } else {
-                  toast.error('Only images can be used as reference');
+                  toast.error('Only images and videos can be used as reference');
                 }
               },
               onSendToRef: (asset) => {
-                // Also support onSendToRef for workspace compatibility
-                if (asset.type === 'image') {
+                if (asset.type === 'image' || asset.type === 'video') {
                   handleUseAsReference(asset);
                 } else {
-                  toast.error('Only images can be used as reference');
+                  toast.error('Only images and videos can be used as reference');
                 }
               }
             }}
