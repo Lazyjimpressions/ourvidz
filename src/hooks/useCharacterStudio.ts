@@ -661,23 +661,60 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
   // === Canon Pose Presets (from prompt_templates metadata) ===
   const [canonPosePresets, setCanonPosePresets] = useState<Record<string, CanonPosePreset>>({});
   const [generatingPoseKey, setGeneratingPoseKey] = useState<string | null>(null);
+  const [canonTemplateId, setCanonTemplateId] = useState<string | null>(null);
 
   const fetchCanonPresets = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('prompt_templates')
-        .select('metadata')
+        .select('id, metadata')
         .eq('use_case', 'canon_position')
         .eq('is_active', true)
         .limit(1)
         .single();
       if (error) throw error;
+      setCanonTemplateId(data?.id || null);
       const metadata = data?.metadata as Record<string, any> || {};
       setCanonPosePresets(metadata.pose_presets || {});
     } catch (err) {
       console.error('❌ Error fetching canon presets:', err);
     }
   }, []);
+
+  const updateCanonPresetPrompt = useCallback(async (poseKey: string, newFragment: string) => {
+    if (!canonTemplateId) {
+      toast({ title: 'Error', description: 'No canon template found', variant: 'destructive' });
+      return;
+    }
+    try {
+      // Fetch full current metadata
+      const { data, error: fetchErr } = await supabase
+        .from('prompt_templates')
+        .select('metadata')
+        .eq('id', canonTemplateId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      const metadata = (data?.metadata as Record<string, any>) || {};
+      const presets = metadata.pose_presets || {};
+      if (!presets[poseKey]) throw new Error(`Pose key "${poseKey}" not found`);
+
+      presets[poseKey].prompt_fragment = newFragment;
+      metadata.pose_presets = presets;
+
+      const { error: updateErr } = await supabase
+        .from('prompt_templates')
+        .update({ metadata: metadata as Json })
+        .eq('id', canonTemplateId);
+      if (updateErr) throw updateErr;
+
+      setCanonPosePresets({ ...presets });
+      toast({ title: 'Prompt updated', description: `Updated "${presets[poseKey].label}" prompt fragment.` });
+    } catch (err) {
+      console.error('❌ Error updating canon preset prompt:', err);
+      toast({ title: 'Update failed', description: err instanceof Error ? err.message : 'Could not update prompt', variant: 'destructive' });
+    }
+  }, [canonTemplateId, toast]);
 
   const generateCanonPosition = useCallback(async (poseKey: string) => {
     if (!character.reference_image_url) {
@@ -768,6 +805,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     canonPosePresets,
     generateCanonPosition,
     generatingPoseKey,
+    updateCanonPresetPrompt,
     
     // Generation
     isGenerating,

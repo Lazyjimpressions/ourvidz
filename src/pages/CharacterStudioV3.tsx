@@ -36,7 +36,8 @@ export default function CharacterStudioV3() {
     selectItem, selectedItemId, selectedItemType,
     canonImages, isCanonUploading, uploadCanon, deleteCanon, updateCanonTags, setCanonPrimary,
     saveCanonFromUrl, assignCanonPoseKey,
-    canonPosePresets, generateCanonPosition, generatingPoseKey
+    canonPosePresets, generateCanonPosition, generatingPoseKey,
+    updateCanonPresetPrompt
   } = studio;
 
   // Prevent auto-save retry loop after failure
@@ -243,6 +244,7 @@ export default function CharacterStudioV3() {
     onGeneratePosition: generateCanonPosition,
     generatingPoseKey,
     hasReferenceImage,
+    onUpdatePresetPrompt: updateCanonPresetPrompt,
   };
 
   // MOBILE
