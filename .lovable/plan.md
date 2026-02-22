@@ -1,36 +1,69 @@
 
-# Fix Drag Shrink + Add Missing Ref Slots to Settings Sheet
 
-## Issue 1: Tiles don't shrink when dragged
+# Fix Toast UX: Eliminate Blocking, Non-Dismissing Notifications
 
-**Root cause**: `SharedGrid.tsx` passes `onDragStart` to `AssetTile` but never passes `onDragEnd`. The `isDragging` state inside `AssetTile` gets set to `true` on drag start but is never reset to `false`.
+## Problem
 
-**Fix**: Add `onDragEnd` prop to the `AssetTile` in `SharedGrid.tsx` (line ~409). Just pass a no-op or a simple handler since the canvas cleanup is already handled.
+The project runs **two separate toast systems** simultaneously, and the primary one is configured to never auto-dismiss:
 
-### File: `src/components/shared/SharedGrid.tsx`
-- After line 409 (`onDragStart={isDraggable ? handleDragStart : undefined}`), add:
-  `onDragEnd={isDraggable ? () => {} : undefined}`
-  (AssetTile's internal handler already resets `isDragging` -- it just needs the prop to be passed so `onDragEnd` fires)
+- **Radix `useToast`** (used by 60+ files): Has `TOAST_REMOVE_DELAY = 1,000,000ms` (~16 minutes). Toasts effectively never go away on their own, blocking UI on both mobile and desktop.
+- **Sonner** (used by ~8 files): Works fine with sensible auto-dismiss defaults (~4 seconds).
 
----
+Both `<Toaster />` and `<Sonner />` are mounted in `App.tsx`, meaning users can see overlapping toasts from two different systems.
 
-## Issue 2: Reference images not visible in settings tray
+## Solution
 
-**Root cause**: The `refSlots` prop is correctly destructured and `hasAnyRef` is computed in `MobileSettingsSheet.tsx`, but the actual JSX to render the reference slot grid was never added to the component's return statement. The section simply doesn't exist in the rendered output.
+Consolidate onto **Sonner only** and remove the Radix toast system entirely. Sonner is already installed, already mounted, and provides better UX out of the box (auto-dismiss, stacking, swipe-to-dismiss on mobile).
 
-**Fix**: Add a "References" section to the settings sheet between the Creative Direction / Video Controls sections and the Advanced Settings section.
+### Step 1: Update `src/hooks/use-toast.ts`
 
-### File: `src/components/workspace/MobileSettingsSheet.tsx`
-- Insert a new "References" section after the Video Controls block (after line ~532) and before the Advanced Settings block (line ~535)
-- The section will contain:
-  - A `grid grid-cols-5 gap-2` layout of 10 reference slots
-  - First 4 (image) or 2 (video) slots are active; rest are dimmed placeholders with a lock icon
-  - Each active slot shows:
-    - If filled: thumbnail image (`img src={slot.url}`) with an X remove button on hover
-    - If empty: dashed border with a "+" icon, clickable via `onRefSlotAdd(index)`
-  - A `text-[8px]` label below each slot (e.g., "Char 1", "Pose", "Start")
-  - Below the grid (when any slot is filled): Copy mode toggle and Strength slider using existing `exactCopyMode`/`referenceStrength` props
+Replace the entire 191-line Radix-based implementation with a thin wrapper around Sonner's `toast()`:
+
+```
+import { toast as sonnerToast } from "sonner";
+
+function toast({ title, description, variant, ...props }) {
+  if (variant === "destructive") {
+    sonnerToast.error(title, { description });
+  } else {
+    sonnerToast(title, { description });
+  }
+}
+
+function useToast() {
+  return { toast, toasts: [], dismiss: () => {} };
+}
+```
+
+This way, all 60+ files that import `useToast` or `toast` from this hook will automatically start using Sonner without any import changes.
+
+### Step 2: Remove the Radix Toaster from `App.tsx`
+
+- Remove `import { Toaster } from "@/components/ui/toaster"` (line 5)
+- Remove `<Toaster />` from the JSX
+- Keep only `<Sonner />` (already imported as line 7)
+
+### Step 3: Configure Sonner for better UX
+
+Update `src/components/ui/sonner.tsx` to set:
+- `duration={3000}` — 3-second auto-dismiss (short, non-blocking)
+- `position="bottom-center"` — less intrusive on mobile
+- `closeButton` — always show close button for manual dismiss
+- `visibleToasts={2}` — limit stack to avoid UI clutter
+
+### Step 4: Reduce toast noise in generation flow
+
+In `src/hooks/useGeneration.ts`, remove or downgrade low-value toasts:
+- Remove "SDXL Generation Started" toast (user already sees the generating state in the UI)
+- Remove "Generation Resumed" toast (unnecessary noise on page reload)
+- Keep "Generation Complete", "Generation Failed", and "Generation Timeout" (these are actionable)
 
 ### Files Changed
-1. `src/components/shared/SharedGrid.tsx` -- Add missing `onDragEnd` prop
-2. `src/components/workspace/MobileSettingsSheet.tsx` -- Add the reference slots grid JSX
+
+1. **`src/hooks/use-toast.ts`** — Replace Radix implementation with Sonner wrapper
+2. **`src/App.tsx`** — Remove Radix `<Toaster />`
+3. **`src/components/ui/sonner.tsx`** — Add duration, position, close button config
+4. **`src/hooks/useGeneration.ts`** — Remove low-value "started" and "resumed" toasts
+5. **`src/components/ui/toaster.tsx`** — Can be deleted (no longer used)
+6. **`src/components/ui/use-toast.ts`** — Keep as-is (it re-exports from the hook)
+
