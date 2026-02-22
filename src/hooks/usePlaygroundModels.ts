@@ -6,7 +6,7 @@
    display_name: string;
    model_key: string;
    modality: 'image' | 'video' | 'chat';
-   task: string;
+   tasks: string[];
    model_family: string | null;
    is_default: boolean;
    provider_name: string;
@@ -33,7 +33,7 @@
            display_name,
            model_key,
            modality,
-           task,
+            tasks,
            model_family,
            is_default,
            api_providers!inner(name, display_name)
@@ -49,7 +49,7 @@
          display_name: m.display_name,
          model_key: m.model_key,
          modality: m.modality,
-         task: m.task,
+         tasks: m.tasks,
          model_family: m.model_family,
          is_default: m.is_default,
          provider_name: m.api_providers.name,
@@ -88,13 +88,13 @@
  export const useGroupedModels = () => {
    const { data: models, isLoading, error } = usePlaygroundModels();
  
-  const grouped = {
-     chat: models?.filter(m => m.modality === 'chat' && m.task !== 'enhancement') || [],
-     image: models?.filter(m => m.task === 't2i') || [],
-     video: models?.filter(m => m.modality === 'video') || [],
-     i2i: models?.filter(m => m.task === 'i2i') || [],
-     enhancement: models?.filter(m => m.modality === 'chat' && m.task === 'enhancement') || [],
-  };
+   const grouped = {
+      chat: models?.filter(m => m.modality === 'chat' && !m.tasks?.includes('enhancement')) || [],
+      image: models?.filter(m => m.tasks?.includes('t2i')) || [],
+      video: models?.filter(m => m.modality === 'video') || [],
+      i2i: models?.filter(m => m.tasks?.includes('i2i')) || [],
+      enhancement: models?.filter(m => m.modality === 'chat' && m.tasks?.includes('enhancement')) || [],
+   };
  
    return { grouped, isLoading, error };
  };

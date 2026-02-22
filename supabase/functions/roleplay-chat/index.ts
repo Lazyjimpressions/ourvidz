@@ -968,7 +968,7 @@ async function getDefaultOpenRouterModel(supabase: any): Promise<string | null> 
       .from('api_models')
       .select('model_key, api_providers!inner(name)')
       .eq('modality', 'chat')
-      .eq('task', 'roleplay')
+      .contains('tasks', ['roleplay'])
       .eq('is_active', true)
       .contains('default_for_tasks', ['roleplay'])
       .eq('api_providers.name', 'openrouter')
@@ -981,7 +981,7 @@ async function getDefaultOpenRouterModel(supabase: any): Promise<string | null> 
       .from('api_models')
       .select('model_key, api_providers!inner(name)')
       .eq('modality', 'chat')
-      .eq('task', 'roleplay')
+      .contains('tasks', ['roleplay'])
       .eq('is_active', true)
       .eq('api_providers.name', 'openrouter')
       .order('priority', { ascending: true })
@@ -2984,7 +2984,7 @@ const sceneContext = analyzeSceneContent(response);
           .select('id, model_key, display_name, task, api_providers!inner(name)')
           .eq('is_active', true)
           .eq('modality', 'image')
-          .eq('task', requiredTask)  // ✅ FIX: Filter by task type
+          .contains('tasks', [requiredTask])  // ✅ FIX: Filter by task type
           .order('priority', { ascending: false })
           .limit(1);
 
@@ -3430,7 +3430,7 @@ ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene n
           const effectiveDenoiseStrength = consistencySettings?.denoise_strength;
 
           // ✅ NEW: Helper function to get I2I model (user selection, default, or fallback)
-          const getI2IModelKey = async (): Promise<string | null> => {
+          const getI2IModelKey = async (forMultiRef: boolean = false): Promise<string | null> => {
             // Priority 1: User-selected I2I model (not 'auto')
             if (i2iModelOverride && i2iModelOverride !== 'auto') {
               // User provided specific I2I model - query by ID to get model_key
@@ -3447,34 +3447,35 @@ ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene n
               }
             }
             
-            // Priority 2: Default I2I model from database
+            // Priority 2: Default model for the requested task tag
+            const taskTag = forMultiRef ? 'i2i_multi' : 'i2i';
             const { data: defaultI2IModel } = await supabase
               .from('api_models')
               .select('model_key, display_name')
-              .eq('task', 'i2i')
+              .contains('tasks', [taskTag])
               .eq('is_active', true)
-              .contains('default_for_tasks', ['i2i'])
+              .contains('default_for_tasks', [taskTag])
               .order('priority', { ascending: true })
               .limit(1)
               .single();
             
             if (defaultI2IModel?.model_key) {
-              console.log('✅ Using default I2I model:', defaultI2IModel.display_name);
+              console.log(`✅ Using default ${taskTag} model:`, defaultI2IModel.display_name);
               return defaultI2IModel.model_key;
             }
             
-            // Priority 3: Any active I2I-capable model
+            // Priority 3: Any active model with the requested task
             const { data: anyI2IModel } = await supabase
               .from('api_models')
               .select('model_key, display_name')
-              .eq('task', 'i2i')
+              .contains('tasks', [taskTag])
               .eq('is_active', true)
               .order('priority', { ascending: true })
               .limit(1)
               .single();
             
             if (anyI2IModel?.model_key) {
-              console.log('✅ Using fallback I2I model:', anyI2IModel.display_name);
+              console.log(`✅ Using fallback ${taskTag} model:`, anyI2IModel.display_name);
               return anyI2IModel.model_key;
             }
             
@@ -3593,9 +3594,9 @@ ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene n
             imageUrlsArray[i] = await ensureFreshSignedUrl(supabase, imageUrlsArray[i]);
           }
 
-          // Force I2I model (v4.5/edit) for multi-reference composition
+          // Force I2I multi-ref model for multi-reference composition (no hardcoded fallback)
           if (!effectiveI2IModelOverride && imageUrlsArray.length >= 2) {
-            effectiveI2IModelOverride = await getI2IModelKey() || 'fal-ai/bytedance/seedream/v4.5/edit';
+            effectiveI2IModelOverride = await getI2IModelKey(true);
           }
 
           console.log('🎭 ALWAYS-I2I IMAGE ARRAY:', {

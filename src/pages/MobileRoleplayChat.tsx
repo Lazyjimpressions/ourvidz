@@ -99,7 +99,7 @@ const MobileRoleplayChat: React.FC = () => {
     modelOptions: i2iModelOptions
   } = useI2IModels();
 
-  // I2I model state
+  // I2I model state — loaded from centralized roleplay settings
   const [selectedI2IModel, setSelectedI2IModel] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('roleplay-settings');

@@ -11,6 +11,7 @@ interface RoleplaySettings {
   memoryTier: 'conversation' | 'character' | 'profile';
   modelProvider: string;
   selectedImageModel: string;
+  selectedI2IModel: string;
   consistencySettings: ConsistencySettings;
   userCharacterId: string | null;
   sceneStyle: SceneStyle;
@@ -28,6 +29,7 @@ const DEFAULT_SETTINGS: RoleplaySettings = {
   // Start safe while models load; edge function will fall back to OpenRouter if local worker is unhealthy
   modelProvider: '',
   selectedImageModel: '',
+  selectedI2IModel: 'auto',
   consistencySettings: DEFAULT_CONSISTENCY_SETTINGS,
   userCharacterId: null,
   sceneStyle: 'character_only'
@@ -117,6 +119,7 @@ export const useRoleplaySettings = (): UseRoleplaySettingsResult => {
           memoryTier: parsed.memoryTier || DEFAULT_SETTINGS.memoryTier,
           modelProvider: effectiveChatModel,
           selectedImageModel: effectiveImageModel,
+          selectedI2IModel: parsed.selectedI2IModel || DEFAULT_SETTINGS.selectedI2IModel,
           consistencySettings: parsed.consistencySettings || DEFAULT_CONSISTENCY_SETTINGS,
           userCharacterId: effectiveUserCharacterId,
           sceneStyle: parsed.sceneStyle || DEFAULT_SETTINGS.sceneStyle

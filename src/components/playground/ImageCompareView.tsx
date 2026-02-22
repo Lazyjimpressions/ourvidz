@@ -48,8 +48,8 @@ const defaultPanel = (modelId: string): PanelState => ({
 });
 
 /** Determine if a model needs reference images */
-const modelNeedsRef = (model: { modality: string; task: string; model_key: string }) => {
-  if (model.task === 'i2i' || model.task === 'i2v' || model.task === 'extend') return true;
+const modelNeedsRef = (model: { modality: string; tasks: string[]; model_key: string }) => {
+  if (model.tasks?.includes('i2i') || model.tasks?.includes('i2v') || model.tasks?.includes('extend')) return true;
   return false;
 };
 
