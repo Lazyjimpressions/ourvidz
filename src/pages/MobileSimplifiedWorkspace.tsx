@@ -100,6 +100,8 @@ const MobileSimplifiedWorkspace = () => {
   // Ref 2 for image mode (i2i_multi) - managed locally since hook doesn't have this
   const [referenceImage2, setReferenceImage2] = useState<File | null>(null);
   const [referenceImage2Url, setReferenceImage2Url] = useState<string | null>(null);
+  // Additional refs (slots 3+) for multi-ref models
+  const [additionalRefUrls, setAdditionalRefUrls] = useState<string[]>([]);
 
   // Smart model auto-switching helper
   const applySmartDefault = useCallback((task: 't2i' | 'i2i' | 'i2i_multi' | 't2v' | 'i2v' | 'extend' | 'multi') => {
@@ -226,9 +228,10 @@ const MobileSimplifiedWorkspace = () => {
         setExactCopyMode(false);
         setBeginningRefImage(null);
         setBeginningRefImageUrl(null);
-        // Revert: check if ref2 exists (shouldn't without ref1, but clear it too)
+        // Revert: clear ref2 and additional refs too
         setReferenceImage2(null);
         setReferenceImage2Url(null);
+        setAdditionalRefUrls([]);
         if (mode === 'image') applySmartDefault('t2i');
         else applySmartDefault('t2v');
         break;
@@ -482,8 +485,13 @@ const MobileSimplifiedWorkspace = () => {
           toast.success('Video set as reference for extension');
         }
       } else {
-        // Image → auto-overflow: if ref1 is occupied, fill ref2
-        if (mode === 'image' && referenceImageUrl) {
+        // Image → auto-overflow: ref1 → ref2 → additionalRefs
+        if (mode === 'image' && referenceImageUrl && referenceImage2Url) {
+          // Both ref1 and ref2 filled → add to additional refs
+          setAdditionalRefUrls(prev => [...prev, referenceUrl!]);
+          applySmartDefault('i2i_multi');
+          toast.success(`Image set as Ref ${3 + additionalRefUrls.length}`);
+        } else if (mode === 'image' && referenceImageUrl) {
           setReferenceImage2(null);
           setReferenceImage2Url(referenceUrl);
           applySmartDefault('i2i_multi');
@@ -510,7 +518,7 @@ const MobileSimplifiedWorkspace = () => {
       console.error('❌ MOBILE: Failed to use asset as reference:', error);
       toast.error('Failed to use as reference');
     }
-  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url]);
+  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url, referenceImage2Url, additionalRefUrls, setAdditionalRefUrls]);
 
   // Workspace actions - Save to library WITHOUT removing from workspace
   const handleSaveToLibrary = useCallback(async (asset: any) => {
@@ -685,6 +693,18 @@ const MobileSimplifiedWorkspace = () => {
           referenceImage2Url={referenceImage2Url}
           onReferenceImage2UrlSet={handleReferenceImage2UrlSet}
           onReferenceImage2Remove={handleReferenceImage2Remove}
+          additionalRefUrls={additionalRefUrls}
+          onAdditionalRefsChange={setAdditionalRefUrls}
+          selectedModelTasks={(() => {
+            if (!selectedModel?.id) return [];
+            const model = imageModels?.find(m => m.id === selectedModel.id);
+            return (model as any)?.tasks || [];
+          })()}
+          selectedModelCapabilities={(() => {
+            if (!selectedModel?.id) return undefined;
+            const model = imageModels?.find(m => m.id === selectedModel.id);
+            return (model as any)?.capabilities as Record<string, any> || undefined;
+          })()}
         />
 
         {/* Lightbox */}

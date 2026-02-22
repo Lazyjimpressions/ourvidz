@@ -75,6 +75,12 @@ export interface MobileSimplePromptInputProps {
   onReferenceImage2Set?: (file: File) => void;
   onReferenceImage2UrlSet?: (url: string) => void;
   onReferenceImage2Remove?: () => void;
+  // Additional refs (slots 3+) for multi-ref models
+  additionalRefUrls?: string[];
+  onAdditionalRefsChange?: (urls: string[]) => void;
+  // Selected model capabilities (for maxSlots detection)
+  selectedModelTasks?: string[];
+  selectedModelCapabilities?: Record<string, any>;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -131,6 +137,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onReferenceImage2Set,
   onReferenceImage2UrlSet,
   onReferenceImage2Remove,
+  additionalRefUrls = [],
+  onAdditionalRefsChange,
+  selectedModelTasks = [],
+  selectedModelCapabilities,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -177,6 +187,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   // File input refs for reference images
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingFileTypeRef = useRef<'single' | 'start' | 'end' | 'ref2'>('single');
+  const pendingSlotIndexRef = useRef<number>(0);
 
   // Notify parent of settings sheet state (for keyboard handling)
   React.useEffect(() => {
@@ -185,6 +196,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   const handleFileSelect = (type: 'single' | 'start' | 'end' | 'ref2') => {
     pendingFileTypeRef.current = type;
+    // Map type to slot index for the new pipeline
+    if (type === 'single' || type === 'start') pendingSlotIndexRef.current = 0;
+    else if (type === 'ref2' || type === 'end') pendingSlotIndexRef.current = 1;
     fileInputRef.current?.click();
   };
 
@@ -241,7 +255,14 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       try {
         const { uploadAndSignReferenceImage: uploadRef } = await import('@/lib/storage');
         const signedUrl = await uploadRef(file);
-        if (isRef2 && onReferenceImage2UrlSet) {
+        const slotIndex = pendingSlotIndexRef.current;
+        if (slotIndex >= 2) {
+          const additionalIndex = slotIndex - 2;
+          const newAdditional = [...additionalRefUrls];
+          while (newAdditional.length <= additionalIndex) newAdditional.push('');
+          newAdditional[additionalIndex] = signedUrl;
+          onAdditionalRefsChange?.(newAdditional);
+        } else if (isRef2 && onReferenceImage2UrlSet) {
           onReferenceImage2UrlSet(signedUrl);
         } else if (onReferenceImageUrlSet) {
           onReferenceImageUrlSet(signedUrl, type as 'single' | 'start' | 'end');
@@ -347,8 +368,17 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       // Upload immediately
       try {
         const signedUrl = await uploadAndSignReferenceImage(persistedFile);
+        const slotIndex = pendingSlotIndexRef.current;
         
-        if (isRef2 && onReferenceImage2UrlSet) {
+        if (slotIndex >= 2) {
+          // Additional refs (slot 3+)
+          const additionalIndex = slotIndex - 2;
+          const newAdditional = [...additionalRefUrls];
+          // Expand array if needed
+          while (newAdditional.length <= additionalIndex) newAdditional.push('');
+          newAdditional[additionalIndex] = signedUrl;
+          onAdditionalRefsChange?.(newAdditional);
+        } else if (isRef2 && onReferenceImage2UrlSet) {
           onReferenceImage2UrlSet(signedUrl);
         } else if (onReferenceImageUrlSet) {
           onReferenceImageUrlSet(signedUrl, type as 'single' | 'start' | 'end');
@@ -356,7 +386,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           onReferenceImageSet(persistedFile, type as 'single' | 'start' | 'end');
         }
         
-        toast.success(`${isRef2 ? 'Ref 2' : type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image uploaded`);
+        toast.success(`Ref ${slotIndex + 1} image uploaded`);
       } catch (uploadError) {
         const errorMessage = uploadError instanceof Error ? uploadError.message : 'Unknown error';
         if (errorMessage.includes('authenticated')) {
@@ -437,6 +467,84 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   const hasDisplayReference = !!ref1Url;
 
+  // Compute maxSlots from selected model capabilities
+  const maxSlots = (() => {
+    if (selectedModelTasks.includes('i2i_multi')) {
+      const schema = selectedModelCapabilities?.input_schema?.image_urls;
+      if (schema) {
+        const desc = schema.description || '';
+        const match = desc.match(/(?:maximum of|up to)\s+(\d+)/i);
+        if (match) return parseInt(match[1], 10);
+        return 4; // default multi max
+      }
+    }
+    return 2; // default: 2 slots
+  })();
+
+  // Build refSlots array: [ref1, ref2, ...additional], showing at least 2
+  const refSlots = (() => {
+    const slots: Array<{ url?: string | null; isVideo?: boolean }> = [
+      { url: ref1Url, isVideo: ref1IsVideo },
+      { url: ref2Url, isVideo: ref2IsVideo },
+    ];
+    // Add additional ref slots
+    for (const url of additionalRefUrls) {
+      slots.push({ url, isVideo: false });
+    }
+    // Ensure at least one empty slot if we have room
+    const filledCount = slots.filter(s => !!s.url).length;
+    if (filledCount === slots.length && slots.length < maxSlots) {
+      // All filled but we don't add an empty one here - the "+" button handles it
+    }
+    return slots;
+  })();
+
+  // Handle adding a new empty slot (triggered by "+" button in QuickBar)
+  const handleAddSlot = () => {
+    // Find the next empty slot index and trigger file select for it
+    const nextIndex = refSlots.length;
+    if (nextIndex < maxSlots) {
+      handleFileSelectForSlot(nextIndex);
+    }
+  };
+
+  // File select for a specific slot index
+  const handleFileSelectForSlot = (index: number) => {
+    pendingSlotIndexRef.current = index;
+    fileInputRef.current?.click();
+  };
+
+  // Handle remove for a specific slot index
+  const handleRemoveSlot = (index: number) => {
+    if (index === 0) {
+      removeReferenceImage(currentMode === 'image' ? 'single' : 'start');
+    } else if (index === 1) {
+      if (currentMode === 'image') {
+        onReferenceImage2Remove?.();
+      } else {
+        removeReferenceImage('end');
+      }
+    } else {
+      // Additional refs (index 2+)
+      const additionalIndex = index - 2;
+      const newAdditional = [...additionalRefUrls];
+      newAdditional.splice(additionalIndex, 1);
+      onAdditionalRefsChange?.(newAdditional);
+    }
+  };
+
+  // Handle drop for a specific slot index
+  const handleDropSlot = (index: number, file: File) => {
+    pendingSlotIndexRef.current = index;
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    if (fileInputRef.current) {
+      fileInputRef.current.files = dt.files;
+      const syntheticEvent = { target: { files: dt.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
+      handleFileInputChange(syntheticEvent);
+    }
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
       {/* Hidden file input */}
@@ -455,30 +563,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onModeToggle={onModeToggle}
         selectedModelName={selectedModel?.display_name || 'Select Model'}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        ref1Url={ref1Url}
-        ref2Url={ref2Url}
-        ref1IsVideo={ref1IsVideo}
-        ref2IsVideo={ref2IsVideo}
-        onAddRef1={() => {
-          // Auto-overflow: if ref1 is already filled, redirect to ref2
-          const ref1Filled = currentMode === 'image' ? !!referenceImageUrl : !!beginningRefImageUrl;
-          if (ref1Filled) {
-            handleFileSelect(currentMode === 'image' ? 'ref2' : 'end');
-          } else {
-            handleFileSelect(currentMode === 'image' ? 'single' : 'start');
-          }
-        }}
-        onAddRef2={() => handleFileSelect(currentMode === 'image' ? 'ref2' : 'end')}
-        onDropRef1={(file: File) => processDroppedFile(file, 'ref1')}
-        onDropRef2={(file: File) => processDroppedFile(file, 'ref2')}
-        onRemoveRef1={() => removeReferenceImage(currentMode === 'image' ? 'single' : 'start')}
-        onRemoveRef2={() => {
-          if (currentMode === 'image') {
-            onReferenceImage2Remove?.();
-          } else {
-            removeReferenceImage('end');
-          }
-        }}
+        refSlots={refSlots}
+        maxSlots={maxSlots}
+        onAddRef={(index) => handleFileSelectForSlot(index)}
+        onRemoveRef={handleRemoveSlot}
+        onDropRef={handleDropSlot}
+        onAddSlot={handleAddSlot}
         disabled={isGenerating}
         contentType={contentType}
         onContentTypeChange={onContentTypeChange}
