@@ -552,7 +552,6 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onFixedSlotRemove={handleRemoveSlot}
         onFixedSlotDrop={handleDropSlot}
         onFixedSlotDropUrl={(index, url) => {
-          // Direct URL drop from grid tile — set ref slot without uploading
           if (index === 0) {
             onReferenceImageUrlSet?.(url, 'single');
           } else if (index === 1) {
@@ -572,6 +571,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onAspectRatioChange={onAspectRatioChange}
         batchSize={batchSize}
         onBatchSizeChange={onBatchSizeChange}
+        selectedModel={selectedModel}
+        onModelChange={onModelChange}
+        imageModels={imageModels?.map(m => ({
+          id: m.id,
+          display_name: m.display_name,
+          provider_name: m.provider_name,
+        }))}
+        videoModels={videoModels || []}
+        modelsLoading={modelsLoading || videoModelsLoading}
       />
       
       {/* Prompt Input + Inline Generate */}
