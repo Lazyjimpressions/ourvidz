@@ -1,79 +1,78 @@
 
 
-## Fix API Cost Tracking -- Replicate + Aggregate Accuracy
+## Comprehensive Fix: Roleplay Settings Modals and Tile Images
 
-### Problems Found
+### Overview
 
-**Problem 1: Replicate cost is 100% missing**
-All 6 successful Replicate requests have NULL cost. The `replicate-image` function logs usage at prediction creation time (status 201), but Replicate doesn't provide cost until the prediction completes. The `replicate-webhook` attempts to backfill cost by querying `provider_metadata->>prediction_id`, but this JSONB path query appears to never match (no webhook-sourced cost updates exist in the data).
+Three settings modals need fixes, plus the "Continue" tile image flash/disappear bug.
 
-**Problem 2: Aggregates not updated when webhook backfills cost**
-When the Replicate webhook does find and update a usage log's `cost_usd`, the aggregate table is never updated with the new cost. There's a TODO comment at line 289 acknowledging this.
+---
 
-**Problem 3: Potential fal.ai double-counting**
-The `fal-webhook` inserts a second usage log (line 249) for requests that `fal-image` already logged, potentially double-counting costs for webhook-routed fal jobs.
+### 1. Continue Conversation Tile Images Flash and Disappear
 
-**Problem 4: FAL_PRICING map is incomplete**
-Many fal.ai models (Flux-2, Flux Pro, grok-image, LTX variants) are not in the static pricing map and fall back to default pricing ($0.03 image / $0.25 video). These defaults may be inaccurate.
+**Problem:** `useUserConversations` signs `last_scene_image` URLs but never signs `character.image_url`. When a scene image errors out (or doesn't exist), the tile falls back to `character.image_url` which is a raw storage path -- this fails to load, triggers `onError`, and permanently hides the image via `erroredSceneImages` state.
 
-### What Changes
+**Fix in `src/hooks/useUserConversations.ts`:**
+- In the signing step (around line 196), also sign `character.image_url` if it's a storage path (not already `http`)
+- Sign from `user-library` bucket (character images are stored there)
 
-#### 1. Fix Replicate webhook cost extraction
+**Fix in `src/pages/MobileRoleplayDashboard.tsx`:**
+- The `onError` handler currently marks the conversation as errored regardless of which image failed. Since we now sign character URLs too, this should resolve naturally. Keep the error handler but only for genuine failures.
 
-**File:** `supabase/functions/replicate-webhook/index.ts`
+---
 
-The JSONB path query `provider_metadata->>prediction_id` likely fails because Supabase/PostgREST may not support this filter syntax reliably. Fix by:
-- Query using `.contains('provider_metadata', { prediction_id: predictionId })` instead (uses `@>` operator, GIN-indexable)
-- Also update the aggregate table when backfilling cost (call `upsert_usage_aggregate` with just the cost delta)
+### 2. DashboardSettings (Roleplay Dashboard Page - Settings Sheet)
 
-#### 2. Fix Replicate initial cost estimation  
+**File:** `src/components/roleplay/DashboardSettings.tsx`
 
-**File:** `supabase/functions/replicate-image/index.ts`
+**Current state:** Uses `useImageModels()` which returns T2I models. This is wrong for the always-I2I architecture.
 
-- At prediction creation time, there are no metrics. Store the model's pricing from `api_models.pricing` as the estimated cost instead of the broken `predict_time * 0.0001` estimate
-- Fetch pricing from the `apiModel.pricing` object that's already available in scope
+**Changes:**
+- Replace `useImageModels()` with `useI2IModels()` 
+- Update label from "Image Model" to "I2I Model"
+- This sheet is already compact (bottom sheet, `max-h-[60vh]`) -- no size issues
 
-#### 3. Prevent fal.ai double-counting
+---
 
-**File:** `supabase/functions/fal-webhook/index.ts`
+### 3. RoleplaySettingsModal (Chat Page - Advanced Settings)
 
-- Before inserting a new usage log, check if one already exists for the same `request_id` in `provider_metadata`
-- If found, update it (e.g., with the webhook timestamp) instead of inserting a duplicate
+**File:** `src/components/roleplay/RoleplaySettingsModal.tsx`
 
-#### 4. Expand FAL_PRICING map
+**Current state:** The Models tab (lines 1005-1174) has three selectors: Chat Model, T2I Model, and I2I Model.
 
-**File:** `supabase/functions/fal-image/index.ts`
+**Changes:**
+- **Remove the T2I Model selector** (lines 1060-1121) -- T2I has no place in roleplay's always-I2I architecture
+- **Add I2I Multi selector** -- Import `useI2IModels` with `'i2i_multi'` task filter for multi-reference model selection. Add a new selector after the existing I2I selector labeled "I2I Multi Model" with subtitle "Multi-reference (2+ characters)"
+- **Verify modal height** -- Currently uses `flex flex-col` with `overflow-y-auto` on the content area. The Sheet side="right" with `w-[85vw] sm:w-[400px]` should be fine since it's full-height. No height fix needed (the "stuck at bottom" issue was likely related to the T2I selector adding unnecessary height).
 
-Add actual pricing for models currently hitting the default fallback:
-- `flux-2/flash/edit` (i2i)
-- `flux-2/flash` (t2i) 
-- `flux-2` (t2i)
-- `flux-pro/v1.1` (i2i)
-- `grok-image` (t2i/i2i)
-- `ltx-video/v0.9.7` variants (i2v, t2v, extend)
-- `wan/v2.1/i2v`
+---
 
-These prices should come from fal.ai's pricing page or be set as accurate estimates.
+### 4. ScenarioSetupWizard (Scene Start Page)
 
-#### 5. Update aggregates on webhook cost backfill
+**File:** `src/components/roleplay/ScenarioSetupWizard.tsx`
 
-**File:** `supabase/functions/replicate-webhook/index.ts`
+**Current state:** The wizard has no model selectors -- it only has character, scenario, vibe, and start (hook) steps. Model selection happens via the dashboard settings or chat settings before/during the session.
 
-After updating a usage log with actual cost, also call `upsert_usage_aggregate` with the cost delta so the dashboard aggregates stay accurate without needing a full recalculation.
+**No changes needed** for this component.
 
-### Technical Details
+---
+
+### 5. QuickSettingsDrawer (Mobile Chat - Quick Settings)
+
+**File:** `src/components/roleplay/QuickSettingsDrawer.tsx`
+
+**Current state:** Already correctly shows Chat Model and I2I Model selectors. No T2I reference.
+
+**No changes needed.**
+
+---
+
+### Technical Summary
 
 | File | Change |
 |------|--------|
-| `supabase/functions/replicate-webhook/index.ts` | Fix JSONB query to use `.contains()`, update aggregates on cost backfill |
-| `supabase/functions/replicate-image/index.ts` | Use model pricing for initial cost estimate instead of broken predict_time formula |
-| `supabase/functions/fal-webhook/index.ts` | Check for existing usage log before inserting (prevent double-count) |
-| `supabase/functions/fal-image/index.ts` | Expand `FAL_PRICING` map with actual prices for all active models |
-
-### What Stays the Same
-
-- OpenRouter cost tracking (already working perfectly)
-- The dashboard UI and aggregate query logic (already correctly excludes errors from avg cost)
-- The `api_usage_logs` and `api_usage_aggregates` table schemas
-- The `logApiUsage` and `extractOpenRouterUsage` shared utilities
+| `src/hooks/useUserConversations.ts` | Sign `character.image_url` alongside `last_scene_image` in the URL signing step |
+| `src/pages/MobileRoleplayDashboard.tsx` | Minor: ensure error handling doesn't permanently hide tiles after signing fix |
+| `src/components/roleplay/DashboardSettings.tsx` | Replace `useImageModels()` with `useI2IModels()`, update labels |
+| `src/components/roleplay/RoleplaySettingsModal.tsx` | Remove T2I selector, add I2I Multi selector using `useI2IModels('i2i_multi')` |
 
