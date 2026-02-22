@@ -79,6 +79,20 @@ const MobileSimplifiedWorkspace = () => {
     setExtendStrength,
     extendReverseVideo,
     setExtendReverseVideo,
+    // Creative Direction
+    shotType,
+    setShotType,
+    cameraAngle,
+    setCameraAngle,
+    style,
+    setStyle,
+    enhancementModel,
+    setEnhancementModel,
+    // Video Controls
+    videoDuration,
+    setVideoDuration,
+    motionIntensity,
+    setMotionIntensity,
     // URL Management (not used - we use useSignedAssets instead for immediate signing)
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
@@ -599,6 +613,18 @@ const MobileSimplifiedWorkspace = () => {
           onExtendReverseVideoChange={setExtendReverseVideo}
           batchSize={batchSize}
           onBatchSizeChange={setBatchSize}
+          shotType={shotType}
+          onShotTypeChange={setShotType}
+          cameraAngle={cameraAngle}
+          onCameraAngleChange={setCameraAngle}
+          style={style}
+          onStyleChange={setStyle}
+          enhancementModel={enhancementModel}
+          onEnhancementModelChange={setEnhancementModel}
+          videoDuration={videoDuration}
+          onVideoDurationChange={setVideoDuration}
+          motionIntensity={motionIntensity}
+          onMotionIntensityChange={setMotionIntensity}
         />
 
         {/* Lightbox */}

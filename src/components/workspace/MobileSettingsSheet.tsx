@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { X, Upload, Image, Copy, Settings2 } from 'lucide-react';
+import { X, Upload, Image, Copy, Settings2, ChevronDown } from 'lucide-react';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -81,6 +81,23 @@ export interface MobileSettingsSheetProps {
   // Workspace Actions
   onClearWorkspace?: () => void;
   onDeleteAllWorkspace?: () => void;
+  
+  // Creative Direction (Image mode)
+  shotType?: 'wide' | 'medium' | 'close';
+  onShotTypeChange?: (type: 'wide' | 'medium' | 'close') => void;
+  cameraAngle?: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye';
+  onCameraAngleChange?: (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => void;
+  style?: string;
+  onStyleChange?: (style: string) => void;
+  enhancementModel?: 'qwen_base' | 'qwen_instruct' | 'none';
+  onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
+  
+  // Video Controls
+  videoDuration?: number;
+  onVideoDurationChange?: (duration: number) => void;
+  videoDurationOptions?: number[];
+  motionIntensity?: number;
+  onMotionIntensityChange?: (intensity: number) => void;
 }
 
 export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
@@ -121,6 +138,19 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onExtendStrengthChange,
   extendReverseVideo = false,
   onExtendReverseVideoChange,
+  shotType = 'wide',
+  onShotTypeChange,
+  cameraAngle = 'eye_level',
+  onCameraAngleChange,
+  style = '',
+  onStyleChange,
+  enhancementModel = 'qwen_instruct',
+  onEnhancementModelChange,
+  videoDuration = 5,
+  onVideoDurationChange,
+  videoDurationOptions = [],
+  motionIntensity = 0.5,
+  onMotionIntensityChange,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   
@@ -302,6 +332,166 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             </div>
           </div>
           
+          {/* Creative Direction (Image mode only) */}
+          {currentMode === 'image' && (
+            <div className="space-y-2 p-2 rounded-lg border bg-muted/30">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                Creative Direction
+              </label>
+              
+              {/* Shot Type */}
+              {onShotTypeChange && (
+                <div className="space-y-1">
+                  <span className="text-[9px] text-muted-foreground">Shot Type</span>
+                  <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
+                    {([
+                      { value: 'wide' as const, label: 'Wide' },
+                      { value: 'medium' as const, label: 'Medium' },
+                      { value: 'close' as const, label: 'Close' },
+                    ]).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => onShotTypeChange(value)}
+                        className={cn(
+                          "flex-1 px-2 py-1 text-[10px] font-medium transition-colors",
+                          shotType === value
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Camera Angle */}
+              {onCameraAngleChange && (
+                <div className="space-y-1">
+                  <span className="text-[9px] text-muted-foreground">Camera Angle</span>
+                  <Select
+                    value={cameraAngle}
+                    onValueChange={(v) => onCameraAngleChange(v as any)}
+                  >
+                    <SelectTrigger className="w-full h-7 text-[10px] bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover z-[100]">
+                      <SelectItem value="eye_level">Eye Level</SelectItem>
+                      <SelectItem value="low_angle">Low Angle</SelectItem>
+                      <SelectItem value="over_shoulder">Over Shoulder</SelectItem>
+                      <SelectItem value="overhead">Overhead</SelectItem>
+                      <SelectItem value="bird_eye">Bird's Eye</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {/* Style */}
+              {onStyleChange && (
+                <div className="space-y-1">
+                  <span className="text-[9px] text-muted-foreground">Style</span>
+                  <input
+                    type="text"
+                    value={style}
+                    onChange={(e) => onStyleChange(e.target.value)}
+                    placeholder="cinematic lighting, film grain..."
+                    className="w-full h-7 px-2 text-[10px] rounded-md border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+              )}
+              
+              {/* Enhancement */}
+              {onEnhancementModelChange && (
+                <div className="space-y-1">
+                  <span className="text-[9px] text-muted-foreground">Enhancement</span>
+                  <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
+                    {([
+                      { value: 'qwen_instruct' as const, label: 'Auto' },
+                      { value: 'qwen_base' as const, label: 'Base' },
+                      { value: 'none' as const, label: 'None' },
+                    ]).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => onEnhancementModelChange(value)}
+                        className={cn(
+                          "flex-1 px-2 py-1 text-[10px] font-medium transition-colors",
+                          enhancementModel === value
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Video Controls (Video mode only) */}
+          {currentMode === 'video' && (onVideoDurationChange || onMotionIntensityChange) && (
+            <div className="space-y-2 p-2 rounded-lg border bg-muted/30">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                Video Controls
+              </label>
+              
+              {/* Duration */}
+              {onVideoDurationChange && videoDurationOptions.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-muted-foreground">Duration</span>
+                    <span className="text-[9px] text-muted-foreground font-mono">{videoDuration}s</span>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {videoDurationOptions.map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => onVideoDurationChange(d)}
+                        className={cn(
+                          "px-2 py-1 text-[10px] font-medium rounded-md border transition-colors min-w-[32px]",
+                          videoDuration === d
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-muted/50 text-muted-foreground border-border hover:text-foreground"
+                        )}
+                      >
+                        {d}s
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Motion Intensity */}
+              {onMotionIntensityChange && (
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+                    <span>Motion Intensity</span>
+                    <span className="font-mono">{motionIntensity.toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={motionIntensity}
+                    onChange={(e) => onMotionIntensityChange(parseFloat(e.target.value))}
+                    className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
+                      [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 
+                      [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
+                      [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full 
+                      [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Reference Image (Image Mode) - Compact */}
           {currentMode === 'image' && (
             <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">

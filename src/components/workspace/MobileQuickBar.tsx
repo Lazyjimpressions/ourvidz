@@ -136,8 +136,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
             </div>
           )}
 
-          {/* Batch Size */}
-          {onBatchSizeChange && (
+          {/* Batch Size - hidden in video mode */}
+          {onBatchSizeChange && currentMode !== 'video' && (
             <div className="flex items-center rounded-md border bg-muted/50 overflow-hidden">
               {[1, 3, 6].map((n) => (
                 <button
