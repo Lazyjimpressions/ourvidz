@@ -407,6 +407,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       onMouseEnter={handleCardMouseEnter}
       draggable={isDraggable}
       onDragStart={isDraggable ? handleDragStart : undefined}
+      onDragEnd={isDraggable ? () => {} : undefined}
       fallbackIcon={
         (asset.type === 'image' && isLoadingFallback) || (asset.type === 'video' && isGeneratingThumbnail)
           ? <div className="flex flex-col items-center gap-2 animate-pulse">
