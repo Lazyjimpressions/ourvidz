@@ -63,6 +63,7 @@ interface StudioWorkspaceProps {
   onGeneratePosition?: (poseKey: string) => Promise<string | null>;
   generatingPoseKey?: string | null;
   hasReferenceImage?: boolean;
+  onUpdatePresetPrompt?: (poseKey: string, newFragment: string) => Promise<void>;
 }
 
 export function StudioWorkspace({
@@ -78,6 +79,7 @@ export function StudioWorkspace({
   canonImages, isCanonUploading, onCanonUpload, onCanonDelete, onCanonSetPrimary, onCanonUpdateTags,
   onSaveAsPosition, onAssignCanonPoseKey,
   canonPosePresets, onGeneratePosition, generatingPoseKey, hasReferenceImage,
+  onUpdatePresetPrompt,
 }: StudioWorkspaceProps) {
 
   // Scenes-only mode for mobile scenes tab
@@ -113,6 +115,7 @@ export function StudioWorkspace({
           onGeneratePosition={onGeneratePosition}
           generatingPoseKey={generatingPoseKey}
           hasReferenceImage={hasReferenceImage}
+          onUpdatePresetPrompt={onUpdatePresetPrompt}
         />
       </ScrollArea>
     );
@@ -265,6 +268,7 @@ export function StudioWorkspace({
                 onGeneratePosition={onGeneratePosition}
                 generatingPoseKey={generatingPoseKey}
                 hasReferenceImage={hasReferenceImage}
+                onUpdatePresetPrompt={onUpdatePresetPrompt}
               />
             ) : (
               <p className="text-xs text-muted-foreground">Positions not available.</p>

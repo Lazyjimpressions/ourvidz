@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { useSignedUrl } from '@/hooks/useSignedUrl';
@@ -35,6 +36,7 @@ interface PositionsGridProps {
   onGeneratePosition?: (poseKey: string) => Promise<string | null>;
   generatingPoseKey?: string | null;
   hasReferenceImage?: boolean;
+  onUpdatePresetPrompt?: (poseKey: string, newFragment: string) => Promise<void>;
 }
 
 // Fixed position slot component
@@ -45,6 +47,7 @@ function PositionSlot({
   isGenerating,
   onGenerate,
   hasReferenceImage,
+  onUpdatePresetPrompt,
 }: {
   poseKey: string;
   preset: CanonPosePreset;
@@ -52,14 +55,56 @@ function PositionSlot({
   isGenerating: boolean;
   onGenerate: (poseKey: string) => void;
   hasReferenceImage: boolean;
+  onUpdatePresetPrompt?: (poseKey: string, newFragment: string) => Promise<void>;
 }) {
   const { signedUrl } = useSignedUrl(filledCanon?.output_url || null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editFragment, setEditFragment] = useState(preset.prompt_fragment);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+
+  const handleSavePrompt = async () => {
+    if (!onUpdatePresetPrompt) return;
+    setIsSavingPrompt(true);
+    await onUpdatePresetPrompt(poseKey, editFragment);
+    setIsSavingPrompt(false);
+    setEditOpen(false);
+  };
+
+  const editButton = onUpdatePresetPrompt ? (
+    <Popover open={editOpen} onOpenChange={(open) => { setEditOpen(open); if (open) setEditFragment(preset.prompt_fragment); }}>
+      <PopoverTrigger asChild>
+        <button
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-0.5 right-0.5 z-10 p-0.5 rounded bg-black/40 hover:bg-black/60 text-white/80 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+          title="Edit prompt"
+        >
+          <Pencil className="w-2.5 h-2.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2.5 space-y-2" align="start" onClick={(e) => e.stopPropagation()}>
+        <Label className="text-xs font-medium">{preset.label} — Prompt</Label>
+        <Textarea
+          value={editFragment}
+          onChange={(e) => setEditFragment(e.target.value)}
+          className="min-h-[80px] text-xs"
+          placeholder="Prompt fragment for this position..."
+        />
+        <div className="flex gap-1.5">
+          <Button size="sm" className="h-6 text-xs flex-1" onClick={handleSavePrompt} disabled={isSavingPrompt}>
+            {isSavingPrompt ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Save
+          </Button>
+          <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => setEditOpen(false)}>Cancel</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  ) : null;
 
   if (isGenerating) {
     return (
-      <div className="aspect-[3/4] rounded-md border border-border bg-muted/50 flex flex-col items-center justify-center gap-1">
+      <div className="aspect-[3/4] rounded-md border border-border bg-muted/50 flex flex-col items-center justify-center gap-1 relative group">
         <Loader2 className="w-4 h-4 animate-spin text-primary" />
         <span className="text-[9px] text-muted-foreground">Generating...</span>
+        {editButton}
       </div>
     );
   }
@@ -71,7 +116,7 @@ function PositionSlot({
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1">
           <span className="text-[9px] text-white/90 font-medium">{preset.label}</span>
         </div>
-        {/* Regenerate overlay */}
+        {editButton}
         <button
           onClick={() => onGenerate(poseKey)}
           className="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
@@ -90,13 +135,14 @@ function PositionSlot({
       onClick={() => onGenerate(poseKey)}
       disabled={!hasReferenceImage}
       className={cn(
-        'aspect-[3/4] rounded-md border-2 border-dashed flex flex-col items-center justify-center gap-0.5 transition-colors',
+        'aspect-[3/4] rounded-md border-2 border-dashed flex flex-col items-center justify-center gap-0.5 transition-colors relative group',
         hasReferenceImage
           ? 'border-muted-foreground/30 hover:border-primary/50 text-muted-foreground hover:text-foreground cursor-pointer'
           : 'border-muted/30 text-muted-foreground/40 cursor-not-allowed'
       )}
       title={hasReferenceImage ? `Generate ${preset.label}` : 'Lock a reference image first'}
     >
+      {editButton}
       <Plus className="w-3.5 h-3.5" />
       <span className="text-[9px] font-medium">{preset.label}</span>
     </button>
@@ -270,6 +316,7 @@ export function PositionsGrid({
   onGeneratePosition,
   generatingPoseKey,
   hasReferenceImage,
+  onUpdatePresetPrompt,
 }: PositionsGridProps) {
   const [typeFilter, setTypeFilter] = useState<OutputTypeFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
@@ -348,6 +395,7 @@ export function PositionsGrid({
                 isGenerating={generatingPoseKey === key}
                 onGenerate={handleGeneratePosition}
                 hasReferenceImage={!!hasReferenceImage}
+                onUpdatePresetPrompt={onUpdatePresetPrompt}
               />
             ))}
           </div>
