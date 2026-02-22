@@ -531,7 +531,79 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             </div>
           )}
 
-          
+          {/* References */}
+          {refSlots.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider px-2">References</p>
+              <div className="grid grid-cols-5 gap-2 px-2">
+                {refSlots.map((slot, i) => {
+                  const activeCount = currentMode === 'video' ? 2 : 4;
+                  const isActive = i < activeCount;
+                  return (
+                    <div key={i} className="flex flex-col items-center gap-0.5">
+                      {isActive ? (
+                        slot.url ? (
+                          <div className="relative group h-12 w-12 rounded-md overflow-hidden border border-border">
+                            <img src={slot.url} alt={slot.label} className="absolute inset-0 w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => onRefSlotRemove?.(i)}
+                              className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X className="w-2.5 h-2.5 text-white" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onRefSlotAdd?.(i)}
+                            className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary/50 transition-colors"
+                          >
+                            <Plus className="w-3 h-3 text-muted-foreground/50" />
+                          </button>
+                        )
+                      ) : (
+                        <div className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/15 flex items-center justify-center opacity-40" title="Coming soon">
+                          <Lock className="w-3 h-3 text-muted-foreground/30" />
+                        </div>
+                      )}
+                      <span className={`text-[8px] ${isActive ? 'text-muted-foreground' : 'text-muted-foreground/30'}`}>{slot.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {hasAnyRef && (
+                <div className="space-y-2 px-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-muted-foreground">Exact Copy</span>
+                    <Switch checked={exactCopyMode} onCheckedChange={onExactCopyModeChange} className="scale-75" />
+                  </div>
+                  {!exactCopyMode && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-muted-foreground">Strength</span>
+                        <span className="text-[9px] text-muted-foreground">{Math.round(referenceStrength * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0.1}
+                        max={1.0}
+                        step={0.05}
+                        value={referenceStrength}
+                        onChange={(e) => onReferenceStrengthChange?.(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 
+                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
+                          [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full 
+                          [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Advanced Settings (Local Models Only) */}
           {showAdvancedSettings && (
             <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
