@@ -227,7 +227,14 @@ serve(async (req) => {
 
     console.log("✅ Job completed via webhook:", job.id);
 
-    // ── 10. Post-processing (fire-and-forget) ──
+    // ── 10. Trigger prompt scoring (fire-and-forget) ──
+    // Only for images, scoring analyzes output quality against original prompt
+    if (resultType === "image") {
+      triggerPromptScoring(supabase, job, resultUrl)
+        .catch((err) => console.error("❌ Prompt scoring trigger error:", err));
+    }
+
+    // ── 11. Post-processing (fire-and-forget) ──
     // Handle character portrait and scene destinations
     const destination = job.metadata?.destination;
     if (destination) {
@@ -235,7 +242,7 @@ serve(async (req) => {
         .catch((err) => console.error("❌ Post-processing error:", err));
     }
 
-    // ── 11. Log API usage (prevent double-counting) ──
+    // ── 12. Log API usage (prevent double-counting) ──
     try {
       const providerName = job.metadata?.provider_name || "fal";
       const { data: provider } = await supabase
@@ -470,5 +477,50 @@ async function handlePostProcessing(
       .eq("id", job.metadata.scene_id);
 
     console.log("✅ Scene updated via webhook:", job.metadata.scene_id);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Prompt Scoring trigger (fire-and-forget)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function triggerPromptScoring(
+  supabase: any,
+  job: any,
+  imageUrl: string
+): Promise<void> {
+  try {
+    // Check if scoring is enabled (quick check before invoking)
+    const { data: configData } = await supabase
+      .from("system_config")
+      .select("config")
+      .limit(1)
+      .single();
+
+    const scoringConfig = configData?.config?.promptScoring;
+    if (!scoringConfig?.enabled || !scoringConfig?.autoAnalysisEnabled) {
+      console.log("⏭️ Prompt scoring disabled, skipping");
+      return;
+    }
+
+    console.log("📊 Triggering prompt scoring for job:", job.id);
+
+    // Fire-and-forget call to score-generation
+    await supabase.functions.invoke("score-generation", {
+      body: {
+        jobId: job.id,
+        imageUrl: imageUrl,
+        originalPrompt: job.original_prompt,
+        enhancedPrompt: job.enhanced_prompt,
+        systemPromptUsed: job.template_name,
+        apiModelId: job.api_model_id,
+        userId: job.user_id,
+      },
+    });
+
+    console.log("✅ Prompt scoring triggered for job:", job.id);
+  } catch (error) {
+    // Don't throw - scoring is non-critical
+    console.error("⚠️ Failed to trigger prompt scoring:", error);
   }
 }

@@ -10,7 +10,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-type OutputMode = 'caption' | 'detailed' | 'structured';
+type OutputMode = 'caption' | 'detailed' | 'structured' | 'scoring';
 
 interface DescribeImageRequest {
   imageUrl: string;
@@ -117,7 +117,50 @@ async function resolveVisionModel(modelId?: string, modelKey?: string): Promise<
   };
 }
 
-function buildSystemPrompt(outputMode: OutputMode, contentRating: string): string {
+/**
+ * Fetch scoring template from prompt_templates table.
+ * Falls back to hardcoded template if none found.
+ */
+async function getScoringTemplate(): Promise<string> {
+  const { data: template } = await supabase
+    .from('prompt_templates')
+    .select('system_prompt')
+    .eq('use_case', 'scoring')
+    .eq('is_active', true)
+    .order('version', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (template?.system_prompt) {
+    return template.system_prompt;
+  }
+
+  // Fallback template if none in database
+  return `You are an expert image quality analyst for AI-generated content.
+
+Analyze this AI-generated image against the original prompt and return ONLY valid JSON:
+{
+  "action_match": <1-5: Are characters doing the requested action/pose?>,
+  "appearance_match": <1-5: Do characters look as described?>,
+  "overall_quality": <1-5: Technical and aesthetic quality>,
+  "description": "Brief description of what is in the image",
+  "elements_present": ["element1", "element2"],
+  "elements_missing": ["element1", "element2"],
+  "issues": ["issue1", "issue2"],
+  "strengths": ["strength1", "strength2"]
+}
+
+Scoring guide (1-5 scale):
+- 5: Excellent match, minor or no issues
+- 4: Good match, small discrepancies
+- 3: Partial match, noticeable issues
+- 2: Poor match, significant issues
+- 1: Failed to match intent
+
+Original prompt: {{original_prompt}}`;
+}
+
+async function buildSystemPrompt(outputMode: OutputMode, contentRating: string, originalPrompt?: string): Promise<string> {
   const base = `You are an expert character analyst for AI roleplay and image generation. All characters are explicitly ADULTS (18+).`;
 
   if (outputMode === 'caption') {
@@ -126,6 +169,11 @@ function buildSystemPrompt(outputMode: OutputMode, contentRating: string): strin
 
   if (outputMode === 'detailed') {
     return `${base}\nWrite a detailed narrative paragraph describing this character's appearance, style, and visual presence. Be vivid and specific.${contentRating === 'nsfw' ? ' You may include sensual or mature descriptors.' : ''}`;
+  }
+
+  if (outputMode === 'scoring') {
+    const template = await getScoringTemplate();
+    return template.replace('{{original_prompt}}', originalPrompt || 'Not provided');
   }
 
   // structured
@@ -138,7 +186,7 @@ Analyze this character image and extract structured details. Return ONLY valid J
   "appearance_tags": ["tag1", "tag2", ...],
   "physical_traits": {
     "hair": "description",
-    "eyes": "description", 
+    "eyes": "description",
     "build": "description",
     "skin": "description",
     "distinguishing_features": "description"
@@ -163,8 +211,12 @@ function buildUserContent(imageUrl: string, outputMode: OutputMode, originalProm
   let textPrompt = 'Describe this character';
   if (outputMode === 'structured') {
     textPrompt = 'Analyze this character image and return structured JSON as specified.';
+  } else if (outputMode === 'scoring') {
+    textPrompt = 'Analyze this AI-generated image against the original prompt and return the scoring JSON as specified. Be critical but fair in your assessment.';
   }
-  if (originalPrompt) {
+
+  // For non-scoring modes, append original prompt context
+  if (originalPrompt && outputMode !== 'scoring') {
     textPrompt += `\n\nThe original generation prompt was: "${originalPrompt}". Also include a "quality_score" field (1-10) rating how well the image matches this prompt.`;
   }
 
@@ -217,7 +269,7 @@ serve(async (req) => {
     const model = await resolveVisionModel(modelId, modelKey);
 
     // 2. Build messages
-    const systemPrompt = buildSystemPrompt(outputMode, contentRating);
+    const systemPrompt = await buildSystemPrompt(outputMode, contentRating, originalPrompt);
     const userContent = buildUserContent(imageUrl, outputMode, originalPrompt);
 
     // 3. Call vision API
@@ -232,7 +284,7 @@ serve(async (req) => {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
       ],
-      max_tokens: model.input_defaults.max_tokens || (outputMode === 'structured' ? 2048 : 800),
+      max_tokens: model.input_defaults.max_tokens || (outputMode === 'structured' || outputMode === 'scoring' ? 2048 : 800),
       temperature: model.input_defaults.temperature || 0.4,
       stream: false,
     };
@@ -277,19 +329,35 @@ serve(async (req) => {
 
     // 4. Parse based on output mode
     let data: Record<string, unknown>;
-    if (outputMode === 'structured') {
+    if (outputMode === 'structured' || outputMode === 'scoring') {
       const parsed = parseStructuredResponse(rawContent);
-      // Check if parsing actually failed (fallback returns empty description)
-      if (!parsed.description && !parsed.traits && parsed.gender === 'unspecified') {
-        console.error('❌ Failed to parse structured response from vision model');
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Vision model returned unparseable response. Try again.',
-          model_used: model.model_key,
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        });
+
+      if (outputMode === 'structured') {
+        // Check if parsing actually failed (fallback returns empty description)
+        if (!parsed.description && !parsed.traits && parsed.gender === 'unspecified') {
+          console.error('❌ Failed to parse structured response from vision model');
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Vision model returned unparseable response. Try again.',
+            model_used: model.model_key,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          });
+        }
+      } else if (outputMode === 'scoring') {
+        // Validate scoring response has required fields
+        if (!parsed.action_match && !parsed.appearance_match && !parsed.overall_quality) {
+          console.error('❌ Failed to parse scoring response from vision model');
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Vision model returned unparseable scoring response. Try again.',
+            model_used: model.model_key,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          });
+        }
       }
       data = parsed;
     } else {

@@ -11,6 +11,7 @@ The Dynamic Prompting System uses database-driven templates for AI interactions.
 ### Third-Party Provider Focus (February 2026)
 
 The system now prioritizes third-party API providers:
+
 - **OpenRouter** - Chat/roleplay and prompt enhancement (MythoMax 13B default)
 - **fal.ai** - Image generation (Seedream v4/v4.5) and video (WAN 2.1 I2V)
 - **Replicate** - Image generation (SDXL, RV5.1)
