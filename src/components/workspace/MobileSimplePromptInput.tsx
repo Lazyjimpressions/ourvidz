@@ -467,46 +467,24 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   const hasDisplayReference = !!ref1Url;
 
-  // Compute maxSlots from selected model capabilities
-  const maxSlots = (() => {
-    if (selectedModelTasks.includes('i2i_multi')) {
-      const schema = selectedModelCapabilities?.input_schema?.image_urls;
-      if (schema) {
-        const desc = schema.description || '';
-        const match = desc.match(/(?:maximum of|up to)\s+(\d+)/i);
-        if (match) return parseInt(match[1], 10);
-        return 4; // default multi max
-      }
-    }
-    return 2; // default: 2 slots
-  })();
+  // Fixed 4-slot structure for image mode: Char1, Char2, Char3, Pose
+  // Maps to: ref1 (referenceImageUrl), ref2 (referenceImage2Url), additionalRefUrls[0], additionalRefUrls[1]
+  const fixedSlots: Array<{ url?: string | null; isVideo?: boolean }> = [
+    { url: referenceImageUrl, isVideo: false },
+    { url: referenceImage2Url, isVideo: false },
+    { url: additionalRefUrls[0] || null, isVideo: false },
+    { url: additionalRefUrls[1] || null, isVideo: false },
+  ];
 
-  // Build refSlots array: [ref1, ref2, ...additional], showing at least 2
-  const refSlots = (() => {
-    const slots: Array<{ url?: string | null; isVideo?: boolean }> = [
-      { url: ref1Url, isVideo: ref1IsVideo },
-      { url: ref2Url, isVideo: ref2IsVideo },
-    ];
-    // Add additional ref slots
-    for (const url of additionalRefUrls) {
-      slots.push({ url, isVideo: false });
-    }
-    // Ensure at least one empty slot if we have room
-    const filledCount = slots.filter(s => !!s.url).length;
-    if (filledCount === slots.length && slots.length < maxSlots) {
-      // All filled but we don't add an empty one here - the "+" button handles it
-    }
-    return slots;
-  })();
+  // Video mode still uses dynamic slots (start/end ref)
+  const videoRefSlots: Array<{ url?: string | null; isVideo?: boolean }> = [
+    { url: beginningRefImageUrl, isVideo: ref1IsVideo },
+    { url: endingRefImageUrl, isVideo: ref2IsVideo },
+  ];
+  const maxSlots = 2; // video mode max
 
-  // Handle adding a new empty slot (triggered by "+" button in QuickBar)
-  const handleAddSlot = () => {
-    // Find the next empty slot index and trigger file select for it
-    const nextIndex = refSlots.length;
-    if (nextIndex < maxSlots) {
-      handleFileSelectForSlot(nextIndex);
-    }
-  };
+  // Handle adding a new empty slot (video mode only)
+  const handleAddSlot = () => {};
 
   // File select for a specific slot index
   const handleFileSelectForSlot = (index: number) => {
@@ -563,12 +541,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onModeToggle={onModeToggle}
         selectedModelName={selectedModel?.display_name || 'Select Model'}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        refSlots={refSlots}
+        refSlots={videoRefSlots}
         maxSlots={maxSlots}
         onAddRef={(index) => handleFileSelectForSlot(index)}
         onRemoveRef={handleRemoveSlot}
         onDropRef={handleDropSlot}
         onAddSlot={handleAddSlot}
+        fixedSlots={fixedSlots}
+        onFixedSlotAdd={(index) => handleFileSelectForSlot(index)}
+        onFixedSlotRemove={handleRemoveSlot}
+        onFixedSlotDrop={handleDropSlot}
         disabled={isGenerating}
         contentType={contentType}
         onContentTypeChange={onContentTypeChange}

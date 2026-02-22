@@ -489,17 +489,41 @@ const MobileSimplifiedWorkspace = () => {
           toast.success('Video set as reference for extension');
         }
       } else {
-        // Image → auto-overflow: ref1 → ref2 → additionalRefs
-        if (mode === 'image' && referenceImageUrl && referenceImage2Url) {
-          // Both ref1 and ref2 filled → add to additional refs
-          setAdditionalRefUrls(prev => [...prev, referenceUrl!]);
-          applySmartDefault('i2i_multi');
-          toast.success(`Image set as Ref ${3 + additionalRefUrls.length}`);
-        } else if (mode === 'image' && referenceImageUrl) {
-          setReferenceImage2(null);
-          setReferenceImage2Url(referenceUrl);
-          applySmartDefault('i2i_multi');
-          toast.success('Image set as second reference');
+        // Image → auto-overflow fixed slots: Char1 → Char2 → Char3 → Pose
+        if (mode === 'image') {
+          if (!referenceImageUrl) {
+            // Char 1 empty
+            setReferenceImage(file);
+            setReferenceImageUrl(referenceUrl);
+            setReferenceMetadata(null);
+            setExactCopyMode(false);
+            if (asset.prompt) setPrompt(asset.prompt);
+            toast.success('Image set as Char 1');
+          } else if (!referenceImage2Url) {
+            // Char 2 empty
+            setReferenceImage2(null);
+            setReferenceImage2Url(referenceUrl);
+            applySmartDefault('i2i_multi');
+            toast.success('Image set as Char 2');
+          } else if (!additionalRefUrls[0]) {
+            // Char 3 empty
+            const newAdditional = [...additionalRefUrls];
+            while (newAdditional.length < 1) newAdditional.push('');
+            newAdditional[0] = referenceUrl!;
+            setAdditionalRefUrls(newAdditional);
+            applySmartDefault('i2i_multi');
+            toast.success('Image set as Char 3');
+          } else if (!additionalRefUrls[1]) {
+            // Pose empty
+            const newAdditional = [...additionalRefUrls];
+            while (newAdditional.length < 2) newAdditional.push('');
+            newAdditional[1] = referenceUrl!;
+            setAdditionalRefUrls(newAdditional);
+            applySmartDefault('i2i_multi');
+            toast.success('Image set as Pose');
+          } else {
+            toast.info('All reference slots are filled');
+          }
         } else if (mode === 'video' && beginningRefImageUrl) {
           setEndingRefImage(file);
           setEndingRefImageUrl(referenceUrl);
@@ -510,11 +534,7 @@ const MobileSimplifiedWorkspace = () => {
           setReferenceImageUrl(referenceUrl);
           setReferenceMetadata(null);
           setExactCopyMode(false);
-          
-          if (asset.prompt) {
-            setPrompt(asset.prompt);
-          }
-          
+          if (asset.prompt) setPrompt(asset.prompt);
           toast.success('Workspace image set as reference');
         }
       }
