@@ -454,27 +454,36 @@ export type Database = {
           created_at: string
           id: string
           is_pinned: boolean
+          is_primary: boolean | null
+          label: string | null
           metadata: Json | null
           output_type: string
           output_url: string
+          tags: string[] | null
         }
         Insert: {
           character_id: string
           created_at?: string
           id?: string
           is_pinned?: boolean
+          is_primary?: boolean | null
+          label?: string | null
           metadata?: Json | null
           output_type: string
           output_url: string
+          tags?: string[] | null
         }
         Update: {
           character_id?: string
           created_at?: string
           id?: string
           is_pinned?: boolean
+          is_primary?: boolean | null
+          label?: string | null
           metadata?: Json | null
           output_type?: string
           output_url?: string
+          tags?: string[] | null
         }
         Relationships: [
           {

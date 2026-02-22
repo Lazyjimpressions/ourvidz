@@ -42,6 +42,19 @@ export interface CharacterScene {
   created_at: string;
 }
 
+export interface CharacterCanon {
+  id: string;
+  character_id: string;
+  output_type: string;
+  output_url: string;
+  is_pinned: boolean;
+  is_primary: boolean;
+  tags: string[];
+  label: string | null;
+  metadata: Record<string, unknown> | null | any;
+  created_at: string;
+}
+
 interface UseCharacterStudioOptions {
   characterId?: string;
   /** Default role for new characters: 'user' for persona, 'ai' for companion */
@@ -73,6 +86,8 @@ const defaultCharacterData: CharacterData = {
 export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseCharacterStudioOptions = {}) {
   const [character, setCharacter] = useState<CharacterData>(defaultCharacterData);
   const [scenes, setScenes] = useState<CharacterScene[]>([]);
+  const [canonImages, setCanonImages] = useState<CharacterCanon[]>([]);
+  const [isCanonUploading, setIsCanonUploading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -493,6 +508,91 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     }
   }, [selectedItemId, selectedItemType, portraits, scenes]);
 
+  // === Canon (Positions) CRUD ===
+  const loadCanon = useCallback(async () => {
+    if (!savedCharacterId) return;
+    try {
+      const { data, error } = await supabase
+        .from('character_canon')
+        .select('*')
+        .eq('character_id', savedCharacterId)
+        .order('is_primary', { ascending: false })
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setCanonImages((data || []).map(d => ({
+        ...d,
+        is_primary: (d as any).is_primary ?? false,
+        tags: (d as any).tags ?? [],
+        label: (d as any).label ?? null,
+      })));
+    } catch (err) {
+      console.error('❌ Error loading canon:', err);
+    }
+  }, [savedCharacterId]);
+
+  const uploadCanon = useCallback(async (file: File, outputType: string, tags: string[], label?: string) => {
+    if (!savedCharacterId || !user?.id) return;
+    setIsCanonUploading(true);
+    try {
+      const ext = file.name.split('.').pop() || 'png';
+      const path = `${user.id}/${savedCharacterId}/canon/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('reference_images').upload(path, file);
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase
+        .from('character_canon')
+        .insert({
+          character_id: savedCharacterId,
+          output_type: outputType,
+          output_url: path,
+          tags,
+          label: label || null,
+        });
+      if (insertError) throw insertError;
+      await loadCanon();
+      toast({ title: 'Position added', description: label || outputType });
+    } catch (err) {
+      console.error('❌ Error uploading canon:', err);
+      toast({ title: 'Upload failed', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' });
+    } finally {
+      setIsCanonUploading(false);
+    }
+  }, [savedCharacterId, user, loadCanon, toast]);
+
+  const deleteCanon = useCallback(async (canonId: string) => {
+    try {
+      const { error } = await supabase.from('character_canon').delete().eq('id', canonId);
+      if (error) throw error;
+      setCanonImages(prev => prev.filter(c => c.id !== canonId));
+    } catch (err) {
+      console.error('❌ Error deleting canon:', err);
+      toast({ title: 'Delete failed', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const updateCanonTags = useCallback(async (canonId: string, tags: string[]) => {
+    try {
+      const { error } = await supabase.from('character_canon').update({ tags }).eq('id', canonId);
+      if (error) throw error;
+      setCanonImages(prev => prev.map(c => c.id === canonId ? { ...c, tags } : c));
+    } catch (err) {
+      console.error('❌ Error updating canon tags:', err);
+    }
+  }, []);
+
+  const setCanonPrimary = useCallback(async (canonId: string) => {
+    if (!savedCharacterId) return;
+    try {
+      // Reset all, then set target
+      await supabase.from('character_canon').update({ is_primary: false }).eq('character_id', savedCharacterId);
+      const { error } = await supabase.from('character_canon').update({ is_primary: true }).eq('id', canonId);
+      if (error) throw error;
+      setCanonImages(prev => prev.map(c => ({ ...c, is_primary: c.id === canonId })));
+    } catch (err) {
+      console.error('❌ Error setting canon primary:', err);
+    }
+  }, [savedCharacterId]);
+
   // Initialize
   useEffect(() => {
     if (characterId) {
@@ -503,8 +603,9 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
   useEffect(() => {
     if (savedCharacterId) {
       loadScenes();
+      loadCanon();
     }
-  }, [savedCharacterId, loadScenes]);
+  }, [savedCharacterId, loadScenes, loadCanon]);
 
   // Check if this is a new character (not yet saved)
   const isNewCharacter = !savedCharacterId;
@@ -537,6 +638,15 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     // Scenes
     scenes,
     loadScenes,
+    
+    // Canon (Positions)
+    canonImages,
+    isCanonUploading,
+    loadCanon,
+    uploadCanon,
+    deleteCanon,
+    updateCanonTags,
+    setCanonPrimary,
     
     // Generation
     isGenerating,

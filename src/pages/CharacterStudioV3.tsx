@@ -33,7 +33,8 @@ export default function CharacterStudioV3() {
     character, updateCharacter, isNewCharacter, isDirty, isLoading, isSaving,
     savedCharacterId, saveCharacter, clearSuggestions, portraits, primaryPortrait, setPrimaryPortrait,
     deletePortrait, scenes, isGenerating, generationProgress, generatePortrait,
-    selectItem, selectedItemId, selectedItemType
+    selectItem, selectedItemId, selectedItemType,
+    canonImages, isCanonUploading, uploadCanon, deleteCanon, updateCanonTags, setCanonPrimary
   } = studio;
 
   // Prevent auto-save retry loop after failure
@@ -51,9 +52,9 @@ export default function CharacterStudioV3() {
   const [sceneToEdit, setSceneToEdit] = useState<CharacterScene | null>(null);
 
   // Mobile tab
-  const [mobileTab, setMobileTab] = useState<'details' | 'portraits' | 'scenes'>('details');
+  const [mobileTab, setMobileTab] = useState<'details' | 'portraits' | 'positions' | 'scenes'>('details');
   // Desktop workspace tab
-  const [workspaceTab, setWorkspaceTab] = useState<'portraits' | 'scenes'>('portraits');
+  const [workspaceTab, setWorkspaceTab] = useState<'portraits' | 'positions' | 'scenes'>('portraits');
   // Prompt text
   const [promptText, setPromptText] = useState('');
   // Reference strength for I2I (0.1–1.0, default 0.65)
@@ -227,6 +228,13 @@ export default function CharacterStudioV3() {
     },
     characterData: { name: character.name, gender: character.gender, traits: character.traits, appearance_tags: character.appearance_tags || [] },
     referenceStrength,
+    // Canon props
+    canonImages,
+    isCanonUploading,
+    onCanonUpload: uploadCanon,
+    onCanonDelete: deleteCanon,
+    onCanonSetPrimary: setCanonPrimary,
+    onCanonUpdateTags: updateCanonTags,
   };
 
   // MOBILE
@@ -253,9 +261,9 @@ export default function CharacterStudioV3() {
 
         {/* Tabs */}
         <div className="flex border-b border-border bg-card">
-          {(['details', 'portraits', 'scenes'] as const).map(tab => (
+          {(['details', 'portraits', 'positions', 'scenes'] as const).map(tab => (
             <button key={tab} onClick={() => setMobileTab(tab)} className={cn('flex-1 py-2 text-xs font-medium capitalize transition-colors', mobileTab === tab ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground')}>
-              {tab}{tab === 'portraits' && portraits.length > 0 && ` (${portraits.length})`}{tab === 'scenes' && scenes.length > 0 && ` (${scenes.length})`}
+              {tab}{tab === 'portraits' && portraits.length > 0 && ` (${portraits.length})`}{tab === 'positions' && canonImages.length > 0 && ` (${canonImages.length})`}{tab === 'scenes' && scenes.length > 0 && ` (${scenes.length})`}
             </button>
           ))}
         </div>
@@ -264,6 +272,7 @@ export default function CharacterStudioV3() {
         <div className="flex-1 overflow-hidden">
           {mobileTab === 'details' && <StudioSidebar {...sidebarProps} />}
           {mobileTab === 'portraits' && <StudioWorkspace {...workspaceProps} mobileMode />}
+          {mobileTab === 'positions' && <StudioWorkspace {...workspaceProps} mobileMode positionsOnly />}
           {mobileTab === 'scenes' && (
             <ScrollArea className="h-full">
               <div className="p-3 pb-24">

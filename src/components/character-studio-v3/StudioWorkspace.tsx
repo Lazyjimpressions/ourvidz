@@ -1,14 +1,15 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Image as ImageIcon, Film } from 'lucide-react';
+import { Image as ImageIcon, Film, Crosshair } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { PortraitGallery } from '@/components/character-studio/PortraitGallery';
 import { ScenesGallery } from '@/components/character-studio/ScenesGallery';
 import { PosePresets } from '@/components/character-studio/PosePresets';
 import { CharacterStudioPromptBar } from '@/components/character-studio/CharacterStudioPromptBar';
+import { PositionsGrid } from '@/components/character-studio-v3/PositionsGrid';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
-import { CharacterData, CharacterScene } from '@/hooks/useCharacterStudio';
+import { CharacterData, CharacterScene, CharacterCanon } from '@/hooks/useCharacterStudio';
 import { ImageModelOption } from '@/hooks/useImageModels';
 
 interface StudioWorkspaceProps {
@@ -37,8 +38,8 @@ interface StudioWorkspaceProps {
   onDeleteScene: (id: string) => void;
   onAddScene: () => void;
   onStartChatWithScene: (s: CharacterScene) => void;
-  workspaceTab: 'portraits' | 'scenes';
-  setWorkspaceTab: (t: 'portraits' | 'scenes') => void;
+  workspaceTab: 'portraits' | 'positions' | 'scenes';
+  setWorkspaceTab: (t: 'portraits' | 'positions' | 'scenes') => void;
   characterAppearanceTags: string[];
   onRegenerate: (prompt: string, refUrl: string) => void;
   onEnhancePrompt?: (prompt: string, modelId: string) => Promise<string | null>;
@@ -46,7 +47,15 @@ interface StudioWorkspaceProps {
   characterData?: { name: string; gender: string; traits: string; appearance_tags: string[] };
   mobileMode?: boolean;
   scenesOnly?: boolean;
+  positionsOnly?: boolean;
   referenceStrength?: number;
+  // Canon props
+  canonImages?: CharacterCanon[];
+  isCanonUploading?: boolean;
+  onCanonUpload?: (file: File, outputType: string, tags: string[], label?: string) => Promise<void>;
+  onCanonDelete?: (id: string) => void;
+  onCanonSetPrimary?: (id: string) => void;
+  onCanonUpdateTags?: (id: string, tags: string[]) => void;
 }
 
 export function StudioWorkspace({
@@ -57,8 +66,9 @@ export function StudioWorkspace({
   onGenerate, promptText, setPromptText, onUseAsReference,
   onEditScene, onDeleteScene, onAddScene, onStartChatWithScene,
   workspaceTab, setWorkspaceTab, characterAppearanceTags, onRegenerate,
-  onEnhancePrompt, onCopyPrompt, characterData, mobileMode, scenesOnly,
+  onEnhancePrompt, onCopyPrompt, characterData, mobileMode, scenesOnly, positionsOnly,
   referenceStrength,
+  canonImages, isCanonUploading, onCanonUpload, onCanonDelete, onCanonSetPrimary, onCanonUpdateTags,
 }: StudioWorkspaceProps) {
 
   // Scenes-only mode for mobile scenes tab
@@ -74,6 +84,23 @@ export function StudioWorkspace({
         onAddNew={onAddScene}
         onStartChat={onStartChatWithScene}
       />
+    );
+  }
+
+  // Positions-only mode for mobile positions tab
+  if (positionsOnly && onCanonUpload && onCanonDelete && onCanonSetPrimary && onCanonUpdateTags) {
+    return (
+      <ScrollArea className="h-full">
+        <PositionsGrid
+          canonImages={canonImages || []}
+          isNewCharacter={isNewCharacter}
+          onUpload={onCanonUpload}
+          onDelete={onCanonDelete}
+          onSetPrimary={onCanonSetPrimary}
+          onUpdateTags={onCanonUpdateTags}
+          isUploading={isCanonUploading}
+        />
+      </ScrollArea>
     );
   }
 
@@ -140,6 +167,17 @@ export function StudioWorkspace({
           {portraits.length > 0 && <Badge variant="secondary" className="ml-1 h-3.5 px-1 text-[9px]">{portraits.length}</Badge>}
         </button>
         <button
+          onClick={() => setWorkspaceTab('positions')}
+          className={cn(
+            'flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px',
+            workspaceTab === 'positions' ? 'text-primary border-primary' : 'text-muted-foreground border-transparent hover:text-foreground'
+          )}
+        >
+          <Crosshair className="w-3 h-3" />
+          Positions
+          {(canonImages?.length ?? 0) > 0 && <Badge variant="secondary" className="ml-1 h-3.5 px-1 text-[9px]">{canonImages!.length}</Badge>}
+        </button>
+        <button
           onClick={() => setWorkspaceTab('scenes')}
           className={cn(
             'flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px',
@@ -194,6 +232,24 @@ export function StudioWorkspace({
             referenceStrength={referenceStrength}
           />
         </>
+      ) : workspaceTab === 'positions' ? (
+        <ScrollArea className="flex-1">
+          <div className="p-4 max-w-6xl">
+            {onCanonUpload && onCanonDelete && onCanonSetPrimary && onCanonUpdateTags ? (
+              <PositionsGrid
+                canonImages={canonImages || []}
+                isNewCharacter={isNewCharacter}
+                onUpload={onCanonUpload}
+                onDelete={onCanonDelete}
+                onSetPrimary={onCanonSetPrimary}
+                onUpdateTags={onCanonUpdateTags}
+                isUploading={isCanonUploading}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">Positions not available.</p>
+            )}
+          </div>
+        </ScrollArea>
       ) : (
         <ScrollArea className="flex-1">
           <div className="p-4 max-w-6xl">
