@@ -1,53 +1,36 @@
 
+# Fix Drag Shrink + Add Missing Ref Slots to Settings Sheet
 
-# Refactor Settings Sheet Reference Section
+## Issue 1: Tiles don't shrink when dragged
 
-## Problem
-The "Reference Image" section in the settings sheet (lines 559-640) uses the old `MobileReferenceImagePreview` component with `File` objects, but the new workflow populates URL-based fixed slots. Images appear broken because the `File` prop is often null.
+**Root cause**: `SharedGrid.tsx` passes `onDragStart` to `AssetTile` but never passes `onDragEnd`. The `isDragging` state inside `AssetTile` gets set to `true` on drag start but is never reset to `false`.
 
-## Solution
-Replace the old single-ref preview with a grid of labeled reference slots that mirrors the Quick Bar's `RefSlot` pattern, showing actual thumbnails from signed URLs. Support up to 10 slots for future expansion (both image and video modes).
+**Fix**: Add `onDragEnd` prop to the `AssetTile` in `SharedGrid.tsx` (line ~409). Just pass a no-op or a simple handler since the canvas cleanup is already handled.
 
-## Changes
+### File: `src/components/shared/SharedGrid.tsx`
+- After line 409 (`onDragStart={isDraggable ? handleDragStart : undefined}`), add:
+  `onDragEnd={isDraggable ? () => {} : undefined}`
+  (AssetTile's internal handler already resets `isDragging` -- it just needs the prop to be passed so `onDragEnd` fires)
 
-### MobileSettingsSheet.tsx
-- Remove the old "Reference Image" section (lines 559-640) that uses `MobileReferenceImagePreview` with `file` + `imageUrl`
-- Replace with a new "References" section containing a grid of up to 10 labeled slots:
-  - **Image mode**: First 4 slots labeled "Char 1", "Char 2", "Char 3", "Pose" (matching Quick Bar), plus 6 future slots labeled "Ref 5"..."Ref 10"
-  - **Video mode**: Slots labeled "Start", "End", plus 8 future slots
-- Each slot is a small thumbnail (h-12 w-12) with its label below, showing the signed URL image directly via `<img src={url}>` -- no more `MobileReferenceImagePreview` / `File` dependency
-- Empty slots show a dashed border with a "+" icon, clickable to add
-- Filled slots show a thumbnail with an "X" remove button on hover
-- Keep the Copy mode toggle and Strength slider below the slot grid when any slot is filled
-- New props: replace the old single `referenceImage`/`referenceImageUrl` props with a `refSlots` array of `{ url, label, role }` objects, plus `onRefSlotAdd(index)` and `onRefSlotRemove(index)` callbacks
+---
 
-### MobileSimplePromptInput.tsx
-- Build a unified `settingsRefSlots` array (up to 10 entries) from the existing state: `referenceImageUrl`, `referenceImage2Url`, `additionalRefUrls`
-- Pass `refSlots`, `onRefSlotAdd`, `onRefSlotRemove` to `MobileSettingsSheet` instead of the old `referenceImage`/`referenceImageUrl` props
-- Reuse existing `handleFileSelectForSlot` and `handleRemoveSlot` for the callbacks
+## Issue 2: Reference images not visible in settings tray
 
-## Technical Details
+**Root cause**: The `refSlots` prop is correctly destructured and `hasAnyRef` is computed in `MobileSettingsSheet.tsx`, but the actual JSX to render the reference slot grid was never added to the component's return statement. The section simply doesn't exist in the rendered output.
 
-### New Settings Sheet Props (replacing old ref props)
-```text
-// Remove:
-referenceImage, referenceImageUrl, onReferenceImageSelect, onReferenceImageRemove
+**Fix**: Add a "References" section to the settings sheet between the Creative Direction / Video Controls sections and the Advanced Settings section.
 
-// Add:
-refSlots: Array<{ url?: string | null; label: string; role?: string }>
-onRefSlotAdd: (index: number) => void
-onRefSlotRemove: (index: number) => void
-```
-
-### Slot Grid Layout
-- Uses `grid grid-cols-5 gap-2` for a compact 5-column layout
-- Each slot: `h-12 w-12` thumbnail with `text-[8px]` label below
-- First 4 slots in image mode match Quick Bar labels exactly
-- Slots 5-10 are dimmed/disabled placeholders labeled "Ref 5"..."Ref 10" with a "Coming soon" tooltip -- these are purely visual placeholders, not yet functional
-
-### Shared Rendering
-The slot rendering in the settings sheet is self-contained (not importing `RefSlot` from `MobileQuickBar`) since the settings sheet slots are larger (h-12) and include additional controls (Copy toggle, Strength slider) that the Quick Bar slots don't have.
+### File: `src/components/workspace/MobileSettingsSheet.tsx`
+- Insert a new "References" section after the Video Controls block (after line ~532) and before the Advanced Settings block (line ~535)
+- The section will contain:
+  - A `grid grid-cols-5 gap-2` layout of 10 reference slots
+  - First 4 (image) or 2 (video) slots are active; rest are dimmed placeholders with a lock icon
+  - Each active slot shows:
+    - If filled: thumbnail image (`img src={slot.url}`) with an X remove button on hover
+    - If empty: dashed border with a "+" icon, clickable via `onRefSlotAdd(index)`
+  - A `text-[8px]` label below each slot (e.g., "Char 1", "Pose", "Start")
+  - Below the grid (when any slot is filled): Copy mode toggle and Strength slider using existing `exactCopyMode`/`referenceStrength` props
 
 ### Files Changed
-1. `src/components/workspace/MobileSettingsSheet.tsx` -- Replace ref section with 10-slot grid
-2. `src/components/workspace/MobileSimplePromptInput.tsx` -- Build and pass refSlots array to settings sheet
+1. `src/components/shared/SharedGrid.tsx` -- Add missing `onDragEnd` prop
+2. `src/components/workspace/MobileSettingsSheet.tsx` -- Add the reference slots grid JSX
