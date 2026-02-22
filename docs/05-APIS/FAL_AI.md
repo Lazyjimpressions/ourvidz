@@ -566,6 +566,7 @@ async function handlePostProcessing(
 
 ## Related Documentation
 
+- [MULTI_REF_SYSTEM_DESIGN_BRIEF.md](../09-REFERENCE/MULTI_REF_SYSTEM_DESIGN_BRIEF.md) - Multi-reference patterns (Seedream 10 images, LTX temporal anchoring)
 - [REPLICATE_API.md](./REPLICATE_API.md) - Alternative cloud provider
 - [I2I_SYSTEM.md](../03-SYSTEMS/I2I_SYSTEM.md) - Image-to-image workflow
 - [SDXL_WORKER.md](../04-WORKERS/SDXL_WORKER.md) - Local SDXL for explicit content

@@ -563,6 +563,7 @@ const falConfig = {
 
 ## Related Documentation
 
+- [MULTI_REF_SYSTEM_DESIGN_BRIEF.md](../09-REFERENCE/MULTI_REF_SYSTEM_DESIGN_BRIEF.md) - Multi-reference system design (Seedream 10 images, LTX temporal anchoring)
 - [REPLICATE_API.md](../05-APIS/REPLICATE_API.md) - Replicate integration details
 - [FAL_AI.md](../05-APIS/FAL_AI.md) - fal.ai platform integration
 - [PROMPTING_SYSTEM.md](./PROMPTING_SYSTEM.md) - Prompt templates
