@@ -323,12 +323,12 @@ serve(async (req) => {
         }
       }
 
-      // Check model capabilities for array vs string
-      const capabilities = apiModel.capabilities as Record<string, any> || {};
-      const requiresArray = capabilities?.requires_image_urls_array === true ||
-        apiModel.model_key.includes('edit');
+      // Check model's input_schema to determine image field name
+      const caps = apiModel.capabilities as Record<string, any> || {};
+      const inputSchema = caps.input_schema || {};
+      const requiresArray = caps.requires_image_urls_array === true;
 
-      if (requiresArray) {
+      if (requiresArray || inputSchema?.image_urls) {
         modelInput.image_urls = [finalImageUrl];
       } else {
         modelInput.image_url = finalImageUrl;
