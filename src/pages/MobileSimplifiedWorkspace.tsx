@@ -323,9 +323,13 @@ const MobileSimplifiedWorkspace = () => {
       return;
     }
     
-    // Set the prompt first, then generate
+    // Set the prompt first, then generate with all multi-ref URLs
     setPrompt(inputPrompt);
-    await generate();
+    const allAdditionalUrls = [
+      ...(referenceImage2Url ? [referenceImage2Url] : []),
+      ...additionalRefUrls
+    ];
+    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined);
   };
 
 
