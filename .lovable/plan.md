@@ -1,85 +1,81 @@
 
 
-# Make Cost-Per-Generation Table-Driven and Editable
+# Expand Workspace Reference Slots from 4 to 10
 
-## Problem
+## Current State
 
-- fal.ai does not return cost in its API responses -- all costs are estimates
-- Cost estimates are hardcoded in a `FAL_PRICING` map inside `fal-image/index.ts` (~40 duplicate entries)
-- The `api_models.pricing` JSONB column exists but is empty for every model
-- There is no way for admins to edit cost estimates from the UI
-- Costs shown in the Usage tab are all estimates but not labeled as such
+- **Quick Bar** renders exactly 4 fixed slots: Char 1, Char 2, Char 3, Pose
+- **Settings Tray** renders a 10-slot grid but slots 5-10 show a Lock icon and are non-functional
+- **Data layer** stores refs across 3 separate variables: `referenceImageUrl` (slot 0), `referenceImage2Url` (slot 1), `additionalRefUrls[]` (slots 2-3 only, length 2)
+- **Figure notation** in `useLibraryFirstWorkspace.ts` is hardcoded for max 4 refs (3 chars + 1 pose)
+- Labels already exist for all 10 slots in the Settings Tray: Char 1-3, Pose, Ref 5-10
 
-## Solution
+## What Changes
 
-Move pricing entirely into the `api_models.pricing` column, make it editable in the Admin UI, and read it from the database in the edge function with zero hardcoded fallbacks.
+### 1. Quick Bar -- Show scrollable 10 slots (`MobileQuickBar.tsx`)
 
----
-
-### Step 1: Add "Est. Cost" editable column to API Models table
-
-**File: `src/components/admin/ApiModelsTab.tsx`**
-
-- Add a new column header "Est. Cost" between existing columns in the table
-- Display `model.pricing.per_generation` as an inline-editable cell
-- On save, update `pricing` JSONB with `{ per_generation: <number>, currency: "USD" }`
-
-### Step 2: Add "Est. Cost" field to the Model Form
-
-**File: `src/components/admin/ApiModelsTab.tsx`**
-
-- Add a numeric input field for "Est. Cost ($)" in the optional fields section
-- Reads/writes `formData.pricing.per_generation`
-- Helper text: "USD per generation (estimate)"
-
-### Step 3: Populate pricing via SQL migration (one-time)
-
-Seed `api_models.pricing` for all existing models using the values currently hardcoded in `FAL_PRICING`. This ensures every model has a cost estimate before the hardcoded map is removed.
-
-```sql
-UPDATE api_models SET pricing = '{"per_generation": 0.025, "currency": "USD"}'
-WHERE model_key LIKE '%seedream%' AND modality = 'image';
--- ... one UPDATE per model/group
+Expand `FIXED_IMAGE_SLOTS` from 4 entries to 10:
+```
+Char 1, Char 2, Char 3, Pose, Ref 5, Ref 6, Ref 7, Ref 8, Ref 9, Ref 10
 ```
 
-### Step 4: Replace hardcoded FAL_PRICING with pure table-driven lookup
+The Quick Bar already has `overflow-x-auto scrollbar-hide` on the slot container, so 10 small slots will scroll horizontally without layout issues. Empty slots beyond the first few will be compact dashed-border `+` buttons.
 
-**File: `supabase/functions/fal-image/index.ts`**
+### 2. Settings Tray -- Unlock all 10 slots (`MobileSettingsSheet.tsx`)
 
-- Remove the entire `FAL_PRICING` map (lines 37-77)
-- Remove the `calculateFalCost` function entirely
-- Read cost solely from `apiModel.pricing?.per_generation`
-- If the value is null/undefined/0, log a warning and record cost as `null` -- no hardcoded default
-- This forces admins to populate pricing for every model; missing pricing is surfaced as null in the usage logs rather than silently guessed
+Remove the `isActive = i < activeCount` gating (lines 540-541) that locks slots 5-10 behind a Lock icon. All 10 slots will be functional: clickable to add, showing thumbnails when filled, removable.
 
-Before:
-```typescript
-const falCost = calculateFalCost(modelKey, modelModality);
+Change the grid from `grid-cols-5` to `grid-cols-5` (keep as-is, 2 rows of 5 fits perfectly).
+
+### 3. Data layer -- Extend `additionalRefUrls` to hold 8 items (`MobileSimplifiedWorkspace.tsx`)
+
+Currently `additionalRefUrls` stores slots 2-3 (2 items). Expand to store slots 2-9 (up to 8 items). The mapping stays the same:
+- Slot 0 = `referenceImageUrl`
+- Slot 1 = `referenceImage2Url`
+- Slots 2-9 = `additionalRefUrls[0]` through `additionalRefUrls[7]`
+
+No schema changes needed -- `additionalRefUrls` is already a `string[]` in React state.
+
+### 4. Slot wiring -- Map all 10 slots (`MobileSimplePromptInput.tsx`)
+
+Update the `fixedSlots` array (line 472) from 4 entries to 10, mapping slots 4-9 to `additionalRefUrls[2]` through `additionalRefUrls[7]`.
+
+Update `handleRemoveSlot` and `onFixedSlotDropUrl` handler to handle indices 0-9.
+
+Update the Settings Tray `refSlots` builder (line 649) to populate URL data for all 10 slots instead of only the first 4.
+
+### 5. Figure notation -- Generalize for N refs (`useLibraryFirstWorkspace.ts`)
+
+Replace the hardcoded `if charCount === 1/2/3` Figure prefix logic (lines 1357-1368) with a dynamic builder:
+
+```
+// Build Figure notation dynamically for any number of refs
+const charRefs = allRefUrls.slice(0, -1); // all except last = characters
+const poseRef = allRefUrls[allRefUrls.length - 1]; // last = pose
+const charList = charRefs.map((_, i) => `Figure ${i + 1}`).join(', ');
+figurePrefix = `Show the character(s) from ${charList} in the pose from Figure ${allRefUrls.length}: `;
 ```
 
-After:
-```typescript
-const falCost = apiModel.pricing?.per_generation || null;
-if (!falCost) console.warn('No pricing configured for model:', modelKey);
-```
+This handles 1-9 character refs + 1 pose ref without hardcoding.
 
-### Step 5: Label estimated costs in the Usage tab
+### 6. Settings Tray slot add -- Support file picker for any index
 
-**File: `src/components/admin/ApiUsageTab.tsx`**
-
-- In the Recent API Calls table, prefix estimated costs with "~" or add an "(est)" suffix when `log.provider_metadata?.cost_source` is `"estimated"` or `"static_pricing"`
-- Costs that are null show as "--" instead of "$0.00"
-
----
+The `handleFileSelectForSlot(index)` in `MobileSimplePromptInput.tsx` already routes by index. The upload handler at line 259 already handles `index >= 2` via the `additionalRefUrls` array. No changes needed here beyond ensuring the array expands properly (which it already does with the `while (newAdditional.length <= additionalIndex)` pattern).
 
 ## Files Changed
 
-1. `src/components/admin/ApiModelsTab.tsx` -- Add editable "Est. Cost" column and form field
-2. `supabase/functions/fal-image/index.ts` -- Remove `FAL_PRICING` map and `calculateFalCost`; read from `apiModel.pricing.per_generation` only, null if missing
-3. `src/components/admin/ApiUsageTab.tsx` -- Label estimated costs, show "--" for null
-4. SQL migration -- Populate `pricing` column for all existing models from current hardcoded values
+| File | Change |
+|------|--------|
+| `src/components/workspace/MobileQuickBar.tsx` | Expand `FIXED_IMAGE_SLOTS` from 4 to 10 entries |
+| `src/components/workspace/MobileSettingsSheet.tsx` | Remove Lock gating on slots 5-10, make all active |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Expand `fixedSlots` array to 10 entries, update refSlots builder |
+| `src/hooks/useLibraryFirstWorkspace.ts` | Replace hardcoded Figure notation with dynamic N-ref builder |
 
-## Key Principle
+## What Does NOT Change
 
-Zero hardcoded pricing anywhere in the codebase. The `api_models.pricing.per_generation` column is the single source of truth. If a model lacks pricing, the cost is recorded as null and surfaced clearly in the admin UI, prompting the admin to fill it in.
+- No database schema changes
+- No new components
+- No changes to the edge function or API layer
+- Video mode slots (Start/End) unchanged
+- Upload, remove, drag-drop mechanics all work as-is (they are index-based)
 
