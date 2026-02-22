@@ -235,10 +235,9 @@ serve(async (req) => {
         .catch((err) => console.error("❌ Post-processing error:", err));
     }
 
-    // ── 11. Log API usage ──
+    // ── 11. Log API usage (prevent double-counting) ──
     try {
       const providerName = job.metadata?.provider_name || "fal";
-      // Look up provider ID
       const { data: provider } = await supabase
         .from("api_providers")
         .select("id")
@@ -246,23 +245,49 @@ serve(async (req) => {
         .single();
 
       if (provider) {
-        await supabase.from("api_usage_logs").insert({
-          provider_id: provider.id,
-          model_id: job.api_model_id,
-          user_id: job.user_id,
-          request_type: resultType === "video" ? "video" : "image",
-          endpoint_path: `/${modelKey}`,
-          response_status: 200,
-          response_time_ms: job.started_at
-            ? new Date().getTime() - new Date(job.started_at).getTime()
-            : 0,
-          cost_usd: job.metadata?.estimated_cost || null,
-          provider_metadata: {
-            request_id: requestId,
-            webhook: true,
-            cost_source: "estimated",
-          },
-        });
+        // Check if a usage log already exists for this request_id (created by fal-image)
+        const { data: existingLog } = await supabase
+          .from("api_usage_logs")
+          .select("id")
+          .contains("provider_metadata", { request_id: requestId })
+          .limit(1);
+
+        if (existingLog && existingLog.length > 0) {
+          // Update existing log with webhook completion data instead of inserting duplicate
+          await supabase.from("api_usage_logs").update({
+            response_status: 200,
+            response_time_ms: job.started_at
+              ? new Date().getTime() - new Date(job.started_at).getTime()
+              : 0,
+            provider_metadata: {
+              request_id: requestId,
+              webhook: true,
+              cost_source: "estimated",
+              webhook_completed: true,
+            },
+          }).eq("id", existingLog[0].id);
+          console.log("✅ Updated existing usage log with webhook data (no double-count)");
+        } else {
+          // No existing log — insert new one
+          await supabase.from("api_usage_logs").insert({
+            provider_id: provider.id,
+            model_id: job.api_model_id,
+            user_id: job.user_id,
+            request_type: resultType === "video" ? "video" : "image",
+            endpoint_path: `/${modelKey}`,
+            response_status: 200,
+            response_time_ms: job.started_at
+              ? new Date().getTime() - new Date(job.started_at).getTime()
+              : 0,
+            cost_usd: job.metadata?.estimated_cost || null,
+            provider_metadata: {
+              request_id: requestId,
+              webhook: true,
+              cost_source: "estimated",
+            },
+          });
+          console.log("✅ Created new usage log from webhook (no prior log found)");
+        }
       }
     } catch (usageError) {
       console.error("❌ Usage logging failed:", usageError);

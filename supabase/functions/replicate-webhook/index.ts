@@ -270,11 +270,11 @@ serve(async (req) => {
           if (predictionCost !== null) {
             console.log('💰 Replicate cost extracted:', predictionCost);
             
-            // Find and update the usage log with actual cost
+            // Find and update the usage log with actual cost using @> containment operator
             const { data: usageLogs } = await supabase
               .from('api_usage_logs')
-              .select('id, cost_usd')
-              .eq('provider_metadata->>prediction_id', predictionId)
+              .select('id, cost_usd, provider_id, model_id')
+              .contains('provider_metadata', { prediction_id: predictionId })
               .order('created_at', { ascending: false })
               .limit(1);
             
@@ -286,8 +286,28 @@ serve(async (req) => {
               
               console.log('✅ Updated usage log with actual cost:', predictionCost);
               
-              // Also update aggregates with the cost difference
-              // (This is approximate - ideally we'd recalculate aggregates)
+              // Update aggregates with the cost delta
+              try {
+                const now = new Date();
+                await supabase.rpc('upsert_usage_aggregate', {
+                  p_provider_id: usageLogs[0].provider_id,
+                  p_model_id: usageLogs[0].model_id || null,
+                  p_date_bucket: now.toISOString().split('T')[0],
+                  p_hour_bucket: now.getHours(),
+                  p_request_count: 0,
+                  p_success_count: 0,
+                  p_error_count: 0,
+                  p_tokens_input: 0,
+                  p_tokens_output: 0,
+                  p_tokens_cached: 0,
+                  p_cost_usd: predictionCost,
+                  p_cost_credits: 0,
+                  p_response_time_ms: 0
+                });
+                console.log('✅ Updated aggregates with backfilled cost');
+              } catch (aggErr) {
+                console.error('❌ Failed to update aggregates with cost:', aggErr);
+              }
             }
           } else {
             console.warn('⚠️ No cost found in Replicate prediction');

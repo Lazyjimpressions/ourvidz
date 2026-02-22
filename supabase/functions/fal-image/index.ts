@@ -35,16 +35,43 @@ const corsHeaders = {
  * Static pricing map for fal.ai models (USD per generation)
  */
 const FAL_PRICING: Record<string, number> = {
+  // Seedream
   'fal-ai/bytedance/seedream/v4/text-to-image': 0.025,
   'fal-ai/bytedance/seedream/v4.5/edit': 0.035,
   'fal-ai/seedream/v4/text-to-image': 0.025,
   'fal-ai/seedream/v4.5/edit': 0.035,
   'bytedance/seedream/v4/text-to-image': 0.025,
   'bytedance/seedream/v4.5/edit': 0.035,
+  // Flux 2
+  'fal-ai/flux-2/flash': 0.025,
+  'fal-ai/flux-2/flash/edit': 0.035,
+  'fal-ai/flux-2': 0.05,
+  'flux-2/flash': 0.025,
+  'flux-2/flash/edit': 0.035,
+  'flux-2': 0.05,
+  // Flux Pro
+  'fal-ai/flux-pro/v1.1': 0.05,
+  'flux-pro/v1.1': 0.05,
+  // Grok Image
+  'fal-ai/grok-2-image': 0.07,
+  'grok-2-image': 0.07,
+  'fal-ai/grok-image': 0.07,
+  'grok-image': 0.07,
+  // WAN video
   'fal-ai/wan-i2v': 0.25,
   'fal-ai/wan/i2v': 0.25,
+  'fal-ai/wan/v2.1/i2v': 0.25,
   'wan-i2v': 0.25,
   'wan/i2v': 0.25,
+  'wan/v2.1/i2v': 0.25,
+  // LTX Video
+  'fal-ai/ltx-video/v0.9.7': 0.20,
+  'fal-ai/ltx-video/v0.9.7/i2v': 0.20,
+  'fal-ai/ltx-video/v0.9.7/extend': 0.25,
+  'ltx-video/v0.9.7': 0.20,
+  'ltx-video/v0.9.7/i2v': 0.20,
+  'ltx-video/v0.9.7/extend': 0.25,
+  // Defaults
   'default_image': 0.03,
   'default_video': 0.25
 };
