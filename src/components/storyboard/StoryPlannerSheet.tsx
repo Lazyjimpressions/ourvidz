@@ -68,15 +68,27 @@ export const StoryPlannerSheet: React.FC<StoryPlannerSheetProps> = ({
     setPlannedScenes([]);
 
     try {
+      // Create an ephemeral conversation for the storyboard planner
+      const { data: convData, error: convError } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: (await supabase.auth.getUser()).data.user!.id,
+          title: 'Storyboard Plan',
+          conversation_type: 'general',
+          status: 'active',
+        })
+        .select('id')
+        .single();
+
+      if (convError || !convData) throw convError || new Error('Failed to create conversation');
+
+      const userMessage = `Plan a storyboard for: "${narrative}"${characterName ? `\nMain character: ${characterName}${characterDescription ? ` - ${characterDescription}` : ''}` : ''}`;
+
       const { data, error } = await supabase.functions.invoke('playground-chat', {
         body: {
+          conversation_id: convData.id,
+          message: userMessage,
           system_prompt_override: `You are a cinematic storyboard planner. Given a video description, break it into 3-6 scenes. Return ONLY a JSON array (no markdown, no explanation) with objects containing: title (string), description (string, 1-2 sentences), setting (string, location), mood (string, one word), duration (number, seconds 3-10). Keep it concise and cinematic.`,
-          messages: [
-            {
-              role: 'user',
-              content: `Plan a storyboard for: "${narrative}"${characterName ? `\nMain character: ${characterName}${characterDescription ? ` - ${characterDescription}` : ''}` : ''}`,
-            },
-          ],
         },
       });
 
