@@ -646,23 +646,33 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onAspectRatioChange={onAspectRatioChange || (() => {})}
         contentType={contentType}
         onContentTypeChange={onContentTypeChange || (() => {})}
-        referenceImage={referenceImage}
-        referenceImageUrl={referenceImageUrl}
-        onReferenceImageSelect={() => handleFileSelect('single')}
-        onReferenceImageRemove={() => removeReferenceImage('single')}
+        refSlots={(() => {
+          if (currentMode === 'image') {
+            const IMAGE_LABELS = ['Char 1', 'Char 2', 'Char 3', 'Pose', 'Ref 5', 'Ref 6', 'Ref 7', 'Ref 8', 'Ref 9', 'Ref 10'];
+            return IMAGE_LABELS.map((label, i) => {
+              let url: string | null = null;
+              if (i === 0) url = referenceImageUrl || null;
+              else if (i === 1) url = referenceImage2Url || null;
+              else if (i === 2) url = additionalRefUrls[0] || null;
+              else if (i === 3) url = additionalRefUrls[1] || null;
+              return { url, label };
+            });
+          } else {
+            const VIDEO_LABELS = ['Start', 'End', 'Ref 3', 'Ref 4', 'Ref 5', 'Ref 6', 'Ref 7', 'Ref 8', 'Ref 9', 'Ref 10'];
+            return VIDEO_LABELS.map((label, i) => {
+              let url: string | null = null;
+              if (i === 0) url = beginningRefImageUrl || null;
+              else if (i === 1) url = endingRefImageUrl || null;
+              return { url, label };
+            });
+          }
+        })()}
+        onRefSlotAdd={(index) => handleFileSelectForSlot(index)}
+        onRefSlotRemove={handleRemoveSlot}
         exactCopyMode={exactCopyMode}
         onExactCopyModeChange={onExactCopyModeChange}
         referenceStrength={referenceStrength}
         onReferenceStrengthChange={onReferenceStrengthChange}
-        beginningRefImage={beginningRefImage}
-        beginningRefImageUrl={beginningRefImageUrl}
-        endingRefImage={endingRefImage}
-        endingRefImageUrl={endingRefImageUrl}
-        onStartFrameSelect={() => handleFileSelect('start')}
-        onEndFrameSelect={() => handleFileSelect('end')}
-        onStartFrameRemove={() => removeReferenceImage('start')}
-        onEndFrameRemove={() => removeReferenceImage('end')}
-        videoReferenceMode={(videoModelSettings?.settings?.referenceMode === 'dual' ? 'dual' : videoModelSettings?.settings?.referenceMode === 'video' ? 'video' : 'single')}
         extendStrength={extendStrength}
         onExtendStrengthChange={onExtendStrengthChange}
         extendReverseVideo={extendReverseVideo}

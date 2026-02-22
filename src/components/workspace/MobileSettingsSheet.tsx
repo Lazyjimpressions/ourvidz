@@ -1,13 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { X, Upload, Image, Copy, Settings2, ChevronDown, Check } from 'lucide-react';
+import { X, Copy, Settings2, ChevronDown, Check, Plus, Lock } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { SegmentedControl } from '@/components/ui/segmented-control';
-import { MobileReferenceImagePreview } from './MobileReferenceImagePreview';
+
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 // Model capability types from api_models table
@@ -47,11 +46,10 @@ export interface MobileSettingsSheetProps {
   contentType: 'sfw' | 'nsfw';
   onContentTypeChange: (type: 'sfw' | 'nsfw') => void;
   
-  // Reference Image (Image Mode)
-  referenceImage?: File | null;
-  referenceImageUrl?: string | null;
-  onReferenceImageSelect?: () => void;
-  onReferenceImageRemove?: () => void;
+  // Reference Slots (unified for image & video)
+  refSlots?: Array<{ url?: string | null; label: string; role?: string }>;
+  onRefSlotAdd?: (index: number) => void;
+  onRefSlotRemove?: (index: number) => void;
   
   // Copy Mode (consolidated)
   exactCopyMode?: boolean;
@@ -61,18 +59,7 @@ export interface MobileSettingsSheetProps {
   referenceStrength?: number;
   onReferenceStrengthChange?: (strength: number) => void;
   
-  // Video Reference Images
-  beginningRefImage?: File | null;
-  beginningRefImageUrl?: string | null;
-  endingRefImage?: File | null;
-  endingRefImageUrl?: string | null;
-  onStartFrameSelect?: () => void;
-  onEndFrameSelect?: () => void;
-  onStartFrameRemove?: () => void;
-  onEndFrameRemove?: () => void;
-  
-  // Video model settings
-  videoReferenceMode?: 'single' | 'dual' | 'video';
+  // (Video reference props removed — now unified via refSlots)
   
   // Video Extend settings
   extendStrength?: number;
@@ -293,23 +280,9 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onAspectRatioChange,
   contentType,
   onContentTypeChange,
-  referenceImage,
-  referenceImageUrl,
-  onReferenceImageSelect,
-  onReferenceImageRemove,
-  exactCopyMode = false,
-  onExactCopyModeChange,
-  referenceStrength = 0.8,
-  onReferenceStrengthChange,
-  beginningRefImage,
-  beginningRefImageUrl,
-  endingRefImage,
-  endingRefImageUrl,
-  onStartFrameSelect,
-  onEndFrameSelect,
-  onStartFrameRemove,
-  onEndFrameRemove,
-  videoReferenceMode = 'single',
+  refSlots = [],
+  onRefSlotAdd,
+  onRefSlotRemove,
   onClearWorkspace,
   onDeleteAllWorkspace,
   extendStrength = 1.0,
@@ -342,10 +315,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   // Determine which advanced features to show
   const showAdvancedSettings = isLocalModel;
   
-  // Has reference image
-  const hasReference = !!(referenceImage || referenceImageUrl);
-  const hasStartFrame = !!(beginningRefImage || beginningRefImageUrl);
-  const hasEndFrame = !!(endingRefImage || endingRefImageUrl);
+  // Has any reference filled
+  const hasAnyRef = refSlots.some(s => !!s.url);
   
   return (
     <Drawer open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -556,268 +527,6 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             </div>
           )}
 
-          {/* Reference Image (Image Mode) - Compact */}
-          {currentMode === 'image' && (
-            <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-                Reference Image
-              </label>
-              
-              {hasReference ? (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <MobileReferenceImagePreview
-                      key={referenceImageUrl || referenceImage?.name || 'ref-single'}
-                      file={referenceImage}
-                      imageUrl={referenceImageUrl}
-                      onRemove={onReferenceImageRemove}
-                      sizeClass="h-10 w-10"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-medium truncate">
-                        {referenceImage?.name || 'Reference set'}
-                      </div>
-                      {referenceImage && (
-                        <div className="text-[9px] text-muted-foreground">
-                          {(referenceImage.size / 1024).toFixed(0)}KB
-                        </div>
-                      )}
-                    </div>
-                    
-                    {onExactCopyModeChange && (
-                      <button
-                        type="button"
-                        onClick={() => onExactCopyModeChange(!exactCopyMode)}
-                        className={cn(
-                          "flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium border transition-colors",
-                          exactCopyMode
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-muted/50 text-muted-foreground border-border"
-                        )}
-                      >
-                        <Copy className="h-3 w-3" />
-                        COPY
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* Strength - Compact range input */}
-                  {!exactCopyMode && onReferenceStrengthChange && (
-                    <div className="space-y-0.5">
-                      <div className="flex items-center justify-between text-[9px] text-muted-foreground">
-                        <span>Variation: {Math.round((1 - referenceStrength) * 100)}%</span>
-                        <span className="font-mono">{referenceStrength.toFixed(2)}</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0.1}
-                        max={0.9}
-                        step={0.05}
-                        value={referenceStrength}
-                        onChange={(e) => onReferenceStrengthChange(parseFloat(e.target.value))}
-                        className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
-                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 
-                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
-                          [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full 
-                          [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={onReferenceImageSelect}
-                  className="w-full h-8 gap-1.5 text-[10px]"
-                >
-                  <Upload className="h-3 w-3" />
-                  Add Reference Image
-                </Button>
-              )}
-            </div>
-          )}
-          
-          {/* Video Reference Frames - Compact */}
-          {currentMode === 'video' && (
-            <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-                {videoReferenceMode === 'video' ? 'Video Source' : videoReferenceMode === 'single' ? 'Reference Image' : 'Reference Frames'}
-              </label>
-              
-              {videoReferenceMode === 'video' ? (
-                <div className="space-y-2">
-                  {hasStartFrame ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                        <Image className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[10px] font-medium truncate">Video source set</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onStartFrameRemove}
-                        className="text-[9px] text-destructive hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={onStartFrameSelect}
-                      className="w-full h-8 gap-1.5 text-[10px]"
-                    >
-                      <Upload className="h-3 w-3" />
-                      Add Video Source
-                    </Button>
-                  )}
-                  
-                  {/* Extend Strength - Compact */}
-                  {onExtendStrengthChange && (
-                    <div className="space-y-0.5">
-                      <div className="flex items-center justify-between text-[9px] text-muted-foreground">
-                        <span>Strength</span>
-                        <span className="font-mono">{(extendStrength ?? 1.0).toFixed(2)}</span>
-                      </div>
-                      <input
-                        type="range"
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        value={extendStrength ?? 1.0}
-                        onChange={(e) => onExtendStrengthChange(parseFloat(e.target.value))}
-                        className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
-                          [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 
-                          [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
-                          [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:rounded-full 
-                          [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
-                      />
-                    </div>
-                  )}
-                  
-                  {/* Reverse Video */}
-                  {onExtendReverseVideoChange && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-muted-foreground uppercase tracking-wider">Reverse Video</span>
-                      <Switch
-                        checked={extendReverseVideo}
-                        onCheckedChange={onExtendReverseVideoChange}
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : videoReferenceMode === 'single' ? (
-                <div className="space-y-1.5">
-                  {hasStartFrame ? (
-                    <div className="flex items-center gap-2">
-                      <MobileReferenceImagePreview
-                        key={beginningRefImageUrl || beginningRefImage?.name || 'ref-start'}
-                        file={beginningRefImage}
-                        imageUrl={beginningRefImageUrl}
-                        onRemove={onStartFrameRemove}
-                        sizeClass="h-10 w-10"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[10px] font-medium truncate">
-                          {beginningRefImage?.name || 'Reference set'}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onStartFrameSelect}
-                        className="text-[9px] text-muted-foreground hover:underline"
-                      >
-                        Change
-                      </button>
-                    </div>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={onStartFrameSelect}
-                      className="w-full h-8 gap-1.5 text-[10px]"
-                    >
-                      <Image className="h-3 w-3" />
-                      Add Reference Image
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                // Dual reference
-                <div className="flex gap-2">
-                  <div className="flex-1 space-y-1">
-                    <span className="text-[9px] text-muted-foreground">Start</span>
-                    {hasStartFrame ? (
-                      <div className="flex items-center gap-1.5">
-                        <MobileReferenceImagePreview
-                          key={`start-${beginningRefImageUrl || beginningRefImage?.name || 'start'}`}
-                          file={beginningRefImage}
-                          imageUrl={beginningRefImageUrl}
-                          onRemove={onStartFrameRemove}
-                          sizeClass="h-8 w-8"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={onStartFrameSelect}
-                          className="h-6 w-6"
-                        >
-                          <Upload className="h-2.5 w-2.5" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={onStartFrameSelect}
-                        className="w-full h-8 text-[9px]"
-                      >
-                        <Image className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                  
-                  <div className="flex-1 space-y-1">
-                    <span className="text-[9px] text-muted-foreground">End</span>
-                    {hasEndFrame ? (
-                      <div className="flex items-center gap-1.5">
-                        <MobileReferenceImagePreview
-                          key={`end-${endingRefImageUrl || endingRefImage?.name || 'end'}`}
-                          file={endingRefImage}
-                          imageUrl={endingRefImageUrl}
-                          onRemove={onEndFrameRemove}
-                          sizeClass="h-8 w-8"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={onEndFrameSelect}
-                          className="h-6 w-6"
-                        >
-                          <Upload className="h-2.5 w-2.5" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={onEndFrameSelect}
-                        className="w-full h-8 text-[9px]"
-                      >
-                        <Image className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
           
           {/* Advanced Settings (Local Models Only) */}
           {showAdvancedSettings && (
