@@ -1,47 +1,53 @@
 
-# Model Selector Dropdown in Quick Bar
 
-## Summary
+# Refactor Settings Sheet Reference Section
 
-Turn the model indicator button in the Quick Bar into a dropdown popover that lets users select models directly, without opening the full settings sheet. The existing `ModelChipPopover` pattern from `MobileSettingsSheet.tsx` will be adapted for use in the Quick Bar.
+## Problem
+The "Reference Image" section in the settings sheet (lines 559-640) uses the old `MobileReferenceImagePreview` component with `File` objects, but the new workflow populates URL-based fixed slots. Images appear broken because the `File` prop is often null.
+
+## Solution
+Replace the old single-ref preview with a grid of labeled reference slots that mirrors the Quick Bar's `RefSlot` pattern, showing actual thumbnails from signed URLs. Support up to 10 slots for future expansion (both image and video modes).
 
 ## Changes
 
-### MobileQuickBar.tsx
-- Add new props: `selectedModel`, `onModelChange`, `imageModels`, `videoModels`, `modelsLoading` (same types already used in `MobileSettingsSheet`)
-- Replace the static model name `<Button>` (lines 368-376) with a `<Popover>` dropdown that:
-  - Shows the truncated model name + a `ChevronDown` icon as the trigger
-  - Opens a popover listing all available models for the current mode (image models or video models)
-  - Highlights the currently selected model with `bg-primary text-primary-foreground`
-  - Calls `onModelChange` on selection and closes the popover
-  - Includes local model options ("SDXL (Local)" for image, "WAN (Local)" for video) at the top of the list
-- Keep the gear/Settings button unchanged -- it still opens the full settings sheet for advanced controls
+### MobileSettingsSheet.tsx
+- Remove the old "Reference Image" section (lines 559-640) that uses `MobileReferenceImagePreview` with `file` + `imageUrl`
+- Replace with a new "References" section containing a grid of up to 10 labeled slots:
+  - **Image mode**: First 4 slots labeled "Char 1", "Char 2", "Char 3", "Pose" (matching Quick Bar), plus 6 future slots labeled "Ref 5"..."Ref 10"
+  - **Video mode**: Slots labeled "Start", "End", plus 8 future slots
+- Each slot is a small thumbnail (h-12 w-12) with its label below, showing the signed URL image directly via `<img src={url}>` -- no more `MobileReferenceImagePreview` / `File` dependency
+- Empty slots show a dashed border with a "+" icon, clickable to add
+- Filled slots show a thumbnail with an "X" remove button on hover
+- Keep the Copy mode toggle and Strength slider below the slot grid when any slot is filled
+- New props: replace the old single `referenceImage`/`referenceImageUrl` props with a `refSlots` array of `{ url, label, role }` objects, plus `onRefSlotAdd(index)` and `onRefSlotRemove(index)` callbacks
 
 ### MobileSimplePromptInput.tsx
-- Pass the new props through to `MobileQuickBar`:
-  - `selectedModel` (already available)
-  - `onModelChange` (already available)
-  - `imageModels` (already fetched and mapped for the settings sheet)
-  - `videoModels` (already fetched)
-  - `modelsLoading` (already computed)
+- Build a unified `settingsRefSlots` array (up to 10 entries) from the existing state: `referenceImageUrl`, `referenceImage2Url`, `additionalRefUrls`
+- Pass `refSlots`, `onRefSlotAdd`, `onRefSlotRemove` to `MobileSettingsSheet` instead of the old `referenceImage`/`referenceImageUrl` props
+- Reuse existing `handleFileSelectForSlot` and `handleRemoveSlot` for the callbacks
 
 ## Technical Details
 
-### New QuickBar props
+### New Settings Sheet Props (replacing old ref props)
 ```text
-selectedModel: { id: string; type: string; display_name: string } | null
-onModelChange: (model: { id: string; type: string; display_name: string }) => void
-imageModels: Array<{ id: string; display_name: string; provider_name: string }>
-videoModels: Array<{ id: string; display_name: string; api_providers: { name: string } }>
-modelsLoading: boolean
+// Remove:
+referenceImage, referenceImageUrl, onReferenceImageSelect, onReferenceImageRemove
+
+// Add:
+refSlots: Array<{ url?: string | null; label: string; role?: string }>
+onRefSlotAdd: (index: number) => void
+onRefSlotRemove: (index: number) => void
 ```
 
-### Dropdown behavior
-- Trigger: compact chip with truncated name (max ~14 chars) + ChevronDown
-- Popover: `min-w-[160px] max-w-[220px]`, aligned to end, `z-50` with solid `bg-popover` background
-- Items: `text-[11px]`, with check icon for the selected model
-- The popover uses Radix Popover (already imported in the project) for proper z-indexing and portal behavior
+### Slot Grid Layout
+- Uses `grid grid-cols-5 gap-2` for a compact 5-column layout
+- Each slot: `h-12 w-12` thumbnail with `text-[8px]` label below
+- First 4 slots in image mode match Quick Bar labels exactly
+- Slots 5-10 are dimmed/disabled placeholders labeled "Ref 5"..."Ref 10" with a "Coming soon" tooltip -- these are purely visual placeholders, not yet functional
+
+### Shared Rendering
+The slot rendering in the settings sheet is self-contained (not importing `RefSlot` from `MobileQuickBar`) since the settings sheet slots are larger (h-12) and include additional controls (Copy toggle, Strength slider) that the Quick Bar slots don't have.
 
 ### Files Changed
-1. `src/components/workspace/MobileQuickBar.tsx` -- Add model dropdown popover replacing the static button
-2. `src/components/workspace/MobileSimplePromptInput.tsx` -- Pass model data and callbacks to QuickBar
+1. `src/components/workspace/MobileSettingsSheet.tsx` -- Replace ref section with 10-slot grid
+2. `src/components/workspace/MobileSimplePromptInput.tsx` -- Build and pass refSlots array to settings sheet
