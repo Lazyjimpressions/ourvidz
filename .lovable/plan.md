@@ -140,4 +140,3 @@ We need to add `referenceImage2` / `referenceImage2Url` state to `useLibraryFirs
 3. **`src/pages/MobileSimplifiedWorkspace.tsx`** - Add ref2 state, consolidated smart model switching effect, wire new props
 4. **`src/components/workspace/MobileSettingsSheet.tsx`** - Minor: simplify reference section (keep strength/copy controls)
 5. **`src/hooks/useSmartModelDefaults.ts`** - No changes needed (already supports all tasks)
-

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Video, Settings, X, Image } from 'lucide-react';
+import { Camera, Video, Settings, X, Plus, Film } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { cn } from '@/lib/utils';
@@ -15,10 +15,15 @@ export interface MobileQuickBarProps {
   // Settings sheet trigger
   onOpenSettings: () => void;
   
-  // Reference indicator
-  hasReferenceImage?: boolean;
-  referenceImageUrl?: string | null;
-  onRemoveReference?: () => void;
+  // Dual reference slots
+  ref1Url?: string | null;
+  ref2Url?: string | null;
+  ref1IsVideo?: boolean;
+  ref2IsVideo?: boolean;
+  onAddRef1?: () => void;
+  onAddRef2?: () => void;
+  onRemoveRef1?: () => void;
+  onRemoveRef2?: () => void;
   
   // Desktop inline controls
   contentType?: 'sfw' | 'nsfw';
@@ -32,14 +37,62 @@ export interface MobileQuickBarProps {
   disabled?: boolean;
 }
 
+/** Single ref slot: empty = dashed +, filled = thumbnail with X */
+const RefSlot: React.FC<{
+  url?: string | null;
+  isVideo?: boolean;
+  onAdd?: () => void;
+  onRemove?: () => void;
+  label: string;
+  disabled?: boolean;
+}> = ({ url, isVideo, onAdd, onRemove, label, disabled }) => {
+  if (url) {
+    return (
+      <div className="relative h-8 w-8 rounded border border-border/50 overflow-hidden bg-muted/20 shrink-0">
+        <img src={url} alt={label} className="h-full w-full object-cover" />
+        {isVideo && (
+          <div className="absolute bottom-0 left-0 bg-black/60 px-0.5">
+            <Film className="h-2.5 w-2.5 text-white" />
+          </div>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-destructive/80 flex items-center justify-center"
+          >
+            <X className="h-2 w-2 text-destructive-foreground" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onAdd}
+      disabled={disabled}
+      className="h-8 w-8 rounded border border-dashed border-muted-foreground/40 flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-colors shrink-0 disabled:opacity-30"
+    >
+      <Plus className="h-3 w-3 text-muted-foreground" />
+    </button>
+  );
+};
+
 export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   currentMode,
   onModeToggle,
   selectedModelName,
   onOpenSettings,
-  hasReferenceImage = false,
-  referenceImageUrl,
-  onRemoveReference,
+  ref1Url,
+  ref2Url,
+  ref1IsVideo = false,
+  ref2IsVideo = false,
+  onAddRef1,
+  onAddRef2,
+  onRemoveRef1,
+  onRemoveRef2,
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
@@ -64,34 +117,9 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
         size="sm"
       />
       
-      {/* Reference Image Indicator (when set) */}
-      {hasReferenceImage && (
-        <div 
-          key={referenceImageUrl || 'ref-indicator'}
-          className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted border text-xs"
-        >
-          {referenceImageUrl ? (
-            <img 
-              key={`img-${referenceImageUrl}`}
-              src={referenceImageUrl} 
-              alt="Ref" 
-              className="h-5 w-5 rounded object-cover"
-            />
-          ) : (
-            <Image className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-          <span className="text-muted-foreground max-w-[60px] truncate">Ref</span>
-          {onRemoveReference && (
-            <button
-              type="button"
-              onClick={onRemoveReference}
-              className="ml-0.5 p-0.5 hover:bg-muted-foreground/20 rounded"
-            >
-              <X className="h-3 w-3 text-muted-foreground" />
-            </button>
-          )}
-        </div>
-      )}
+      {/* Ref Slots */}
+      <RefSlot url={ref1Url} isVideo={ref1IsVideo} onAdd={onAddRef1} onRemove={onRemoveRef1} label="Ref 1" disabled={disabled} />
+      <RefSlot url={ref2Url} isVideo={ref2IsVideo} onAdd={onAddRef2} onRemove={onRemoveRef2} label="Ref 2" disabled={disabled} />
 
       {/* Desktop-only inline controls */}
       {onContentTypeChange && (
