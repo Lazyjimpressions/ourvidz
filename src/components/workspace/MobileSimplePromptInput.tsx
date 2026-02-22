@@ -55,6 +55,20 @@ export interface MobileSimplePromptInputProps {
   // Batch size
   batchSize?: number;
   onBatchSizeChange?: (size: number) => void;
+  // Creative Direction (Image mode)
+  shotType?: 'wide' | 'medium' | 'close';
+  onShotTypeChange?: (type: 'wide' | 'medium' | 'close') => void;
+  cameraAngle?: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye';
+  onCameraAngleChange?: (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => void;
+  style?: string;
+  onStyleChange?: (style: string) => void;
+  enhancementModel?: 'qwen_base' | 'qwen_instruct' | 'none';
+  onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
+  // Video Controls
+  videoDuration?: number;
+  onVideoDurationChange?: (duration: number) => void;
+  motionIntensity?: number;
+  onMotionIntensityChange?: (intensity: number) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -94,6 +108,18 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onExtendReverseVideoChange,
   batchSize = 1,
   onBatchSizeChange,
+  shotType = 'wide',
+  onShotTypeChange,
+  cameraAngle = 'eye_level',
+  onCameraAngleChange,
+  style = '',
+  onStyleChange,
+  enhancementModel = 'qwen_instruct',
+  onEnhancementModelChange,
+  videoDuration = 5,
+  onVideoDurationChange,
+  motionIntensity = 0.5,
+  onMotionIntensityChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -500,6 +526,19 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onExtendReverseVideoChange={onExtendReverseVideoChange}
         onClearWorkspace={onClearWorkspace}
         onDeleteAllWorkspace={onDeleteAllWorkspace}
+        shotType={shotType}
+        onShotTypeChange={onShotTypeChange}
+        cameraAngle={cameraAngle}
+        onCameraAngleChange={onCameraAngleChange}
+        style={style}
+        onStyleChange={onStyleChange}
+        enhancementModel={enhancementModel}
+        onEnhancementModelChange={onEnhancementModelChange}
+        videoDuration={videoDuration}
+        onVideoDurationChange={onVideoDurationChange}
+        videoDurationOptions={videoModelSettings?.settings?.durationOptions || []}
+        motionIntensity={motionIntensity}
+        onMotionIntensityChange={onMotionIntensityChange}
       />
     </div>
   );
