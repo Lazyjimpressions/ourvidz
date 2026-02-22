@@ -1,78 +1,123 @@
 
 
-## Comprehensive Fix: Roleplay Settings Modals and Tile Images
+## Workspace Controls: Layout and Categorization Plan
 
-### Overview
+### Current State
 
-Three settings modals need fixes, plus the "Continue" tile image flash/disappear bug.
-
----
-
-### 1. Continue Conversation Tile Images Flash and Disappear
-
-**Problem:** `useUserConversations` signs `last_scene_image` URLs but never signs `character.image_url`. When a scene image errors out (or doesn't exist), the tile falls back to `character.image_url` which is a raw storage path -- this fails to load, triggers `onError`, and permanently hides the image via `erroredSceneImages` state.
-
-**Fix in `src/hooks/useUserConversations.ts`:**
-- In the signing step (around line 196), also sign `character.image_url` if it's a storage path (not already `http`)
-- Sign from `user-library` bucket (character images are stored there)
-
-**Fix in `src/pages/MobileRoleplayDashboard.tsx`:**
-- The `onError` handler currently marks the conversation as errored regardless of which image failed. Since we now sign character URLs too, this should resolve naturally. Keep the error handler but only for genuine failures.
+The workspace hook (`useLibraryFirstWorkspace`) already manages **shot type**, **camera angle**, **style**, **enhancement model**, **video duration**, **motion intensity**, and more -- but none of these are exposed in the UI. The Settings Sheet only shows Model, Resolution, Content Type, Aspect Ratio, and Reference Image controls.
 
 ---
 
-### 2. DashboardSettings (Roleplay Dashboard Page - Settings Sheet)
+### Proposed Control Hierarchy
 
-**File:** `src/components/roleplay/DashboardSettings.tsx`
+#### Tier 1: Quick Bar (always visible, inline)
+These are the most-changed-per-generation controls. Keep what's there now:
 
-**Current state:** Uses `useImageModels()` which returns T2I models. This is wrong for the always-I2I architecture.
+| Control | Image | Video |
+|---------|-------|-------|
+| Mode toggle (Image/Video) | Yes | Yes |
+| Content Type (SFW/NSFW) | Desktop only | Desktop only |
+| Aspect Ratio (1:1, 16:9, 9:16) | Desktop only | Desktop only |
+| Batch Size (1, 3, 6) | Desktop only | Hidden (video is always 1) |
+| Model chip (opens settings) | Yes | Yes |
+| Reference indicator | Yes | Yes |
 
-**Changes:**
-- Replace `useImageModels()` with `useI2IModels()` 
-- Update label from "Image Model" to "I2I Model"
-- This sheet is already compact (bottom sheet, `max-h-[60vh]`) -- no size issues
-
----
-
-### 3. RoleplaySettingsModal (Chat Page - Advanced Settings)
-
-**File:** `src/components/roleplay/RoleplaySettingsModal.tsx`
-
-**Current state:** The Models tab (lines 1005-1174) has three selectors: Chat Model, T2I Model, and I2I Model.
-
-**Changes:**
-- **Remove the T2I Model selector** (lines 1060-1121) -- T2I has no place in roleplay's always-I2I architecture
-- **Add I2I Multi selector** -- Import `useI2IModels` with `'i2i_multi'` task filter for multi-reference model selection. Add a new selector after the existing I2I selector labeled "I2I Multi Model" with subtitle "Multi-reference (2+ characters)"
-- **Verify modal height** -- Currently uses `flex flex-col` with `overflow-y-auto` on the content area. The Sheet side="right" with `w-[85vw] sm:w-[400px]` should be fine since it's full-height. No height fix needed (the "stuck at bottom" issue was likely related to the T2I selector adding unnecessary height).
+No changes to the Quick Bar.
 
 ---
 
-### 4. ScenarioSetupWizard (Scene Start Page)
+#### Tier 2: Settings Sheet (user-facing, opened via gear icon)
+Add the missing creative controls here. Organized into sections:
 
-**File:** `src/components/roleplay/ScenarioSetupWizard.tsx`
+**Section: Model** (existing)
+- Model selector dropdown
 
-**Current state:** The wizard has no model selectors -- it only has character, scenario, vibe, and start (hook) steps. Model selection happens via the dashboard settings or chat settings before/during the session.
+**Section: Output** (existing, reorganized)
+- Resolution (Standard/HD)
+- Content Type (SFW/NSFW)
+- Aspect Ratio pills
 
-**No changes needed** for this component.
+**Section: Creative Direction** (NEW -- image mode only)
+- **Shot Type**: `Wide | Medium | Close` -- segmented pills
+- **Camera Angle**: dropdown with `Eye Level | Low Angle | Over Shoulder | Overhead | Bird's Eye`
+- **Style**: compact text input (pre-filled with "cinematic lighting, film grain, dramatic composition")
+- **Enhancement**: `Auto | Base | None` segmented pills (maps to qwen_instruct / qwen_base / none)
+
+**Section: Video Controls** (NEW -- video mode only)
+- **Duration**: segmented pills showing model-derived options (e.g., 1s, 2s, 3s, 4s, 5s) from `useVideoModelSettings`
+- **Motion Intensity**: compact range slider (0-1)
+
+**Section: Reference Image** (existing, no changes)
+
+**Section: Advanced** (existing collapsible, stays for local models)
+
+**Section: Workspace Actions** (existing, no changes)
 
 ---
 
-### 5. QuickSettingsDrawer (Mobile Chat - Quick Settings)
+#### Tier 3: Admin/Debug Only (hidden from users)
+These stay in the dev-only Debug Panel or are invisible:
 
-**File:** `src/components/roleplay/QuickSettingsDrawer.tsx`
-
-**Current state:** Already correctly shows Chat Model and I2I Model selectors. No T2I reference.
-
-**No changes needed.**
+| Control | Reason |
+|---------|--------|
+| Bypass Enhancement toggle | Debug only |
+| Hard Override toggle | Debug only |
+| Lock Seed / Seed input | Power-user, rarely needed |
+| Reference Type (style/character/composition) | Auto-determined by context |
+| SDXL advanced (steps, CFG, compel) | Local model internals |
+| Sound Enabled toggle | Not yet functional |
 
 ---
 
-### Technical Summary
+### Technical Changes
 
-| File | Change |
-|------|--------|
-| `src/hooks/useUserConversations.ts` | Sign `character.image_url` alongside `last_scene_image` in the URL signing step |
-| `src/pages/MobileRoleplayDashboard.tsx` | Minor: ensure error handling doesn't permanently hide tiles after signing fix |
-| `src/components/roleplay/DashboardSettings.tsx` | Replace `useImageModels()` with `useI2IModels()`, update labels |
-| `src/components/roleplay/RoleplaySettingsModal.tsx` | Remove T2I selector, add I2I Multi selector using `useI2IModels('i2i_multi')` |
+**`src/components/workspace/MobileSettingsSheet.tsx`**
+- Add props: `shotType`, `onShotTypeChange`, `cameraAngle`, `onCameraAngleChange`, `style`, `onStyleChange`, `enhancementModel`, `onEnhancementModelChange`, `videoDuration`, `onVideoDurationChange`, `motionIntensity`, `onMotionIntensityChange`, `videoDurationOptions` (from hook)
+- Add "Creative Direction" section after Aspect Ratio (image mode only) with Shot Type pills, Camera Angle dropdown, Style text input, Enhancement pills
+- Add "Video Controls" section (video mode only) with Duration pills and Motion slider
+- All new controls use the existing `text-[9px]` label + compact control pattern
+
+**`src/components/workspace/MobileSimplePromptInput.tsx`**
+- Accept and pass through the new props to `MobileSettingsSheet`
+- Wire `useVideoModelSettings` duration options into the sheet
+
+**`src/pages/MobileSimplifiedWorkspace.tsx`**
+- Pass `shotType`, `setShotType`, `cameraAngle`, `setCameraAngle`, `style`, `setStyle`, `enhancementModel`, `setEnhancementModel`/`updateEnhancementModel`, `videoDuration`, `setVideoDuration`, `motionIntensity`, `setMotionIntensity` from the hook to `MobileSimplePromptInput`
+
+**`src/components/workspace/MobileQuickBar.tsx`**
+- Hide Batch Size pills when in video mode (video is always 1)
+
+---
+
+### Layout Sketch
+
+Settings sheet with new sections (compact, same density as existing):
+
+```text
++----------------------------------+
+| [x] Settings                     |
++----------------------------------+
+| MODEL           [Flux Kontext v2]|
++----------------------------------+
+| RESOLUTION  [Standard] [HD]      |
+| CONTENT     [SFW] [NSFW]         |
++----------------------------------+
+| ASPECT RATIO  [1:1] [16:9] [9:16]|
++----------------------------------+
+| --- Image mode only: ----------- |
+| SHOT TYPE  [Wide] [Medium] [Close]|
+| CAMERA     [Eye Level      v]    |
+| STYLE      [cinematic lighting..]|
+| ENHANCE    [Auto] [Base] [None]  |
++----------------------------------+
+| --- Video mode only: ----------- |
+| DURATION   [1] [2] [3] [4] [5]s  |
+| MOTION     ----o--------  0.50   |
++----------------------------------+
+| REFERENCE IMAGE                  |
+| [Upload] or [preview + strength] |
++----------------------------------+
+| Clear All    Delete All          |
++----------------------------------+
+```
 
