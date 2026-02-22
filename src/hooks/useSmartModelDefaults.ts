@@ -26,7 +26,7 @@ export const useSmartModelDefaults = () => {
       if (explicit) return explicit;
 
       // 2. Fallback: highest priority with matching task (already sorted desc)
-      return data.all.find((m) => m.task === task) ?? null;
+      return data.all.find((m) => m.tasks?.includes(task)) ?? null;
     },
     [data],
   );

@@ -5,7 +5,7 @@ export interface I2IModel {
   id: string;
   model_key: string;
   display_name: string;
-  task: string;
+  tasks: string[];
   is_active: boolean;
   is_default: boolean;
   priority: number;
@@ -15,6 +15,7 @@ export interface I2IModel {
     supports_i2i?: boolean;
     uses_strength_param?: boolean;
     nsfw_status?: string;
+    requires_image_urls_array?: boolean;
   };
 }
 
@@ -23,13 +24,15 @@ export interface I2IModelOption {
   label: string;
   isAvailable: boolean;
   isDefault: boolean;
+  supportsMultiRef: boolean;
   capabilities?: I2IModel['capabilities'];
 }
 
 /**
- * Hook to load I2I (Image-to-Image) models for scene iteration
+ * Hook to load I2I (Image-to-Image) models for scene iteration.
+ * Pass filterTask to narrow results (e.g. 'i2i_multi' for multi-ref only).
  */
-export const useI2IModels = () => {
+export const useI2IModels = (filterTask: 'i2i' | 'i2i_multi' = 'i2i') => {
   const [i2iModels, setI2IModels] = useState<I2IModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,21 +43,22 @@ export const useI2IModels = () => {
         setIsLoading(true);
         setError(null);
 
-        // Query for I2I models
+        // Query for models whose tasks array contains the requested task
         const { data, error } = await supabase
           .from('api_models')
           .select(`
             id,
             model_key,
             display_name,
-            task,
+            tasks,
             is_active,
             is_default,
             priority,
             capabilities,
+            default_for_tasks,
             api_providers!inner(name, display_name)
           `)
-          .eq('task', 'i2i')
+          .contains('tasks', [filterTask])
           .eq('is_active', true)
           .order('priority', { ascending: true });
 
@@ -66,7 +70,7 @@ export const useI2IModels = () => {
           id: model.id,
           model_key: model.model_key,
           display_name: model.display_name,
-          task: model.task,
+          tasks: model.tasks,
           is_active: model.is_active,
           is_default: model.is_default,
           priority: model.priority,
@@ -85,7 +89,7 @@ export const useI2IModels = () => {
     };
 
     loadI2IModels();
-  }, []);
+  }, [filterTask]);
 
   // Create model options for UI
   const modelOptions: I2IModelOption[] = [
@@ -95,6 +99,7 @@ export const useI2IModels = () => {
       label: 'Auto (Use Default)',
       isAvailable: true,
       isDefault: true,
+      supportsMultiRef: true,
       capabilities: {}
     },
     // Add all loaded I2I models
@@ -103,6 +108,7 @@ export const useI2IModels = () => {
       label: `${model.display_name} (${model.provider_display_name})`,
       isAvailable: true,
       isDefault: model.is_default,
+      supportsMultiRef: model.tasks.includes('i2i_multi'),
       capabilities: model.capabilities
     }))
   ];

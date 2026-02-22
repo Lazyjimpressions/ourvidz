@@ -84,7 +84,7 @@ export interface ApiModel {
   display_name: string;
   model_key: string;
   modality: string;
-  task: string;
+  tasks: string[];
   pricing: Record<string, any>;
   is_active: boolean;
   is_default: boolean;
@@ -140,7 +140,7 @@ export const useApiModels = () => {
       const { data, error } = await supabase
         .from('api_models')
         .select(`
-          id, display_name, model_key, modality, task, pricing, is_active, is_default, priority,
+          id, display_name, model_key, modality, tasks, pricing, is_active, is_default, priority,
           api_providers!inner(id, name, display_name)
         `)
         .order('priority', { ascending: true });

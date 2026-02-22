@@ -7,7 +7,7 @@ export interface RoleplayModel {
   model_key: string;
   display_name: string;
   modality: string;
-  task: string;
+  tasks: string[];
   model_family: string;
   is_active: boolean;
   is_default: boolean;
@@ -81,7 +81,7 @@ export const useRoleplayModels = () => {
             model_key,
             display_name,
             modality,
-            task,
+            tasks,
             model_family,
             is_active,
             is_default,

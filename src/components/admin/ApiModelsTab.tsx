@@ -38,7 +38,7 @@ interface ApiModel {
   version: string | null;
   display_name: string;
   modality: string;
-  task: string;
+  tasks: string[];
   model_family: string | null;
   endpoint_path: string | null;
   input_defaults: any;
@@ -54,6 +54,7 @@ interface ApiModel {
 const TASK_ABBREVIATIONS: Record<string, string> = {
   t2i: 'T2I',
   i2i: 'I2I',
+  i2i_multi: 'I2I-M',
   t2v: 'T2V',
   i2v: 'I2V',
   extend: 'EXT',
@@ -67,7 +68,7 @@ const TASK_ABBREVIATIONS: Record<string, string> = {
 };
 
 const MODALITIES = ['image', 'video', 'chat'] as const;
-const TASKS = ['t2i', 'i2i', 't2v', 'i2v', 'extend', 'multi', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding', 'vision'] as const;
+const TASKS = ['t2i', 'i2i', 'i2i_multi', 't2v', 'i2v', 'extend', 'multi', 'upscale', 'roleplay', 'reasoning', 'enhancement', 'embedding', 'vision'] as const;
 
 const formatResponseTime = (ms: number | null | undefined) => {
   if (ms === null || ms === undefined || ms === 0) return '--';
@@ -187,7 +188,7 @@ export const ApiModelsTab = () => {
         switch (sortKey) {
           case 'display_name': cmp = a.display_name.localeCompare(b.display_name); break;
           case 'provider': cmp = a.api_providers.display_name.localeCompare(b.api_providers.display_name); break;
-          case 'task': cmp = a.task.localeCompare(b.task); break;
+          case 'task': cmp = (a.tasks?.[0] || '').localeCompare(b.tasks?.[0] || ''); break;
           case 'model_key': cmp = a.model_key.localeCompare(b.model_key); break;
           case 'model_family': cmp = (a.model_family || '').localeCompare(b.model_family || ''); break;
           case 'avg_cost': cmp = (statsA?.avgCost || 0) - (statsB?.avgCost || 0); break;
@@ -434,9 +435,15 @@ function ModelRow({ model, avgCost, avgTime, editingCellId, setEditingCellId, on
         </Badge>
       </TableCell>
 
-      {/* Task */}
+      {/* Tasks */}
       <TableCell className="p-1">
-        <span className="text-[11px] text-muted-foreground">{model.task}</span>
+        <div className="flex flex-wrap gap-0.5">
+          {model.tasks?.map(t => (
+            <Badge key={t} variant="outline" className="text-[9px] h-3.5 px-1 font-mono">
+              {TASK_ABBREVIATIONS[t] || t.slice(0, 3).toUpperCase()}
+            </Badge>
+          ))}
+        </div>
       </TableCell>
 
       {/* Model Key - truncated with tooltip */}
@@ -592,7 +599,7 @@ function ModelForm({ model, providers, onSubmit, onCancel }: {
     version: model?.version || null,
     display_name: model?.display_name || '',
     modality: model?.modality || 'image',
-    task: model?.task || 'generation',
+    tasks: model?.tasks || ['t2i'],
     model_family: model?.model_family || null,
     endpoint_path: model?.endpoint_path || null,
     input_defaults: model?.input_defaults || {},
@@ -650,11 +657,42 @@ function ModelForm({ model, providers, onSubmit, onCancel }: {
             </Select>
           </div>
           <div>
-            <Label className="text-[10px] text-muted-foreground">Task</Label>
-            <Select value={formData.task} onValueChange={(v) => set('task', v)}>
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>{TASKS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-            </Select>
+            <Label className="text-[10px] text-muted-foreground">Tasks</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="flex flex-wrap gap-0.5 min-w-[80px] h-7 items-center border rounded px-2 text-xs w-full hover:bg-muted/50">
+                  {formData.tasks?.length > 0 ? formData.tasks.map(t => (
+                    <Badge key={t} variant="secondary" className="text-[9px] h-3.5 px-1 font-mono">
+                      {TASK_ABBREVIATIONS[t] || t}
+                    </Badge>
+                  )) : <span className="text-muted-foreground">Select...</span>}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-2" align="start">
+                <div className="text-[10px] font-semibold text-muted-foreground mb-1.5">Eligible tasks</div>
+                <div className="space-y-1">
+                  {TASKS.map(task => {
+                    const checked = formData.tasks?.includes(task) ?? false;
+                    return (
+                      <label key={task} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(c) => {
+                            const current = formData.tasks || [];
+                            const next = c ? [...current, task] : current.filter(t => t !== task);
+                            // Also remove from default_for_tasks if unchecked
+                            const nextDefaults = (formData.default_for_tasks || []).filter(t => next.includes(t));
+                            setFormData(prev => ({ ...prev, tasks: next, default_for_tasks: nextDefaults, is_default: nextDefaults.length > 0 }));
+                          }}
+                          className="h-3 w-3"
+                        />
+                        <span>{task}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           <div>
             <Label className="text-[10px] text-muted-foreground">Priority</Label>

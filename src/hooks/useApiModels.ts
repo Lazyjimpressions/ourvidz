@@ -8,7 +8,7 @@ interface ApiModel {
   model_key: string;
   version: string | null;
   modality: 'image' | 'video' | 'chat';
-  task: 't2i' | 'i2i' | 't2v' | 'i2v' | 'extend' | 'multi' | 'upscale' | 'roleplay' | 'reasoning' | 'enhancement' | 'embedding' | 'vision';
+  tasks: string[];
   model_family: string | null;
   is_default: boolean;
   priority: number;
@@ -32,7 +32,7 @@ export const useApiModels = (modality?: string, task?: string) => {
           model_key,
           version,
           modality,
-          task,
+          tasks,
           model_family,
           is_default,
           priority,
@@ -47,7 +47,7 @@ export const useApiModels = (modality?: string, task?: string) => {
       }
 
       if (task) {
-        query = query.eq('task', task);
+        query = query.contains('tasks', [task]);
       }
 
       const { data, error } = await query
@@ -83,31 +83,31 @@ export const useAllVisualModels = () => {
           model_key,
           version,
           modality,
-          task,
+          tasks,
           model_family,
           is_default,
           priority,
           capabilities,
           input_defaults,
+          default_for_tasks,
           api_providers!inner(name, display_name)
         `)
         .eq('is_active', true)
         .or('modality.eq.image,modality.eq.video')
-        .in('task', ['t2i', 'i2i', 't2v', 'i2v', 'extend', 'multi'])
         .order('priority', { ascending: false })
         .order('display_name', { ascending: true });
 
       if (error) throw error;
 
-      const models = data as ApiModel[];
+      const models = data as unknown as ApiModel[];
 
-      // Group by task directly — no model_key sniffing needed
-      const t2i = models.filter(m => m.task === 't2i');
-      const i2i = models.filter(m => m.task === 'i2i');
-      const i2v = models.filter(m => m.task === 'i2v');
-      const t2v = models.filter(m => m.task === 't2v');
-      const extend = models.filter(m => m.task === 'extend');
-      const multi = models.filter(m => m.task === 'multi');
+      // Group by tasks array — models can appear in multiple groups
+      const t2i = models.filter(m => m.tasks?.includes('t2i'));
+      const i2i = models.filter(m => m.tasks?.includes('i2i'));
+      const i2v = models.filter(m => m.tasks?.includes('i2v'));
+      const t2v = models.filter(m => m.tasks?.includes('t2v'));
+      const extend = models.filter(m => m.tasks?.includes('extend'));
+      const multi = models.filter(m => m.tasks?.includes('multi'));
 
       return { all: models, t2i, i2i, i2v, t2v, extend, multi };
     },
