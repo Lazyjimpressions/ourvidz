@@ -1355,16 +1355,17 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             const charCount = poseUrlIndex >= 0 ? totalSlots - 1 : totalSlots;
             
             let figurePrefix = '';
-            if (charCount === 1 && poseUrlIndex >= 0) {
-              figurePrefix = 'Show the character from Figure 1 in the pose/position shown in Figure 2: ';
-            } else if (charCount === 2 && poseUrlIndex >= 0) {
-              figurePrefix = 'Show the character from Figure 1 and the character from Figure 2 in the pose/position shown in Figure 3: ';
-            } else if (charCount === 3 && poseUrlIndex >= 0) {
-              figurePrefix = 'Show the characters from Figure 1, Figure 2, and Figure 3 in the pose/position shown in Figure 4: ';
-            } else if (charCount === 2 && poseUrlIndex < 0) {
-              figurePrefix = 'Show the character from Figure 1 and the character from Figure 2 together: ';
-            } else if (charCount === 3 && poseUrlIndex < 0) {
-              figurePrefix = 'Show the characters from Figure 1, Figure 2, and Figure 3 together: ';
+            if (charCount > 0) {
+              const figureRefs = Array.from({ length: charCount }, (_, i) => `Figure ${i + 1}`);
+              const charLabel = charCount === 1 ? 'the character' : 'the characters';
+              const figureList = figureRefs.length <= 2
+                ? figureRefs.join(' and ')
+                : figureRefs.slice(0, -1).join(', ') + ', and ' + figureRefs[figureRefs.length - 1];
+              if (poseUrlIndex >= 0) {
+                figurePrefix = `Show ${charLabel} from ${figureList} in the pose/position shown in Figure ${totalSlots}: `;
+              } else {
+                figurePrefix = `Show ${charLabel} from ${figureList} together: `;
+              }
             }
             
             if (figurePrefix && !finalPrompt.includes('Figure ')) {

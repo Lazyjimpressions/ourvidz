@@ -12,12 +12,18 @@ export interface RefSlotData {
   label?: string;
 }
 
-/** Fixed slot definitions for image mode */
+/** Fixed slot definitions for image mode (10 slots for multi-ref support) */
 export const FIXED_IMAGE_SLOTS: { role: 'character' | 'pose'; label: string }[] = [
   { role: 'character', label: 'Char 1' },
   { role: 'character', label: 'Char 2' },
   { role: 'character', label: 'Char 3' },
   { role: 'pose', label: 'Pose' },
+  { role: 'character', label: 'Ref 5' },
+  { role: 'character', label: 'Ref 6' },
+  { role: 'character', label: 'Ref 7' },
+  { role: 'character', label: 'Ref 8' },
+  { role: 'character', label: 'Ref 9' },
+  { role: 'character', label: 'Ref 10' },
 ];
 
 export interface MobileQuickBarProps {

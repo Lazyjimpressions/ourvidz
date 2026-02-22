@@ -536,38 +536,30 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             <div className="space-y-2">
               <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider px-2">References</p>
               <div className="grid grid-cols-5 gap-2 px-2">
-                {refSlots.map((slot, i) => {
-                  const activeCount = currentMode === 'video' ? 2 : 4;
-                  const isActive = i < activeCount;
+              {refSlots.map((slot, i) => {
                   return (
                     <div key={i} className="flex flex-col items-center gap-0.5">
-                      {isActive ? (
-                        slot.url ? (
-                          <div className="relative group h-12 w-12 rounded-md overflow-hidden border border-border">
-                            <img src={slot.url} alt={slot.label} className="absolute inset-0 w-full h-full object-cover" />
-                            <button
-                              type="button"
-                              onClick={() => onRefSlotRemove?.(i)}
-                              className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <X className="w-2.5 h-2.5 text-white" />
-                            </button>
-                          </div>
-                        ) : (
+                      {slot.url ? (
+                        <div className="relative group h-12 w-12 rounded-md overflow-hidden border border-border">
+                          <img src={slot.url} alt={slot.label} className="absolute inset-0 w-full h-full object-cover" />
                           <button
                             type="button"
-                            onClick={() => onRefSlotAdd?.(i)}
-                            className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary/50 transition-colors"
+                            onClick={() => onRefSlotRemove?.(i)}
+                            className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                           >
-                            <Plus className="w-3 h-3 text-muted-foreground/50" />
+                            <X className="w-2.5 h-2.5 text-white" />
                           </button>
-                        )
-                      ) : (
-                        <div className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/15 flex items-center justify-center opacity-40" title="Coming soon">
-                          <Lock className="w-3 h-3 text-muted-foreground/30" />
                         </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onRefSlotAdd?.(i)}
+                          className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary/50 transition-colors"
+                        >
+                          <Plus className="w-3 h-3 text-muted-foreground/50" />
+                        </button>
                       )}
-                      <span className={`text-[8px] ${isActive ? 'text-muted-foreground' : 'text-muted-foreground/30'}`}>{slot.label}</span>
+                      <span className="text-[8px] text-muted-foreground">{slot.label}</span>
                     </div>
                   );
                 })}

@@ -467,13 +467,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   const hasDisplayReference = !!ref1Url;
 
-  // Fixed 4-slot structure for image mode: Char1, Char2, Char3, Pose
-  // Maps to: ref1 (referenceImageUrl), ref2 (referenceImage2Url), additionalRefUrls[0], additionalRefUrls[1]
+  // Fixed 10-slot structure for image mode: Char1, Char2, Char3, Pose, Ref5-10
+  // Maps to: ref1 (referenceImageUrl), ref2 (referenceImage2Url), additionalRefUrls[0..7]
   const fixedSlots: Array<{ url?: string | null; isVideo?: boolean }> = [
     { url: referenceImageUrl, isVideo: false },
     { url: referenceImage2Url, isVideo: false },
-    { url: additionalRefUrls[0] || null, isVideo: false },
-    { url: additionalRefUrls[1] || null, isVideo: false },
+    ...Array.from({ length: 8 }, (_, i) => ({
+      url: additionalRefUrls[i] || null,
+      isVideo: false,
+    })),
   ];
 
   // Video mode still uses dynamic slots (start/end ref)
@@ -653,8 +655,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               let url: string | null = null;
               if (i === 0) url = referenceImageUrl || null;
               else if (i === 1) url = referenceImage2Url || null;
-              else if (i === 2) url = additionalRefUrls[0] || null;
-              else if (i === 3) url = additionalRefUrls[1] || null;
+              else url = additionalRefUrls[i - 2] || null;
               return { url, label };
             });
           } else {
