@@ -1,66 +1,64 @@
 
 
-# Fix Broken Images, Add "Save as Position", and Position Assignment
+# Editable Base Position Prompts
 
-## Issue 1: Broken Images on Positions Page
+## What This Adds
 
-**Root cause**: The `character-portrait` edge function saves `output_url` as a raw storage path like `userId/portraits/file.png`. The `useSignedUrl` hook only triggers signing when the URL contains the string `user-library/` or `workspace-temp/`. Since the raw path contains neither, it gets used as-is as the image `src` -- resulting in a broken image.
+Each of the 6 base position slots (Front, Left Side, Right Side, Rear, 3/4, Bust) will have a small edit button that opens a popover where you can view and modify the prompt fragment used for generation. Changes save back to the database immediately, so the next time you generate that position it uses your updated prompt.
 
-**Fix**: Update `useSignedUrl` to detect bare storage paths (no protocol, no bucket prefix) and sign them against the correct bucket. The canon images are stored in `user-library`, so any path that doesn't start with `http`, `data:`, or `/` and doesn't already contain a bucket identifier should be treated as a `user-library` path.
+For example, you could change the "Left Side" prompt from:
+> full body, standing, left side profile view, arms at sides, plain background
 
-**File**: `src/hooks/useSignedUrl.ts`
+to:
+> full body, standing, left side profile view, looking away from camera, arms at sides, plain background
 
-## Issue 2: "Save as Position" on Portrait Dropdown
+## How It Works
 
-Add a new dropdown menu item in `PortraitGallery.tsx` that lets users promote any portrait to a character position. When clicked, it opens a small popover/dialog to select the output type and optional pose key (to assign it to a base position slot).
+The prompt fragments live in the `prompt_templates` table's `metadata.pose_presets` JSON. The edit flow:
 
-This requires:
-- A new `onSaveAsPosition` callback prop on `PortraitGallery`
-- A new `saveCanonFromUrl` function in `useCharacterStudio.ts` that inserts a portrait's existing `image_url` into `character_canon` without re-uploading
-- Wiring through `StudioWorkspace.tsx` and `CharacterStudioV3.tsx`
-
-**Files**: `PortraitGallery.tsx`, `useCharacterStudio.ts`, `StudioWorkspace.tsx`, `CharacterStudioV3.tsx`
-
-## Issue 3: Assign Image to Base Position Slot
-
-On the Positions page, allow users to assign any existing canon image (from the grid below) to one of the 6 fixed base position slots. This means adding a small action on each `CanonThumbnail` in the grid that lets the user pick which pose key to assign (e.g., "Set as Front", "Set as Left Side", etc.). This updates the canon entry's `metadata.pose_key` field.
-
-Also, the fixed position slots should support drag-and-drop or a click-to-assign flow from uploaded/existing images.
-
-**Implementation**: Add a dropdown on `CanonThumbnail` hover actions with the available pose keys. When selected, update the canon entry's metadata via a new `assignCanonPoseKey` function.
-
-**Files**: `PositionsGrid.tsx`, `useCharacterStudio.ts`
+1. Click the edit (pencil) icon on any position slot
+2. A popover shows the current `prompt_fragment` in a textarea
+3. Edit the text and click Save
+4. The hook updates the full `metadata` JSONB in `prompt_templates` and refreshes the local state
 
 ## Technical Details
 
-### useSignedUrl fix (Issue 1)
-
-Add a check before the `needsSigning` logic: if the URL doesn't start with `http`, `https`, `data:`, or `/`, treat it as a bare `user-library` storage path and prepend the bucket identifier for signing.
-
-### saveCanonFromUrl (Issue 2)
-
-```
-saveCanonFromUrl(imageUrl, outputType, tags, label?, poseKey?)
-  -> INSERT into character_canon with output_url = imageUrl, metadata = { pose_key }
-  -> refresh canon list
-```
-
-### assignCanonPoseKey (Issue 3)
-
-```
-assignCanonPoseKey(canonId, poseKey)
-  -> UPDATE character_canon SET metadata = jsonb_set(metadata, '{pose_key}', '"poseKey"')
-  -> refresh canon list
-```
-
-### Files Changed Summary
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/hooks/useSignedUrl.ts` | Detect bare storage paths and sign against `user-library` bucket |
-| `src/hooks/useCharacterStudio.ts` | Add `saveCanonFromUrl()` and `assignCanonPoseKey()` functions |
-| `src/components/character-studio/PortraitGallery.tsx` | Add "Save as Position" dropdown item with type selector |
-| `src/components/character-studio-v3/PositionsGrid.tsx` | Add pose-key assignment action on `CanonThumbnail` hover overlay |
-| `src/components/character-studio-v3/StudioWorkspace.tsx` | Pass new callbacks through |
-| `src/pages/CharacterStudioV3.tsx` | Wire new callbacks |
+| `src/hooks/useCharacterStudio.ts` | Add `updateCanonPresetPrompt(poseKey, newFragment)` function that reads current metadata, patches the specific preset's `prompt_fragment`, and writes it back via `supabase.from('prompt_templates').update()` |
+| `src/components/character-studio-v3/PositionsGrid.tsx` | Add edit button + popover with textarea on each `PositionSlot`; accept new `onUpdatePresetPrompt` callback prop |
+| `src/components/character-studio-v3/StudioWorkspace.tsx` | Pass `onUpdatePresetPrompt` through |
+| `src/pages/CharacterStudioV3.tsx` | Wire `updateCanonPresetPrompt` to the prop |
+
+### useCharacterStudio.ts -- new function
+
+```typescript
+const updateCanonPresetPrompt = useCallback(async (poseKey: string, newFragment: string) => {
+  // 1. Fetch current template row (need the id + full metadata)
+  // 2. Patch metadata.pose_presets[poseKey].prompt_fragment = newFragment
+  // 3. UPDATE prompt_templates SET metadata = patched WHERE id = templateId
+  // 4. Update local canonPosePresets state
+}, []);
+```
+
+To do this we also need to store the template row ID when we first fetch presets, so we know which row to update.
+
+### PositionSlot -- edit popover
+
+On each slot (both empty and filled states), add a small pencil icon button. On click, it opens a `Popover` with:
+- A `<textarea>` pre-filled with `preset.prompt_fragment`
+- A Save button
+- A Reset button (restores original default -- stored as `default_prompt_fragment` in the preset or just a visual indicator)
+
+The popover sits on the slot without interfering with the generate/regenerate click targets.
+
+### RLS Consideration
+
+The `prompt_templates` table needs an UPDATE policy for authenticated users on their own templates, or at minimum the table must allow updates. Since these are system-level templates (not user-owned), we may need to either:
+- Add a `user_id` column and per-user overrides, OR
+- Allow authenticated users to update the shared template (simpler but shared)
+
+The simplest approach for now: allow authenticated users to update `prompt_templates` rows where `use_case = 'canon_position'`. This means edits are shared across all users of that template. If per-user customization is needed later, we can add a user override table.
 
