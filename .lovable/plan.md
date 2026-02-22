@@ -1,60 +1,114 @@
 
 
-# Fix: Image Generation Broken (Sync URL + Prompt Wrapping)
+## Migrate `task` Column to `tasks` Array -- Multi-Capability Model Architecture
 
-## Root Cause Analysis
+### The Problem
 
-The fal provider's `base_url` in the database is `https://queue.fal.run`. This is correct for **async/webhook models** (video) but wrong for **sync models** (images). The `queue.fal.run` endpoint always returns `{ request_id, status: "IN_QUEUE" }` and expects a webhook to deliver results. The sync API lives at `https://fal.run`.
+The current `task` column is a **single value** (e.g., `'i2i'`, `'roleplay'`), but models often serve multiple purposes. Seedream v4 Edit can do both single-ref I2I and multi-ref I2I. Chat models can serve roleplay, reasoning, and enhancement. The single `task` column forces each model into one bucket, creating artificial limitations and requiring workarounds like the hardcoded v4.5 fallback.
 
-Every image model has `endpoint_path = null`, so the edge function takes the sync path but calls the queue URL. The safety-net detects this (`Unexpected queue status on sync call`) and returns `{ status: 'queued' }` -- but no webhook is configured for these models, so results are never delivered.
+Meanwhile, `default_for_tasks` already acts as a multi-select array, but it's disconnected from `task` -- there's no validation that a model marked as "default for i2i" actually has `i2i` as a capability.
 
-This is NOT caused by our taxonomy overhaul. The `api_providers.base_url` was not touched by our migration. This was likely broken before or was masked by a different code path.
+### The Solution
 
-## Fix 1: Edge function sync URL (fal-image)
+Replace the single `task text` column with a `tasks text[]` array column. Each model declares all the tasks it can perform (its capabilities/eligibility). The existing `default_for_tasks` array stays but is now validated as a subset of `tasks`. The admin UI consolidates this into one checkbox grid.
 
-**File**: `supabase/functions/fal-image/index.ts` (line ~804)
+### What Changes
 
-When a model is sync (`!isAsync`), replace `queue.fal.run` with `fal.run` in the endpoint URL:
+#### 1. Database Migration
 
+- Rename column `task` to `tasks` and convert from `text` to `text[]`
+- Migrate existing data: each model's single `task` value becomes a one-element array
+- Update the constraint `api_models_task_check` to validate that all elements in the array are from the allowed set
+- Add a constraint ensuring `default_for_tasks` is a subset of `tasks`
+- Update the Supabase types to reflect `tasks: string[]`
+
+```text
+Example migration for existing data:
+  Seedream v4 Edit:  task='i2i'  -->  tasks=['i2i']
+  MythoMax 13B:      task='roleplay'  -->  tasks=['roleplay']
+  Grok 4.1 Fast:     task='reasoning'  -->  tasks=['reasoning', 'enhancement']
+  LTX 13b i2v:       task='i2v'  -->  tasks=['i2v']
 ```
-// Line 804, currently:
-const falEndpoint = `${providerBaseUrl}/${modelKey}`;
 
-// Change to:
-let falEndpoint = `${providerBaseUrl}/${modelKey}`;
-if (!isAsync) {
-  falEndpoint = falEndpoint.replace('queue.fal.run', 'fal.run');
-}
-```
+After migration, admin can add additional tasks to models:
+- Seedream v4 Edit: `tasks=['i2i', 'i2i_multi']` (supports both single and multi-ref)
+- Seedream v4.5 Edit: `tasks=['i2i', 'i2i_multi']`
+- MythoMax: `tasks=['roleplay']` (only roleplay)
+- Grok 4.1 Fast: `tasks=['reasoning', 'enhancement']` (serves both)
 
-This is purely dynamic -- it derives sync vs async from the model's `endpoint_path` column. No hardcoded model keys. Video models (which all have `endpoint_path = 'fal-webhook'`) continue using `queue.fal.run` as before.
+The new `i2i_multi` task value gets added to the constraint's allowed list.
 
-## Fix 2: Remove hardcoded prompt wrapping (frontend)
+#### 2. Admin UI -- Unified Checkbox Grid
 
-**File**: `src/hooks/useLibraryFirstWorkspace.ts` (lines 918-948)
+Replace the current separate "Task" dropdown + "Default for tasks" checkbox popover with a **single consolidated popover** (or inline grid). Each task shows as a row with two states:
 
-Currently, every I2I prompt gets wrapped with:
-> "preserve the same person/identity and facial features from the reference image, [user prompt], maintaining similar quality and detail level"
+- **Unchecked**: Model is not eligible for this task
+- **Single check**: Model is eligible (appears in this task's model list)
+- **Star/highlighted check**: Model is the default for this task
 
-This is wrong -- the prompt should be sent as-is to the model. If enhancement is needed, it should come from the enhance-prompt edge function (which is a separate, user-controlled toggle), not hardcoded frontend wrapping.
+This replaces two separate controls with one unified interaction. The "Task" dropdown in the add/edit form is also replaced with checkboxes.
 
-**Change**: In image I2I mode, pass the user's prompt directly. If the prompt is empty, use a minimal default like `"enhance this image"`.
+The table column currently showing the single `task` value will instead show badge chips for all assigned tasks, with default tasks highlighted differently (e.g., outlined vs filled badge).
 
-## Files to modify
+#### 3. Query Updates -- All Consumers
+
+Every query currently using `.eq('task', 'i2i')` changes to `.contains('tasks', ['i2i'])`:
+
+**Frontend hooks (4 files):**
+- `src/hooks/useI2IModels.ts`: `.eq('task', 'i2i')` --> `.contains('tasks', ['i2i'])`
+- `src/hooks/useImageModels.ts`: filter logic updated for `tasks` array
+- `src/hooks/useRoleplayModels.ts`: no task filter currently (queries all chat), unchanged
+- `src/hooks/useApiModels.ts`: generic hook, `.eq('task', task)` --> `.contains('tasks', [task])`
+- `src/hooks/useSmartModelDefaults.ts`: `m.task === task` --> `m.tasks?.includes(task)`
+- `src/hooks/usePlaygroundModels.ts`: `m.task === 't2i'` --> `m.tasks?.includes('t2i')`, etc.
+
+**Edge function (1 file):**
+- `supabase/functions/roleplay-chat/index.ts`: All `.eq('task', ...)` queries become `.contains('tasks', [...])`
+- Remove the hardcoded `'fal-ai/bytedance/seedream/v4.5/edit'` fallback at line 3598
+- Update `getI2IModelKey()` to accept a task parameter (e.g., `'i2i'` vs `'i2i_multi'`) and resolve accordingly
+
+#### 4. Settings Hook -- Add `selectedI2IModel`
+
+- Add `selectedI2IModel: string` (default `'auto'`) to the `RoleplaySettings` interface in `useRoleplaySettings.ts`
+- Include in load/save/reset logic
+- Refactor `MobileRoleplayChat.tsx` to consume from the hook instead of standalone `useState` + raw `localStorage`
+
+#### 5. Model Selection UI -- Task-Filtered Dropdowns
+
+The existing I2I model selector in `SceneSetupSheet` and `RoleplaySettingsModal` already works, but with the `tasks` array, the hook can now filter more precisely:
+
+- When building a multi-ref scene (both_characters style), query models with `tasks` containing `'i2i_multi'`
+- When doing single-ref iteration, query models with `tasks` containing `'i2i'`
+- Models eligible for both will appear in both lists
+
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/fal-image/index.ts` | Replace `queue.fal.run` with `fal.run` for sync calls |
-| `src/hooks/useLibraryFirstWorkspace.ts` | Remove hardcoded prompt wrapping in I2I mode (lines 925-936) |
+| **Database migration** | Rename `task` to `tasks`, convert to `text[]`, update constraints, add `i2i_multi` to allowed values |
+| `src/integrations/supabase/types.ts` | Auto-regenerated: `task: string` --> `tasks: string[]` |
+| `src/components/admin/ApiModelsTab.tsx` | Replace Task dropdown + Default popover with unified checkbox grid; update table display |
+| `src/hooks/useApiModels.ts` | `.eq('task', task)` --> `.contains('tasks', [task])`, update grouping logic |
+| `src/hooks/useI2IModels.ts` | `.eq('task', 'i2i')` --> `.contains('tasks', ['i2i'])` |
+| `src/hooks/useImageModels.ts` | Update task references |
+| `src/hooks/useSmartModelDefaults.ts` | `m.task === task` --> `m.tasks?.includes(task)` |
+| `src/hooks/usePlaygroundModels.ts` | Update all `m.task ===` filters to `m.tasks?.includes()` |
+| `src/hooks/useRoleplaySettings.ts` | Add `selectedI2IModel` field |
+| `src/pages/MobileRoleplayChat.tsx` | Use settings hook for I2I model state |
+| `supabase/functions/roleplay-chat/index.ts` | Update all `.eq('task', ...)` queries; remove hardcoded fallback; update `getI2IModelKey()` |
 
-## Edge function to redeploy
+### What Stays the Same
 
-- `fal-image`
+- `modality` column (image/video/chat) -- unchanged, still the top-level categorization
+- `default_for_tasks` array -- unchanged in purpose, now validated as subset of `tasks`
+- `priority` column -- unchanged, still used for ordering within a task
+- All model capabilities, input_schema, pricing -- unchanged
+- The overall admin table layout and density -- unchanged, just the task column gets smarter
 
-## Verification
+### Technical Notes
 
-After deploying, test:
-1. T2I (no ref image) -- should return image inline
-2. I2I (with ref image) -- should return modified image with user's actual prompt
-3. Video (any) -- should still queue via webhook as before
+- The `tasks` array uses PostgreSQL's `text[]` type with a CHECK constraint using the `&&` (overlap) or element-level validation
+- Supabase's `.contains()` operator maps to PostgreSQL's `@>` which is GIN-indexable for performance
+- A GIN index on `tasks` replaces the current B-tree index on `task` for efficient array queries
+- The `default_for_tasks <@ tasks` subset constraint ensures data integrity
 
