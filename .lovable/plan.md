@@ -1,53 +1,78 @@
 
 
-# Convert Inline Control Groups to Compact Popover Buttons
+# Character Reference Images in Character Studio V3
 
-## Problem
+## Design Decision: Single Table
 
-The three inline control groups (SFW/NSFW, aspect ratio, batch size) each display all options side-by-side, consuming significant horizontal space in the Quick Bar. With 10 ref slots now present, horizontal real estate is at a premium.
+**Recommendation: Use `character_canon` as the single source of truth.** It already has a flexible `metadata` JSONB column for rich tagging and `output_type` for categorization. We'll add a `tags` text array column for fast filtering and an `is_primary` boolean (borrowed from `character_anchors`). The `character_anchors` table will be left unused -- no migration needed since it only has 2 dev rows.
 
-## Solution
+## Schema Change: Expand `character_canon`
 
-Replace each multi-button group with a single compact button showing the current value. Clicking it opens a small Popover with the options. This reduces each control from ~3 buttons wide to 1 button wide.
+Add three columns to `character_canon`:
 
-### Before (3 separate groups, ~9 buttons total):
-```
-[SFW][NSFW]  [1:1][16:9][9:16]  [1x][3x][6x]
-```
+| Column | Type | Purpose |
+|--------|------|---------|
+| `tags` | `text[]` | Filterable tags: `front`, `side`, `rear`, `3/4`, `full-body`, `casual`, `formal`, `action`, `seated`, etc. |
+| `is_primary` | `boolean DEFAULT false` | Marks the primary reference for this character |
+| `label` | `text` | Optional user-facing name, e.g., "Front neutral", "Red dress side" |
 
-### After (3 compact buttons):
-```
-[NSFW v]  [1:1 v]  [3x v]
-```
+The existing `output_type` field will serve as the top-level category: `pose`, `outfit`, `style`, `position`. The `metadata` JSONB remains available for future LoRA-related data (training set membership, quality scores, etc.).
 
-Each button click opens a popover with the full option list using the existing `ModelDropdownItem`-style rows.
+RLS: Same policy pattern as `character_portraits` -- users can CRUD their own character's canon entries.
 
----
+## New Tab: "Positions" in Character Studio V3
 
-## Changes
+Add a fourth tab alongside Details, Portraits, and Scenes.
 
-### File: `src/components/workspace/MobileQuickBar.tsx`
+**Mobile**: Tab bar becomes `details | portraits | positions | scenes`
 
-**Replace the three inline button groups** (lines 339-402) with three Popover components:
+**Desktop**: Workspace area gets a `portraits | positions | scenes` tab selector (positions tab is new)
 
-1. **Content Type Popover** -- Button shows current value ("SFW" or "NSFW"), popover lists both options with a checkmark on the active one
-2. **Aspect Ratio Popover** -- Button shows current ratio ("1:1", "16:9", "9:16"), popover lists all three
-3. **Batch Size Popover** -- Button shows current size ("1x", "3x", "6x"), popover lists all three (hidden in video mode, same as today)
+### Positions Tab Content
 
-Each popover will:
-- Use the same `Popover`/`PopoverContent` already imported
-- Auto-close on selection (using Popover's `open` state)
-- Style the trigger button consistently: `h-7 px-2 text-[10px] font-medium rounded border bg-muted/50` with a small ChevronDown icon
-- Keep the `hidden md:flex` visibility (desktop-only, same as current)
-- Use `bg-popover border border-border shadow-lg` on the content to avoid transparency issues
+- **Filter bar**: Horizontal pill toggles for `output_type` values (All, Pose, Outfit, Style, Position). Below that, a tag cloud or search for the `tags` array.
+- **Grid**: 3-column (mobile) or 4-column (desktop) thumbnail grid of canon images for this character, filtered by the active type/tag.
+- **Each thumbnail**: Shows the image with a small type badge (bottom-left). Hover/tap reveals:
+  - **Delete** (trash icon)
+  - **Set Primary** (star icon, fills when active)
+  - **Send to Workspace** (arrow-right icon) -- copies URL and offers to open workspace with `?ref=` param
+  - **Edit Tags** (tag icon) -- inline popover to add/remove tags
+- **Add button**: Dashed-border upload button at the end of the grid. On click, opens file picker. After upload, shows a small popover to select `output_type` and add tags before saving.
+- **Generate from Workspace**: A subtle "Create in Workspace" link that navigates to `/workspace?mode=image` so users can generate new position images there and later save them back.
 
-**Remove the `hidden md:flex` wrapper div** and make each popover individually `hidden md:inline-flex` so they sit in the same flex row without a wrapper.
+### "Send to Workspace" Flow
 
-No prop changes needed -- all the same props (`contentType`, `onContentTypeChange`, `aspectRatio`, `onAspectRatioChange`, `batchSize`, `onBatchSizeChange`) are used, just rendered differently.
+Same as the previous plan: copies signed URL, shows toast with "Open Workspace" button that navigates to `/workspace?mode=image&ref={encodedUrl}`. The workspace consumes the `?ref=` param and auto-fills the first empty slot.
 
-## Technical Notes
+## Hook: Extend `useCharacterStudio`
 
-- The Popover component is already imported and used for the model selector in this file
-- Each popover uses controlled `open` state so it closes on option select
-- The `PopoverContent` gets `z-[100] bg-popover border border-border shadow-lg` to prevent the known transparency issue
-- No changes to any other files -- this is purely a rendering change within `MobileQuickBar.tsx`
+Add to the hook:
+
+- `canonImages: CharacterCanon[]` -- state for loaded canon entries
+- `loadCanon(characterId)` -- fetches from `character_canon` WHERE `character_id`, ordered by `is_primary DESC, created_at DESC`
+- `uploadCanon(file, outputType, tags, label?)` -- uploads to `reference_images` bucket, inserts row, refreshes
+- `deleteCanon(canonId)` -- deletes row + optional storage cleanup, refreshes
+- `updateCanonTags(canonId, tags)` -- updates tags array
+- `setCanonPrimary(canonId)` -- resets all `is_primary` for character, sets target
+
+Auto-load canon when `savedCharacterId` changes (same pattern as `loadScenes`).
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| **SQL migration** | `ALTER TABLE character_canon ADD COLUMN tags text[] DEFAULT '{}', ADD COLUMN is_primary boolean DEFAULT false, ADD COLUMN label text;` + RLS policies |
+| `src/hooks/useCharacterStudio.ts` | Add canon state, CRUD functions, auto-load |
+| `src/pages/CharacterStudioV3.tsx` | Add "positions" to mobile tabs and desktop workspace tabs, wire canon props |
+| `src/components/character-studio-v3/StudioWorkspace.tsx` | Render PositionsGrid when positions tab is active |
+| **New: `src/components/character-studio-v3/PositionsGrid.tsx`** | Grid component with filter bar, thumbnails, upload, tag editing |
+| `src/pages/MobileSimplifiedWorkspace.tsx` | Consume `?ref=` query param to auto-fill first empty slot |
+
+## What Does NOT Change
+
+- Portraits tab and portrait generation workflow unchanged
+- Scenes tab unchanged
+- No edge function changes
+- No changes to workspace slot system (already supports 10 slots)
+- `character_anchors` table left as-is (deprecated, not deleted)
+
