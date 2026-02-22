@@ -1,142 +1,55 @@
 
 
-## Redesign Control Box with Multi-Reference Slots and Compact Generate Button
+## Fix Multi-Reference Slot Issues
 
-### Current Problem
-The bottom control area takes too much vertical space because the Generate button is a full-width 48px-tall button. Reference images are buried in the Settings Sheet and there's no visible multi-ref capability.
+### Issue 1 & 2: Race condition + auto-fill Ref 2
 
-### New Layout
+**Root cause**: When Ref 1 is already populated, clicking the Ref 1 slot (or using "Use as Reference" from the grid) tries to overwrite Ref 1, causing state conflicts. Instead, new references should auto-fill Ref 2 when Ref 1 is occupied.
 
-The fixed bottom bar will be restructured into a compact, information-dense control box:
+**Changes in `MobileQuickBar.tsx`**:
+- Make the filled Ref 1 slot clickable -- tapping it should trigger `onAddRef2` (not `onAddRef1`) when Ref 1 is already populated. Add an `onClick` to the filled thumbnail div that routes to the appropriate add handler.
+- Actually simpler: when Ref 1 is filled, clicking on it does nothing (keep current). The real fix is in the parent logic.
 
-```text
-+--------------------------------------------------+
-| [Image|Video]  [Model chip]  [Settings gear]      |  <- Quick Bar (unchanged)
-+--------------------------------------------------+
-| [Textarea prompt............] [X] [Sparkle]       |
-|                               [Generate ->]       |  <- Generate button inside textarea, below sparkle
-+--[REF 1]--[REF 2]-------- right of mode toggle ---+
-```
+**Changes in `MobileSimplePromptInput.tsx`**:
+- Update `onAddRef1` logic: if ref1 is already populated, redirect the file select to ref2's slot type instead. Change line 438 from always using `'single'/'start'` to checking if ref1 is already filled, and if so, routing to `'ref2'/'end'`.
 
-More precisely, the textarea area becomes:
+**Changes in `MobileSimplifiedWorkspace.tsx`**:
+- Update `handleUseAsReference`: when an image/video is used as reference and Ref 1 is already occupied, populate Ref 2 instead. Check `referenceImageUrl` (image mode) or `beginningRefImageUrl` (video mode) before deciding which slot to fill.
 
-```text
-+-------------------------------------------+
-| Describe what you want to create...       |
-|                                    [X]    |
-|                                    [*]    |  <- Sparkle (enhance)
-|                                    [>]    |  <- Generate (arrow/send icon)
-+-------------------------------------------+
-```
+### Issue 3: Drag and drop on desktop
 
-And to the right of the Image/Video toggle on the Quick Bar, two small ref image boxes appear:
+**Changes in `MobileQuickBar.tsx`**:
+- Add `onDragOver` and `onDrop` event handlers to each RefSlot.
+- Empty slot: drop fills that slot.
+- Filled Ref 1 slot: drop fills Ref 2 (auto-overflow).
+- New props: `onDropRef1` and `onDropRef2` callbacks that accept a `File`.
 
-```text
-[Image|Video]  [REF 1: +]  [REF 2: +]  ...spacer...  [Model chip] [Settings]
-```
+**Changes in `MobileSimplePromptInput.tsx`**:
+- Add drop handler functions that process the dropped file through the same upload pipeline as `handleFileInputChange` (validate, HEIC convert, upload, set URL).
+- Extract the file processing logic from `handleFileInputChange` into a shared `processAndUploadFile(file, slotType)` helper to avoid duplication.
+- Pass drop handlers down to `MobileQuickBar`.
 
-### Smart Model Auto-Switching Logic
+### Issue 4: Video ref shows broken image
 
-Based on mode + ref state, the system auto-selects the best model (unless user overrode):
+**Root cause**: `RefSlot` renders `<img>` for all refs. Video URLs can't render in an `<img>` tag -- they show a broken image icon.
 
-| Mode | Ref 1 | Ref 2 | Task | Default Model |
-|------|-------|-------|------|---------------|
-| Image | empty | empty | t2i | Seedream v4 |
-| Image | image | empty | i2i | Flux-2 Flash i2i |
-| Image | image | image | i2i_multi | Seedream v4 Edit |
-| Video | empty | empty | t2v | LTX 13b - t2v |
-| Video | image | empty | i2v | LTX 13b - i2v |
-| Video | image | image | multi | LTX 13b - multi |
-| Video | video | empty | extend | LTX 13b - extend |
+**Changes in `MobileQuickBar.tsx`**:
+- In the `RefSlot` component, when `isVideo` is true, render a `<video>` element instead of `<img>`:
+  - Use `<video src={url} muted preload="metadata" />` to show a thumbnail frame.
+  - Keep the Film icon overlay for visual indication.
+- Alternatively, for a simpler approach: when `isVideo` is true, show a styled placeholder with the Film icon (no broken image), since video thumbnails from signed URLs may not always load in a `<video>` tag either. This is the safer approach.
 
-### Detailed Changes
+**Recommended approach**: Use a `<video>` tag with `preload="metadata"` which will show the first frame as a poster. Wrap in an error handler that falls back to the Film icon placeholder if it fails to load.
 
-#### 1. `MobileSimplePromptInput.tsx` - Generate Button Redesign
+### Technical Details
 
-**Remove** the full-width `<Button type="submit">` below the textarea.
+**Files modified**:
+1. `src/components/workspace/MobileQuickBar.tsx` -- RefSlot video rendering, drop zone support
+2. `src/components/workspace/MobileSimplePromptInput.tsx` -- auto-overflow ref1->ref2 logic, extract shared file processor, wire drop handlers
+3. `src/pages/MobileSimplifiedWorkspace.tsx` -- handleUseAsReference auto-overflow to ref2
 
-**Add** a generate/send icon button inside the textarea's absolute-positioned button group (next to sparkle and X), stacked vertically below sparkle:
+**Auto-overflow logic summary**:
+- `onAddRef1` becomes smart: if ref1 is filled, it calls the ref2 add path instead.
+- `handleUseAsReference`: checks if ref1 slot is occupied before deciding target slot.
+- No changes to the remove logic -- individual X buttons continue to clear their own slot.
 
-- Icon: Arrow-right or Send icon from lucide-react
-- Size: Same as sparkle button (p-1, 16px icon)
-- Disabled when generating or no prompt (unless exact copy mode)
-- Shows Loader2 spinner when generating
-- Submit the form on click
-
-This reclaims ~56px of vertical space.
-
-#### 2. `MobileQuickBar.tsx` - Add Two Ref Image Slots
-
-After the Image/Video segmented control, add two small reference image boxes (32x32px each):
-
-- **Empty state**: Dashed border box with "+" icon. Tapping opens the file picker (via callback to parent).
-- **Filled state**: Shows thumbnail of the ref image/video. Small X button to remove. Video refs show a small film icon overlay.
-- Each slot accepts images and videos (via the existing hidden file input in MobileSimplePromptInput).
-
-New props needed:
-- `ref1Url?: string | null` - signed URL for ref 1
-- `ref2Url?: string | null` - signed URL for ref 2
-- `ref1IsVideo?: boolean` - whether ref 1 is a video
-- `ref2IsVideo?: boolean` - whether ref 2 is a video
-- `onAddRef1?: () => void` - trigger file picker for ref 1
-- `onAddRef2?: () => void` - trigger file picker for ref 2
-- `onRemoveRef1?: () => void`
-- `onRemoveRef2?: () => void`
-
-Remove the existing single `hasReferenceImage` / `referenceImageUrl` / `onRemoveReference` props (replaced by ref1/ref2).
-
-#### 3. `MobileSimplePromptInput.tsx` - Wire Up Ref Slots
-
-- Add a second hidden file input (or reuse one with a ref tracking which slot is being filled).
-- `pendingFileTypeRef` already supports 'single' | 'start' | 'end'. Map:
-  - Ref 1 -> 'single' (image mode) or 'start' (video mode)
-  - Ref 2 -> mapped to a new 'ref2' type
-- On file selected for Ref 2:
-  - If image mode: set both ref images -> triggers i2i_multi auto-switch
-  - If video mode: set second ref -> triggers multi auto-switch
-
-#### 4. `MobileSimplifiedWorkspace.tsx` - Smart Model Logic
-
-Extend the existing `applySmartDefault` calls. Add a new effect or consolidated handler that watches ref1/ref2 state and mode, then calls the appropriate `applySmartDefault(task)`:
-
-```
-useEffect on [mode, ref1, ref2]:
-  if mode === 'image':
-    if ref1 && ref2 -> applySmartDefault('i2i_multi')
-    if ref1 -> applySmartDefault('i2i')
-    else -> applySmartDefault('t2i')
-  if mode === 'video':
-    if ref1 is video -> applySmartDefault('extend')
-    if ref1 && ref2 -> applySmartDefault('multi')
-    if ref1 -> applySmartDefault('i2v')
-    else -> applySmartDefault('t2v')
-```
-
-The `useSmartModelDefaults` hook already supports all these task types ('i2i_multi', 'multi', 'extend', etc.) and the database has defaults configured for each.
-
-#### 5. `MobileSettingsSheet.tsx` - Reference Section Simplification
-
-Since refs are now managed in the Quick Bar, the Reference Image section in Settings Sheet becomes a secondary/advanced view. It can remain for detailed controls (strength slider, copy mode, extend settings) but the primary add/remove interaction moves to the Quick Bar.
-
-#### 6. Prop Threading
-
-New props flow: `MobileSimplifiedWorkspace` -> `MobileSimplePromptInput` -> `MobileQuickBar`
-
-A second reference image/URL state pair is needed. Currently we have:
-- `referenceImage` / `referenceImageUrl` (single / ref 1 for image mode)
-- `beginningRefImage` / `beginningRefImageUrl` (start frame / ref 1 for video mode)
-- `endingRefImage` / `endingRefImageUrl` (end frame / ref 2 for video mode)
-
-For the unified ref slot approach:
-- **Ref 1** = `referenceImage`/`referenceImageUrl` in image mode, `beginningRefImage`/`beginningRefImageUrl` in video mode
-- **Ref 2** = new `referenceImage2`/`referenceImage2Url` in image mode (for i2i_multi), `endingRefImage`/`endingRefImageUrl` in video mode
-
-We need to add `referenceImage2` / `referenceImage2Url` state to `useLibraryFirstWorkspace` (or manage it locally in MobileSimplifiedWorkspace).
-
-### Files Modified
-
-1. **`src/components/workspace/MobileQuickBar.tsx`** - Add ref slot boxes, remove old single ref indicator
-2. **`src/components/workspace/MobileSimplePromptInput.tsx`** - Move generate to inline icon, wire ref slot callbacks, add ref2 file handling
-3. **`src/pages/MobileSimplifiedWorkspace.tsx`** - Add ref2 state, consolidated smart model switching effect, wire new props
-4. **`src/components/workspace/MobileSettingsSheet.tsx`** - Minor: simplify reference section (keep strength/copy controls)
-5. **`src/hooks/useSmartModelDefaults.ts`** - No changes needed (already supports all tasks)
