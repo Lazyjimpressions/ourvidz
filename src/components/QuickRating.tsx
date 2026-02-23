@@ -4,6 +4,9 @@ import { cn } from '@/lib/utils';
 import { PromptScoringService } from '@/lib/services/PromptScoringService';
 import { toast } from 'sonner';
 
+/** Module-level cache: persists ratings across unmount/remount within session */
+const ratingCache = new Map<string, number>();
+
 interface QuickRatingProps {
   jobId: string;
   userId: string;
@@ -17,7 +20,7 @@ interface QuickRatingProps {
  */
 export const QuickRating = ({ jobId, userId, className }: QuickRatingProps) => {
   const [hoverRating, setHoverRating] = useState<number | null>(null);
-  const [submittedRating, setSubmittedRating] = useState<number>(0);
+  const [submittedRating, setSubmittedRating] = useState<number>(() => ratingCache.get(jobId) || 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const displayRating = hoverRating ?? submittedRating;
@@ -29,6 +32,7 @@ export const QuickRating = ({ jobId, userId, className }: QuickRatingProps) => {
 
       setIsSubmitting(true);
       setSubmittedRating(rating);
+      ratingCache.set(jobId, rating);
 
       const result = await PromptScoringService.upsertQuickRating(jobId, userId, rating);
 
@@ -37,6 +41,7 @@ export const QuickRating = ({ jobId, userId, className }: QuickRatingProps) => {
       } else {
         toast.error('Failed to save rating');
         setSubmittedRating(0);
+        ratingCache.delete(jobId);
       }
 
       setIsSubmitting(false);
