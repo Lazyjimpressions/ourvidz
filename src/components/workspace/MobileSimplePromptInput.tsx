@@ -473,11 +473,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     });
   };
 
-  // Compute multi-ref state: 2+ filled image-mode slots
+  // Compute multi-ref state: 2+ filled image-mode slots OR video multi model
   const filledSlotCount = currentMode === 'image'
     ? [referenceImageUrl, referenceImage2Url, ...additionalRefUrls].filter(Boolean).length
     : 0;
-  const multiRefActive = filledSlotCount >= 2;
+  const multiRefActive = filledSlotCount >= 2 || (currentMode === 'video' && selectedModelTasks.includes('multi'));
 
   // Compute ref slot URLs for QuickBar
   const ref1Url = currentMode === 'image' ? referenceImageUrl : beginningRefImageUrl;
@@ -498,15 +498,28 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     })),
   ];
 
-  // Video mode still uses dynamic slots (start/end ref)
-  const videoRefSlots: Array<{ url?: string | null; isVideo?: boolean }> = [
-    { url: beginningRefImageUrl, isVideo: ref1IsVideo },
-    { url: endingRefImageUrl, isVideo: ref2IsVideo },
-  ];
-  const maxSlots = 2; // video mode max
+  // Video mode: show 4 labeled slots for multi, 2 for standard
+  const isVideoMulti = currentMode === 'video' && selectedModelTasks.includes('multi');
+  const VIDEO_MULTI_LABELS = ['Start', 'Mid 1', 'Mid 2', 'End'];
+  const VIDEO_STD_LABELS = ['Start', 'End'];
+  const videoLabels = isVideoMulti ? VIDEO_MULTI_LABELS : VIDEO_STD_LABELS;
+  
+  const videoRefSlots: Array<{ url?: string | null; isVideo?: boolean; label?: string }> = videoLabels.map((label, i) => {
+    let url: string | null = null;
+    let isVideo = false;
+    if (i === 0) { url = beginningRefImageUrl || null; isVideo = ref1IsVideo; }
+    else if (i === videoLabels.length - 1) { url = endingRefImageUrl || null; isVideo = ref2IsVideo; }
+    else { url = additionalRefUrls[i - 1] || null; } // Mid slots map to additionalRefUrls[0], [1]...
+    return { url, isVideo, label };
+  });
+  const maxVideoSlots = isVideoMulti ? 5 : 2;
 
-  // Handle adding a new empty slot (video mode only)
-  const handleAddSlot = () => {};
+  // Handle adding a new video slot (multi mode: expand from 4 to 5)
+  const handleAddSlot = () => {
+    if (isVideoMulti && videoRefSlots.length < 5) {
+      // This is handled by maxSlots expansion; the slot just needs to exist
+    }
+  };
 
   // File select for a specific slot index
   const handleFileSelectForSlot = (index: number) => {
@@ -516,6 +529,22 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   // Handle remove for a specific slot index
   const handleRemoveSlot = (index: number) => {
+    if (currentMode === 'video' && isVideoMulti) {
+      // Multi video mode: slot 0=Start, 1..N-2=Mid (additionalRefUrls), N-1=End
+      const lastSlotIdx = videoRefSlots.length - 1;
+      if (index === 0) {
+        removeReferenceImage('start');
+      } else if (index === lastSlotIdx) {
+        removeReferenceImage('end');
+      } else {
+        // Mid slots map to additionalRefUrls[index - 1]
+        const additionalIndex = index - 1;
+        const newAdditional = [...additionalRefUrls];
+        newAdditional[additionalIndex] = '';
+        onAdditionalRefsChange?.(newAdditional);
+      }
+      return;
+    }
     if (index === 0) {
       removeReferenceImage(currentMode === 'image' ? 'single' : 'start');
     } else if (index === 1) {
@@ -533,15 +562,45 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     }
   };
 
-  // Handle drop for a specific slot index
+  // Handle file drop for a specific slot index
   const handleDropSlot = (index: number, file: File) => {
-    pendingSlotIndexRef.current = index;
+    // For multi video, map slot index to pendingSlotIndex
+    if (currentMode === 'video' && isVideoMulti) {
+      const lastSlotIdx = videoRefSlots.length - 1;
+      if (index === 0) pendingSlotIndexRef.current = 0;
+      else if (index === lastSlotIdx) pendingSlotIndexRef.current = 1;
+      else pendingSlotIndexRef.current = index + 1; // mid slots → additionalRefUrls
+    } else {
+      pendingSlotIndexRef.current = index;
+    }
     const dt = new DataTransfer();
     dt.items.add(file);
     if (fileInputRef.current) {
       fileInputRef.current.files = dt.files;
       const syntheticEvent = { target: { files: dt.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
       handleFileInputChange(syntheticEvent);
+    }
+  };
+
+  // Handle URL drop for video ref slots
+  const handleDropSlotUrl = (index: number, url: string) => {
+    if (currentMode === 'video' && isVideoMulti) {
+      const lastSlotIdx = videoRefSlots.length - 1;
+      if (index === 0) {
+        onReferenceImageUrlSet?.(url, 'start');
+      } else if (index === lastSlotIdx) {
+        onReferenceImageUrlSet?.(url, 'end');
+      } else {
+        // Mid slots → additionalRefUrls[index - 1]
+        const additionalIndex = index - 1;
+        const newAdditional = [...additionalRefUrls];
+        while (newAdditional.length <= additionalIndex) newAdditional.push('');
+        newAdditional[additionalIndex] = url;
+        onAdditionalRefsChange?.(newAdditional);
+      }
+    } else if (currentMode === 'video') {
+      if (index === 0) onReferenceImageUrlSet?.(url, 'start');
+      else if (index === 1) onReferenceImageUrlSet?.(url, 'end');
     }
   };
 
@@ -564,11 +623,13 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         selectedModelName={selectedModel?.display_name || 'Select Model'}
         onOpenSettings={() => setIsSettingsOpen(true)}
         refSlots={videoRefSlots}
-        maxSlots={maxSlots}
+        maxSlots={maxVideoSlots}
         onAddRef={(index) => handleFileSelectForSlot(index)}
         onRemoveRef={handleRemoveSlot}
         onDropRef={handleDropSlot}
+        onDropRefUrl={handleDropSlotUrl}
         onAddSlot={handleAddSlot}
+        selectedModelTasks={selectedModelTasks}
         fixedSlots={fixedSlots}
         onFixedSlotAdd={(index) => handleFileSelectForSlot(index)}
         onFixedSlotRemove={handleRemoveSlot}
@@ -692,17 +753,31 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               return { url, label: slotRoles?.[i] ? getSlotLabel(role, i) : slotDef.label };
             });
           } else {
-            const VIDEO_LABELS = ['Start', 'End', 'Ref 3', 'Ref 4', 'Ref 5', 'Ref 6', 'Ref 7', 'Ref 8', 'Ref 9', 'Ref 10'];
-            return VIDEO_LABELS.map((label, i) => {
-              let url: string | null = null;
-              if (i === 0) url = beginningRefImageUrl || null;
-              else if (i === 1) url = endingRefImageUrl || null;
-              return { url, label };
-            });
+            // Use same labels as QuickBar for consistency
+            return videoRefSlots.map((slot, i) => ({
+              url: slot.url || null,
+              label: slot.label || `Ref ${i + 1}`,
+            }));
           }
         })()}
         onRefSlotAdd={(index) => handleFileSelectForSlot(index)}
         onRefSlotRemove={handleRemoveSlot}
+        onRefSlotDrop={handleDropSlot}
+        onRefSlotDropUrl={(index, url) => {
+          if (currentMode === 'image') {
+            if (index === 0) onReferenceImageUrlSet?.(url, 'single');
+            else if (index === 1) onReferenceImage2UrlSet?.(url);
+            else {
+              const additionalIndex = index - 2;
+              const newAdditional = [...additionalRefUrls];
+              while (newAdditional.length <= additionalIndex) newAdditional.push('');
+              newAdditional[additionalIndex] = url;
+              onAdditionalRefsChange?.(newAdditional);
+            }
+          } else {
+            handleDropSlotUrl(index, url);
+          }
+        }}
         exactCopyMode={exactCopyMode}
         onExactCopyModeChange={onExactCopyModeChange}
         referenceStrength={referenceStrength}

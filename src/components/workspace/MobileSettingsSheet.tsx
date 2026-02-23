@@ -51,6 +51,8 @@ export interface MobileSettingsSheetProps {
   refSlots?: Array<{ url?: string | null; label: string; role?: string }>;
   onRefSlotAdd?: (index: number) => void;
   onRefSlotRemove?: (index: number) => void;
+  onRefSlotDrop?: (index: number, file: File) => void;
+  onRefSlotDropUrl?: (index: number, url: string) => void;
   
   // Copy Mode (consolidated)
   exactCopyMode?: boolean;
@@ -288,6 +290,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   refSlots = [],
   onRefSlotAdd,
   onRefSlotRemove,
+  onRefSlotDrop,
+  onRefSlotDropUrl,
   exactCopyMode = false,
   onExactCopyModeChange,
   referenceStrength = 0.8,
@@ -513,8 +517,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                 </div>
               )}
               
-              {/* Motion Intensity */}
-              {onMotionIntensityChange && (
+              {/* Motion Intensity - hidden for multi model */}
+              {onMotionIntensityChange && !multiRefActive && (
                 <div className="space-y-0.5">
                   <div className="flex items-center justify-between text-[9px] text-muted-foreground">
                     <span>Motion Intensity</span>
@@ -547,7 +551,24 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   return (
                     <div key={i} className="flex flex-col items-center gap-0.5">
                       {slot.url ? (
-                        <div className="relative group h-12 w-12 rounded-md overflow-hidden border border-border">
+                        <div
+                          className="relative group h-12 w-12 rounded-md overflow-hidden border border-border"
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const refData = e.dataTransfer.getData('application/x-ref-image');
+                            if (refData) {
+                              try {
+                                const { url: droppedUrl } = JSON.parse(refData);
+                                if (droppedUrl && onRefSlotDropUrl) onRefSlotDropUrl(i, droppedUrl);
+                              } catch { /* ignore */ }
+                              return;
+                            }
+                            const file = e.dataTransfer.files?.[0];
+                            if (file && onRefSlotDrop) onRefSlotDrop(i, file);
+                          }}
+                        >
                           <img src={slot.url} alt={slot.label} className="absolute inset-0 w-full h-full object-cover" />
                           <button
                             type="button"
@@ -561,6 +582,21 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                         <button
                           type="button"
                           onClick={() => onRefSlotAdd?.(i)}
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const refData = e.dataTransfer.getData('application/x-ref-image');
+                            if (refData) {
+                              try {
+                                const { url: droppedUrl } = JSON.parse(refData);
+                                if (droppedUrl && onRefSlotDropUrl) onRefSlotDropUrl(i, droppedUrl);
+                              } catch { /* ignore */ }
+                              return;
+                            }
+                            const file = e.dataTransfer.files?.[0];
+                            if (file && onRefSlotDrop) onRefSlotDrop(i, file);
+                          }}
                           className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary/50 transition-colors"
                         >
                           <Plus className="w-3 h-3 text-muted-foreground/50" />
@@ -571,7 +607,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   );
                 })}
               </div>
-              {hasAnyRef && (
+              {hasAnyRef && !multiRefActive && (
                 <div className="space-y-2 px-2 pt-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[9px] text-muted-foreground">Exact Copy</span>

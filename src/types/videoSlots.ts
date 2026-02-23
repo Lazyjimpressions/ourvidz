@@ -6,6 +6,7 @@ export interface VideoRefSlot {
   url: string | null;
   isVideo: boolean;
   frameNum: number; // 0-160, multiples of 8
+  strength: number; // 0-1, default 1. How strongly this keyframe influences the video.
 }
 
 /**
@@ -26,6 +27,9 @@ export function getFrameLabel(frameNum: number): string {
   return `F${frameNum}`;
 }
 
+/** Video slot labels for multi-conditioning UI */
+export const VIDEO_MULTI_LABELS = ['Start', 'Mid 1', 'Mid 2', 'End', 'Key 5'];
+
 /** Default 10 empty video slots */
 export const DEFAULT_VIDEO_SLOTS: VideoRefSlot[] =
-  Array.from({ length: 10 }, () => ({ url: null, isVideo: false, frameNum: 0 }));
+  Array.from({ length: 10 }, () => ({ url: null, isVideo: false, frameNum: 0, strength: 1 }));

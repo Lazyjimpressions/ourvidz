@@ -41,6 +41,7 @@ export interface MobileQuickBarProps {
   onAddRef: (index: number) => void;
   onRemoveRef: (index: number) => void;
   onDropRef: (index: number, file: File) => void;
+  onDropRefUrl?: (index: number, url: string) => void;
   onAddSlot: () => void;
   
   // Fixed image slots (used in image mode)
@@ -69,6 +70,9 @@ export interface MobileQuickBarProps {
   videoModels?: Array<{ id: string; display_name: string; api_providers?: { name: string } }>;
   modelsLoading?: boolean;
   multiRefActive?: boolean;
+  
+  /** Selected model's task tags (e.g. ['multi', 'i2v']) */
+  selectedModelTasks?: string[];
   
   // Disabled state
   disabled?: boolean;
@@ -352,6 +356,7 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onAddRef,
   onRemoveRef,
   onDropRef,
+  onDropRefUrl,
   onAddSlot,
   fixedSlots = [],
   onFixedSlotAdd,
@@ -372,8 +377,10 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   videoModels = [],
   modelsLoading = false,
   multiRefActive = false,
+  selectedModelTasks = [],
   disabled = false,
 }) => {
+  const isVideoMulti = currentMode === 'video' && selectedModelTasks.includes('multi');
   const allFilled = refSlots.length > 0 && refSlots.every(s => !!s.url);
   const canAddMore = refSlots.length < maxSlots;
 
@@ -421,7 +428,7 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
             );
           })
         ) : (
-          /* Dynamic slots for video mode */
+          /* Video mode: fixed 4-slot layout for multi, dynamic 2-slot for others */
           <>
             {refSlots.map((slot, i) => (
               <RefSlot
@@ -431,11 +438,13 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
                 onAdd={() => onAddRef(i)}
                 onRemove={() => onRemoveRef(i)}
                 onDrop={(file) => onDropRef(i, file)}
-                label={`Ref ${i + 1}`}
+                onDropUrl={onDropRefUrl ? (url) => onDropRefUrl(i, url) : undefined}
+                label={slot.label || `Ref ${i + 1}`}
                 disabled={disabled}
+                showLabel={isVideoMulti}
               />
             ))}
-            {allFilled && canAddMore && (
+            {isVideoMulti && allFilled && canAddMore && (
               <AddSlotButton onClick={onAddSlot} disabled={disabled} />
             )}
           </>
