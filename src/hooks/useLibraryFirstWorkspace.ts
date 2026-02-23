@@ -11,6 +11,7 @@ import { ReferenceMetadata } from '@/types/workspace';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 import { useVideoModelSettings } from './useVideoModelSettings';
+import { SlotRole, buildFigurePrefix } from '@/types/slotRoles';
 
 // STAGING-FIRST: Simplified workspace state using staging assets
 export interface LibraryFirstWorkspaceState {
@@ -108,7 +109,7 @@ export interface LibraryFirstWorkspaceActions {
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   setReferenceType: (type: 'style' | 'character' | 'composition') => void;
-  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[]) => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[]) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -646,7 +647,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     overrideBeginningRefImageUrl?: string | null, 
     overrideEndingRefImageUrl?: string | null,
     overrideSeed?: number | null,
-    additionalImageUrls?: string[]
+    additionalImageUrls?: string[],
+    slotRoles?: SlotRole[]
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
       toast({
@@ -1335,38 +1337,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             inputObj.strength = computedReferenceStrength;
             console.log('✅ Multi-ref: Added image_urls array with', allRefUrls.length, 'images');
             
-            // Auto-inject Figure notation for multi-ref
-            // Convention: characters first, pose last (if present)
-            // additionalImageUrls format: [ref2Url, ...additionalRefUrls]
-            // allRefUrls = [effRefUrl (Char1), ref2Url (Char2), additionalRefUrls[0] (Char3), additionalRefUrls[1] (Pose)]
-            // The last additionalRefUrl is the Pose slot if it's the 4th slot
-            const totalSlots = allRefUrls.length;
-            // Determine if the last URL is a pose reference
-            // Pose is slot index 3 (4th slot). It's pose if we have additionalImageUrls and the pose slot was filled.
-            // The pose is always the last item in additionalImageUrls when slot 3 (Pose) is filled.
-            // We detect this by checking if additionalImageUrls has 2+ items (meaning Char3 + Pose both present)
-            // or if there's only 1 additional and no Char2 (meaning it could be just Pose from slot 3)
-            // Simplified: the last URL is pose if totalSlots >= 2 and the last additionalImageUrl corresponds to slot 3
-            const hasAdditional = additionalImageUrls && additionalImageUrls.length > 0;
-            const poseUrlIndex = hasAdditional ? totalSlots - 1 : -1; // pose is always last if additional refs exist
+            // Auto-inject Figure notation using role-aware builder
+            const filledSlots: { figureIndex: number; role: SlotRole }[] = allRefUrls.map((_, i) => ({
+              figureIndex: i + 1,
+              role: slotRoles?.[i] || 'reference',
+            }));
             
-            // Only inject Figure notation if we have the structured slot data
-            // For now, use the convention: all refs except last are characters, last is pose (if 2+ refs)
-            const charCount = poseUrlIndex >= 0 ? totalSlots - 1 : totalSlots;
-            
-            let figurePrefix = '';
-            if (charCount > 0) {
-              const figureRefs = Array.from({ length: charCount }, (_, i) => `Figure ${i + 1}`);
-              const charLabel = charCount === 1 ? 'the character' : 'the characters';
-              const figureList = figureRefs.length <= 2
-                ? figureRefs.join(' and ')
-                : figureRefs.slice(0, -1).join(', ') + ', and ' + figureRefs[figureRefs.length - 1];
-              if (poseUrlIndex >= 0) {
-                figurePrefix = `Show ${charLabel} from ${figureList} in the pose/position shown in Figure ${totalSlots}: `;
-              } else {
-                figurePrefix = `Show ${charLabel} from ${figureList} together: `;
-              }
-            }
+            const figurePrefix = buildFigurePrefix(filledSlots);
             
             if (figurePrefix && !finalPrompt.includes('Figure ')) {
               finalPrompt = figurePrefix + finalPrompt;

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import type { SlotRole } from '@/types/slotRoles';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sparkles, Loader2, X, Send } from 'lucide-react';
@@ -8,8 +9,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useVideoModels } from '@/hooks/useApiModels';
 import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
-import { MobileQuickBar } from './MobileQuickBar';
+import { MobileQuickBar, FIXED_IMAGE_SLOTS } from './MobileQuickBar';
 import { MobileSettingsSheet } from './MobileSettingsSheet';
+import { getSlotLabel } from '@/types/slotRoles';
 import { detectImageType, looksLikeImage, isHeicType, normalizeExtension } from '@/utils/imageTypeDetection';
 import { uploadAndSignReferenceImage } from '@/lib/storage';
 
@@ -81,6 +83,9 @@ export interface MobileSimplePromptInputProps {
   // Selected model capabilities (for maxSlots detection)
   selectedModelTasks?: string[];
   selectedModelCapabilities?: Record<string, any>;
+  // Slot roles
+  slotRoles?: SlotRole[];
+  onSlotRoleChange?: (index: number, role: SlotRole) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -141,6 +146,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onAdditionalRefsChange,
   selectedModelTasks = [],
   selectedModelCapabilities,
+  slotRoles,
+  onSlotRoleChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -567,6 +574,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           }
         }}
         disabled={isGenerating}
+        slotRoles={slotRoles}
+        onSlotRoleChange={onSlotRoleChange}
         contentType={contentType}
         onContentTypeChange={onContentTypeChange}
         aspectRatio={aspectRatio}
@@ -650,13 +659,13 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onContentTypeChange={onContentTypeChange || (() => {})}
         refSlots={(() => {
           if (currentMode === 'image') {
-            const IMAGE_LABELS = ['Char 1', 'Char 2', 'Char 3', 'Pose', 'Ref 5', 'Ref 6', 'Ref 7', 'Ref 8', 'Ref 9', 'Ref 10'];
-            return IMAGE_LABELS.map((label, i) => {
+            return FIXED_IMAGE_SLOTS.map((slotDef, i) => {
+              const role = slotRoles?.[i] || slotDef.role;
               let url: string | null = null;
               if (i === 0) url = referenceImageUrl || null;
               else if (i === 1) url = referenceImage2Url || null;
               else url = additionalRefUrls[i - 2] || null;
-              return { url, label };
+              return { url, label: slotRoles?.[i] ? getSlotLabel(role, i) : slotDef.label };
             });
           } else {
             const VIDEO_LABELS = ['Start', 'End', 'Ref 3', 'Ref 4', 'Ref 5', 'Ref 6', 'Ref 7', 'Ref 8', 'Ref 9', 'Ref 10'];

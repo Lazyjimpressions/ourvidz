@@ -18,6 +18,7 @@ import { useSmartModelDefaults } from '@/hooks/useSmartModelDefaults';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 
+import { SlotRole, DEFAULT_SLOT_ROLES } from '@/types/slotRoles';
 
 const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -25,6 +26,7 @@ const MobileSimplifiedWorkspace = () => {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [batchSize, setBatchSize] = useState(1);
   const [userOverrodeModel, setUserOverrodeModel] = useState(false);
+  const [slotRoles, setSlotRoles] = useState<SlotRole[]>([...DEFAULT_SLOT_ROLES]);
   const location = useLocation();
   const navigate = useNavigate();
   const processedRef = useRef(false);
@@ -329,7 +331,7 @@ const MobileSimplifiedWorkspace = () => {
       ...(referenceImage2Url ? [referenceImage2Url] : []),
       ...additionalRefUrls
     ];
-    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined);
+    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles);
   };
 
 
@@ -717,9 +719,17 @@ const MobileSimplifiedWorkspace = () => {
           referenceImage2Url={referenceImage2Url}
           onReferenceImage2UrlSet={handleReferenceImage2UrlSet}
           onReferenceImage2Remove={handleReferenceImage2Remove}
-          additionalRefUrls={additionalRefUrls}
-          onAdditionalRefsChange={setAdditionalRefUrls}
-          selectedModelTasks={(() => {
+           additionalRefUrls={additionalRefUrls}
+           onAdditionalRefsChange={setAdditionalRefUrls}
+           slotRoles={slotRoles}
+           onSlotRoleChange={(index, role) => {
+             setSlotRoles(prev => {
+               const next = [...prev];
+               next[index] = role;
+               return next;
+             });
+           }}
+           selectedModelTasks={(() => {
             if (!selectedModel?.id) return [];
             const model = imageModels?.find(m => m.id === selectedModel.id);
             return (model as any)?.tasks || [];
