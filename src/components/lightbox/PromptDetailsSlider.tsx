@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Sheet, 
   SheetContent, 
@@ -602,6 +602,7 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
   const [score, setScore] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
+  const hasFetchedRef = useRef(false);
 
   // Per-dimension user ratings
   const [actionRating, setActionRating] = useState(0);
@@ -641,11 +642,18 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
     setIsLoading(false);
   }, [jobId]);
 
+  // Reset fetch guard when jobId changes
   useEffect(() => {
-    if (isOpen && !score && !isLoading) {
+    hasFetchedRef.current = false;
+    setScore(null);
+  }, [jobId]);
+
+  useEffect(() => {
+    if (isOpen && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchScore();
     }
-  }, [isOpen, score, isLoading, fetchScore]);
+  }, [isOpen, fetchScore]);
 
   const handleDimensionRate = useCallback(async (
     dimension: 'user_action_rating' | 'user_appearance_rating' | 'user_quality_rating',
@@ -657,7 +665,6 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
     const result = await PromptScoringService.updateIndividualRating(jobId, user.id, dimension, value);
     if (result.success) {
       toast({ title: `Rating updated`, duration: 1500 });
-      fetchScore();
     } else {
       toast({ title: 'Failed to save rating', variant: 'destructive', duration: 2000 });
       setter(0);
