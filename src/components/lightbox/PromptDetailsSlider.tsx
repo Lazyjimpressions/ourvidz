@@ -25,7 +25,7 @@ import {
   Star,
   BarChart3,
   RefreshCw,
-  Shield,
+  MessageSquare,
   Save,
   X
 } from 'lucide-react';
@@ -597,7 +597,7 @@ const FEEDBACK_TAG_OPTIONS = [
  * Fetches score data only when expanded (single query).
  */
 const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
-  const { user, isAdmin } = useAuth();
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [score, setScore] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -612,15 +612,12 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
   const [hoverAppearance, setHoverAppearance] = useState<number | null>(null);
   const [hoverQuality, setHoverQuality] = useState<number | null>(null);
 
-  // Admin fields
-  const [adminActionRating, setAdminActionRating] = useState(0);
-  const [adminAppearanceRating, setAdminAppearanceRating] = useState(0);
-  const [adminQualityRating, setAdminQualityRating] = useState(0);
+  // Feedback fields
   const [feedbackTags, setFeedbackTags] = useState<string[]>([]);
-  const [adminComment, setAdminComment] = useState('');
+  const [comment, setComment] = useState('');
   const [preserveImage, setPreserveImage] = useState(false);
   const [preserveReason, setPreserveReason] = useState('');
-  const [isSavingAdmin, setIsSavingAdmin] = useState(false);
+  const [isSavingFeedback, setIsSavingFeedback] = useState(false);
 
   const fetchScore = useCallback(async () => {
     setIsLoading(true);
@@ -630,12 +627,8 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
       setActionRating(data.user_action_rating || 0);
       setAppearanceRating(data.user_appearance_rating || 0);
       setQualityRating(data.user_quality_rating || 0);
-      // Admin fields
-      setAdminActionRating(data.admin_action_rating || 0);
-      setAdminAppearanceRating(data.admin_appearance_rating || 0);
-      setAdminQualityRating(data.admin_quality_rating || 0);
       setFeedbackTags(data.feedback_tags || []);
-      setAdminComment(data.admin_comment || '');
+      setComment(data.admin_comment || '');
       setPreserveImage(data.preserve_image || false);
       setPreserveReason(data.preserve_reason || '');
     }
@@ -711,26 +704,23 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
     }
   }, [jobId, user?.id, score, fetchScore]);
 
-  const handleSaveAdmin = useCallback(async () => {
+  const handleSaveFeedback = useCallback(async () => {
     if (!user?.id) return;
-    setIsSavingAdmin(true);
-    const result = await PromptScoringService.updateAdminScoring(jobId, user.id, {
-      admin_action_rating: adminActionRating || undefined,
-      admin_appearance_rating: adminAppearanceRating || undefined,
-      admin_quality_rating: adminQualityRating || undefined,
+    setIsSavingFeedback(true);
+    const result = await PromptScoringService.updateScoringMetadata(jobId, user.id, {
       feedback_tags: feedbackTags,
-      admin_comment: adminComment || undefined,
+      comment: comment || undefined,
       preserve_image: preserveImage,
       preserve_reason: preserveReason || undefined,
     });
     if (result.success) {
-      toast({ title: 'Admin scoring saved', duration: 2000 });
+      toast({ title: 'Feedback saved', duration: 2000 });
       fetchScore();
     } else {
       toast({ title: 'Failed to save', variant: 'destructive', duration: 2000 });
     }
-    setIsSavingAdmin(false);
-  }, [jobId, user?.id, adminActionRating, adminAppearanceRating, adminQualityRating, feedbackTags, adminComment, preserveImage, preserveReason, fetchScore]);
+    setIsSavingFeedback(false);
+  }, [jobId, user?.id, feedbackTags, comment, preserveImage, preserveReason, fetchScore]);
 
   const toggleTag = (tag: string) => {
     setFeedbackTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -834,51 +824,24 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
               </div>
             )}
 
-            {/* Admin: Score/Re-score button */}
-            {isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleTriggerScoring}
-                disabled={isScoring}
-                className="w-full h-7 text-xs"
-              >
-                <RefreshCw className={cn('h-3 w-3 mr-1', isScoring && 'animate-spin')} />
-                {score?.vision_analysis ? 'Re-score' : 'Score Image'}
-              </Button>
-            )}
+            {/* Score/Re-score button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTriggerScoring}
+              disabled={isScoring}
+              className="w-full h-7 text-xs"
+            >
+              <RefreshCw className={cn('h-3 w-3 mr-1', isScoring && 'animate-spin')} />
+              {score?.vision_analysis ? 'Re-score' : 'Score Image'}
+            </Button>
 
-            {/* Admin Controls Section */}
-            {isAdmin && score && (
+            {/* Feedback Section */}
+            {score && (
               <div className="space-y-3 border-t border-border pt-3">
                 <div className="flex items-center gap-1.5">
-                  <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="text-xs font-medium">Admin Scoring</span>
-                </div>
-
-                {/* Admin per-dimension ratings */}
-                <div className="space-y-1.5">
-                  <DimensionStars
-                    label="Action Match"
-                    value={adminActionRating}
-                    hoverValue={null}
-                    onRate={setAdminActionRating}
-                    onHover={() => {}}
-                  />
-                  <DimensionStars
-                    label="Appearance"
-                    value={adminAppearanceRating}
-                    hoverValue={null}
-                    onRate={setAdminAppearanceRating}
-                    onHover={() => {}}
-                  />
-                  <DimensionStars
-                    label="Quality"
-                    value={adminQualityRating}
-                    hoverValue={null}
-                    onRate={setAdminQualityRating}
-                    onHover={() => {}}
-                  />
+                  <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium">Feedback</span>
                 </div>
 
                 {/* Feedback Tags */}
@@ -902,13 +865,13 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
                   </div>
                 </div>
 
-                {/* Admin Comment */}
+                {/* Comment */}
                 <div className="space-y-1">
                   <span className="text-xs text-muted-foreground">Comment</span>
                   <Textarea
-                    value={adminComment}
-                    onChange={(e) => setAdminComment(e.target.value)}
-                    placeholder="Admin notes..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Notes..."
                     className="min-h-[40px] text-xs resize-none"
                     rows={2}
                   />
@@ -934,12 +897,12 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={handleSaveAdmin}
-                  disabled={isSavingAdmin}
+                  onClick={handleSaveFeedback}
+                  disabled={isSavingFeedback}
                   className="w-full h-7 text-xs"
                 >
                   <Save className="h-3 w-3 mr-1" />
-                  {isSavingAdmin ? 'Saving...' : 'Save Admin Scoring'}
+                  {isSavingFeedback ? 'Saving...' : 'Save Feedback'}
                 </Button>
               </div>
             )}
@@ -947,7 +910,7 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
             {/* No score yet message */}
             {!score && !isLoading && (
               <p className="text-xs text-muted-foreground text-center py-2">
-                No score yet. Rate this image or{isAdmin ? ' click Score to analyze.' : ' check back later.'}
+                No score yet. Rate this image or click Score to analyze.
               </p>
             )}
           </>
