@@ -454,8 +454,39 @@ async function buildModelInput(
       // Aspect ratio from metadata
       if (body.metadata?.aspectRatio) modelInput.aspect_ratio = body.metadata.aspectRatio;
 
-      // I2V reference image (non-extend)
-      if (hasImageUrl && !hasVideoInput) {
+      // MultiCondition: images[] array with temporal frame positions
+      if (body.input.images && Array.isArray(body.input.images)) {
+        const signedImages = [];
+        for (const img of body.input.images) {
+          const signed = await signIfStoragePath(supabase, img.url, 'user-library');
+          if (signed) {
+            signedImages.push({ url: signed, start_frame_num: img.start_frame_num || 0 });
+          }
+        }
+        if (signedImages.length > 0) {
+          modelInput.images = signedImages;
+          delete modelInput.image_url;
+          delete modelInput.image;
+          console.log(`✅ MultiCondition: ${signedImages.length} temporal images set`);
+        }
+      }
+
+      // MultiCondition: videos[] array
+      if (body.input.videos && Array.isArray(body.input.videos)) {
+        const signedVideos = [];
+        for (const vid of body.input.videos) {
+          const url = typeof vid === 'string' ? vid : vid.url;
+          const signed = await signIfStoragePath(supabase, url, 'reference_images');
+          if (signed) signedVideos.push({ url: signed });
+        }
+        if (signedVideos.length > 0) {
+          modelInput.videos = signedVideos;
+          console.log(`✅ MultiCondition: ${signedVideos.length} video refs set`);
+        }
+      }
+
+      // I2V reference image (non-extend, non-multi)
+      if (hasImageUrl && !hasVideoInput && !modelInput.images) {
         const signed = await signIfStoragePath(supabase, body.input.image_url, 'user-library');
         if (signed && (signed.startsWith('http://') || signed.startsWith('https://') || signed.startsWith('data:'))) {
           modelInput.image_url = signed;
@@ -492,7 +523,7 @@ async function buildModelInput(
   // ─── Schema allow-list filtering ───
   const schemaKeys = Object.keys(inputSchema);
   if (schemaKeys.length > 0) {
-    const alwaysAllowed = new Set(['prompt', 'image_url', 'image_urls', 'video']);
+    const alwaysAllowed = new Set(['prompt', 'image_url', 'image_urls', 'video', 'images', 'videos']);
     const removedParams: string[] = [];
     for (const key of Object.keys(modelInput)) {
       if (!inputSchema[key] && !alwaysAllowed.has(key)) {

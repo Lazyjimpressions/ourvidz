@@ -864,14 +864,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
            (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined)))
         : undefined;
       
-      // Only calculate endRefUrl for local models - API models (fal.ai) don't support dual references
-      const endRefUrl = (mode === 'video' && isLocalRoute)
+      // Calculate endRefUrl for ALL video models (local + API MultiCondition)
+      const endRefUrl = mode === 'video'
         ? (overrideEndingRefImageUrl || endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
         : undefined;
-      
-      if (mode === 'video' && isApiRoute && (endingRefImage || endingRefImageUrl)) {
-        console.log('ℹ️ NOTE: End reference ignored for API video model (only start reference supported)');
-      }
 
       // FIX: Compute effective reference URL BEFORE prompt enhancement (so we know if we have a reference image)
       console.log('🔍 MOBILE DEBUG - Reference image state before upload:', {
@@ -1365,12 +1361,27 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           
           // Check if this is a video extend model (uses cached caps from validation above)
           const isExtendModel = cachedCaps?.input_schema?.video?.required === true;
+          // Check if this is a MultiCondition model (supports images[] array with temporal positions)
+          const isMultiModel = (selectedModel as any).tasks?.includes('multi') || 
+                               cachedCaps?.input_schema?.images !== undefined;
           
           if (isExtendModel && refImageUrl) {
             // fal.ai LTX extend expects `video` as a plain URL string
             inputObj.video = refImageUrl;
             // reverse_video is a top-level param in the schema
             if (extendReverseVideo) inputObj.reverse_video = true;
+          } else if (isMultiModel && refImageUrl) {
+            // MultiCondition: build images[] with temporal positions
+            const { autoSpaceFrames } = await import('@/types/videoSlots');
+            const filledUrls = [refImageUrl, endRefUrl].filter(Boolean) as string[];
+            const maxFrame = cachedCaps?.input_schema?.num_frames?.max || 160;
+            const frames = autoSpaceFrames(filledUrls.length, maxFrame);
+            inputObj.images = filledUrls.map((url, i) => ({
+              url, start_frame_num: frames[i]
+            }));
+            // Don't set image_url -- multi uses images[] array
+            delete inputObj.image_url;
+            console.log(`🎬 MultiCondition: ${filledUrls.length} temporal images, frames: ${frames.join(', ')}`);
           } else if (refImageUrl) {
             inputObj.image_url = refImageUrl; // Standard I2V
           }
