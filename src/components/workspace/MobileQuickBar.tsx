@@ -188,19 +188,21 @@ const RefSlot: React.FC<{
                   type="button"
                   onClick={(e) => e.stopPropagation()}
                   className={cn(
-                    "absolute -bottom-0.5 -left-0.5 h-3.5 px-0.5 rounded text-[6px] font-bold text-white flex items-center justify-center leading-none",
-                    SLOT_ROLE_COLORS[role]
+                    "absolute bottom-0 left-0 right-0 h-4 flex items-center justify-center text-[7px] font-bold text-white leading-none tracking-wide",
+                    SLOT_ROLE_COLORS[role],
+                    "bg-opacity-90"
                   )}
                 >
-                  {SLOT_ROLE_LABELS[role][0]}
+                  {SLOT_ROLE_LABELS[role]}
                 </button>
               </PopoverTrigger>
               <PopoverContent
                 align="start"
                 sideOffset={4}
-                className="min-w-[100px] w-auto p-1 z-[100] bg-popover border border-border shadow-lg"
+                className="min-w-[120px] w-auto p-1.5 z-[100] bg-popover border border-border shadow-lg"
                 onClick={(e) => e.stopPropagation()}
               >
+                <p className="text-[9px] text-muted-foreground px-1.5 pb-1 font-medium uppercase tracking-wider">Slot Role</p>
                 <div className="space-y-0.5">
                   {([...MEANINGFUL_ROLES, 'reference'] as SlotRole[]).map((r) => (
                     <button
@@ -208,11 +210,11 @@ const RefSlot: React.FC<{
                       type="button"
                       onClick={() => onRoleChange(r)}
                       className={cn(
-                        "w-full flex items-center gap-1.5 px-2 py-1 rounded text-[10px] transition-colors text-left",
+                        "w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-[11px] transition-colors text-left",
                         role === r ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent"
                       )}
                     >
-                      <span className={cn("w-2 h-2 rounded-full shrink-0", SLOT_ROLE_COLORS[r])} />
+                      <span className={cn("w-2.5 h-2.5 rounded-full shrink-0", SLOT_ROLE_COLORS[r])} />
                       {SLOT_ROLE_LABELS[r]}
                     </button>
                   ))}
