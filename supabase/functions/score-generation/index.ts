@@ -14,11 +14,6 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 interface ScoreGenerationRequest {
   jobId: string;
   imageUrl: string;
-  originalPrompt: string;
-  enhancedPrompt?: string;
-  systemPromptUsed?: string;
-  apiModelId?: string;
-  userId: string;
   force?: boolean;
 }
 
@@ -112,8 +107,14 @@ function computeCompositeScore(
     quality * overallQuality
   );
 
-  // Round to 1 decimal place
   return Math.round(composite * 10) / 10;
+}
+
+function errorResponse(message: string, status = 400) {
+  return new Response(
+    JSON.stringify({ success: false, error: message }),
+    { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
 }
 
 serve(async (req) => {
@@ -125,29 +126,44 @@ serve(async (req) => {
 
   try {
     const body: ScoreGenerationRequest = await req.json();
-    const {
-      jobId,
-      imageUrl,
-      originalPrompt,
-      enhancedPrompt,
-      systemPromptUsed,
-      apiModelId,
-      userId,
-      force = false,
-    } = body;
+    const { jobId, imageUrl, force = false } = body;
 
-    // Validate required fields
-    if (!jobId || !imageUrl || !originalPrompt || !userId) {
-      console.error("❌ Missing required fields:", { jobId: !!jobId, imageUrl: !!imageUrl, originalPrompt: !!originalPrompt, userId: !!userId });
-      return new Response(
-        JSON.stringify({ success: false, error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!jobId || !imageUrl) {
+      return errorResponse("Missing required fields: jobId and imageUrl");
     }
 
-    console.log("📊 Score-generation request:", { jobId, hasImage: !!imageUrl, promptLength: originalPrompt.length });
+    console.log("📊 Score-generation request:", { jobId, hasImage: !!imageUrl, force });
 
-    // Check if scoring is enabled
+    // ── Fetch job record for all metadata ──
+    const { data: job, error: jobError } = await supabase
+      .from("jobs")
+      .select("original_prompt, enhanced_prompt, template_name, api_model_id, user_id, metadata")
+      .eq("id", jobId)
+      .single();
+
+    if (jobError || !job) {
+      console.error("❌ Job not found:", jobId, jobError);
+      return errorResponse("Job not found", 404);
+    }
+
+    const originalPrompt = job.original_prompt || "";
+    if (!originalPrompt) {
+      return errorResponse("Job has no original_prompt");
+    }
+
+    // ── Derive prompt type and enhancement metadata ──
+    const enhancementMeta = (job.metadata as Record<string, unknown>)?.enhancement_metadata as Record<string, unknown> | undefined;
+    const isEnhanced = !!(job.enhanced_prompt && job.enhanced_prompt !== originalPrompt && job.template_name);
+    const promptType = isEnhanced ? "enhanced" : "manual";
+
+    console.log("📋 Job metadata:", {
+      promptType,
+      templateName: job.template_name || null,
+      hasEnhancedPrompt: !!job.enhanced_prompt,
+      apiModelId: job.api_model_id,
+    });
+
+    // ── Check if scoring is enabled ──
     const config = await getScoringConfig();
     if (!config?.enabled || !config?.autoAnalysisEnabled) {
       console.log("⏭️ Scoring disabled, skipping");
@@ -157,40 +173,28 @@ serve(async (req) => {
       );
     }
 
-    // Check if score already exists for this job
+    // ── Check for existing score ──
     const { data: existingScore } = await supabase
       .from("prompt_scores")
       .select("id")
       .eq("job_id", jobId)
       .single();
 
-    if (existingScore) {
-      if (!force) {
-        console.log("⏭️ Score already exists for job:", jobId);
-        return new Response(
-          JSON.stringify({ success: true, skipped: true, reason: "Score already exists" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      // Force re-score: delete existing row
-      console.log("🔄 Force re-score: deleting existing score for job:", jobId);
-      await supabase.from("prompt_scores").delete().eq("id", existingScore.id);
+    if (existingScore && !force) {
+      console.log("⏭️ Score already exists for job:", jobId);
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: "Score already exists" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // Call vision model for analysis
+    // ── Run vision analysis ──
     console.log("🔍 Analyzing image with vision model...");
-    const visionResult = await analyzeWithVision(
-      imageUrl,
-      originalPrompt,
-      config.visionModelId
-    );
+    const visionResult = await analyzeWithVision(imageUrl, originalPrompt, config.visionModelId);
 
     if (!visionResult) {
       console.error("❌ Vision analysis failed for job:", jobId);
-      return new Response(
-        JSON.stringify({ success: false, error: "Vision analysis failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse("Vision analysis failed", 500);
     }
 
     console.log("✅ Vision analysis complete:", {
@@ -199,11 +203,11 @@ serve(async (req) => {
       overall_quality: visionResult.overall_quality,
     });
 
-    // Compute composite score
+    // ── Compute composite score ──
     const compositeScore = computeCompositeScore(visionResult, config.scoringWeights);
 
-    // Look up vision model cost from api_models
-    let visionModelUsed = config.visionModelId || 'default';
+    // ── Look up vision model cost ──
+    let visionModelUsed = config.visionModelId || "default";
     let visionCostEstimate: number | null = null;
     if (config.visionModelId) {
       const { data: modelData } = await supabase
@@ -211,43 +215,82 @@ serve(async (req) => {
         .select("pricing")
         .eq("id", config.visionModelId)
         .single();
-      if (modelData?.pricing && typeof modelData.pricing === 'object') {
+      if (modelData?.pricing && typeof modelData.pricing === "object") {
         visionCostEstimate = (modelData.pricing as Record<string, unknown>).per_generation as number || null;
       }
     }
 
-    // Insert prompt_scores record
-    const { data: insertedScore, error: insertError } = await supabase.from("prompt_scores").insert({
-      job_id: jobId,
-      user_id: userId,
-      api_model_id: apiModelId || null,
-      original_prompt: originalPrompt,
-      enhanced_prompt: enhancedPrompt || null,
-      system_prompt_used: systemPromptUsed || null,
-      vision_analysis: {
-        ...visionResult,
-        analysis_timestamp: new Date().toISOString(),
-        processing_time_ms: Date.now() - startTime,
-        vision_model_used: visionModelUsed,
-        vision_cost_estimate: visionCostEstimate,
-      },
+    // ── Build vision_analysis JSONB ──
+    const visionAnalysis = {
+      ...visionResult,
+      analysis_timestamp: new Date().toISOString(),
+      processing_time_ms: Date.now() - startTime,
+      vision_model_used: visionModelUsed,
+      vision_cost_estimate: visionCostEstimate,
+      prompt_type: promptType,
+      template_name: job.template_name || null,
+      enhancement_model: enhancementMeta?.enhancement_model || null,
+      content_mode: enhancementMeta?.content_mode || null,
+    };
+
+    // ── Build the vision-only columns payload ──
+    const visionColumns = {
+      vision_analysis: visionAnalysis,
       action_match: visionResult.action_match,
       appearance_match: visionResult.appearance_match,
       overall_quality: visionResult.overall_quality,
       composite_score: compositeScore,
       scoring_version: "v1",
-    }).select('id').single();
+    };
 
-    if (insertError) {
-      console.error("❌ Failed to insert prompt_scores:", insertError);
-      return new Response(
-        JSON.stringify({ success: false, error: insertError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    let scoreId: string | null = null;
+
+    if (existingScore) {
+      // ── Force re-score: UPDATE only vision columns, preserve user data ──
+      console.log("🔄 Force re-score: updating existing score, preserving user ratings");
+      const { error: updateError } = await supabase
+        .from("prompt_scores")
+        .update({
+          ...visionColumns,
+          // Also refresh metadata from job in case it was missing before
+          original_prompt: originalPrompt,
+          enhanced_prompt: job.enhanced_prompt || null,
+          system_prompt_used: job.template_name || null,
+          api_model_id: job.api_model_id || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingScore.id);
+
+      if (updateError) {
+        console.error("❌ Failed to update prompt_scores:", updateError);
+        return errorResponse(updateError.message, 500);
+      }
+      scoreId = existingScore.id;
+    } else {
+      // ── New score: INSERT ──
+      const { data: insertedScore, error: insertError } = await supabase
+        .from("prompt_scores")
+        .insert({
+          job_id: jobId,
+          user_id: job.user_id,
+          api_model_id: job.api_model_id || null,
+          original_prompt: originalPrompt,
+          enhanced_prompt: job.enhanced_prompt || null,
+          system_prompt_used: job.template_name || null,
+          ...visionColumns,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        console.error("❌ Failed to insert prompt_scores:", insertError);
+        return errorResponse(insertError.message, 500);
+      }
+      scoreId = insertedScore?.id || null;
     }
 
-    // Populate workspace_asset_id by looking up the workspace asset for this job
-    if (insertedScore?.id) {
+    // ── Link workspace_asset_id if not already set ──
+    if (scoreId && !existingScore) {
       const { data: wsAsset } = await supabase
         .from("workspace_assets")
         .select("id")
@@ -259,18 +302,19 @@ serve(async (req) => {
         await supabase
           .from("prompt_scores")
           .update({ workspace_asset_id: wsAsset.id })
-          .eq("id", insertedScore.id);
+          .eq("id", scoreId);
         console.log("✅ Linked workspace_asset_id:", wsAsset.id);
       }
     }
 
     const processingTime = Date.now() - startTime;
-    console.log("✅ Score saved for job:", jobId, "composite:", compositeScore, `(${processingTime}ms)`);
+    console.log("✅ Score saved for job:", jobId, "composite:", compositeScore, `(${processingTime}ms)`, "type:", promptType);
 
     return new Response(
       JSON.stringify({
         success: true,
         job_id: jobId,
+        prompt_type: promptType,
         scores: {
           action_match: visionResult.action_match,
           appearance_match: visionResult.appearance_match,

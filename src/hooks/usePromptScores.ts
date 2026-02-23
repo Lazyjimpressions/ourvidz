@@ -355,15 +355,12 @@ export const usePromptScores = (jobId: string | null) => {
         throw new Error('Could not get image URL');
       }
 
-      // Invoke score-generation
+      // Invoke score-generation (metadata is resolved server-side from jobs table)
       const { error: invokeError } = await supabase.functions.invoke('score-generation', {
         body: {
           jobId: job.id,
           imageUrl: signedData.signedUrl,
-          originalPrompt: job.original_prompt,
-          enhancedPrompt: job.enhanced_prompt,
-          apiModelId: job.api_model_id,
-          userId: job.user_id,
+          force: true,
         },
       });
 

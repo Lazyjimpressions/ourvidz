@@ -684,12 +684,11 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
       return;
     }
 
-    const result = await PromptScoringService.triggerVisionScoring(jobId, signedUrl, prompt, {
-      enhancedPrompt: score?.enhanced_prompt,
-      apiModelId: score?.api_model_id,
-      userId: user.id,
-      force: !!score?.vision_analysis, // force if re-scoring
-    });
+    const result = await PromptScoringService.triggerVisionScoring(
+      jobId,
+      signedUrl,
+      !!score?.vision_analysis // force if re-scoring
+    );
 
     if (result.success) {
       toast({ title: 'Scoring triggered', description: 'Results will appear shortly...', duration: 3000 });
