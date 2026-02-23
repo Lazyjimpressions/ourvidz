@@ -493,38 +493,36 @@ const MobileSimplifiedWorkspace = () => {
       } else {
         // Image → auto-overflow fixed slots: Char1 → Char2 → Char3 → Pose
         if (mode === 'image') {
-          if (!referenceImageUrl) {
-            // Char 1 empty
+          // Auto-overflow into first empty fixed slot (0-9)
+          // Slot 0 = referenceImageUrl, Slot 1 = referenceImage2Url, Slots 2-9 = additionalRefUrls[0-7]
+          const slotUrls = [
+            referenceImageUrl,
+            referenceImage2Url,
+            ...Array.from({ length: 8 }, (_, i) => additionalRefUrls[i] || null),
+          ];
+          const emptyIndex = slotUrls.findIndex(u => !u);
+          if (emptyIndex === -1) {
+            toast.info('All reference slots are filled');
+          } else if (emptyIndex === 0) {
             setReferenceImage(file);
             setReferenceImageUrl(referenceUrl);
             setReferenceMetadata(null);
             setExactCopyMode(false);
             if (asset.prompt) setPrompt(asset.prompt);
-            toast.success('Image set as Char 1');
-          } else if (!referenceImage2Url) {
-            // Char 2 empty
+            toast.success(`Image set as ${slotRoles[0] || 'Ref 1'}`);
+          } else if (emptyIndex === 1) {
             setReferenceImage2(null);
             setReferenceImage2Url(referenceUrl);
             applySmartDefault('i2i_multi');
-            toast.success('Image set as Char 2');
-          } else if (!additionalRefUrls[0]) {
-            // Char 3 empty
-            const newAdditional = [...additionalRefUrls];
-            while (newAdditional.length < 1) newAdditional.push('');
-            newAdditional[0] = referenceUrl!;
-            setAdditionalRefUrls(newAdditional);
-            applySmartDefault('i2i_multi');
-            toast.success('Image set as Char 3');
-          } else if (!additionalRefUrls[1]) {
-            // Pose empty
-            const newAdditional = [...additionalRefUrls];
-            while (newAdditional.length < 2) newAdditional.push('');
-            newAdditional[1] = referenceUrl!;
-            setAdditionalRefUrls(newAdditional);
-            applySmartDefault('i2i_multi');
-            toast.success('Image set as Pose');
+            toast.success(`Image set as ${slotRoles[1] || 'Ref 2'}`);
           } else {
-            toast.info('All reference slots are filled');
+            const additionalIndex = emptyIndex - 2;
+            const newAdditional = [...additionalRefUrls];
+            while (newAdditional.length <= additionalIndex) newAdditional.push('');
+            newAdditional[additionalIndex] = referenceUrl!;
+            setAdditionalRefUrls(newAdditional);
+            applySmartDefault('i2i_multi');
+            toast.success(`Image set as Ref ${emptyIndex + 1}`);
           }
         } else if (mode === 'video' && beginningRefImageUrl) {
           setEndingRefImage(file);
