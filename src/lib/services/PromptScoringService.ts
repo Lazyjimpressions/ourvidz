@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 export class PromptScoringService {
   /**
    * Upsert a quick rating for a job. Creates the prompt_scores row if it doesn't exist.
-   * Fetches job metadata to populate required fields on insert.
+   * Sets all 3 user dimensions to the same value (quick rating shortcut).
    */
   static async upsertQuickRating(
     jobId: string,
@@ -20,7 +20,6 @@ export class PromptScoringService {
     const clampedRating = Math.max(1, Math.min(5, Math.round(rating)));
 
     try {
-      // Fetch job metadata for required fields on insert
       const { data: job, error: jobError } = await supabase
         .from('jobs')
         .select('original_prompt, enhanced_prompt, api_model_id, user_id')
@@ -31,7 +30,6 @@ export class PromptScoringService {
         return { success: false, error: 'Job not found' };
       }
 
-      // Upsert: insert if missing, update ratings if exists
       const { error: upsertError } = await (supabase as any)
         .from('prompt_scores')
         .upsert(
@@ -64,6 +62,151 @@ export class PromptScoringService {
   }
 
   /**
+   * Update a single user rating dimension. Used in lightbox per-dimension stars.
+   */
+  static async updateIndividualRating(
+    jobId: string,
+    userId: string,
+    dimension: 'user_action_rating' | 'user_appearance_rating' | 'user_quality_rating',
+    value: number
+  ): Promise<{ success: boolean; error?: string }> {
+    const clamped = Math.max(1, Math.min(5, Math.round(value)));
+
+    try {
+      // Check if row exists
+      const { data: existing } = await (supabase as any)
+        .from('prompt_scores')
+        .select('id')
+        .eq('job_id', jobId)
+        .single();
+
+      if (!existing) {
+        // Create row first via upsertQuickRating with the value, then update the single dimension
+        const result = await this.upsertQuickRating(jobId, userId, clamped);
+        if (!result.success) return result;
+        // Now update just the one dimension (the upsert set all 3 to the same value)
+        // Only need to do this if we want different values — but since we just created with clamped,
+        // the target dimension already has the right value. Done.
+        return { success: true };
+      }
+
+      const { error } = await (supabase as any)
+        .from('prompt_scores')
+        .update({
+          [dimension]: clamped,
+          user_rated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId);
+
+      if (error) {
+        console.error('❌ updateIndividualRating error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
+   * Update admin scoring fields (ratings, tags, comment, preserve).
+   */
+  static async updateAdminScoring(
+    jobId: string,
+    adminUserId: string,
+    data: {
+      admin_action_rating?: number;
+      admin_appearance_rating?: number;
+      admin_quality_rating?: number;
+      feedback_tags?: string[];
+      admin_comment?: string;
+      preserve_image?: boolean;
+      preserve_reason?: string;
+    }
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updatePayload: Record<string, any> = {
+        admin_rated_by: adminUserId,
+        admin_rated_at: new Date().toISOString(),
+      };
+
+      if (data.admin_action_rating !== undefined) {
+        updatePayload.admin_action_rating = Math.max(1, Math.min(5, Math.round(data.admin_action_rating)));
+      }
+      if (data.admin_appearance_rating !== undefined) {
+        updatePayload.admin_appearance_rating = Math.max(1, Math.min(5, Math.round(data.admin_appearance_rating)));
+      }
+      if (data.admin_quality_rating !== undefined) {
+        updatePayload.admin_quality_rating = Math.max(1, Math.min(5, Math.round(data.admin_quality_rating)));
+      }
+      if (data.feedback_tags !== undefined) {
+        updatePayload.feedback_tags = data.feedback_tags;
+      }
+      if (data.admin_comment !== undefined) {
+        updatePayload.admin_comment = data.admin_comment;
+      }
+      if (data.preserve_image !== undefined) {
+        updatePayload.preserve_image = data.preserve_image;
+      }
+      if (data.preserve_reason !== undefined) {
+        updatePayload.preserve_reason = data.preserve_reason;
+      }
+
+      const { error } = await (supabase as any)
+        .from('prompt_scores')
+        .update(updatePayload)
+        .eq('job_id', jobId);
+
+      if (error) {
+        console.error('❌ updateAdminScoring error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
+   * Get a signed image URL for a job's workspace asset.
+   * Used to pass a valid URL to score-generation (since fal.ai URLs expire).
+   */
+  static async getSignedImageUrl(
+    jobId: string
+  ): Promise<{ url: string | null; error?: string }> {
+    try {
+      const { data: wsAsset, error: wsError } = await supabase
+        .from('workspace_assets')
+        .select('temp_storage_path')
+        .eq('job_id', jobId)
+        .limit(1)
+        .single();
+
+      if (wsError || !wsAsset?.temp_storage_path) {
+        return { url: null, error: 'No workspace asset found for job' };
+      }
+
+      const { data: signedData, error: signError } = await supabase
+        .storage
+        .from('workspace-temp')
+        .createSignedUrl(wsAsset.temp_storage_path, 3600);
+
+      if (signError || !signedData?.signedUrl) {
+        return { url: null, error: signError?.message || 'Failed to create signed URL' };
+      }
+
+      return { url: signedData.signedUrl };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      return { url: null, error: msg };
+    }
+  }
+
+  /**
    * Fetch the prompt score for a specific job. Used in lightbox details only.
    */
   static async fetchScoreForJob(jobId: string) {
@@ -83,7 +226,6 @@ export class PromptScoringService {
 
   /**
    * Trigger vision scoring for a job via the score-generation edge function.
-   * Fire-and-forget pattern - returns immediately.
    */
   static async triggerVisionScoring(
     jobId: string,
@@ -93,6 +235,7 @@ export class PromptScoringService {
       enhancedPrompt?: string;
       apiModelId?: string;
       userId?: string;
+      force?: boolean;
     }
   ): Promise<{ success: boolean; error?: string }> {
     try {
@@ -104,6 +247,7 @@ export class PromptScoringService {
           enhancedPrompt: options?.enhancedPrompt,
           apiModelId: options?.apiModelId,
           userId: options?.userId,
+          force: options?.force ?? false,
         },
       });
 

@@ -8,6 +8,9 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { 
   Copy, 
   FileText, 
@@ -21,7 +24,10 @@ import {
   Info,
   Star,
   BarChart3,
-  RefreshCw
+  RefreshCw,
+  Shield,
+  Save,
+  X
 } from 'lucide-react';
 import { useFetchImageDetails } from '@/hooks/useFetchImageDetails';
 import { toast } from '@/hooks/use-toast';
@@ -539,6 +545,54 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
 };
 
 /**
+ * Inline star rating row for a single dimension.
+ */
+const DimensionStars: React.FC<{
+  label: string;
+  value: number;
+  hoverValue: number | null;
+  onRate: (v: number) => void;
+  onHover: (v: number | null) => void;
+}> = ({ label, value, hoverValue, onRate, onHover }) => {
+  const display = hoverValue ?? value;
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-muted-foreground w-24 shrink-0">{label}</span>
+      <div className="flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map((r) => (
+          <button
+            key={r}
+            onClick={() => onRate(r)}
+            onMouseEnter={() => onHover(r)}
+            onMouseLeave={() => onHover(null)}
+            className="p-0.5 transition-transform hover:scale-125 focus:outline-none"
+            title={`Rate ${r}/5`}
+          >
+            <Star
+              className={cn(
+                'w-3.5 h-3.5 transition-colors',
+                r <= display
+                  ? 'fill-yellow-400 text-yellow-400'
+                  : 'fill-transparent text-muted-foreground hover:text-yellow-300'
+              )}
+            />
+          </button>
+        ))}
+        {value > 0 && (
+          <span className="text-xs text-muted-foreground ml-1.5">{value}/5</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const FEEDBACK_TAG_OPTIONS = [
+  'wrong_pose', 'good_likeness', 'bad_hands', 'wrong_outfit',
+  'good_composition', 'bad_anatomy', 'good_lighting', 'artifacts',
+  'wrong_background', 'excellent_quality', 'blurry', 'extra_limbs',
+];
+
+/**
  * Collapsible section showing prompt scores, user ratings, and admin controls.
  * Fetches score data only when expanded (single query).
  */
@@ -548,52 +602,132 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
   const [score, setScore] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScoring, setIsScoring] = useState(false);
-  const [userRating, setUserRating] = useState<number>(0);
-  const [hoverRating, setHoverRating] = useState<number | null>(null);
+
+  // Per-dimension user ratings
+  const [actionRating, setActionRating] = useState(0);
+  const [appearanceRating, setAppearanceRating] = useState(0);
+  const [qualityRating, setQualityRating] = useState(0);
+  const [hoverAction, setHoverAction] = useState<number | null>(null);
+  const [hoverAppearance, setHoverAppearance] = useState<number | null>(null);
+  const [hoverQuality, setHoverQuality] = useState<number | null>(null);
+
+  // Admin fields
+  const [adminActionRating, setAdminActionRating] = useState(0);
+  const [adminAppearanceRating, setAdminAppearanceRating] = useState(0);
+  const [adminQualityRating, setAdminQualityRating] = useState(0);
+  const [feedbackTags, setFeedbackTags] = useState<string[]>([]);
+  const [adminComment, setAdminComment] = useState('');
+  const [preserveImage, setPreserveImage] = useState(false);
+  const [preserveReason, setPreserveReason] = useState('');
+  const [isSavingAdmin, setIsSavingAdmin] = useState(false);
 
   const fetchScore = useCallback(async () => {
     setIsLoading(true);
     const data = await PromptScoringService.fetchScoreForJob(jobId);
     setScore(data);
-    if (data?.user_action_rating) {
-      setUserRating(data.user_action_rating);
+    if (data) {
+      setActionRating(data.user_action_rating || 0);
+      setAppearanceRating(data.user_appearance_rating || 0);
+      setQualityRating(data.user_quality_rating || 0);
+      // Admin fields
+      setAdminActionRating(data.admin_action_rating || 0);
+      setAdminAppearanceRating(data.admin_appearance_rating || 0);
+      setAdminQualityRating(data.admin_quality_rating || 0);
+      setFeedbackTags(data.feedback_tags || []);
+      setAdminComment(data.admin_comment || '');
+      setPreserveImage(data.preserve_image || false);
+      setPreserveReason(data.preserve_reason || '');
     }
     setIsLoading(false);
   }, [jobId]);
 
-  // Fetch score when section is opened
   useEffect(() => {
     if (isOpen && !score && !isLoading) {
       fetchScore();
     }
   }, [isOpen, score, isLoading, fetchScore]);
 
-  const handleQuickRate = useCallback(async (rating: number) => {
+  const handleDimensionRate = useCallback(async (
+    dimension: 'user_action_rating' | 'user_appearance_rating' | 'user_quality_rating',
+    value: number,
+    setter: (v: number) => void
+  ) => {
     if (!user?.id) return;
-    setUserRating(rating);
-    const result = await PromptScoringService.upsertQuickRating(jobId, user.id, rating);
+    setter(value);
+    const result = await PromptScoringService.updateIndividualRating(jobId, user.id, dimension, value);
     if (result.success) {
-      toast({ title: `Rated ${rating}/5`, duration: 2000 });
-      fetchScore(); // Refresh to show updated data
+      toast({ title: `Rating updated`, duration: 1500 });
+      fetchScore();
     } else {
       toast({ title: 'Failed to save rating', variant: 'destructive', duration: 2000 });
-      setUserRating(0);
+      setter(0);
     }
   }, [jobId, user?.id, fetchScore]);
 
   const handleTriggerScoring = useCallback(async () => {
-    if (!score?.original_prompt) return;
+    if (!user?.id) return;
     setIsScoring(true);
-    // We need a signed image URL - for now use a placeholder approach
-    toast({ title: 'Scoring triggered...', duration: 2000 });
-    // Refresh after a delay to pick up results
-    setTimeout(() => {
-      fetchScore();
-      setIsScoring(false);
-    }, 5000);
-  }, [score, fetchScore]);
 
-  const displayRating = hoverRating ?? userRating;
+    // Get signed image URL
+    const { url: signedUrl, error: urlError } = await PromptScoringService.getSignedImageUrl(jobId);
+    if (!signedUrl) {
+      toast({ title: 'Could not resolve image URL', description: urlError, variant: 'destructive', duration: 3000 });
+      setIsScoring(false);
+      return;
+    }
+
+    // Get prompt from score or fetch job
+    const prompt = score?.original_prompt || '';
+    if (!prompt) {
+      toast({ title: 'No prompt found for scoring', variant: 'destructive', duration: 2000 });
+      setIsScoring(false);
+      return;
+    }
+
+    const result = await PromptScoringService.triggerVisionScoring(jobId, signedUrl, prompt, {
+      enhancedPrompt: score?.enhanced_prompt,
+      apiModelId: score?.api_model_id,
+      userId: user.id,
+      force: !!score?.vision_analysis, // force if re-scoring
+    });
+
+    if (result.success) {
+      toast({ title: 'Scoring triggered', description: 'Results will appear shortly...', duration: 3000 });
+      // Poll for results
+      setTimeout(() => {
+        fetchScore();
+        setIsScoring(false);
+      }, 8000);
+    } else {
+      toast({ title: 'Scoring failed', description: result.error, variant: 'destructive', duration: 3000 });
+      setIsScoring(false);
+    }
+  }, [jobId, user?.id, score, fetchScore]);
+
+  const handleSaveAdmin = useCallback(async () => {
+    if (!user?.id) return;
+    setIsSavingAdmin(true);
+    const result = await PromptScoringService.updateAdminScoring(jobId, user.id, {
+      admin_action_rating: adminActionRating || undefined,
+      admin_appearance_rating: adminAppearanceRating || undefined,
+      admin_quality_rating: adminQualityRating || undefined,
+      feedback_tags: feedbackTags,
+      admin_comment: adminComment || undefined,
+      preserve_image: preserveImage,
+      preserve_reason: preserveReason || undefined,
+    });
+    if (result.success) {
+      toast({ title: 'Admin scoring saved', duration: 2000 });
+      fetchScore();
+    } else {
+      toast({ title: 'Failed to save', variant: 'destructive', duration: 2000 });
+    }
+    setIsSavingAdmin(false);
+  }, [jobId, user?.id, adminActionRating, adminAppearanceRating, adminQualityRating, feedbackTags, adminComment, preserveImage, preserveReason, fetchScore]);
+
+  const toggleTag = (tag: string) => {
+    setFeedbackTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+  };
 
   const getScoreColor = (val: number | null) => {
     if (!val) return 'text-muted-foreground';
@@ -633,39 +767,38 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
 
         {!isLoading && (
           <>
-            {/* User Quick Rating */}
-            <div className="space-y-1.5">
-              <span className="text-xs text-muted-foreground">Your Rating</span>
-              <div className="flex items-center gap-0.5">
-                {[1, 2, 3, 4, 5].map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => handleQuickRate(r)}
-                    onMouseEnter={() => setHoverRating(r)}
-                    onMouseLeave={() => setHoverRating(null)}
-                    className="p-0.5 transition-transform hover:scale-125 focus:outline-none"
-                    title={`Rate ${r}/5`}
-                  >
-                    <Star
-                      className={cn(
-                        'w-4 h-4 transition-colors',
-                        r <= displayRating
-                          ? 'fill-yellow-400 text-yellow-400'
-                          : 'fill-transparent text-muted-foreground hover:text-yellow-300'
-                      )}
-                    />
-                  </button>
-                ))}
-                {userRating > 0 && (
-                  <span className="text-xs text-muted-foreground ml-2">{userRating}/5</span>
-                )}
+            {/* Per-Dimension User Ratings */}
+            <div className="space-y-2">
+              <span className="text-xs font-medium text-muted-foreground">Your Rating</span>
+              <div className="space-y-1.5">
+                <DimensionStars
+                  label="Action Match"
+                  value={actionRating}
+                  hoverValue={hoverAction}
+                  onRate={(v) => handleDimensionRate('user_action_rating', v, setActionRating)}
+                  onHover={setHoverAction}
+                />
+                <DimensionStars
+                  label="Appearance"
+                  value={appearanceRating}
+                  hoverValue={hoverAppearance}
+                  onRate={(v) => handleDimensionRate('user_appearance_rating', v, setAppearanceRating)}
+                  onHover={setHoverAppearance}
+                />
+                <DimensionStars
+                  label="Quality"
+                  value={qualityRating}
+                  hoverValue={hoverQuality}
+                  onRate={(v) => handleDimensionRate('user_quality_rating', v, setQualityRating)}
+                  onHover={setHoverQuality}
+                />
               </div>
             </div>
 
             {/* Vision Analysis Scores */}
             {score?.action_match && (
               <div className="space-y-1.5">
-                <span className="text-xs text-muted-foreground">Vision Analysis</span>
+                <span className="text-xs font-medium text-muted-foreground">Vision Analysis</span>
                 <div className="grid grid-cols-2 gap-1.5 text-xs">
                   <div className={cn('flex items-center justify-between rounded px-2 py-1 border', getScoreBg(score.action_match))}>
                     <span className="text-muted-foreground">Action</span>
@@ -706,6 +839,102 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
                 <RefreshCw className={cn('h-3 w-3 mr-1', isScoring && 'animate-spin')} />
                 {score?.vision_analysis ? 'Re-score' : 'Score Image'}
               </Button>
+            )}
+
+            {/* Admin Controls Section */}
+            {isAdmin && score && (
+              <div className="space-y-3 border-t border-border pt-3">
+                <div className="flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-medium">Admin Scoring</span>
+                </div>
+
+                {/* Admin per-dimension ratings */}
+                <div className="space-y-1.5">
+                  <DimensionStars
+                    label="Action Match"
+                    value={adminActionRating}
+                    hoverValue={null}
+                    onRate={setAdminActionRating}
+                    onHover={() => {}}
+                  />
+                  <DimensionStars
+                    label="Appearance"
+                    value={adminAppearanceRating}
+                    hoverValue={null}
+                    onRate={setAdminAppearanceRating}
+                    onHover={() => {}}
+                  />
+                  <DimensionStars
+                    label="Quality"
+                    value={adminQualityRating}
+                    hoverValue={null}
+                    onRate={setAdminQualityRating}
+                    onHover={() => {}}
+                  />
+                </div>
+
+                {/* Feedback Tags */}
+                <div className="space-y-1.5">
+                  <span className="text-xs text-muted-foreground">Feedback Tags</span>
+                  <div className="flex flex-wrap gap-1">
+                    {FEEDBACK_TAG_OPTIONS.map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(tag)}
+                        className={cn(
+                          'text-xs px-2 py-0.5 rounded-full border transition-colors',
+                          feedbackTags.includes(tag)
+                            ? 'bg-primary/20 border-primary/40 text-primary'
+                            : 'border-border text-muted-foreground hover:border-primary/30'
+                        )}
+                      >
+                        {tag.replace(/_/g, ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Admin Comment */}
+                <div className="space-y-1">
+                  <span className="text-xs text-muted-foreground">Comment</span>
+                  <Textarea
+                    value={adminComment}
+                    onChange={(e) => setAdminComment(e.target.value)}
+                    placeholder="Admin notes..."
+                    className="min-h-[40px] text-xs resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Preserve Toggle */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Preserve Image</span>
+                    <Switch checked={preserveImage} onCheckedChange={setPreserveImage} />
+                  </div>
+                  {preserveImage && (
+                    <Input
+                      value={preserveReason}
+                      onChange={(e) => setPreserveReason(e.target.value)}
+                      placeholder="Reason for preserving..."
+                      className="h-7 text-xs"
+                    />
+                  )}
+                </div>
+
+                {/* Save Button */}
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleSaveAdmin}
+                  disabled={isSavingAdmin}
+                  className="w-full h-7 text-xs"
+                >
+                  <Save className="h-3 w-3 mr-1" />
+                  {isSavingAdmin ? 'Saving...' : 'Save Admin Scoring'}
+                </Button>
+              </div>
             )}
 
             {/* No score yet message */}
