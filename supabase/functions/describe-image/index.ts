@@ -42,12 +42,12 @@ interface ResolvedModel {
  * Resolve a vision-capable model from the database.
  * Priority: explicit modelId > explicit modelKey > default_for_tasks containing 'vision' > hardcoded fallback
  */
-async function resolveVisionModel(modelId?: string, modelKey?: string): Promise<ResolvedModel> {
+async function resolveVisionModel(modelId?: string, modelKey?: string, contentRating?: string): Promise<ResolvedModel> {
   const selectFields = 'model_key, display_name, input_defaults, api_providers!inner(name, base_url, secret_name, auth_scheme, auth_header_name)';
 
   let data: any = null;
 
-  // 1. Try explicit ID
+  // 1. Try explicit ID (skip for NSFW if it's a Claude model that will refuse)
   if (modelId) {
     const result = await supabase
       .from('api_models')
@@ -56,7 +56,12 @@ async function resolveVisionModel(modelId?: string, modelKey?: string): Promise<
       .eq('is_active', true)
       .limit(1)
       .single();
-    data = result.data;
+    // Skip Claude models for NSFW content — they refuse adult images
+    if (result.data && contentRating === 'nsfw' && (result.data as any).model_key?.includes('claude')) {
+      console.log('⚠️ Skipping Claude model for NSFW scoring, falling through to permissive model');
+    } else {
+      data = result.data;
+    }
   }
 
   // 2. Try explicit model_key
@@ -71,8 +76,21 @@ async function resolveVisionModel(modelId?: string, modelKey?: string): Promise<
     data = result.data;
   }
 
-  // 3. Try default for vision task
-  if (!data) {
+  // 3. For NSFW, try nsfw_vision default first
+  if (!data && contentRating === 'nsfw') {
+    const result = await supabase
+      .from('api_models')
+      .select(selectFields)
+      .eq('is_active', true)
+      .contains('default_for_tasks', ['nsfw_vision'])
+      .order('priority', { ascending: true })
+      .limit(1)
+      .single();
+    data = result.data;
+  }
+
+  // 4. Try default for vision task (skip for NSFW — likely Claude)
+  if (!data && contentRating !== 'nsfw') {
     const result = await supabase
       .from('api_models')
       .select(selectFields)
@@ -84,7 +102,7 @@ async function resolveVisionModel(modelId?: string, modelKey?: string): Promise<
     data = result.data;
   }
 
-  // 4. Hardcoded fallback: Kimi K2.5 by model_key
+  // 5. Hardcoded fallback: Kimi K2.5 (permissive, vision-capable)
   if (!data) {
     const result = await supabase
       .from('api_models')
@@ -266,7 +284,7 @@ serve(async (req) => {
     console.log('🔍 Describe image request:', { outputMode, contentRating, hasOriginalPrompt: !!originalPrompt });
 
     // 1. Resolve model
-    const model = await resolveVisionModel(modelId, modelKey);
+    const model = await resolveVisionModel(modelId, modelKey, contentRating);
 
     // 2. Build messages
     const systemPrompt = await buildSystemPrompt(outputMode, contentRating, originalPrompt);
