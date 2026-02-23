@@ -111,41 +111,30 @@ export class PromptScoringService {
   }
 
   /**
-   * Update admin scoring fields (ratings, tags, comment, preserve).
+   * Update scoring metadata (feedback tags, comment, preserve status).
+   * Ratings are handled separately via updateIndividualRating/upsertQuickRating.
    */
-  static async updateAdminScoring(
+  static async updateScoringMetadata(
     jobId: string,
-    adminUserId: string,
+    userId: string,
     data: {
-      admin_action_rating?: number;
-      admin_appearance_rating?: number;
-      admin_quality_rating?: number;
       feedback_tags?: string[];
-      admin_comment?: string;
+      comment?: string;
       preserve_image?: boolean;
       preserve_reason?: string;
     }
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const updatePayload: Record<string, any> = {
-        admin_rated_by: adminUserId,
+        admin_rated_by: userId,
         admin_rated_at: new Date().toISOString(),
       };
 
-      if (data.admin_action_rating !== undefined) {
-        updatePayload.admin_action_rating = Math.max(1, Math.min(5, Math.round(data.admin_action_rating)));
-      }
-      if (data.admin_appearance_rating !== undefined) {
-        updatePayload.admin_appearance_rating = Math.max(1, Math.min(5, Math.round(data.admin_appearance_rating)));
-      }
-      if (data.admin_quality_rating !== undefined) {
-        updatePayload.admin_quality_rating = Math.max(1, Math.min(5, Math.round(data.admin_quality_rating)));
-      }
       if (data.feedback_tags !== undefined) {
         updatePayload.feedback_tags = data.feedback_tags;
       }
-      if (data.admin_comment !== undefined) {
-        updatePayload.admin_comment = data.admin_comment;
+      if (data.comment !== undefined) {
+        updatePayload.admin_comment = data.comment;
       }
       if (data.preserve_image !== undefined) {
         updatePayload.preserve_image = data.preserve_image;
@@ -160,7 +149,7 @@ export class PromptScoringService {
         .eq('job_id', jobId);
 
       if (error) {
-        console.error('❌ updateAdminScoring error:', error);
+        console.error('❌ updateScoringMetadata error:', error);
         return { success: false, error: error.message };
       }
 
