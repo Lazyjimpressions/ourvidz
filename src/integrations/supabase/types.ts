@@ -1619,6 +1619,144 @@ export type Database = {
         }
         Relationships: []
       }
+      prompt_scores: {
+        Row: {
+          action_match: number | null
+          admin_action_rating: number | null
+          admin_appearance_rating: number | null
+          admin_comment: string | null
+          admin_quality_rating: number | null
+          admin_rated_at: string | null
+          admin_rated_by: string | null
+          api_model_id: string | null
+          appearance_match: number | null
+          composite_score: number | null
+          created_at: string | null
+          enhanced_prompt: string | null
+          feedback_tags: string[] | null
+          id: string
+          image_deleted: boolean | null
+          job_id: string
+          original_prompt: string
+          overall_quality: number | null
+          preserve_image: boolean | null
+          preserve_reason: string | null
+          preserved_url: string | null
+          scoring_version: string | null
+          system_prompt_used: string | null
+          updated_at: string | null
+          user_action_rating: number | null
+          user_appearance_rating: number | null
+          user_id: string
+          user_quality_rating: number | null
+          user_rated_at: string | null
+          vision_analysis: Json | null
+          workspace_asset_id: string | null
+        }
+        Insert: {
+          action_match?: number | null
+          admin_action_rating?: number | null
+          admin_appearance_rating?: number | null
+          admin_comment?: string | null
+          admin_quality_rating?: number | null
+          admin_rated_at?: string | null
+          admin_rated_by?: string | null
+          api_model_id?: string | null
+          appearance_match?: number | null
+          composite_score?: number | null
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          feedback_tags?: string[] | null
+          id?: string
+          image_deleted?: boolean | null
+          job_id: string
+          original_prompt: string
+          overall_quality?: number | null
+          preserve_image?: boolean | null
+          preserve_reason?: string | null
+          preserved_url?: string | null
+          scoring_version?: string | null
+          system_prompt_used?: string | null
+          updated_at?: string | null
+          user_action_rating?: number | null
+          user_appearance_rating?: number | null
+          user_id: string
+          user_quality_rating?: number | null
+          user_rated_at?: string | null
+          vision_analysis?: Json | null
+          workspace_asset_id?: string | null
+        }
+        Update: {
+          action_match?: number | null
+          admin_action_rating?: number | null
+          admin_appearance_rating?: number | null
+          admin_comment?: string | null
+          admin_quality_rating?: number | null
+          admin_rated_at?: string | null
+          admin_rated_by?: string | null
+          api_model_id?: string | null
+          appearance_match?: number | null
+          composite_score?: number | null
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          feedback_tags?: string[] | null
+          id?: string
+          image_deleted?: boolean | null
+          job_id?: string
+          original_prompt?: string
+          overall_quality?: number | null
+          preserve_image?: boolean | null
+          preserve_reason?: string | null
+          preserved_url?: string | null
+          scoring_version?: string | null
+          system_prompt_used?: string | null
+          updated_at?: string | null
+          user_action_rating?: number | null
+          user_appearance_rating?: number | null
+          user_id?: string
+          user_quality_rating?: number | null
+          user_rated_at?: string | null
+          vision_analysis?: Json | null
+          workspace_asset_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_scores_admin_rated_by_fkey"
+            columns: ["admin_rated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_scores_api_model_id_fkey"
+            columns: ["api_model_id"]
+            isOneToOne: false
+            referencedRelation: "api_models"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_scores_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_scores_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_scores_workspace_asset_id_fkey"
+            columns: ["workspace_asset_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       prompt_templates: {
         Row: {
           comment: string | null

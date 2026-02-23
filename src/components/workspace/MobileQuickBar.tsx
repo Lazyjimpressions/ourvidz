@@ -4,27 +4,25 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { cn } from '@/lib/utils';
+import {
+  SlotRole,
+  SLOT_ROLE_LABELS,
+  SLOT_ROLE_COLORS,
+  MEANINGFUL_ROLES,
+  DEFAULT_SLOT_ROLES,
+  getSlotLabel,
+} from '@/types/slotRoles';
 
 export interface RefSlotData {
   url?: string | null;
   isVideo?: boolean;
-  role?: 'character' | 'pose';
+  role?: SlotRole;
   label?: string;
 }
 
 /** Fixed slot definitions for image mode (10 slots for multi-ref support) */
-export const FIXED_IMAGE_SLOTS: { role: 'character' | 'pose'; label: string }[] = [
-  { role: 'character', label: 'Char 1' },
-  { role: 'character', label: 'Char 2' },
-  { role: 'character', label: 'Char 3' },
-  { role: 'pose', label: 'Pose' },
-  { role: 'character', label: 'Ref 5' },
-  { role: 'character', label: 'Ref 6' },
-  { role: 'character', label: 'Ref 7' },
-  { role: 'character', label: 'Ref 8' },
-  { role: 'character', label: 'Ref 9' },
-  { role: 'character', label: 'Ref 10' },
-];
+export const FIXED_IMAGE_SLOTS: { role: SlotRole; label: string }[] =
+  DEFAULT_SLOT_ROLES.map((role, i) => ({ role, label: getSlotLabel(role, i) }));
 
 export interface MobileQuickBarProps {
   // Mode
@@ -52,6 +50,9 @@ export interface MobileQuickBarProps {
   onFixedSlotDrop?: (index: number, file: File) => void;
   /** Handle URL-based drops (from grid tile drag) — no upload needed */
   onFixedSlotDropUrl?: (index: number, url: string) => void;
+  /** Slot role assignments (parallel to fixedSlots) */
+  slotRoles?: SlotRole[];
+  onSlotRoleChange?: (index: number, role: SlotRole) => void;
   
   // Desktop inline controls
   contentType?: 'sfw' | 'nsfw';
@@ -83,7 +84,9 @@ const RefSlot: React.FC<{
   label: string;
   disabled?: boolean;
   showLabel?: boolean;
-}> = ({ url, isVideo, onAdd, onRemove, onDrop, onDropUrl, label, disabled, showLabel = false }) => {
+  role?: SlotRole;
+  onRoleChange?: (role: SlotRole) => void;
+}> = ({ url, isVideo, onAdd, onRemove, onDrop, onDropUrl, label, disabled, showLabel = false, role, onRoleChange }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [justDropped, setJustDropped] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -176,6 +179,46 @@ const RefSlot: React.FC<{
           >
             <X className="h-2 w-2 text-destructive-foreground" />
           </button>
+          {/* Role badge - tap to change */}
+          {role && role !== 'reference' && onRoleChange && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className={cn(
+                    "absolute -bottom-0.5 -left-0.5 h-3.5 px-0.5 rounded text-[6px] font-bold text-white flex items-center justify-center leading-none",
+                    SLOT_ROLE_COLORS[role]
+                  )}
+                >
+                  {SLOT_ROLE_LABELS[role][0]}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                sideOffset={4}
+                className="min-w-[100px] w-auto p-1 z-[100] bg-popover border border-border shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="space-y-0.5">
+                  {([...MEANINGFUL_ROLES, 'reference'] as SlotRole[]).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => onRoleChange(r)}
+                      className={cn(
+                        "w-full flex items-center gap-1.5 px-2 py-1 rounded text-[10px] transition-colors text-left",
+                        role === r ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-accent"
+                      )}
+                    >
+                      <span className={cn("w-2 h-2 rounded-full shrink-0", SLOT_ROLE_COLORS[r])} />
+                      {SLOT_ROLE_LABELS[r]}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
         {showLabel && (
           <span className="text-[8px] text-muted-foreground mt-0.5 leading-none">{label}</span>
@@ -312,6 +355,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onFixedSlotRemove,
   onFixedSlotDrop,
   onFixedSlotDropUrl,
+  slotRoles,
+  onSlotRoleChange,
   contentType = 'nsfw',
   onContentTypeChange,
   aspectRatio = '1:1',
@@ -351,20 +396,26 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
         {useFixedSlots ? (
           /* Fixed 4 labeled slots for image mode */
-          FIXED_IMAGE_SLOTS.map((slotDef, i) => (
-            <RefSlot
-              key={`fixed-${i}`}
-              url={fixedSlots[i]?.url}
-              isVideo={fixedSlots[i]?.isVideo}
-              onAdd={() => onFixedSlotAdd!(i)}
-              onRemove={() => onFixedSlotRemove!(i)}
-              onDrop={(file) => onFixedSlotDrop!(i, file)}
-              onDropUrl={onFixedSlotDropUrl ? (url) => onFixedSlotDropUrl(i, url) : undefined}
-              label={slotDef.label}
-              disabled={disabled}
-              showLabel
-            />
-          ))
+          FIXED_IMAGE_SLOTS.map((slotDef, i) => {
+            const effectiveRole = slotRoles?.[i] || slotDef.role;
+            const effectiveLabel = slotRoles?.[i] ? getSlotLabel(slotRoles[i], i) : slotDef.label;
+            return (
+              <RefSlot
+                key={`fixed-${i}`}
+                url={fixedSlots[i]?.url}
+                isVideo={fixedSlots[i]?.isVideo}
+                onAdd={() => onFixedSlotAdd!(i)}
+                onRemove={() => onFixedSlotRemove!(i)}
+                onDrop={(file) => onFixedSlotDrop!(i, file)}
+                onDropUrl={onFixedSlotDropUrl ? (url) => onFixedSlotDropUrl(i, url) : undefined}
+                label={effectiveLabel}
+                disabled={disabled}
+                showLabel
+                role={effectiveRole}
+                onRoleChange={onSlotRoleChange ? (role) => onSlotRoleChange(i, role) : undefined}
+              />
+            );
+          })
         ) : (
           /* Dynamic slots for video mode */
           <>

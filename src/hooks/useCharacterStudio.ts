@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePortraitVersions, CharacterPortrait } from './usePortraitVersions';
+import { ROLE_TAG_PREFIX } from '@/types/slotRoles';
 import { Json } from '@/integrations/supabase/types';
 
 export interface CharacterData {
@@ -553,13 +554,21 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
       const { error: uploadError } = await supabase.storage.from('reference_images').upload(path, file);
       if (uploadError) throw uploadError;
 
+      // Auto-inject role tags based on outputType
+      const autoTags = [...tags];
+      const roleTagMap: Record<string, string> = { image: 'character', pose: 'position', position: 'position', outfit: 'clothing', style: 'style' };
+      const autoRole = roleTagMap[outputType];
+      if (autoRole && !autoTags.some(t => t.startsWith(ROLE_TAG_PREFIX))) {
+        autoTags.push(`${ROLE_TAG_PREFIX}${autoRole}`);
+      }
+
       const { error: insertError } = await supabase
         .from('character_canon')
         .insert({
           character_id: savedCharacterId,
           output_type: outputType,
           output_url: path,
-          tags,
+          tags: autoTags,
           label: label || null,
         });
       if (insertError) throw insertError;
@@ -618,13 +627,21 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     if (!savedCharacterId) return;
     try {
       const metadata = poseKey ? { pose_key: poseKey } : null;
+      // Auto-inject role tags based on outputType
+      const autoTags = [...tags];
+      const roleTagMap: Record<string, string> = { image: 'character', pose: 'position', position: 'position', outfit: 'clothing', style: 'style' };
+      const autoRole = roleTagMap[outputType];
+      if (autoRole && !autoTags.some(t => t.startsWith(ROLE_TAG_PREFIX))) {
+        autoTags.push(`${ROLE_TAG_PREFIX}${autoRole}`);
+      }
+
       const { error } = await supabase
         .from('character_canon')
         .insert({
           character_id: savedCharacterId,
           output_type: outputType,
           output_url: imageUrl,
-          tags,
+          tags: autoTags,
           label: label || null,
           metadata,
         });
