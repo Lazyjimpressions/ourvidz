@@ -102,7 +102,6 @@ export const usePromptScoringConfig = () => {
   }, []);
 
   const showQuickRating = config.enabled && config.showQuickRating;
-  console.log('🔧 usePromptScoringConfig:', { config, showQuickRating });
 
   return {
     config,

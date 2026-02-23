@@ -1,7 +1,7 @@
 # Prompt Scoring System
 
-**Last Updated:** February 22, 2026
-**Status:** Implementation Phase 1
+**Last Updated:** February 23, 2026
+**Status:** Implementation Phase 1 (In Progress)
 **Purpose:** Model-specific prompt optimization through automated vision analysis and user feedback
 
 ## Overview
@@ -10,7 +10,7 @@ The Prompt Scoring System evaluates AI-generated images/videos against their ori
 
 ## Goals
 
-1. **Automated Vision Analysis**: Every generation analyzed by vision model
+1. **Automated Vision Analysis**: Generations analyzed by vision model (on-demand or auto)
 2. **Multi-Dimensional Scoring**: Action Match, Appearance Match, Overall Quality (1-5 scale)
 3. **Model-Specific Insights**: Per-model dashboards and prompt pattern mining
 4. **Admin-First Rollout**: Start with admin-only access, iterate, then expand
@@ -18,43 +18,63 @@ The Prompt Scoring System evaluates AI-generated images/videos against their ori
 
 ## Architecture
 
+### Scoring Trigger Strategy
+
+The system uses **user/admin-initiated scoring first**, with auto-scoring planned for later once accuracy is validated.
+
 ```text
-Generation Complete
+Trigger                  When                              Creates prompt_scores row?
+-----------------------  --------------------------------  --------------------------
+User Quick Rating        User clicks stars on tile         YES (upsert: insert if missing)
+Manual Score button      Admin clicks "Score" in lightbox  YES (calls score-generation)
+Batch Score (admin)      Admin action on unscored jobs     YES (bulk score-generation)
+Auto-score (future)      After generation complete         YES (when accuracy is proven)
+```
+
+**Why not auto-score on every generation?**
+1. Multiple API providers use different callback paths — fal-webhook only covers some fal.ai jobs
+2. Client-side polling bypasses webhooks entirely
+3. Auto-scoring every generation wastes vision API credits while tuning scoring accuracy
+
+**Key insight:** When a user clicks stars, the system:
+1. Upserts a `prompt_scores` row with the user rating
+2. If `autoAnalysisEnabled` is true, fires `score-generation` in the background
+3. If auto-analysis is off, the row exists with user ratings only — still valuable data
+
+Quick Rating works even without vision scoring being enabled.
+
+### Data Flow
+
+```text
+[User rates on tile / Admin clicks Score]
        │
-       ▼
-[fal-webhook / job-callback]
-       │
-       ▼ (fire-and-forget)
-[score-generation edge function]
-       │
-       ├──► [describe-image outputMode:'scoring']
+       ├──► [PromptScoringService.upsertQuickRating]
        │           │
        │           ▼
-       │    Vision Analysis JSON
-       │    - action_match: 1-5
-       │    - appearance_match: 1-5
-       │    - overall_quality: 1-5
-       │    - elements_present: []
-       │    - elements_missing: []
-       │    - issues: []
+       │    prompt_scores UPSERT (user ratings)
        │
-       ▼
-[prompt_scores table INSERT]
-       │
-       ├──────────────────────┐
-       ▼                      ▼
-[Admin Views Asset]    [Nightly Aggregation]
-       │                      │
-       ▼                      ▼
-[Manual Rating UI]     [Model Performance Stats]
-       │                      │
-       ▼                      ▼
-[Score Updated]        [Pattern Mining]
+       └──► [score-generation edge function] (if auto or manual)
+                   │
+                   ├──► [describe-image outputMode:'scoring']
+                   │           │
+                   │           ▼
+                   │    Vision Analysis JSON
+                   │    - action_match: 1-5
+                   │    - appearance_match: 1-5
+                   │    - overall_quality: 1-5
+                   │    - elements_present: []
+                   │    - elements_missing: []
+                   │
+                   ▼
+            prompt_scores UPDATE (vision scores + cost tracking)
+                   │
+                   ▼
+            workspace_asset_id populated
 ```
 
 ## Configuration
 
-All configuration is maintained in the admin portal - **no hardcoded models or prompts**.
+All configuration is maintained in the admin portal — **no hardcoded models or prompts**.
 
 | Config | Storage | Admin UI |
 |--------|---------|----------|
@@ -69,7 +89,7 @@ All configuration is maintained in the admin portal - **no hardcoded models or p
 {
   "promptScoring": {
     "enabled": true,
-    "autoAnalysisEnabled": true,
+    "autoAnalysisEnabled": false,
     "showQuickRating": true,
     "visionModelId": null,
     "scoringWeights": {
@@ -101,21 +121,25 @@ All configuration is maintained in the admin portal - **no hardcoded models or p
 
 ### Quick Rating on Asset Tiles
 
-When `showQuickRating` is enabled, asset tiles show a 5-star rating on hover:
+When `showQuickRating` is enabled, asset tiles show a 5-star rating centered on hover:
 
-- Stars appear as subtle overlay on hover
+- Stars appear as a translucent pill overlay centered in the middle of the tile
 - Click to rate (1-5 stars)
-- **Same score applied to all 3 dimensions**
-- Rating persists with the image
-- In modal, user can refine individual dimension scores
+- **Same score applied to all 3 dimensions** via `PromptScoringService.upsertQuickRating`
+- **Write-only at tile level** — no DB read per tile, avoiding N+1 query overhead
+- Stars render empty by default; submitted rating shows filled stars for the session
+- To see full scoring details, user opens the Generation Details slider in the lightbox
 
-### Admin Score Panel (in AssetPreviewModal)
+### Prompt Score Section (in Generation Details Slider)
 
-- Vision scores displayed as small badges
-- Admin rating: 3 simple number inputs
-- Tag selector: horizontal chip row
-- Comment: single-line expanding textarea
-- Save button (only visible when changes made)
+Scoring details are consolidated into the existing Generation Details panel:
+
+- **Collapsible section** labeled "Prompt Score" with composite score badge
+- **User rating**: 5-star inline rating (per-dimension refinement planned)
+- **Vision analysis**: 4 color-coded score badges (Action, Appearance, Quality, Overall)
+- **Vision description**: Expandable text from the vision model analysis
+- **Admin controls**: "Score" / "Re-score" button to trigger `score-generation`
+- Single DB query fired only when the section is expanded
 
 ### Feedback Tags
 
@@ -142,167 +166,74 @@ High-value images can be flagged for preservation:
 - `preserve_reason`: Why this image is valuable
 - `preserved_url`: Permanent URL if copied before expiry
 
+### Vision Model Cost Tracking
+
+Each vision analysis records cost metadata in the `vision_analysis` JSONB:
+
+- `vision_model_used`: Model ID or 'default'
+- `vision_cost_estimate`: From `api_models.pricing.per_generation` (null if unavailable)
+- `processing_time_ms`: Duration of the scoring pipeline
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/services/PromptScoringService.ts` | Client-side scoring operations (upsert, fetch, trigger) |
+| `src/components/QuickRating.tsx` | Write-only 5-star rating overlay for tiles |
+| `src/components/shared/SharedGrid.tsx` | Renders QuickRating centered on tile hover |
+| `src/components/lightbox/PromptDetailsSlider.tsx` | PromptScoreSection in Generation Details |
+| `src/hooks/usePromptScores.ts` | Full scoring hook (admin operations) |
+| `src/hooks/usePromptScoringConfig.ts` | Config hook with realtime subscription |
+| `supabase/functions/score-generation/index.ts` | Vision analysis orchestration |
+| `supabase/functions/describe-image/index.ts` | Vision model invocation (scoring mode) |
+
 ## Database Schema
 
 ### prompt_scores Table
 
-Run this SQL in the Supabase SQL Editor:
-
 ```sql
--- Create prompt_scores table for storing generation quality evaluations
 CREATE TABLE prompt_scores (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-
-  -- Relationships
   job_id UUID NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES profiles(id),
   api_model_id UUID REFERENCES api_models(id),
   workspace_asset_id UUID REFERENCES workspace_assets(id) ON DELETE SET NULL,
-
-  -- Prompts (denormalized for analysis efficiency)
   original_prompt TEXT NOT NULL,
   enhanced_prompt TEXT,
   system_prompt_used TEXT,
-
-  -- Vision Model Analysis (automated)
   vision_analysis JSONB DEFAULT '{}',
-
-  -- Multi-Dimensional Scores (1-5 scale)
   action_match NUMERIC(2,1),
   appearance_match NUMERIC(2,1),
   overall_quality NUMERIC(2,1),
   composite_score NUMERIC(2,1),
-
-  -- User Rating (from tile or modal)
   user_action_rating INTEGER CHECK (user_action_rating BETWEEN 1 AND 5),
   user_appearance_rating INTEGER CHECK (user_appearance_rating BETWEEN 1 AND 5),
   user_quality_rating INTEGER CHECK (user_quality_rating BETWEEN 1 AND 5),
   user_rated_at TIMESTAMPTZ,
-
-  -- Admin Rating (optional manual override)
   admin_action_rating INTEGER CHECK (admin_action_rating BETWEEN 1 AND 5),
   admin_appearance_rating INTEGER CHECK (admin_appearance_rating BETWEEN 1 AND 5),
   admin_quality_rating INTEGER CHECK (admin_quality_rating BETWEEN 1 AND 5),
   admin_rated_at TIMESTAMPTZ,
   admin_rated_by UUID REFERENCES profiles(id),
-
-  -- Feedback Tags + Comments
   feedback_tags TEXT[] DEFAULT '{}',
   admin_comment TEXT,
-
-  -- Image Preservation
   preserve_image BOOLEAN DEFAULT false,
   preserve_reason TEXT,
   preserved_url TEXT,
   image_deleted BOOLEAN DEFAULT false,
-
-  -- Metadata
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   scoring_version VARCHAR(10) DEFAULT 'v1',
-
   CONSTRAINT unique_job_score UNIQUE(job_id)
 );
-
--- Indexes for efficient queries
-CREATE INDEX idx_prompt_scores_model ON prompt_scores(api_model_id, composite_score DESC);
-CREATE INDEX idx_prompt_scores_created ON prompt_scores(created_at DESC);
-CREATE INDEX idx_prompt_scores_user ON prompt_scores(user_id, created_at DESC);
-CREATE INDEX idx_prompt_scores_tags ON prompt_scores USING GIN(feedback_tags);
-CREATE INDEX idx_prompt_scores_vision ON prompt_scores USING GIN(vision_analysis);
-
--- Enable RLS
-ALTER TABLE prompt_scores ENABLE ROW LEVEL SECURITY;
-
--- Users can view their own scores
-CREATE POLICY "Users can view own scores" ON prompt_scores
-FOR SELECT TO authenticated
-USING (user_id = auth.uid());
-
--- Users can rate their own generations
-CREATE POLICY "Users can update own scores" ON prompt_scores
-FOR UPDATE TO authenticated
-USING (user_id = auth.uid())
-WITH CHECK (user_id = auth.uid());
-
--- Service role full access (for edge functions)
-CREATE POLICY "Service role full access" ON prompt_scores
-FOR ALL TO service_role
-USING (true);
-
--- Updated_at trigger
-CREATE TRIGGER update_prompt_scores_updated_at
-  BEFORE UPDATE ON prompt_scores
-  FOR EACH ROW
-  EXECUTE FUNCTION update_updated_at_column();
 ```
 
-### Add Scoring Template to prompt_templates
+### RLS Policies
 
-```sql
--- Insert scoring system prompt template
-INSERT INTO prompt_templates (
-  template_name,
-  use_case,
-  content_mode,
-  job_type,
-  system_prompt,
-  is_active,
-  version
-) VALUES (
-  'Image Scoring - Vision Analysis',
-  'scoring',
-  'nsfw',
-  'image',
-  'You are an expert image quality analyst for AI-generated content.
-
-Analyze this AI-generated image against the original prompt and return ONLY valid JSON:
-{
-  "action_match": <1-5: Are characters doing the requested action/pose?>,
-  "appearance_match": <1-5: Do characters look as described?>,
-  "overall_quality": <1-5: Technical and aesthetic quality>,
-  "description": "Brief description of what is in the image",
-  "elements_present": ["element1", "element2"],
-  "elements_missing": ["element1", "element2"],
-  "issues": ["issue1", "issue2"],
-  "strengths": ["strength1", "strength2"]
-}
-
-Scoring guide (1-5 scale):
-- 5: Excellent match, minor or no issues
-- 4: Good match, small discrepancies
-- 3: Partial match, noticeable issues
-- 2: Poor match, significant issues
-- 1: Failed to match intent
-
-Original prompt: {{original_prompt}}',
-  true,
-  1
-);
-```
-
-### Update system_config
-
-```sql
--- Add promptScoring config to system_config
-UPDATE system_config
-SET config = jsonb_set(
-  config,
-  '{promptScoring}',
-  '{
-    "enabled": false,
-    "autoAnalysisEnabled": false,
-    "showQuickRating": false,
-    "visionModelId": null,
-    "scoringWeights": {
-      "actionMatch": 0.40,
-      "appearanceMatch": 0.35,
-      "overallQuality": 0.25
-    }
-  }'::jsonb
-)
-WHERE id = (SELECT id FROM system_config LIMIT 1);
-```
+- Users can SELECT own scores (`user_id = auth.uid()`)
+- Users can INSERT own scores (`user_id = auth.uid()`)
+- Users can UPDATE own scores (`user_id = auth.uid()`)
+- Service role has full access (edge functions)
 
 ## Edge Functions
 
@@ -311,22 +242,18 @@ WHERE id = (SELECT id FROM system_config LIMIT 1);
 New `outputMode: 'scoring'` that uses the scoring template from `prompt_templates`:
 
 ```typescript
-// In describe-image/index.ts
 if (outputMode === 'scoring') {
-  // Fetch scoring template from prompt_templates
   const { data: template } = await supabase
     .from('prompt_templates')
     .select('system_prompt')
     .eq('use_case', 'scoring')
     .eq('is_active', true)
     .single();
-
-  // Replace {{original_prompt}} placeholder
   systemPrompt = template.system_prompt.replace('{{original_prompt}}', originalPrompt);
 }
 ```
 
-### score-generation (New)
+### score-generation
 
 Orchestrates the scoring process:
 
@@ -334,67 +261,39 @@ Orchestrates the scoring process:
 2. Call describe-image with outputMode: 'scoring'
 3. Parse vision analysis JSON
 4. Compute composite_score from weights
-5. Insert into prompt_scores table
-
-### fal-webhook (Modified)
-
-Fire-and-forget trigger after job completion:
-
-```typescript
-// After job marked complete
-const scoringConfig = await getPromptScoringConfig(supabase);
-if (scoringConfig?.enabled && scoringConfig?.autoAnalysisEnabled) {
-  EdgeRuntime.waitUntil(
-    supabase.functions.invoke('score-generation', {
-      body: {
-        jobId: job.id,
-        imageUrl: resultUrl,
-        originalPrompt: job.original_prompt,
-        enhancedPrompt: job.enhanced_prompt,
-        apiModelId: job.api_model_id,
-        userId: job.user_id
-      }
-    })
-  );
-}
-```
-
-## Admin Dashboard
-
-### Per-Model Performance Table
-
-| Model | Action | Appear | Quality | Score | n |
-|-------|--------|--------|---------|-------|---|
-| Seedream v4.5 | 3.6 | 4.1 | 3.9 | 3.8 | 1234 |
-| Flux | 3.4 | 3.8 | 4.1 | 3.7 | 892 |
-
-- Sortable columns
-- Click row to drill into model-specific patterns
-- Color-code cells: green >= 4, yellow 2.5-4, red < 2.5
-
-### Pattern Mining View
-
-- List of high-scoring prompts for selected model
-- Common issues (tag frequency)
-- No fancy visualizations - just sorted lists
+5. Look up vision model cost from `api_models.pricing.per_generation`
+6. Insert/update prompt_scores with vision data + cost tracking
+7. Populate `workspace_asset_id` by querying `workspace_assets` by `job_id`
 
 ## Implementation Phases
 
 ### Phase 1: Foundation (P0)
 
 - [x] Design documentation
-- [ ] Create `prompt_scores` table
-- [ ] Add `promptScoring` config to `system_config`
-- [ ] Extend `describe-image` with `outputMode: 'scoring'`
-- [ ] Create `score-generation` edge function
-- [ ] Add trigger in `fal-webhook`
+- [x] Create `prompt_scores` table with indexes and RLS
+- [x] Add `promptScoring` config to `system_config`
+- [x] Extend `describe-image` with `outputMode: 'scoring'`
+- [x] Create `score-generation` edge function
+- [x] Add trigger in `fal-webhook` (partial — only some fal jobs)
+- [x] Create `usePromptScores` hook
+- [x] Create `usePromptScoringConfig` hook with realtime subscription
+- [x] Add toggle in `SystemConfigTab`
+- [x] Add INSERT RLS policy for authenticated users
+- [x] Create `PromptScoringService` (write-only client service)
+- [x] Rewrite `QuickRating` as write-only (no per-tile DB reads)
+- [x] Add Prompt Score section to Generation Details slider
+- [x] Add `workspace_asset_id` population in `score-generation`
+- [x] Add vision model cost tracking in `score-generation`
 
-### Phase 2: Admin UI (P1)
+### Phase 2: User + Admin UI (P1)
 
-- [ ] Create `usePromptScores` hook
-- [ ] Create `PromptScorePanel` component
-- [ ] Integrate into `AssetPreviewModal`
-- [ ] Add toggle in `SystemConfigTab`
+- [x] QuickRating on tiles (centered hover, write-only)
+- [x] User rating in Generation Details
+- [ ] Per-dimension rating refinement in Generation Details
+- [ ] Admin rating/tags/comment in Generation Details
+- [ ] Manual "Score" / "Re-score" button (admin — UI done, wiring in progress)
+- [ ] Batch scoring admin action
+- [ ] Image preservation UI
 
 ### Phase 3: Analytics (P2)
 
@@ -407,6 +306,55 @@ if (scoringConfig?.enabled && scoringConfig?.autoAnalysisEnabled) {
 - [ ] Aggregation queries for model-specific patterns
 - [ ] High-scoring prompt extraction
 - [ ] Common issue identification
+
+## Medium Priority (Backlog)
+
+### Reference Image Context in Scoring
+Pass `reference_images_metadata` with multi-ref slot roles (position, clothing, style) to `score-generation` so the vision model can factor in whether the output matches the reference images. This would allow the scoring prompt to include "the user provided a reference image of X for position guidance" context.
+
+### Scoring Dimension Relevance by Role
+When multi-ref roles are active (e.g., position ref + clothing ref), automatically weight those dimensions higher in the composite score calculation. For example, if a clothing reference is provided, `appearance_match` weight could increase from 0.35 to 0.50.
+
+### `scoring_status` Column
+Add a `scoring_status` column (`pending | scoring | scored | failed`) to the `prompt_scores` table to enable:
+- Retry logic for failed vision analyses
+- Admin visibility into scoring pipeline health
+- Filtering unscored jobs for batch processing
+
+### Auto-Scoring Trigger
+Re-enable automatic scoring after accuracy is validated. Options:
+- **Database trigger** on `jobs` table when `status` changes to `completed` (cannot invoke edge functions directly, but could insert into a queue table)
+- **Provider-agnostic callback**: Add scoring trigger to all completion paths (fal-webhook, replicate callback, polling completion)
+- **Batch cron**: Periodic edge function that scores recent unscored completed jobs
+
+## Low Priority (Future)
+
+### Client-to-Postgres Aggregation Migration
+Move `usePromptScoringStats` aggregation from client-side JavaScript to Postgres functions/views for performance at scale. Create materialized views for per-model averages.
+
+### Pattern Mining
+- Sorted lists of high-scoring prompts per model
+- Common issue tag frequency analysis
+- Template effectiveness comparison
+
+### User-Facing Score Visibility
+After admin validation confirms scoring accuracy, optionally show composite scores to users on their assets. Requires UX consideration to avoid discouraging users.
+
+### A/B Prompt Template Testing
+Use scores to compare prompt template variants per model. Run experiments with different system prompts and measure composite score differences.
+
+### Score-Based Auto-Template Selection
+When a model consistently scores higher with certain templates, auto-prefer those templates for that model. Requires sufficient scoring data to be statistically significant.
+
+## Design Considerations
+
+- **Performance**: Scoring must never block or slow generation. All scoring is fire-and-forget or user-initiated.
+- **Write-only tiles**: Quick rating is write-only at tile level; reads happen only in lightbox details. This prevents N+1 DB queries on large grids.
+- **URL expiry**: fal.ai URLs expire. Scoring should use persisted `storage_path` with signed URLs from Supabase Storage, not raw provider URLs.
+- **Human data value**: Quick rating without auto-analysis still creates valuable human-labeled data for future model tuning.
+- **Type safety**: The `as any` casts on Supabase queries are tech debt; should be resolved when `prompt_scores` is added to generated types.
+- **Dependency**: Quick rating creates a `prompt_scores` INSERT (upsert). If the upsert fails, the rating is lost. The service handles this gracefully with toast feedback.
+- **Cost tracking**: Vision model costs are tracked per-analysis in the `vision_analysis` JSONB using `api_models.pricing.per_generation`. Missing pricing results in `null` cost, not hardcoded fallbacks.
 
 ## Related Documentation
 

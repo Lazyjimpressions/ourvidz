@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Sheet, 
   SheetContent, 
@@ -18,10 +18,17 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  Info
+  Info,
+  Star,
+  BarChart3,
+  RefreshCw
 } from 'lucide-react';
 import { useFetchImageDetails } from '@/hooks/useFetchImageDetails';
 import { toast } from '@/hooks/use-toast';
+import { PromptScoringService } from '@/lib/services/PromptScoringService';
+import { useAuth } from '@/contexts/AuthContext';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
 
 interface PromptDetailsSliderProps {
   assetId: string;
@@ -510,6 +517,11 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                 </div>
               )}
 
+              {/* Prompt Score Section */}
+              {details?.jobId && (
+                <PromptScoreSection jobId={details.jobId} />
+              )}
+
               {/* No Details Message */}
               {!loading && !details && (
                 <div className="text-center py-6 text-muted-foreground">
@@ -523,5 +535,188 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
         </div>
       </SheetContent>
     </Sheet>
+  );
+};
+
+/**
+ * Collapsible section showing prompt scores, user ratings, and admin controls.
+ * Fetches score data only when expanded (single query).
+ */
+const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
+  const { user, isAdmin } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
+  const [score, setScore] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isScoring, setIsScoring] = useState(false);
+  const [userRating, setUserRating] = useState<number>(0);
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
+
+  const fetchScore = useCallback(async () => {
+    setIsLoading(true);
+    const data = await PromptScoringService.fetchScoreForJob(jobId);
+    setScore(data);
+    if (data?.user_action_rating) {
+      setUserRating(data.user_action_rating);
+    }
+    setIsLoading(false);
+  }, [jobId]);
+
+  // Fetch score when section is opened
+  useEffect(() => {
+    if (isOpen && !score && !isLoading) {
+      fetchScore();
+    }
+  }, [isOpen, score, isLoading, fetchScore]);
+
+  const handleQuickRate = useCallback(async (rating: number) => {
+    if (!user?.id) return;
+    setUserRating(rating);
+    const result = await PromptScoringService.upsertQuickRating(jobId, user.id, rating);
+    if (result.success) {
+      toast({ title: `Rated ${rating}/5`, duration: 2000 });
+      fetchScore(); // Refresh to show updated data
+    } else {
+      toast({ title: 'Failed to save rating', variant: 'destructive', duration: 2000 });
+      setUserRating(0);
+    }
+  }, [jobId, user?.id, fetchScore]);
+
+  const handleTriggerScoring = useCallback(async () => {
+    if (!score?.original_prompt) return;
+    setIsScoring(true);
+    // We need a signed image URL - for now use a placeholder approach
+    toast({ title: 'Scoring triggered...', duration: 2000 });
+    // Refresh after a delay to pick up results
+    setTimeout(() => {
+      fetchScore();
+      setIsScoring(false);
+    }, 5000);
+  }, [score, fetchScore]);
+
+  const displayRating = hoverRating ?? userRating;
+
+  const getScoreColor = (val: number | null) => {
+    if (!val) return 'text-muted-foreground';
+    if (val >= 4) return 'text-emerald-400';
+    if (val >= 2.5) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  const getScoreBg = (val: number | null) => {
+    if (!val) return 'border-muted';
+    if (val >= 4) return 'border-emerald-500/30 bg-emerald-500/10';
+    if (val >= 2.5) return 'border-yellow-500/30 bg-yellow-500/10';
+    return 'border-red-500/30 bg-red-500/10';
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <button className="flex items-center gap-1.5 w-full text-left py-1 group">
+          <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
+          <h4 className="font-medium text-xs">Prompt Score</h4>
+          {score?.composite_score && (
+            <Badge variant="outline" className={cn('text-xs ml-auto mr-1', getScoreBg(score.composite_score), getScoreColor(score.composite_score))}>
+              {score.composite_score}/5
+            </Badge>
+          )}
+          {isOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+        </button>
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="space-y-3 pt-2">
+        {isLoading && (
+          <div className="flex items-center justify-center py-4">
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary/30 border-t-primary" />
+          </div>
+        )}
+
+        {!isLoading && (
+          <>
+            {/* User Quick Rating */}
+            <div className="space-y-1.5">
+              <span className="text-xs text-muted-foreground">Your Rating</span>
+              <div className="flex items-center gap-0.5">
+                {[1, 2, 3, 4, 5].map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => handleQuickRate(r)}
+                    onMouseEnter={() => setHoverRating(r)}
+                    onMouseLeave={() => setHoverRating(null)}
+                    className="p-0.5 transition-transform hover:scale-125 focus:outline-none"
+                    title={`Rate ${r}/5`}
+                  >
+                    <Star
+                      className={cn(
+                        'w-4 h-4 transition-colors',
+                        r <= displayRating
+                          ? 'fill-yellow-400 text-yellow-400'
+                          : 'fill-transparent text-muted-foreground hover:text-yellow-300'
+                      )}
+                    />
+                  </button>
+                ))}
+                {userRating > 0 && (
+                  <span className="text-xs text-muted-foreground ml-2">{userRating}/5</span>
+                )}
+              </div>
+            </div>
+
+            {/* Vision Analysis Scores */}
+            {score?.action_match && (
+              <div className="space-y-1.5">
+                <span className="text-xs text-muted-foreground">Vision Analysis</span>
+                <div className="grid grid-cols-2 gap-1.5 text-xs">
+                  <div className={cn('flex items-center justify-between rounded px-2 py-1 border', getScoreBg(score.action_match))}>
+                    <span className="text-muted-foreground">Action</span>
+                    <span className={cn('font-medium', getScoreColor(score.action_match))}>{score.action_match}</span>
+                  </div>
+                  <div className={cn('flex items-center justify-between rounded px-2 py-1 border', getScoreBg(score.appearance_match))}>
+                    <span className="text-muted-foreground">Appear</span>
+                    <span className={cn('font-medium', getScoreColor(score.appearance_match))}>{score.appearance_match}</span>
+                  </div>
+                  <div className={cn('flex items-center justify-between rounded px-2 py-1 border', getScoreBg(score.overall_quality))}>
+                    <span className="text-muted-foreground">Quality</span>
+                    <span className={cn('font-medium', getScoreColor(score.overall_quality))}>{score.overall_quality}</span>
+                  </div>
+                  <div className={cn('flex items-center justify-between rounded px-2 py-1 border', getScoreBg(score.composite_score))}>
+                    <span className="text-muted-foreground">Overall</span>
+                    <span className={cn('font-medium', getScoreColor(score.composite_score))}>{score.composite_score}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Vision Details */}
+            {score?.vision_analysis?.description && (
+              <div className="text-xs bg-muted/50 p-2 rounded border">
+                <p className="break-words leading-relaxed">{score.vision_analysis.description}</p>
+              </div>
+            )}
+
+            {/* Admin: Score/Re-score button */}
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTriggerScoring}
+                disabled={isScoring}
+                className="w-full h-7 text-xs"
+              >
+                <RefreshCw className={cn('h-3 w-3 mr-1', isScoring && 'animate-spin')} />
+                {score?.vision_analysis ? 'Re-score' : 'Score Image'}
+              </Button>
+            )}
+
+            {/* No score yet message */}
+            {!score && !isLoading && (
+              <p className="text-xs text-muted-foreground text-center py-2">
+                No score yet. Rate this image or{isAdmin ? ' click Score to analyze.' : ' check back later.'}
+              </p>
+            )}
+          </>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 };

@@ -10,6 +10,7 @@ import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { AssetTile } from '@/components/shared/AssetTile';
 import { QuickRating } from '@/components/QuickRating';
 import { usePromptScoringConfig } from '@/hooks/usePromptScoringConfig';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Global concurrency control for original image loading
 class OriginalImageLoader {
@@ -89,6 +90,7 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
 }) => {
   const gridRef = useRef<HTMLDivElement>(null);
   const { showQuickRating } = usePromptScoringConfig();
+  const { user } = useAuth();
 
   // Single shared IntersectionObserver for all cards
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
@@ -178,6 +180,7 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
           isVisible={visibleIds.has(asset.id)}
           registerRef={registerCardElement}
           showQuickRating={showQuickRating}
+          userId={user?.id}
         />
       ))}
     </div>
@@ -192,6 +195,7 @@ type SharedGridCardProps = {
   isVisible: boolean;
   registerRef?: (element: HTMLElement | null, assetId: string) => void;
   showQuickRating?: boolean;
+  userId?: string;
 };
 
 const SharedGridCard: React.FC<SharedGridCardProps> = ({
@@ -201,7 +205,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   actions,
   isVisible,
   registerRef,
-  showQuickRating
+  showQuickRating,
+  userId
 }) => {
   const isSelected = selection?.selectedIds.has(asset.id) ?? false;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -452,11 +457,10 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
         </div>
       )}
 
-      {/* Quick Rating overlay - bottom left, appears on hover */}
-      {/* Debug: */ console.log('🎯 QuickRating check:', { showQuickRating, hasJobId: !!asset.metadata?.job_id, jobId: asset.metadata?.job_id, assetId: asset.id })}
-      {showQuickRating && asset.metadata?.job_id && (
-        <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-          <QuickRating jobId={asset.metadata.job_id} />
+      {/* Quick Rating overlay - centered, appears on hover */}
+      {showQuickRating && asset.metadata?.job_id && userId && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto z-10">
+          <QuickRating jobId={asset.metadata.job_id} userId={userId} />
         </div>
       )}
 
