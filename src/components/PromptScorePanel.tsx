@@ -75,8 +75,14 @@ export const PromptScorePanel = ({ jobId, className }: PromptScorePanelProps) =>
     });
   }, [actionRating, appearanceRating, qualityRating, selectedTags, comment, submitAdminRating]);
 
+  // Debug logging
+  console.log('🎯 PromptScorePanel render:', { isAdmin, jobId, hasScore, isLoading });
+
   // Hide panel for non-admins or if no job
-  if (!isAdmin || !jobId) return null;
+  if (!isAdmin || !jobId) {
+    console.log('🎯 PromptScorePanel hidden:', { reason: !isAdmin ? 'not admin' : 'no jobId' });
+    return null;
+  }
 
   const formatScore = (val: number | null | undefined) => {
     if (val === null || val === undefined) return '-';

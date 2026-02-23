@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { AssetTile } from '@/components/shared/AssetTile';
+import { QuickRating } from '@/components/QuickRating';
+import { usePromptScoringConfig } from '@/hooks/usePromptScoringConfig';
 
 // Global concurrency control for original image loading
 class OriginalImageLoader {
@@ -86,6 +88,7 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
   registerAssetRef
 }) => {
   const gridRef = useRef<HTMLDivElement>(null);
+  const { showQuickRating } = usePromptScoringConfig();
 
   // Single shared IntersectionObserver for all cards
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
@@ -174,6 +177,7 @@ export const SharedGrid: React.FC<SharedGridProps> = ({
           actions={actions}
           isVisible={visibleIds.has(asset.id)}
           registerRef={registerCardElement}
+          showQuickRating={showQuickRating}
         />
       ))}
     </div>
@@ -187,6 +191,7 @@ type SharedGridCardProps = {
   actions?: SharedGridProps['actions'];
   isVisible: boolean;
   registerRef?: (element: HTMLElement | null, assetId: string) => void;
+  showQuickRating?: boolean;
 };
 
 const SharedGridCard: React.FC<SharedGridCardProps> = ({
@@ -195,7 +200,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   selection,
   actions,
   isVisible,
-  registerRef
+  registerRef,
+  showQuickRating
 }) => {
   const isSelected = selection?.selectedIds.has(asset.id) ?? false;
   const cardRef = useRef<HTMLDivElement>(null);
@@ -443,6 +449,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       {asset.type === 'video' && (
         <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5 flex items-center gap-1 pointer-events-none">
           <Video className="w-3 h-3 text-white" />
+        </div>
+      )}
+
+      {/* Quick Rating overlay - bottom left, appears on hover */}
+      {/* Debug: */ console.log('🎯 QuickRating check:', { showQuickRating, hasJobId: !!asset.metadata?.job_id, jobId: asset.metadata?.job_id, assetId: asset.id })}
+      {showQuickRating && asset.metadata?.job_id && (
+        <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          <QuickRating jobId={asset.metadata.job_id} />
         </div>
       )}
 

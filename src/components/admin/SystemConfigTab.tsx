@@ -166,10 +166,15 @@ export const SystemConfigTab = () => {
       const { data, error } = await supabase
         .from('system_config')
         .select('*')
+        .eq('id', 1)
         .single();
+
+      console.log('🔧 Loaded system_config:', { data, error });
 
       if (data && !error) {
         const loadedConfig = { ...config, ...(data.config as any) };
+        console.log('🔧 Merged config:', loadedConfig);
+        console.log('🔧 promptScoring:', loadedConfig.promptScoring);
         setConfig(loadedConfig);
         setOriginalConfig(loadedConfig);
       } else {
@@ -186,14 +191,17 @@ export const SystemConfigTab = () => {
   const saveConfig = async () => {
     setIsLoading(true);
     try {
+      console.log('🔧 Saving config:', config);
       const { error } = await supabase
         .from('system_config')
         .upsert({
+          id: 1, // Required for upsert to update the correct row
           config: config as any,
           updated_at: new Date().toISOString()
         });
 
       if (error) throw error;
+      console.log('✅ Config saved successfully');
 
       setOriginalConfig(config);
       setHasChanges(false);

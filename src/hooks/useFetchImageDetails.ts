@@ -156,6 +156,7 @@ export const useFetchImageDetails = () => {
           // ✅ SCORING: Job ID for prompt score lookup
           jobId: workspaceAsset.job_id,
         });
+        console.log('🔍 useFetchImageDetails: jobId =', workspaceAsset.job_id);
         return;
       }
 

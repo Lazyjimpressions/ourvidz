@@ -109,7 +109,7 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
   const modelUsed = row.model_used || row.modelUsed || '';
   const mimeType = row.mime_type || row.mimeType || '';
   const generationSeed = row.generation_seed || row.generationSeed;
-  const jobId = row.job_id || row.jobId;
+  const jobId = row.job_id || row.jobId || row.metadata?.job_id;
   const generationSettings = row.generation_settings || row.generationSettings || {};
   const fileSizeBytes = row.file_size_bytes || row.fileSizeBytes;
   const durationSeconds = row.duration_seconds || row.durationSeconds;
