@@ -103,8 +103,8 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
   }
   
   // Support both naming conventions
-  const assetType = row.asset_type || row.assetType || 'image';
-  const originalPrompt = row.original_prompt || row.originalPrompt || '';
+  const assetType = row.asset_type || row.assetType || row.type || 'image';
+  const originalPrompt = row.original_prompt || row.originalPrompt || row.prompt || '';
   const createdAt = row.created_at || row.createdAt;
   const modelUsed = row.model_used || row.modelUsed || '';
   const mimeType = row.mime_type || row.mimeType || '';

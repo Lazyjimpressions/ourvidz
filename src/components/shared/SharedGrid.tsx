@@ -295,9 +295,13 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     });
   }, [isMobile]);
 
+  // Retry guards to prevent infinite loops on signing failures
+  const [failedToLoad, setFailedToLoad] = useState(false);
+  const [failedVideoThumb, setFailedVideoThumb] = useState(false);
+
   // Load fallback URL for images when visible, no thumbUrl
   useEffect(() => {
-    if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible) {
+    if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible && !failedToLoad) {
       setIsLoadingFallback(true);
       
       const timeout = setTimeout(() => {
@@ -312,6 +316,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           setFallbackUrl(url);
         } catch (err) {
           console.warn('❌ Failed to load fallback image for asset', asset.id, err);
+          setFailedToLoad(true);
         }
       }).finally(() => {
         clearTimeout(timeout);
@@ -320,7 +325,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       
       return () => clearTimeout(timeout);
     }
-  }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely]);
+  }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely, failedToLoad]);
 
   // Generate video thumbnail when visible
   useEffect(() => {
@@ -330,7 +335,8 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       !generatedVideoThumbnail && 
       !isGeneratingThumbnail && 
       isVisible &&
-      asset.originalPath
+      asset.originalPath &&
+      !failedVideoThumb
     ) {
       setIsGeneratingThumbnail(true);
       
@@ -347,6 +353,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           if (thumbnail) setGeneratedVideoThumbnail(thumbnail);
         } catch (err) {
           console.warn('❌ Failed to generate video thumbnail for asset', asset.id, err);
+          setFailedVideoThumb(true);
         }
       }).finally(() => {
         clearTimeout(timeout);
@@ -355,7 +362,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       
       return () => clearTimeout(timeout);
     }
-  }, [asset.type, asset.thumbUrl, asset.id, asset.originalPath, generatedVideoThumbnail, isGeneratingThumbnail, isVisible, signOriginalSafely, generateVideoThumbnail]);
+  }, [asset.type, asset.thumbUrl, asset.id, asset.originalPath, generatedVideoThumbnail, isGeneratingThumbnail, isVisible, signOriginalSafely, generateVideoThumbnail, failedVideoThumb]);
 
   // Sign video URL on hover for autoplay (desktop only, lazy)
   const handleCardMouseEnter = useCallback(() => {
