@@ -1375,7 +1375,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // MultiCondition: build images[] with temporal positions
             const { autoSpaceFrames } = await import('@/types/videoSlots');
             const filledUrls = [refImageUrl, endRefUrl].filter(Boolean) as string[];
-            const maxFrame = cachedCaps?.input_schema?.num_frames?.max || 160;
+            // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
+            const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
+            const actualNumFrames = (videoDuration || 5) * fps;
+            const maxFrame = actualNumFrames - 1; // last valid frame index
             const frames = autoSpaceFrames(filledUrls.length, maxFrame);
             inputObj.images = filledUrls.map((image_url, i) => ({
               image_url, start_frame_num: frames[i]
