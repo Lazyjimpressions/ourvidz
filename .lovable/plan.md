@@ -1,65 +1,171 @@
 
-# Fix Plan: 4 Multi-Ref Issues
 
-## Issue 1: Cannot change ref image type (role badge not working)
+# Prompt Scoring System: Revised Design + Implementation
 
-**Root cause**: In `MobileQuickBar.tsx` line 183, the role badge popover only renders when `role && role !== 'reference'`. This means:
-- Slots defaulting to `reference` (slots 5-10) never show the role badge
-- Empty slots have no way to pre-assign a role before filling
+## Design Philosophy Changes
 
-**Fix** (`src/components/workspace/MobileQuickBar.tsx`):
-- Remove the `role !== 'reference'` guard so ALL filled slots show the role badge popover, including generic "Ref" slots
-- Change condition from `role && role !== 'reference' && onRoleChange` to just `role && onRoleChange`
-- This allows users to tap the badge on any filled slot and cycle through all 6 roles
+The original design assumed auto-scoring on every generation via webhooks. This is wrong for three reasons:
+1. Multiple API providers use different callback paths -- fal-webhook only covers some fal.ai jobs
+2. Client-side polling bypasses webhooks entirely (which is why there are 0 scores)
+3. Auto-scoring every generation wastes vision API credits while we're still tuning scoring accuracy
 
-## Issue 2: Lightbox missing role tag button
+**New approach: User/Admin-initiated scoring first, auto-scoring later.**
 
-**Root cause**: `LightboxActions.tsx` already accepts `onRoleTagToggle` and `tags` props, and `RoleTagButton` is built. But neither caller passes them:
-- `UpdatedOptimizedLibrary.tsx` (line 471) renders `LibraryAssetActions` without `onRoleTagToggle` or `tags`
-- `MobileSimplifiedWorkspace.tsx` (line 773) renders `WorkspaceAssetActions` without `onRoleTagToggle` or `tags`
+## Scoring Trigger Strategy
 
-**Fix**:
-- **`src/components/library/UpdatedOptimizedLibrary.tsx`**: Add a `handleRoleTagToggle` function that reads the asset's current tags, calls `toggleRoleTag()`, then updates the `user_library` row via Supabase. Pass `onRoleTagToggle` and `tags` to `LibraryAssetActions`.
-- **`src/pages/MobileSimplifiedWorkspace.tsx`**: Similar handler for workspace assets. Since workspace assets may not have persistent tags (they're ephemeral), the tag button should only appear for library assets in the lightbox. For workspace lightbox, we can skip this (workspace images get tagged when saved to library).
+```text
+Trigger                  When                              Creates prompt_scores row?
+-----------------------  --------------------------------  --------------------------
+User Quick Rating        User clicks stars on tile         YES (upsert: insert if missing)
+Manual Score button      Admin clicks "Score" in lightbox  YES (calls score-generation)
+Batch Score (admin)      Admin action on unscored jobs     YES (bulk score-generation)
+Auto-score (future)      After generation complete         YES (when accuracy is proven)
+```
 
-## Issue 3: Default multi model not switching when 2+ refs loaded
+Key insight: When a user clicks stars, the system:
+1. Upserts a `prompt_scores` row with the user rating
+2. If `autoAnalysisEnabled` is true, fires `score-generation` in the background to get vision scores
+3. If auto-analysis is off, the row exists with user ratings only -- still valuable data
 
-**Root cause**: The `applySmartDefault('i2i_multi')` call exists for ref2 (line 508) and some additional slots (lines 516, 524), but:
-1. **Model dropdown is not filtered** -- `MobileSettingsSheet.tsx` `ModelChipPopover` shows ALL image models regardless of multi-ref state. It doesn't receive or check `tasks` arrays.
-2. **QuickBar model dropdown** (line 514 in MobileQuickBar) also shows all models unfiltered.
+This means Quick Rating works even without vision scoring being enabled.
 
-**Fix**:
-- **`src/components/workspace/MobileSimplePromptInput.tsx`**: Compute `multiRefActive` (count filled ref slots >= 2). Pass it to both `MobileQuickBar` and `MobileSettingsSheet`.
-- **`src/components/workspace/MobileQuickBar.tsx`**: Accept `multiRefActive` prop. When true and mode is `image`, filter `imageModels` to only those with `tasks` including `i2i_multi`. Need to expand the `imageModels` prop type to include `tasks?: string[]`.
-- **`src/components/workspace/MobileSettingsSheet.tsx`**: Same -- accept `multiRefActive` and `tasks` on model items, filter the model list.
-- **`src/hooks/useImageModels.ts`**: Already includes `tasks` in the query and `ImageModel` type. But `MobileSimplePromptInput` strips it when mapping to the QuickBar prop (line 587-591). Fix: include `tasks` in the mapped object.
+## Changes
 
-## Issue 4: Sparkle button not keying off ref images / no template hover tooltip
+### 1. QuickRating: Remove DB Query Per Tile
 
-**Root cause**: The `handleEnhance` function (MobileSimplePromptInput line 165) sends `model_id`, `job_type`, and `contentType` to the `enhance-prompt` edge function but does NOT send any reference image context or slot role metadata. There's also no hover tooltip showing which template will be used.
+**Problem**: Current `QuickRating` component calls `usePromptScores(jobId)` which fires a Supabase SELECT for every visible tile. With 40 tiles on screen, that's 40 queries.
 
-**Fix** (`src/components/workspace/MobileSimplePromptInput.tsx`):
-- Update `handleEnhance` to include `has_reference_images: true` and `slot_roles` metadata in the request body when multi-ref is active. This lets the edge function select the appropriate multi-ref template.
-- Add a `title` attribute (tooltip) to the sparkle button that shows the expected template context, e.g. "Enhance prompt (Multi-ref: Char, Position, Clothing)" or "Enhance prompt (single image)" based on the current ref state and selected model.
+**Solution**: Remove the per-tile DB fetch entirely. The stars are a write-only interaction at the tile level.
 
-## Files to Modify
+- Stars render in their unrated state (empty) by default
+- On click, the component calls a lightweight `upsertQuickRating(jobId, rating)` function directly (no hook)
+- This function does a Supabase upsert on `prompt_scores` using `job_id` as the conflict key
+- Toast confirms the rating
+- No need to read back the score on tiles -- if the user wants to see their rating and scoring details, they open the lightbox Generation Details
 
-| File | Changes |
-|------|---------|
-| `src/components/workspace/MobileQuickBar.tsx` | Remove `role !== 'reference'` guard; add `multiRefActive` prop; add `tasks` to imageModels type; filter models when multi-ref |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Compute `multiRefActive`; pass to QuickBar + SettingsSheet; include `tasks` in model mapping; update sparkle handler with ref context; add sparkle tooltip |
-| `src/components/workspace/MobileSettingsSheet.tsx` | Accept `multiRefActive`; filter model list for `i2i_multi` when active |
-| `src/components/library/UpdatedOptimizedLibrary.tsx` | Wire `onRoleTagToggle` + `tags` to `LibraryAssetActions` with Supabase update handler |
-| `src/pages/MobileSimplifiedWorkspace.tsx` | No changes needed (already passes `slotRoles` correctly) |
+**New file**: `src/lib/services/PromptScoringService.ts`
+- `upsertQuickRating(jobId, userId, rating)`: Upserts prompt_scores with user ratings + fetches job metadata (original_prompt, api_model_id) to populate required fields on insert
+- `triggerVisionScoring(jobId)`: Invokes `score-generation` edge function
+- `fetchScoreForJob(jobId)`: Single fetch for lightbox use
 
-## Status of Previously Planned Changes
+### 2. QuickRating UI: Centered on Hover
 
-- **SlotRole types** (`src/types/slotRoles.ts`): Done -- 6 roles, labels, colors, `buildFigurePrefix`
-- **`RoleTagButton` component**: Done -- built and functional
-- **`LightboxActions` prop wiring**: Props added but NOT connected to callers (this plan fixes it)
-- **`MobileQuickBar` role badge**: Built but gated behind `role !== 'reference'` (this plan fixes it)
-- **`slotRoles` state in workspace page**: Done -- state, setter, and passthrough all wired
-- **`buildFigurePrefix` in generate flow**: Done -- `useLibraryFirstWorkspace.ts` accepts and uses `slotRoles`
-- **Character Studio auto-tagging**: Changes were made to `useCharacterStudio.ts` and `CharacterStudioV3.tsx` (needs verification)
-- **Model filtering for `i2i_multi`**: NOT done (this plan adds it)
-- **Sparkle/enhance with ref context**: NOT done (this plan adds it)
+**File**: `src/components/QuickRating.tsx`
+
+- Remove `usePromptScores` hook (no DB read)
+- Accept `jobId` and `userId` props
+- Stars render centered horizontally in middle third of tile
+- Use `pointer-events-none` on the wrapper, `pointer-events-auto` on the stars row
+- Position: `absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`
+- Only show on hover via parent's `opacity-0 group-hover:opacity-100`
+- Remove debug console.log statements
+
+**File**: `src/components/shared/SharedGrid.tsx`
+- Remove `console.log` debug statement on line 456
+- Move QuickRating from bottom-left to center: `absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2`
+- Pass `userId` from auth context or prop
+
+### 3. Scoring Details in Generation Details Slider
+
+**File**: `src/components/lightbox/PromptDetailsSlider.tsx`
+
+Add a new collapsible "Prompt Score" section after "Generation Details":
+
+- Fetch score via `fetchScoreForJob(jobId)` when the slider opens (single query, only when user explicitly opens details)
+- Show vision analysis scores (action_match, appearance_match, overall_quality, composite) as colored badges
+- Show user rating if present
+- Show admin rating if present
+- Show feedback tags as chips
+- Show "Score" button (admin) or "Re-score" button to trigger `score-generation`
+- Show detailed star rating inputs (per-dimension) for users who want to refine their quick rating
+- Admin users see additional fields: admin rating inputs, comment textarea, feedback tag selector, preserve toggle
+
+This consolidates the scoring UI into the existing details panel rather than creating a separate panel.
+
+### 4. score-generation Edge Function Updates
+
+**File**: `supabase/functions/score-generation/index.ts`
+
+- After inserting the score, query `workspace_assets` by `job_id` and update the score row with `workspace_asset_id`
+- Add vision model cost tracking to `vision_analysis` JSONB:
+  - `vision_model_used`: the model ID used
+  - `vision_cost_estimate`: looked up from `api_models.pricing`
+- The function already handles the "score exists" check, so re-scoring should use an upsert or delete-then-insert pattern
+
+### 5. QuickRating Upsert Logic
+
+The `upsertQuickRating` service function needs to handle the case where no `prompt_scores` row exists yet (user rates before auto-scoring runs):
+
+```text
+1. Fetch job metadata: original_prompt, enhanced_prompt, api_model_id, user_id
+2. Upsert into prompt_scores:
+   - ON CONFLICT (job_id) DO UPDATE SET user ratings + user_rated_at
+   - ON INSERT: populate job_id, user_id, api_model_id, original_prompt, enhanced_prompt
+3. If autoAnalysisEnabled and no vision_analysis exists, fire score-generation in background
+```
+
+This requires the `unique_job_score` constraint already exists on `prompt_scores(job_id)`.
+
+### 6. Documentation Update
+
+**File**: `docs/03-SYSTEMS/PROMPT_SCORING_SYSTEM.md`
+
+**Architecture section**: Replace webhook-centric diagram with the new trigger strategy table.
+
+**Phase checklist update**:
+- Phase 1 (Foundation):
+  - [x] prompt_scores table
+  - [x] system_config scoring section
+  - [x] describe-image scoring mode
+  - [x] score-generation edge function
+  - [x] fal-webhook trigger (partial -- only some fal jobs)
+  - [x] usePromptScores hook
+  - [x] usePromptScoringConfig hook
+  - [x] SystemConfigTab toggle
+  - [ ] Fix: QuickRating upsert (no per-tile DB reads)
+  - [ ] Fix: Score details in Generation Details slider
+  - [ ] workspace_asset_id population
+  - [ ] Vision model cost tracking
+
+- Phase 2 (User + Admin UI):
+  - [ ] QuickRating on tiles (centered hover)
+  - [ ] Per-dimension rating in Generation Details
+  - [ ] Admin rating/tags/comment in Generation Details
+  - [ ] Manual "Score" / "Re-score" button
+  - [ ] Batch scoring admin action
+
+- Phase 3 (Analytics): unchanged
+
+**New sections to add**:
+
+**Medium Priority (Backlog)**:
+- Reference image context in scoring: Pass multi-ref slot roles to score-generation so vision model factors in reference match
+- Scoring dimension relevance by role: Weight dimensions based on active reference roles
+- `scoring_status` column: Track pending/scoring/scored/failed for retry logic
+- Auto-scoring trigger: Re-enable after accuracy is validated, using a provider-agnostic approach (e.g., DB trigger on job status change to 'completed')
+
+**Low Priority (Future)**:
+- Move aggregation from client to Postgres functions
+- Pattern mining: sorted high-scoring prompts per model
+- User-facing score visibility after admin validation
+- A/B prompt template testing using scores
+- Score-based auto-template selection
+
+**Design Considerations**:
+- Scoring must never block or slow generation
+- Quick rating is write-only at tile level; read happens only in lightbox details
+- fal.ai URLs expire; scoring should use persisted storage paths with signed URLs
+- Quick rating without auto-analysis still creates valuable human-labeled data
+- The `as any` casts on Supabase queries are tech debt; resolve when prompt_scores is added to generated types
+
+## Files Summary
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `src/lib/services/PromptScoringService.ts` | Create | upsertQuickRating, triggerVisionScoring, fetchScoreForJob |
+| `src/components/QuickRating.tsx` | Rewrite | Remove DB reads, center on tile, write-only interaction |
+| `src/components/shared/SharedGrid.tsx` | Edit | Center QuickRating, remove debug logs, pass userId |
+| `src/components/lightbox/PromptDetailsSlider.tsx` | Edit | Add Prompt Score section with ratings + admin panel |
+| `supabase/functions/score-generation/index.ts` | Edit | Add workspace_asset_id + vision cost tracking |
+| `docs/03-SYSTEMS/PROMPT_SCORING_SYSTEM.md` | Edit | Update architecture, checklist, add backlog sections |
+
