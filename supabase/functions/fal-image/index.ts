@@ -458,9 +458,10 @@ async function buildModelInput(
       if (body.input.images && Array.isArray(body.input.images)) {
         const signedImages = [];
         for (const img of body.input.images) {
-          const signed = await signIfStoragePath(supabase, img.url, 'user-library');
+          const imgUrl = img.image_url || img.url;
+          const signed = await signIfStoragePath(supabase, imgUrl, 'user-library');
           if (signed) {
-            signedImages.push({ url: signed, start_frame_num: img.start_frame_num || 0 });
+            signedImages.push({ image_url: signed, start_frame_num: img.start_frame_num || 0 });
           }
         }
         if (signedImages.length > 0) {
