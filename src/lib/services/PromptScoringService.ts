@@ -215,29 +215,16 @@ export class PromptScoringService {
 
   /**
    * Trigger vision scoring for a job via the score-generation edge function.
+   * Metadata (prompt, model, template) is resolved server-side from the jobs table.
    */
   static async triggerVisionScoring(
     jobId: string,
     imageUrl: string,
-    originalPrompt: string,
-    options?: {
-      enhancedPrompt?: string;
-      apiModelId?: string;
-      userId?: string;
-      force?: boolean;
-    }
+    force = false
   ): Promise<{ success: boolean; error?: string }> {
     try {
       const { error } = await supabase.functions.invoke('score-generation', {
-        body: {
-          jobId,
-          imageUrl,
-          originalPrompt,
-          enhancedPrompt: options?.enhancedPrompt,
-          apiModelId: options?.apiModelId,
-          userId: options?.userId,
-          force: options?.force ?? false,
-        },
+        body: { jobId, imageUrl, force },
       });
 
       if (error) {
