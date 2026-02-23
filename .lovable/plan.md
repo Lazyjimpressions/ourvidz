@@ -1,137 +1,103 @@
 
 
-# MultiCondition Video UI: Comprehensive Upgrade
+# Simplify Video Mode: 5 Fixed Ref Boxes, Content-Driven Model Switching
 
-## Answers to Your Questions
+## Problem
+The current implementation gates how many ref slots are visible based on whether the "multi" model is already selected. This is backwards -- the slots should always be there, and the model should auto-switch based on what the user fills in.
 
-### 1. Frames vs Seconds
-Frame rate should be fixed at 30fps (the model default). Users think in seconds, not frames. One duration slider (1-5s) is correct. The system multiplies internally: `num_frames = duration * 30`. No need for separate frame/fps controls.
+## Current State (What's Wrong)
+- QuickBar shows **2 slots** in standard video, **4 slots** only when multi model is already active
+- Settings Sheet mirrors the same limited slot count
+- No per-image strength controls in the Settings Sheet
+- Model must be manually selected before extra slots appear -- chicken-and-egg problem
 
-### 2. Video Conditioning
-The `videos[]` array lets you provide a short video clip as a temporal reference -- the model will continue/blend from it alongside your image keyframes. Think of it as "extend from this clip while transitioning to these keyframes." It's powerful but adds complexity; recommend deferring to a later phase.
+## Desired Behavior
+1. Video mode **always shows 5 ref boxes** in QuickBar (Start, Key 2, Key 3, Key 4, End)
+2. **First image added** (any slot) -> auto-switch to **i2v** model
+3. **Video file added** -> auto-switch to **v2v extend** model  
+4. **2+ images filled** -> auto-switch to **multi** model
+5. Settings Sheet shows all 5 boxes with **per-image strength sliders** (0.1-1.0)
+6. Empty middle slots are simply skipped during generation
 
-### 3. Per-Image Strength (from fal.ai screenshot)
-Each image in the `images[]` array supports a `strength` field (0-1, default 1). This controls how strongly each keyframe influences the generated video at its frame position. Our current code does NOT pass `strength` -- it only sends `image_url` and `start_frame_num`. This is a missing feature.
+## Changes
 
-### 4. QuickBar Ref Slots for Video
-Currently video mode shows dynamic `refSlots` starting with just 2 ("Start"/"End"). The `AddSlotButton` only appears when ALL existing slots are filled. For multi, we should show 3-5 labeled slots by default: "Start", "Mid 1", "Mid 2", "End" -- similar to image mode's fixed slot pattern.
+### 1. `MobileSimplePromptInput.tsx` -- Always 5 video slots
 
-### 5. Keyframe Spacing Logic
-Each slot needs two controls visible when filled:
-- **Frame position** (auto-calculated from a time input, e.g. "0.0s", "1.5s", "4.0s") -- snapped to multiples of 8 frames
-- **Strength** slider (0-1)
+Remove the `isVideoMulti` gating. Video mode always builds 5 labeled slots:
 
-Auto-spacing distributes filled images evenly across the duration by default, but users can override individual positions. The last filled slot defaults to the final frame.
-
-### 6. Strength -- confirmed missing from payload
-The `images[]` objects we build only have `{ image_url, start_frame_num }`. Need to add `strength` field.
-
-### 7. Drag & Drop -- works in QuickBar, missing in Settings Sheet
-QuickBar ref slots have `onDrop` handlers. Settings Sheet renders plain buttons/images without drag event handlers.
-
-### 8. More than 2 refs -- UI limitation
-The generation logic hardcodes `filledUrls = [refImageUrl, endRefUrl]` -- only 2 sources. Need to expand to pull from additional ref slots.
-
-### 9. LoRAs
-Schema supports `loras[]` array but no UI exists. Significant feature requiring a LoRA browser. Defer to future phase.
-
-### 10. Overall UI design -- see plan below
-
----
-
-## Implementation Plan
-
-### Phase 1: Core Multi Video UI (This Sprint)
-
-#### A. Fixed Keyframe Slots in QuickBar (video + multi model)
-
-**File: `MobileQuickBar.tsx`**
-
-When `currentMode === 'video'` AND multi model is selected, switch from dynamic 2-slot layout to a fixed 4-slot layout:
-
-| Slot | Label | Default Frame Position |
-|------|-------|----------------------|
-| 0 | Start | 0 (always) |
-| 1 | Mid 1 | auto-spaced |
-| 2 | Mid 2 | auto-spaced |
-| 3 | End | last frame (always) |
-
-- Use the existing `RefSlot` component with labels
-- Keep the `AddSlotButton` to allow up to 5 slots
-- Empty middle slots are simply skipped during generation (only filled slots contribute to `images[]`)
-
-#### B. Per-Keyframe Controls in Settings Sheet
-
-**File: `MobileSettingsSheet.tsx`**
-
-For each filled keyframe slot, show:
-1. Thumbnail with remove button
-2. **Time position**: small input showing seconds (e.g. "0.0s", "2.0s") -- converted to `start_frame_num` as `Math.round(seconds * fps / 8) * 8`
-3. **Strength**: compact slider 0-1, default 1
-
-Also:
-- Add `onDragOver`/`onDrop` handlers to ref slot elements (mirrors QuickBar)
-- Hide "Motion Intensity" slider when multi model is selected
-- Hide "Strength" (the old single-ref strength) when multi model is selected
-
-#### C. Expand Generation Logic to All Slots
-
-**File: `useLibraryFirstWorkspace.ts`**
-
-Replace the hardcoded 2-source array:
 ```
-const filledUrls = [refImageUrl, endRefUrl].filter(Boolean)
+const VIDEO_LABELS = ['Start', 'Key 2', 'Key 3', 'Key 4', 'End'];
+const videoRefSlots = VIDEO_LABELS.map((label, i) => {
+  let url = null, isVideo = false;
+  if (i === 0) { url = beginningRefImageUrl; isVideo = ref1IsVideo; }
+  else if (i === 4) { url = endingRefImageUrl; isVideo = ref2IsVideo; }
+  else { url = additionalRefUrls[i - 1] || null; }
+  return { url, isVideo, label };
+});
+const maxVideoSlots = 5; // always 5
 ```
 
-With a gather from all ref sources:
+Remove `isVideoMulti` checks from `handleRemoveSlot`, `handleDropSlot`, `handleDropSlotUrl` -- treat ALL video slots the same way (slot 0 = start, slot 4 = end, slots 1-3 = additionalRefUrls[0-2]).
+
+### 2. `MobileQuickBar.tsx` -- Remove multi-gating logic
+
+Remove the `isVideoMulti` variable and `selectedModelTasks` prop dependency for slot rendering. Video mode always renders `refSlots` as-is (which will now always be 5). Remove the `AddSlotButton` in video mode -- fixed at 5.
+
+The `showLabel` is always `true` for video slots (was gated on `isVideoMulti`).
+
+### 3. `MobileSettingsSheet.tsx` -- Per-image strength in References
+
+When `currentMode === 'video'` and a slot has an image, show a small strength slider under its thumbnail:
+
 ```
-const allRefUrls = [
-  refImageUrl,
-  endRefUrl,
-  ...additionalRefUrls
-].filter(Boolean)
+{slot.url && currentMode === 'video' && (
+  <div className="w-12">
+    <input type="range" min={0.1} max={1} step={0.05} 
+           value={keyframeStrengths?.[i] ?? 1} 
+           onChange={(e) => onKeyframeStrengthChange?.(i, parseFloat(e.target.value))} />
+    <span className="text-[7px]">{((keyframeStrengths?.[i] ?? 1) * 100).toFixed(0)}%</span>
+  </div>
+)}
 ```
 
-Each entry in `images[]` gets:
-```
-{ image_url, start_frame_num, strength }
-```
+Add new props: `keyframeStrengths?: number[]` and `onKeyframeStrengthChange?: (index: number, strength: number) => void`.
 
-Where `strength` comes from per-slot state (new state array, default 1.0 for all).
+Hide the global "Strength" slider and "Exact Copy" toggle when in video mode (they don't apply).
 
-#### D. Per-Slot State for Frame Position & Strength
+### 4. `useLibraryFirstWorkspace.ts` -- Add keyframe strengths state + pass through
 
-**File: `useLibraryFirstWorkspace.ts` (state) + `MobileSimplePromptInput.tsx` (props)**
-
-Add new state:
+Add state:
 ```typescript
 const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1, 1, 1, 1, 1]);
-const [keyframePositions, setKeyframePositions] = useState<number[] | null>(null); // null = auto-space
 ```
 
-When `keyframePositions` is null, use `autoSpaceFrames()`. When user manually adjusts a time input, store the override.
+In the multi-model generation branch, use per-slot strength:
+```typescript
+inputObj.images = filledUrls.map((image_url, i) => ({
+  image_url,
+  start_frame_num: frames[i],
+  strength: keyframeStrengths[originalSlotIndices[i]] ?? 1,
+}));
+```
 
-#### E. Update `input_schema` in DB
+Pass `keyframeStrengths` and `setKeyframeStrengths` down through `MobileSimplePromptInput` to `MobileSettingsSheet`.
 
-Add `strength` to the images schema description so the edge function doesn't strip it. Currently `images` has `type: "string"` which is misleading -- the edge function handles it as an array anyway, but we should ensure `strength` passes through.
+### 5. Auto-model switching (already mostly works via `useSmartModelDefaults`)
 
-Check: The edge function's `alwaysAllowed` set already includes `images`. The `strength` field is nested inside each image object, so it should pass through without being stripped.
+The existing `useSmartModelDefaults` hook already handles task-based model lookup. The auto-switching in `useLibraryFirstWorkspace` should trigger on slot fill count:
+- 0 filled images -> `t2v`
+- 1 filled image -> `i2v`  
+- 1 filled video -> `extend`
+- 2+ filled images -> `multi`
 
----
+This logic likely already exists but needs to count ALL 5 slots, not just the first 2.
 
-### Files to Modify
+## Files Summary
 
-| File | Change | Lines |
-|------|--------|-------|
-| `MobileQuickBar.tsx` | Add fixed 4-slot keyframe layout for video+multi mode | ~30 lines |
-| `MobileSettingsSheet.tsx` | Add per-keyframe time/strength controls, drag-drop, hide irrelevant sliders | ~50 lines |
-| `useLibraryFirstWorkspace.ts` | Gather all ref URLs into `images[]`, add `strength` field, per-slot state | ~25 lines |
-| `MobileSimplePromptInput.tsx` | Pass keyframe state props down to QuickBar and Settings | ~15 lines |
-| `videoSlots.ts` | Add strength to `VideoRefSlot` type | ~3 lines |
-
-### Not in This Sprint
-- Video conditioning (`videos[]` array) -- deferred
-- LoRA browser UI -- deferred  
-- Frame rate selector -- fixed at model default (30fps)
-- Slots beyond 5 -- can expand later
+| File | Change |
+|------|--------|
+| `MobileSimplePromptInput.tsx` | Always 5 video slots, remove `isVideoMulti` gating, pass strength props |
+| `MobileQuickBar.tsx` | Remove `isVideoMulti` logic, always show labels for video, remove AddSlotButton for video |
+| `MobileSettingsSheet.tsx` | Add per-image strength slider under each filled video ref, new props |
+| `useLibraryFirstWorkspace.ts` | Add `keyframeStrengths` state, use in `images[]` payload, pass down |
 
