@@ -5,6 +5,9 @@ import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { SharedGrid } from '@/components/shared/SharedGrid';
 import { LibraryAssetActions } from '@/components/shared/LightboxActions';
 import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
+import { toggleRoleTag } from '@/components/shared/RoleTagButton';
+import type { SlotRole } from '@/types/slotRoles';
+import { supabase } from '@/integrations/supabase/client';
 import { OurVidzDashboardLayout } from '../OurVidzDashboardLayout';
 import { CompactLibraryHeader } from './CompactLibraryHeader';
 import { CompactLibraryFilters } from './CompactLibraryFilters';
@@ -195,6 +198,22 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
       toast.error('Delete failed');
     } finally {
       setIsDeleting(false);
+    }
+  }, [refetch]);
+
+  const handleRoleTagToggle = useCallback(async (asset: any, role: SlotRole) => {
+    try {
+      const currentTags: string[] = asset.metadata?.tags || [];
+      const newTags = toggleRoleTag(currentTags, role);
+      await supabase
+        .from('user_library')
+        .update({ tags: newTags })
+        .eq('id', asset.id);
+      toast.success(`Role tag updated`);
+      refetch();
+    } catch (err) {
+      console.error('Failed to update role tag:', err);
+      toast.error('Failed to update tag');
     }
   }, [refetch]);
 
@@ -473,6 +492,8 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 onDelete={() => handleDelete(asset as any)}
                 onDownload={() => handleDownload(asset as any)}
                 onUseAsReference={() => handleUseAsReference(asset as any)}
+                onRoleTagToggle={(role) => handleRoleTagToggle(asset, role)}
+                tags={(asset as any).metadata?.tags || []}
               />
             );
           }}

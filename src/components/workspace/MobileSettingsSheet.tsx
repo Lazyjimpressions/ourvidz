@@ -30,9 +30,10 @@ export interface MobileSettingsSheetProps {
   // Model Selection
   selectedModel: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null;
   onModelChange: (model: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string }) => void;
-  imageModels?: Array<{ id: string; display_name: string; provider_name: string; capabilities?: ModelCapabilities }>;
+  imageModels?: Array<{ id: string; display_name: string; provider_name: string; tasks?: string[]; capabilities?: ModelCapabilities }>;
   videoModels?: Array<{ id: string; display_name: string; api_providers: { name: string } }>;
   modelsLoading?: boolean;
+  multiRefActive?: boolean;
   
   // Quality
   quality: 'fast' | 'high';
@@ -95,17 +96,21 @@ const STYLE_PRESETS = [
 ];
 
 /** Model selector popover chip */
-function ModelChipPopover({ currentMode, selectedModel, onModelChange, imageModels, videoModels, modelsLoading }: {
+function ModelChipPopover({ currentMode, selectedModel, onModelChange, imageModels, videoModels, modelsLoading, multiRefActive }: {
   currentMode: 'image' | 'video';
   selectedModel: MobileSettingsSheetProps['selectedModel'];
   onModelChange: MobileSettingsSheetProps['onModelChange'];
   imageModels: MobileSettingsSheetProps['imageModels'];
   videoModels: MobileSettingsSheetProps['videoModels'];
   modelsLoading: boolean;
+  multiRefActive?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const filteredImageModels = multiRefActive
+    ? (imageModels || []).filter(m => m.tasks?.includes('i2i_multi'))
+    : (imageModels || []);
   const models = currentMode === 'image'
-    ? [{ id: 'sdxl', label: 'SDXL (Local)' }, ...(imageModels || []).map(m => ({ id: m.id, label: m.display_name }))]
+    ? [{ id: 'sdxl', label: 'SDXL (Local)' }, ...filteredImageModels.map(m => ({ id: m.id, label: m.display_name }))]
     : [{ id: 'wan', label: 'WAN (Local)' }, ...(videoModels || []).map(m => ({ id: m.id, label: m.display_name }))];
 
   const handleSelect = (modelId: string) => {
@@ -306,6 +311,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   videoDurationOptions = [],
   motionIntensity = 0.5,
   onMotionIntensityChange,
+  multiRefActive = false,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   
@@ -368,6 +374,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                 imageModels={imageModels}
                 videoModels={videoModels}
                 modelsLoading={modelsLoading}
+                multiRefActive={multiRefActive}
               />
 
               {/* Resolution Chip */}

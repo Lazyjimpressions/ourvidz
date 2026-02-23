@@ -167,14 +167,21 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     setIsEnhancing(true);
     try {
       const playgroundSettings = JSON.parse(localStorage.getItem('playground-settings') || '{}');
+      const enhanceBody: Record<string, any> = {
+        prompt: prompt.trim(),
+        model_id: selectedModel.id,
+        job_type: currentMode === 'video' ? 'video' : 'image',
+        contentType: contentType || 'sfw',
+        enhancement_model: playgroundSettings.enhancementModel || undefined,
+      };
+      // Include multi-ref context for template selection
+      const _filledCount = [referenceImageUrl, referenceImage2Url, ...additionalRefUrls].filter(Boolean).length;
+      if (_filledCount >= 2 && slotRoles) {
+        enhanceBody.has_reference_images = true;
+        enhanceBody.slot_roles = slotRoles.slice(0, _filledCount);
+      }
       const { data, error } = await supabase.functions.invoke('enhance-prompt', {
-        body: {
-          prompt: prompt.trim(),
-          model_id: selectedModel.id,
-          job_type: currentMode === 'video' ? 'video' : 'image',
-          contentType: contentType || 'sfw',
-          enhancement_model: playgroundSettings.enhancementModel || undefined,
-        }
+        body: enhanceBody,
       });
       if (error) throw error;
       if (data?.enhanced_prompt) {
@@ -466,6 +473,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     });
   };
 
+  // Compute multi-ref state: 2+ filled image-mode slots
+  const filledSlotCount = currentMode === 'image'
+    ? [referenceImageUrl, referenceImage2Url, ...additionalRefUrls].filter(Boolean).length
+    : 0;
+  const multiRefActive = filledSlotCount >= 2;
+
   // Compute ref slot URLs for QuickBar
   const ref1Url = currentMode === 'image' ? referenceImageUrl : beginningRefImageUrl;
   const ref2Url = currentMode === 'image' ? referenceImage2Url : endingRefImageUrl;
@@ -576,6 +589,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         disabled={isGenerating}
         slotRoles={slotRoles}
         onSlotRoleChange={onSlotRoleChange}
+        multiRefActive={multiRefActive}
         contentType={contentType}
         onContentTypeChange={onContentTypeChange}
         aspectRatio={aspectRatio}
@@ -588,6 +602,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           id: m.id,
           display_name: m.display_name,
           provider_name: m.provider_name,
+          tasks: m.tasks,
         }))}
         videoModels={videoModels || []}
         modelsLoading={modelsLoading || videoModelsLoading}
@@ -621,6 +636,13 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               onClick={handleEnhance}
               disabled={!prompt.trim() || isEnhancing || isGenerating}
               className="text-muted-foreground hover:text-primary p-1 rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title={
+                multiRefActive && slotRoles
+                  ? `Enhance prompt (Multi-ref: ${slotRoles.slice(0, filledSlotCount).filter(r => r !== 'reference').map(r => r[0].toUpperCase() + r.slice(1)).join(', ') || 'Refs'})`
+                  : hasReferenceImage
+                    ? 'Enhance prompt (single ref)'
+                    : 'Enhance prompt'
+              }
             >
               {isEnhancing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
             </button>
@@ -647,10 +669,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           id: m.id,
           display_name: m.display_name,
           provider_name: m.provider_name,
+          tasks: m.tasks,
           capabilities: m.capabilities as any
         }))}
         videoModels={videoModels || []}
         modelsLoading={modelsLoading || videoModelsLoading}
+        multiRefActive={multiRefActive}
         quality={quality}
         onQualityChange={onQualityChange}
         aspectRatio={aspectRatio}
