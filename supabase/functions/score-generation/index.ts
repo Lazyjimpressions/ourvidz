@@ -19,6 +19,7 @@ interface ScoreGenerationRequest {
   systemPromptUsed?: string;
   apiModelId?: string;
   userId: string;
+  force?: boolean;
 }
 
 interface ScoringConfig {
@@ -132,6 +133,7 @@ serve(async (req) => {
       systemPromptUsed,
       apiModelId,
       userId,
+      force = false,
     } = body;
 
     // Validate required fields
@@ -163,11 +165,16 @@ serve(async (req) => {
       .single();
 
     if (existingScore) {
-      console.log("⏭️ Score already exists for job:", jobId);
-      return new Response(
-        JSON.stringify({ success: true, skipped: true, reason: "Score already exists" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (!force) {
+        console.log("⏭️ Score already exists for job:", jobId);
+        return new Response(
+          JSON.stringify({ success: true, skipped: true, reason: "Score already exists" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      // Force re-score: delete existing row
+      console.log("🔄 Force re-score: deleting existing score for job:", jobId);
+      await supabase.from("prompt_scores").delete().eq("id", existingScore.id);
     }
 
     // Call vision model for analysis
