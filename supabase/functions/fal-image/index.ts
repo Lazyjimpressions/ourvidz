@@ -306,14 +306,17 @@ async function buildModelInput(
   const hasImageUrl = !!(body.input?.image_url);
   const hasImageUrls = Array.isArray(body.input?.image_urls) && body.input.image_urls.length > 0;
   const hasVideoInput = !!(body.input?.video);
-  const hasReference = hasImageUrl || hasImageUrls || hasVideoInput;
+  const hasImagesArray = Array.isArray(body.input?.images) && body.input.images.length > 0;
+  const hasReference = hasImageUrl || hasImageUrls || hasVideoInput || hasImagesArray;
 
   const generationMode = hasReference
-    ? (isVideo ? (hasVideoInput ? 'v2v_extend' : 'i2v') : 'i2i')
+    ? (isVideo
+        ? (hasVideoInput ? 'v2v_extend' : hasImagesArray ? 'multi_conditioning' : 'i2v')
+        : 'i2i')
     : (isVideo ? 'txt2vid' : 'txt2img');
 
   console.log('🎯 Generation mode:', generationMode, {
-    hasImageUrl, hasImageUrls, hasVideoInput, isVideo
+    hasImageUrl, hasImageUrls, hasVideoInput, hasImagesArray, isVideo
   });
 
   // --- Determine if model requires image_urls array (schema-driven) ---
