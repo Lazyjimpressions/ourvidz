@@ -95,6 +95,9 @@ const MobileSimplifiedWorkspace = () => {
     setVideoDuration,
     motionIntensity,
     setMotionIntensity,
+    // Per-keyframe strengths
+    keyframeStrengths,
+    setKeyframeStrengths,
     // URL Management (not used - we use useSignedAssets instead for immediate signing)
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
@@ -718,7 +721,15 @@ const MobileSimplifiedWorkspace = () => {
           onReferenceImage2UrlSet={handleReferenceImage2UrlSet}
           onReferenceImage2Remove={handleReferenceImage2Remove}
            additionalRefUrls={additionalRefUrls}
-           onAdditionalRefsChange={setAdditionalRefUrls}
+           onAdditionalRefsChange={(urls) => {
+             setAdditionalRefUrls(urls);
+             // Auto-switch to multi if 2+ total video refs filled
+             if (mode === 'video') {
+               const totalFilled = [beginningRefImageUrl, ...urls, endingRefImageUrl].filter(Boolean).length;
+               if (totalFilled >= 2) applySmartDefault('multi');
+               else if (totalFilled === 1) applySmartDefault('i2v');
+             }
+           }}
            slotRoles={slotRoles}
            onSlotRoleChange={(index, role) => {
              setSlotRoles(prev => {
@@ -737,6 +748,12 @@ const MobileSimplifiedWorkspace = () => {
             const model = imageModels?.find(m => m.id === selectedModel.id);
             return (model as any)?.capabilities as Record<string, any> || undefined;
           })()}
+          keyframeStrengths={keyframeStrengths}
+          onKeyframeStrengthChange={(index, strength) => {
+            const next = [...keyframeStrengths];
+            next[index] = strength;
+            setKeyframeStrengths(next);
+          }}
         />
 
         {/* Lightbox */}
