@@ -65,9 +65,10 @@ export interface MobileQuickBarProps {
   // Model selector dropdown
   selectedModel?: { id: string; type: string; display_name: string } | null;
   onModelChange?: (model: { id: string; type: string; display_name: string }) => void;
-  imageModels?: Array<{ id: string; display_name: string; provider_name: string }>;
+  imageModels?: Array<{ id: string; display_name: string; provider_name: string; tasks?: string[] }>;
   videoModels?: Array<{ id: string; display_name: string; api_providers?: { name: string } }>;
   modelsLoading?: boolean;
+  multiRefActive?: boolean;
   
   // Disabled state
   disabled?: boolean;
@@ -180,7 +181,7 @@ const RefSlot: React.FC<{
             <X className="h-2 w-2 text-destructive-foreground" />
           </button>
           {/* Role badge - tap to change */}
-          {role && role !== 'reference' && onRoleChange && (
+          {role && onRoleChange && (
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -368,6 +369,7 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   imageModels = [],
   videoModels = [],
   modelsLoading = false,
+  multiRefActive = false,
   disabled = false,
 }) => {
   const allFilled = refSlots.length > 0 && refSlots.every(s => !!s.url);
@@ -510,8 +512,13 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
                   onClick={() => onModelChange?.({ id: 'local-wan', type: 'sdxl', display_name: 'WAN (Local)' })}
                 />
               )}
-              {/* API models */}
-              {(currentMode === 'image' ? imageModels : videoModels).map((m) => (
+              {/* API models (filtered for i2i_multi when multi-ref active) */}
+              {(currentMode === 'image'
+                ? (multiRefActive
+                    ? imageModels.filter(m => m.tasks?.includes('i2i_multi'))
+                    : imageModels)
+                : videoModels
+              ).map((m) => (
                 <ModelDropdownItem
                   key={m.id}
                   label={m.display_name}
