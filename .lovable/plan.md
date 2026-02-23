@@ -1,98 +1,66 @@
 
 
-# Audit: Implementation vs Plan — Gaps Found
+# Unify Scoring: Remove Admin/User Distinction
 
-## Summary
+## Overview
 
-The core service layer (`PromptScoringService.ts`) and edge function updates are solid. The main gaps are in the **PromptDetailsSlider scoring UI** (incomplete per-dimension ratings, broken re-score, missing admin controls) and a missing debug log cleanup.
+Remove all separation between "admin" and "user" in the scoring UI and service layer. Everyone sees the same controls -- ratings, feedback tags, comment, preserve toggle -- with no admin-gated sections or separate admin columns.
 
----
+## Changes
 
-## Gap 1: Generation Details shows ONE rating, not THREE per-dimension ratings
+### 1. PromptDetailsSlider.tsx (UI)
 
-**Plan said:** "Show detailed star rating inputs (per-dimension) for users who want to refine their quick rating" — action, appearance, quality each with their own star row.
+- **Remove the `isAdmin` gate** on the entire "Admin Controls Section" (lines 851-944). Move feedback tags, comment, and preserve toggle into the main section visible to all users.
+- **Remove the duplicate admin star rows** (lines 859-882) -- the unified "Your Rating" stars already handle this.
+- **Remove the `isAdmin` gate** on the Score/Re-score button (line 838) -- all users can trigger scoring.
+- **Remove admin-specific state variables**: `adminActionRating`, `adminAppearanceRating`, `adminQualityRating` (lines 616-618).
+- **Rename labels**: Remove "Admin Scoring" header and Shield icon. The section header becomes just "Feedback" or similar. "Save Admin Scoring" becomes "Save Feedback". `adminComment` state renamed to `comment`. Placeholder text changes from "Admin notes..." to "Notes...".
+- **Remove `isAdmin` import dependency** for this section (keep if used elsewhere in the component).
+- **Remove the no-score conditional** that references `isAdmin` (line 950) -- simplify message since everyone can score.
 
-**What was built:** A single "Your Rating" star row (lines 637-663) that calls `upsertQuickRating` which sets all 3 dimensions to the same value. There is no way for a user to adjust individual dimensions in the lightbox.
+### 2. PromptScoringService.ts (Service)
 
-**Fix:** Replace the single star row with 3 labeled star rows:
-- Action Match (how well the image matches the requested action/pose)
-- Appearance Match (how well it matches described appearance)
-- Quality (overall image quality)
+- **Rename `updateAdminScoring`** to `updateScoringMetadata` (or similar).
+- **Remove the 3 admin rating fields** from its parameter type and payload logic (`admin_action_rating`, `admin_appearance_rating`, `admin_quality_rating`).
+- **Keep**: `feedback_tags`, `admin_comment`, `preserve_image`, `preserve_reason` in the payload (these column names stay as-is in the DB to avoid a migration, but the method accepts them without admin naming).
+- **Update the payload**: Change `admin_rated_by` to just use the `userId` param, keep `admin_rated_at` timestamp.
 
-Each row calls a new `updateIndividualRating(jobId, dimension, value)` method on `PromptScoringService` that updates only that column. Initialize each from the score record (`user_action_rating`, `user_appearance_rating`, `user_quality_rating`).
+### 3. handleSaveAdmin callback (in PromptDetailsSlider.tsx)
 
----
+- Rename to `handleSaveFeedback`.
+- Remove the 3 admin rating fields from the call.
+- Call the renamed `updateScoringMetadata` instead of `updateAdminScoring`.
+- Remove `adminActionRating`, `adminAppearanceRating`, `adminQualityRating` from its dependency array.
 
-## Gap 2: Re-score / Score button does nothing
+## Result
 
-**Plan said:** "Score button (admin) to trigger score-generation" and "Re-score button to trigger score-generation."
+After this change, the Prompt Score section shows:
+1. Three star rating rows (Action Match, Appearance, Quality) -- for everyone
+2. Vision Analysis scores (if available) -- for everyone
+3. Score/Re-score button -- for everyone
+4. Feedback tags, comment box, preserve toggle, and Save Feedback button -- for everyone, shown when a score record exists
 
-**What was built:** `handleTriggerScoring` (lines 584-594) shows a toast and sets a 5-second timeout to re-fetch, but **never actually calls** `PromptScoringService.triggerVisionScoring()`. It just says "Scoring triggered..." without invoking the edge function.
+No admin/user distinction anywhere in the scoring flow.
 
-**Fix:** The handler needs to:
-1. Get the image URL — resolve from `workspace_assets.storage_path` via a signed URL (not the expired fal.ai URL)
-2. Call `PromptScoringService.triggerVisionScoring(jobId, signedUrl, originalPrompt, { enhancedPrompt, apiModelId, userId })`
-3. Handle the "score already exists" case in `score-generation` — currently it returns early with `skipped: true`. For re-scoring, either pass a `force: true` flag or have the edge function delete-then-reinsert.
+## Technical Details
 
-This also means `score-generation/index.ts` needs a `force` parameter to allow re-scoring (delete existing, then re-analyze).
+### State variables to remove
+- `adminActionRating`, `setAdminActionRating`
+- `adminAppearanceRating`, `setAdminAppearanceRating`
+- `adminQualityRating`, `setAdminQualityRating`
 
----
+### State variables to rename
+- `adminComment` -> `comment`
+- `isSavingAdmin` -> `isSavingFeedback`
 
-## Gap 3: No admin controls (admin rating, feedback tags, comment, preserve toggle)
+### Lines affected in PromptDetailsSlider.tsx
+- Lines 616-618: Delete admin rating states
+- Lines 634-636: Delete admin rating initialization in fetchScore
+- Lines 714-733: Rewrite handleSaveAdmin -> handleSaveFeedback without admin ratings
+- Lines 837-849: Remove `isAdmin &&` gate on Score button
+- Lines 851-944: Remove `isAdmin &&` gate; delete admin star rows (859-882); keep tags/comment/preserve; remove Shield icon and "Admin Scoring" label
+- Line 950: Simplify no-score message
 
-**Plan said:** "Admin users see additional fields: admin rating inputs, comment textarea, feedback tag selector, preserve toggle."
-
-**What was built:** Only the Score/Re-score button for admins. No admin rating inputs, no feedback tags, no comment field, no preserve toggle.
-
-**Fix:** Add an admin-only section below the user rating:
-- 3 number inputs or star rows for admin_action_rating, admin_appearance_rating, admin_quality_rating
-- A horizontal chip selector for feedback tags (e.g., "wrong_pose", "good_likeness", "bad_hands", etc.)
-- A single-line comment textarea
-- A preserve toggle + reason field
-- A Save button that calls a new `updateAdminScoring()` method on `PromptScoringService`
-
----
-
-## Gap 4: No image URL resolution for scoring
-
-**Plan said:** "fal.ai URLs expire; scoring should use persisted storage paths with signed URLs."
-
-**What was built:** `handleTriggerScoring` checks `score?.original_prompt` but has no way to get the actual image URL for the asset. The comment says "We need a signed image URL - for now use a placeholder approach."
-
-**Fix:** Add a method to `PromptScoringService` (or inline in the handler) that:
-1. Queries `workspace_assets` by `job_id` to get `storage_path`
-2. Generates a signed URL via `supabase.storage.from('workspace-temp').createSignedUrl(path, 3600)`
-3. Passes that URL to `triggerVisionScoring`
-
----
-
-## Gap 5: Debug console.log still present
-
-**What was built:** `useFetchImageDetails.ts` line 159 still has:
-```
-console.log('useFetchImageDetails: jobId =', workspaceAsset.job_id);
-```
-
-**Fix:** Remove it.
-
----
-
-## Gap 6: score-generation doesn't support re-scoring
-
-**Plan said:** "Re-scoring should use an upsert or delete-then-insert pattern."
-
-**What was built:** The edge function (lines 159-171) checks for existing score and returns `skipped: true` if one exists. There is no way to force a re-score.
-
-**Fix:** Accept an optional `force: boolean` in the request body. When true, delete the existing score row before proceeding with vision analysis.
-
----
-
-## Files to Change
-
-| File | Change |
-|------|--------|
-| `src/components/lightbox/PromptDetailsSlider.tsx` | Replace single rating with 3 per-dimension star rows; wire `triggerVisionScoring` properly with signed URL; add admin section (ratings, tags, comment, preserve) |
-| `src/lib/services/PromptScoringService.ts` | Add `updateIndividualRating()`, `updateAdminScoring()`, `getSignedImageUrl()` methods |
-| `supabase/functions/score-generation/index.ts` | Add `force` parameter to allow re-scoring by deleting existing row first |
-| `src/hooks/useFetchImageDetails.ts` | Remove debug console.log on line 159 |
+### PromptScoringService.ts
+- Lines 113-162: Rename method, remove admin rating params and payload lines
 
