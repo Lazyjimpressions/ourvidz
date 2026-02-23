@@ -195,8 +195,22 @@ serve(async (req) => {
     // Compute composite score
     const compositeScore = computeCompositeScore(visionResult, config.scoringWeights);
 
+    // Look up vision model cost from api_models
+    let visionModelUsed = config.visionModelId || 'default';
+    let visionCostEstimate: number | null = null;
+    if (config.visionModelId) {
+      const { data: modelData } = await supabase
+        .from("api_models")
+        .select("pricing")
+        .eq("id", config.visionModelId)
+        .single();
+      if (modelData?.pricing && typeof modelData.pricing === 'object') {
+        visionCostEstimate = (modelData.pricing as Record<string, unknown>).per_generation as number || null;
+      }
+    }
+
     // Insert prompt_scores record
-    const { error: insertError } = await supabase.from("prompt_scores").insert({
+    const { data: insertedScore, error: insertError } = await supabase.from("prompt_scores").insert({
       job_id: jobId,
       user_id: userId,
       api_model_id: apiModelId || null,
@@ -207,13 +221,15 @@ serve(async (req) => {
         ...visionResult,
         analysis_timestamp: new Date().toISOString(),
         processing_time_ms: Date.now() - startTime,
+        vision_model_used: visionModelUsed,
+        vision_cost_estimate: visionCostEstimate,
       },
       action_match: visionResult.action_match,
       appearance_match: visionResult.appearance_match,
       overall_quality: visionResult.overall_quality,
       composite_score: compositeScore,
       scoring_version: "v1",
-    });
+    }).select('id').single();
 
     if (insertError) {
       console.error("❌ Failed to insert prompt_scores:", insertError);
@@ -221,6 +237,24 @@ serve(async (req) => {
         JSON.stringify({ success: false, error: insertError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Populate workspace_asset_id by looking up the workspace asset for this job
+    if (insertedScore?.id) {
+      const { data: wsAsset } = await supabase
+        .from("workspace_assets")
+        .select("id")
+        .eq("job_id", jobId)
+        .limit(1)
+        .single();
+
+      if (wsAsset?.id) {
+        await supabase
+          .from("prompt_scores")
+          .update({ workspace_asset_id: wsAsset.id })
+          .eq("id", insertedScore.id);
+        console.log("✅ Linked workspace_asset_id:", wsAsset.id);
+      }
     }
 
     const processingTime = Date.now() - startTime;

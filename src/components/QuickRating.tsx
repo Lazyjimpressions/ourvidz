@@ -1,52 +1,53 @@
 import { useState, useCallback } from 'react';
 import { Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { usePromptScores } from '@/hooks/usePromptScores';
+import { PromptScoringService } from '@/lib/services/PromptScoringService';
+import { toast } from 'sonner';
 
 interface QuickRatingProps {
-  jobId: string | null;
+  jobId: string;
+  userId: string;
   className?: string;
 }
 
 /**
- * Quick 5-star rating overlay for asset tiles
- * Applies the same rating to all 3 dimensions (action, appearance, quality)
+ * Write-only 5-star rating overlay for asset tiles.
+ * No DB reads - stars always render empty until clicked.
+ * On click, upserts a prompt_scores row via PromptScoringService.
  */
-export const QuickRating = ({ jobId, className }: QuickRatingProps) => {
-  const { score, submitQuickRating, isLoading } = usePromptScores(jobId);
+export const QuickRating = ({ jobId, userId, className }: QuickRatingProps) => {
   const [hoverRating, setHoverRating] = useState<number | null>(null);
+  const [submittedRating, setSubmittedRating] = useState<number>(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Get current rating from user ratings or admin ratings
-  const currentRating = score?.user_action_rating || score?.admin_action_rating || 0;
-  const displayRating = hoverRating ?? currentRating;
+  const displayRating = hoverRating ?? submittedRating;
 
   const handleClick = useCallback(
-    (rating: number, e: React.MouseEvent) => {
+    async (rating: number, e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!jobId || isLoading) return;
-      submitQuickRating(rating);
+      if (isSubmitting) return;
+
+      setIsSubmitting(true);
+      setSubmittedRating(rating);
+
+      const result = await PromptScoringService.upsertQuickRating(jobId, userId, rating);
+
+      if (result.success) {
+        toast.success(`Rated ${rating}/5`);
+      } else {
+        toast.error('Failed to save rating');
+        setSubmittedRating(0);
+      }
+
+      setIsSubmitting(false);
     },
-    [jobId, isLoading, submitQuickRating]
+    [jobId, userId, isSubmitting]
   );
-
-  const handleMouseEnter = useCallback((rating: number) => {
-    setHoverRating(rating);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    setHoverRating(null);
-  }, []);
-
-  // Debug logging
-  console.log('⭐ QuickRating:', { jobId, hasScore: !!score, currentRating });
-
-  // Don't render if no job ID (no score record can exist)
-  if (!jobId) return null;
 
   return (
     <div
       className={cn(
-        'flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded px-1.5 py-1',
+        'flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded-full px-2 py-1',
         className
       )}
       onClick={(e) => e.stopPropagation()}
@@ -55,13 +56,13 @@ export const QuickRating = ({ jobId, className }: QuickRatingProps) => {
         <button
           key={rating}
           type="button"
-          disabled={isLoading}
+          disabled={isSubmitting}
           onClick={(e) => handleClick(rating, e)}
-          onMouseEnter={() => handleMouseEnter(rating)}
-          onMouseLeave={handleMouseLeave}
+          onMouseEnter={() => setHoverRating(rating)}
+          onMouseLeave={() => setHoverRating(null)}
           className={cn(
-            'p-0.5 transition-transform hover:scale-110 focus:outline-none',
-            isLoading && 'cursor-not-allowed opacity-50'
+            'p-0.5 transition-transform hover:scale-125 focus:outline-none',
+            isSubmitting && 'cursor-not-allowed opacity-50'
           )}
           title={`Rate ${rating}/5`}
         >
@@ -70,7 +71,7 @@ export const QuickRating = ({ jobId, className }: QuickRatingProps) => {
               'w-3.5 h-3.5 transition-colors',
               rating <= displayRating
                 ? 'fill-yellow-400 text-yellow-400'
-                : 'fill-transparent text-gray-400 hover:text-yellow-300'
+                : 'fill-transparent text-white/60 hover:text-yellow-300'
             )}
           />
         </button>
