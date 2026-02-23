@@ -1230,14 +1230,16 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // Check if this video model requires a reference image (I2V) using capabilities from the already-loaded model data
         let videoRequiresRefImage = false;
         let cachedCaps: any = {};
+        let modelTasks: string[] = [];
         if (isFalVideo && selectedModel.id) {
           try {
             const { data: modelData } = await supabase
               .from('api_models')
-              .select('capabilities')
+              .select('capabilities, tasks')
               .eq('id', selectedModel.id)
               .single();
             cachedCaps = (modelData?.capabilities as any) || {};
+            modelTasks = (modelData as any)?.tasks || [];
             videoRequiresRefImage = cachedCaps?.input_schema?.image_url?.required === true ||
                                    cachedCaps?.input_schema?.video?.required === true || // V2V extend models
                                    cachedCaps?.supports_i2v === true ||
@@ -1362,8 +1364,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           // Check if this is a video extend model (uses cached caps from validation above)
           const isExtendModel = cachedCaps?.input_schema?.video?.required === true;
           // Check if this is a MultiCondition model (supports images[] array with temporal positions)
-          const isMultiModel = (selectedModel as any).tasks?.includes('multi') || 
-                               cachedCaps?.input_schema?.images !== undefined;
+           const isMultiModel = modelTasks.includes('multi');
           
           if (isExtendModel && refImageUrl) {
             // fal.ai LTX extend expects `video` as a plain URL string
