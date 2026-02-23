@@ -1372,16 +1372,27 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // reverse_video is a top-level param in the schema
             if (extendReverseVideo) inputObj.reverse_video = true;
           } else if (isMultiModel && refImageUrl) {
-            // MultiCondition: build images[] with temporal positions
+            // MultiCondition: build images[] with temporal positions from all ref slots
             const { autoSpaceFrames } = await import('@/types/videoSlots');
-            const filledUrls = [refImageUrl, endRefUrl].filter(Boolean) as string[];
+            // Gather all ref URLs: start, additionalRefs (mid slots), end
+            const filledUrls: string[] = [];
+            if (refImageUrl) filledUrls.push(refImageUrl);
+            // additionalImageUrls holds mid-slot refs for multi video mode
+            if (additionalImageUrls) {
+              for (const url of additionalImageUrls) {
+                if (url && typeof url === 'string' && url.trim() !== '') {
+                  filledUrls.push(url);
+                }
+              }
+            }
+            if (endRefUrl) filledUrls.push(endRefUrl);
             // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
             const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
             const actualNumFrames = (videoDuration || 5) * fps;
             const maxFrame = actualNumFrames - 1; // last valid frame index
             const frames = autoSpaceFrames(filledUrls.length, maxFrame);
             inputObj.images = filledUrls.map((image_url, i) => ({
-              image_url, start_frame_num: frames[i]
+              image_url, start_frame_num: frames[i], strength: 1
             }));
             // Don't set image_url -- multi uses images[] array
             delete inputObj.image_url;
