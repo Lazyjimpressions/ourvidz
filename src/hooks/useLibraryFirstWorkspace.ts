@@ -82,6 +82,8 @@ export interface LibraryFirstWorkspaceState {
   // Video Extend settings
   extendStrength: number;
   extendReverseVideo: boolean;
+  // Per-keyframe strengths for video multi mode
+  keyframeStrengths: number[];
 }
 
 export interface LibraryFirstWorkspaceActions {
@@ -146,6 +148,8 @@ export interface LibraryFirstWorkspaceActions {
   // Video Extend settings
   setExtendStrength: (strength: number) => void;
   setExtendReverseVideo: (reverse: boolean) => void;
+  // Per-keyframe strengths
+  setKeyframeStrengths: (strengths: number[]) => void;
   
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
@@ -419,6 +423,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   // Video Extend settings
   const [extendStrength, setExtendStrength] = useState(1.0);
   const [extendReverseVideo, setExtendReverseVideo] = useState(false);
+  // Per-keyframe strengths for video multi mode (5 slots)
+  const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1, 1, 1, 1, 1]);
 
   // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -1374,29 +1380,31 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           } else if (isMultiModel && refImageUrl) {
             // MultiCondition: build images[] with temporal positions from all ref slots
             const { autoSpaceFrames } = await import('@/types/videoSlots');
-            // Gather all ref URLs: start, additionalRefs (mid slots), end
-            const filledUrls: string[] = [];
-            if (refImageUrl) filledUrls.push(refImageUrl);
-            // additionalImageUrls holds mid-slot refs for multi video mode
+            // Gather all ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
+            const filledEntries: { url: string; slotIndex: number }[] = [];
+            if (refImageUrl) filledEntries.push({ url: refImageUrl, slotIndex: 0 });
+            // additionalImageUrls holds mid-slot refs for multi video mode (slots 1-3)
             if (additionalImageUrls) {
-              for (const url of additionalImageUrls) {
+              additionalImageUrls.forEach((url, i) => {
                 if (url && typeof url === 'string' && url.trim() !== '') {
-                  filledUrls.push(url);
+                  filledEntries.push({ url, slotIndex: i + 1 });
                 }
-              }
+              });
             }
-            if (endRefUrl) filledUrls.push(endRefUrl);
+            if (endRefUrl) filledEntries.push({ url: endRefUrl, slotIndex: 4 });
             // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
             const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
             const actualNumFrames = (videoDuration || 5) * fps;
             const maxFrame = actualNumFrames - 1; // last valid frame index
-            const frames = autoSpaceFrames(filledUrls.length, maxFrame);
-            inputObj.images = filledUrls.map((image_url, i) => ({
-              image_url, start_frame_num: frames[i], strength: 1
+            const frames = autoSpaceFrames(filledEntries.length, maxFrame);
+            inputObj.images = filledEntries.map((entry, i) => ({
+              image_url: entry.url,
+              start_frame_num: frames[i],
+              strength: keyframeStrengths[entry.slotIndex] ?? 1,
             }));
             // Don't set image_url -- multi uses images[] array
             delete inputObj.image_url;
-            console.log(`🎬 MultiCondition: ${filledUrls.length} temporal images, frames: ${frames.join(', ')}`);
+            console.log(`🎬 MultiCondition: ${filledEntries.length} temporal images, frames: ${frames.join(', ')}, strengths: ${filledEntries.map(e => keyframeStrengths[e.slotIndex] ?? 1).join(', ')}`);
           } else if (refImageUrl) {
             inputObj.image_url = refImageUrl; // Standard I2V
           }
@@ -2029,6 +2037,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     // Video Extend settings
     extendStrength,
     extendReverseVideo,
+    // Per-keyframe strengths
+    keyframeStrengths,
     
     // Actions
     updateMode: setMode,
@@ -2112,6 +2122,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     // Video Extend settings
     setExtendStrength: (s: number) => setExtendStrength(s),
     setExtendReverseVideo: (r: boolean) => setExtendReverseVideo(r),
+    // Per-keyframe strengths
+    setKeyframeStrengths,
     getJobStats,
     getActiveJob,
     getJobById,

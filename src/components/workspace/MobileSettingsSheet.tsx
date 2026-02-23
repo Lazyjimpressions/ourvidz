@@ -90,6 +90,9 @@ export interface MobileSettingsSheetProps {
   videoDurationOptions?: number[];
   motionIntensity?: number;
   onMotionIntensityChange?: (intensity: number) => void;
+  // Per-keyframe strengths (video multi mode)
+  keyframeStrengths?: number[];
+  onKeyframeStrengthChange?: (index: number, strength: number) => void;
 }
 
 const STYLE_PRESETS = [
@@ -316,6 +319,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   motionIntensity = 0.5,
   onMotionIntensityChange,
   multiRefActive = false,
+  keyframeStrengths,
+  onKeyframeStrengthChange,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   
@@ -603,11 +608,33 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                         </button>
                       )}
                       <span className="text-[8px] text-muted-foreground">{slot.label}</span>
+                      {/* Per-keyframe strength slider (video mode only) */}
+                      {slot.url && currentMode === 'video' && onKeyframeStrengthChange && (
+                        <div className="w-12 mt-0.5">
+                          <input
+                            type="range"
+                            min={0.1}
+                            max={1}
+                            step={0.05}
+                            value={keyframeStrengths?.[i] ?? 1}
+                            onChange={(e) => onKeyframeStrengthChange(i, parseFloat(e.target.value))}
+                            className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
+                              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5 
+                              [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
+                              [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:rounded-full 
+                              [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                          />
+                          <span className="text-[7px] text-muted-foreground block text-center">
+                            {Math.round((keyframeStrengths?.[i] ?? 1) * 100)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
-              {hasAnyRef && !multiRefActive && (
+              {/* Exact Copy + Global Strength: only show in image mode */}
+              {hasAnyRef && !multiRefActive && currentMode !== 'video' && (
                 <div className="space-y-2 px-2 pt-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[9px] text-muted-foreground">Exact Copy</span>

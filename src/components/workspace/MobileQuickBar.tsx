@@ -380,7 +380,6 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   selectedModelTasks = [],
   disabled = false,
 }) => {
-  const isVideoMulti = currentMode === 'video' && selectedModelTasks.includes('multi');
   const allFilled = refSlots.length > 0 && refSlots.every(s => !!s.url);
   const canAddMore = refSlots.length < maxSlots;
 
@@ -428,7 +427,7 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
             );
           })
         ) : (
-          /* Video mode: fixed 4-slot layout for multi, dynamic 2-slot for others */
+          /* Video mode: always 5 fixed labeled slots */
           <>
             {refSlots.map((slot, i) => (
               <RefSlot
@@ -441,12 +440,9 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
                 onDropUrl={onDropRefUrl ? (url) => onDropRefUrl(i, url) : undefined}
                 label={slot.label || `Ref ${i + 1}`}
                 disabled={disabled}
-                showLabel={isVideoMulti}
+                showLabel
               />
             ))}
-            {isVideoMulti && allFilled && canAddMore && (
-              <AddSlotButton onClick={onAddSlot} disabled={disabled} />
-            )}
           </>
         )}
       </div>
