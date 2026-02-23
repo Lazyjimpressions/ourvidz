@@ -1376,8 +1376,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             const filledUrls = [refImageUrl, endRefUrl].filter(Boolean) as string[];
             const maxFrame = cachedCaps?.input_schema?.num_frames?.max || 160;
             const frames = autoSpaceFrames(filledUrls.length, maxFrame);
-            inputObj.images = filledUrls.map((url, i) => ({
-              url, start_frame_num: frames[i]
+            inputObj.images = filledUrls.map((image_url, i) => ({
+              image_url, start_frame_num: frames[i]
             }));
             // Don't set image_url -- multi uses images[] array
             delete inputObj.image_url;
