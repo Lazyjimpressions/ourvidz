@@ -1,64 +1,143 @@
 
 
-# Editable Base Position Prompts
+# Dynamic Multi-Ref Slot Roles with Reference Tagging
 
-## What This Adds
+## Overview
 
-Each of the 6 base position slots (Front, Left Side, Right Side, Rear, 3/4, Bust) will have a small edit button that opens a popover where you can view and modify the prompt fragment used for generation. Changes save back to the database immediately, so the next time you generate that position it uses your updated prompt.
+Update the workspace multi-ref system with 6 slot roles and add a tagging system so images across the app can be tagged with their "ref role" (character, clothing, position, scene, style). This enables future quick-assignment workflows where the system can suggest or auto-populate ref slots based on tagged images.
 
-For example, you could change the "Left Side" prompt from:
-> full body, standing, left side profile view, arms at sides, plain background
+## The 6 Roles
 
-to:
-> full body, standing, left side profile view, looking away from camera, arms at sides, plain background
+| Role | Meaning | Example |
+|------|---------|---------|
+| **Character** | Use this exact person's identity/face | Headshot, full body |
+| **Clothing** | Use this exact outfit/garment | Photo of a dress, suit |
+| **Position** | Use this exact body pose/composition | Someone sitting, action pose |
+| **Scene** | Use this exact environment/background | A room, landscape |
+| **Style** | Use this visual aesthetic/mood | Painting style, film look |
+| **Reference** | Generic reference (no special prompt logic) | Anything else |
 
-## How It Works
+## Default Slot Assignments
 
-The prompt fragments live in the `prompt_templates` table's `metadata.pose_presets` JSON. The edit flow:
+| Slot | Default Role | Label |
+|------|-------------|-------|
+| 1 | Character | Char 1 |
+| 2 | Character | Char 2 |
+| 3 | Position | Position |
+| 4 | Clothing | Clothing |
+| 5-10 | Reference | Ref 5-10 |
 
-1. Click the edit (pencil) icon on any position slot
-2. A popover shows the current `prompt_fragment` in a textarea
-3. Edit the text and click Save
-4. The hook updates the full `metadata` JSONB in `prompt_templates` and refreshes the local state
+## Workflow Example
 
-## Technical Details
+**Goal**: Character 1 sitting in a specific dress in a garden.
 
-### Files Changed
+| Slot | Role | Image |
+|------|------|-------|
+| 1 | Character | Photo of your character |
+| 2 | Position | Image of someone sitting |
+| 3 | Clothing | Photo of the specific dress |
+| 4 | Scene | Photo of a garden |
 
-| File | Change |
-|------|--------|
-| `src/hooks/useCharacterStudio.ts` | Add `updateCanonPresetPrompt(poseKey, newFragment)` function that reads current metadata, patches the specific preset's `prompt_fragment`, and writes it back via `supabase.from('prompt_templates').update()` |
-| `src/components/character-studio-v3/PositionsGrid.tsx` | Add edit button + popover with textarea on each `PositionSlot`; accept new `onUpdatePresetPrompt` callback prop |
-| `src/components/character-studio-v3/StudioWorkspace.tsx` | Pass `onUpdatePresetPrompt` through |
-| `src/pages/CharacterStudioV3.tsx` | Wire `updateCanonPresetPrompt` to the prop |
+Auto-generated prefix: "Show the character from Figure 1 in the position from Figure 2 wearing the clothing from Figure 3 in the scene from Figure 4:"
 
-### useCharacterStudio.ts -- new function
+User prompt: "relaxed expression, golden hour lighting"
 
-```typescript
-const updateCanonPresetPrompt = useCallback(async (poseKey: string, newFragment: string) => {
-  // 1. Fetch current template row (need the id + full metadata)
-  // 2. Patch metadata.pose_presets[poseKey].prompt_fragment = newFragment
-  // 3. UPDATE prompt_templates SET metadata = patched WHERE id = templateId
-  // 4. Update local canonPosePresets state
-}, []);
-```
+## Image Tagging Strategy
 
-To do this we also need to store the template row ID when we first fetch presets, so we know which row to update.
+### Recommendation: Tag via Lightbox Action Bar (not separate library tabs)
 
-### PositionSlot -- edit popover
+Rather than adding new tabs to the library, the most natural UX is a **role tag button in the lightbox action bar**. When viewing any image in the lightbox (library, workspace, or character studio), the user sees a small tag/label icon. Tapping it reveals a popover with the 5 meaningful roles (character, clothing, position, scene, style) as toggleable chips -- multiple can be selected. This writes to the existing `tags` text[] column on `user_library` or `character_canon`.
 
-On each slot (both empty and filled states), add a small pencil icon button. On click, it opens a `Popover` with:
-- A `<textarea>` pre-filled with `preset.prompt_fragment`
-- A Save button
-- A Reset button (restores original default -- stored as `default_prompt_fragment` in the preset or just a visual indicator)
+**Why this is better than library tabs:**
+- Tags are applied in context, while looking at the image
+- No need to navigate to a separate tab or view
+- Works across all lightbox contexts (library, workspace, studio)
+- The existing `tags` column on both tables already supports this -- no schema change needed
+- Library can later add a filter-by-role-tag feature using the existing tag filter UI
 
-The popover sits on the slot without interfering with the generate/regenerate click targets.
+### Tag Format
 
-### RLS Consideration
+Use a namespaced prefix to distinguish role tags from other tags: `role:character`, `role:clothing`, `role:position`, `role:scene`, `role:style`. This avoids collision with existing freeform tags like character names.
 
-The `prompt_templates` table needs an UPDATE policy for authenticated users on their own templates, or at minimum the table must allow updates. Since these are system-level templates (not user-owned), we may need to either:
-- Add a `user_id` column and per-user overrides, OR
-- Allow authenticated users to update the shared template (simpler but shared)
+### Character Studio Auto-Tagging
 
-The simplest approach for now: allow authenticated users to update `prompt_templates` rows where `use_case = 'canon_position'`. This means edits are shared across all users of that template. If per-user customization is needed later, we can add a user override table.
+Images generated or saved in Character Studio should auto-receive role tags based on context:
+- Portraits tab images get `role:character` automatically
+- Position tab images get `role:position` automatically
+- These auto-tags make character studio assets immediately usable as typed references in the workspace
 
+## Technical Changes
+
+### 1. Type Definitions
+
+**File**: `src/components/workspace/MobileQuickBar.tsx`
+
+- Add `SlotRole` type: `'character' | 'clothing' | 'position' | 'scene' | 'style' | 'reference'`
+- Add `SLOT_ROLE_LABELS` map and `SLOT_ROLE_ICONS` map
+- Update `FIXED_IMAGE_SLOTS` defaults (Char 1, Char 2, Position, Clothing, Ref 5-10)
+- Add `onSlotRoleChange?: (index: number, role: SlotRole) => void` prop
+- Add a small role badge on each slot that opens a popover to change role on tap
+
+### 2. Figure Notation Builder
+
+**File**: `src/hooks/useLibraryFirstWorkspace.ts`
+
+- Accept `slotRoles: SlotRole[]` in the prefix builder
+- Group filled slots by role and build prefix in order: Character, Position, Clothing, Scene, Style
+- Skip "reference" role slots in the prefix (they're passed as images but not described)
+- Handle multiples of same role (e.g., 2 characters: "the characters from Figure 1 and Figure 2")
+
+### 3. State and Wiring
+
+**File**: `src/pages/MobileSimplifiedWorkspace.tsx`
+
+- Add `slotRoles` state initialized from defaults
+- Wire `handleSlotRoleChange` callback
+- Pass roles to prompt builder and quick bar
+- Compute `multiRefActive` (2+ filled slots) and pass to settings sheet
+
+### 4. Model Filtering
+
+**File**: `src/components/workspace/MobileSettingsSheet.tsx`
+
+- When `multiRefActive`, filter image models to those with `i2i_multi` in `tasks`
+- Auto-select the `i2i_multi` default model
+
+**File**: `src/hooks/useImageModels.ts`
+
+- Ensure `tasks` field is included in returned model data
+
+### 5. Lightbox Role Tagging
+
+**File**: `src/components/shared/LightboxActions.tsx` (or new `RoleTagButton.tsx`)
+
+- Add a "Tag" button to `LibraryAssetActions` and `WorkspaceAssetActions`
+- On click, show a popover with 5 role chips (character, clothing, position, scene, style)
+- Toggle adds/removes `role:X` from the asset's `tags` array
+- Calls `supabase.from('user_library').update({ tags })` or `supabase.from('character_canon').update({ tags })`
+
+**File**: `src/components/library/UpdatedOptimizedLibrary.tsx`
+
+- Pass the tag button through the `actionsSlot` in the lightbox
+
+### 6. Character Studio Auto-Tagging
+
+**File**: `src/hooks/useCharacterStudio.ts`
+
+- When saving a portrait, auto-include `role:character` in the tags array
+- When saving a position, auto-include `role:position` in the tags array
+- When saving an outfit/style, auto-include the corresponding `role:clothing` or `role:style` tag
+
+### 7. Prompt Input Passthrough
+
+**File**: `src/components/workspace/MobileSimplePromptInput.tsx`
+
+- Accept and pass `slotRoles` and `onSlotRoleChange` through to `MobileQuickBar`
+
+## Edge Function Note
+
+No edge function changes needed. The Figure notation is constructed client-side in the prompt text. The `fal-image` edge function already accepts an `image_urls` array and passes them to the model as-is. The prompt text is what tells the model how to interpret each Figure.
+
+## Build Error Fixes (Separate)
+
+The current build errors in `playground-chat`, `replicate-image`, `replicate-webhook`, and `roleplay-chat` are unrelated to this feature. They stem from missing Supabase type definitions for tables like `messages`, `conversations`, and `system_config`. These need `as any` casts or type regeneration, and should be fixed in a separate pass.
