@@ -90,6 +90,7 @@ All configuration is maintained in the admin portal - **no hardcoded models or p
 | Overall Quality | 1-5 | Technical and aesthetic quality | 25% |
 
 **Scoring Guide:**
+
 - 5: Excellent match, minor or no issues
 - 4: Good match, small discrepancies
 - 3: Partial match, noticeable issues
@@ -101,6 +102,7 @@ All configuration is maintained in the admin portal - **no hardcoded models or p
 ### Quick Rating on Asset Tiles
 
 When `showQuickRating` is enabled, asset tiles show a 5-star rating on hover:
+
 - Stars appear as subtle overlay on hover
 - Click to rate (1-5 stars)
 - **Same score applied to all 3 dimensions**
@@ -135,6 +137,7 @@ const FEEDBACK_TAGS = {
 ### Image Preservation
 
 High-value images can be flagged for preservation:
+
 - `preserve_image`: Admin marks images worth keeping
 - `preserve_reason`: Why this image is valuable
 - `preserved_url`: Permanent URL if copied before expiry
@@ -378,6 +381,7 @@ if (scoringConfig?.enabled && scoringConfig?.autoAnalysisEnabled) {
 ## Implementation Phases
 
 ### Phase 1: Foundation (P0)
+
 - [x] Design documentation
 - [ ] Create `prompt_scores` table
 - [ ] Add `promptScoring` config to `system_config`
@@ -386,17 +390,20 @@ if (scoringConfig?.enabled && scoringConfig?.autoAnalysisEnabled) {
 - [ ] Add trigger in `fal-webhook`
 
 ### Phase 2: Admin UI (P1)
+
 - [ ] Create `usePromptScores` hook
 - [ ] Create `PromptScorePanel` component
 - [ ] Integrate into `AssetPreviewModal`
 - [ ] Add toggle in `SystemConfigTab`
 
 ### Phase 3: Analytics (P2)
+
 - [ ] Create `PromptScoringAnalytics` admin tab
 - [ ] Per-model performance tables
 - [ ] Score distribution views
 
 ### Phase 4: Pattern Mining (P3)
+
 - [ ] Aggregation queries for model-specific patterns
 - [ ] High-scoring prompt extraction
 - [ ] Common issue identification

@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiProvidersTab } from '@/components/admin/ApiProvidersTab';
 import { ApiModelsTab } from '@/components/admin/ApiModelsTab';
 import { ApiUsageTab } from '@/components/admin/ApiUsageTab';
+import { PromptScoringAnalytics } from '@/components/admin/PromptScoringAnalytics';
 
 const AdminContent = () => {
 
@@ -31,6 +32,7 @@ const AdminContent = () => {
     { id: 'system-config', label: 'System Config', component: <SystemConfigTab /> },
     { id: 'prompt-management', label: 'Prompt Management', component: <PromptManagementTab /> },
     { id: 'prompt-testing', label: 'Prompt Testing', component: <PromptTestingTab /> },
+    { id: 'prompt-scoring', label: 'Prompt Scoring', component: <PromptScoringAnalytics /> },
     { id: 'api-providers', label: 'API Providers', component: <ApiProvidersTab /> },
     { id: 'api-models', label: 'API Models', component: <ApiModelsTab /> },
     { id: 'api-usage', label: 'API Usage & Costs', component: <ApiUsageTab /> },
