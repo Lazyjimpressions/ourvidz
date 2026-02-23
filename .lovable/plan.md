@@ -1,76 +1,148 @@
 
 
-# Fix: Workspace Crash on I2V Generation
+# Wire Up MultiCondition: images[] Array from Client to Edge Function
 
-## Root Cause
+## Problem
 
-When an i2v (image-to-video) job starts, an optimistic placeholder is created as a `UnifiedAsset` with `type: 'video'`. This placeholder gets mapped through `toSharedFromWorkspace()`, which expects workspace DB row format (`asset_type` field) -- not `UnifiedAsset` format (`type` field).
+The MultiCondition model (`fal-ai/ltx-video-13b-distilled/multiconditioning`) expects an `images` array with temporal frame positions, but:
 
-Because the mapper can't find `asset_type` or `assetType`, it defaults to `'image'`. This mistyped placeholder then triggers an infinite retry loop in SharedGridCard's fallback image loader effect, crashing React.
+1. **Client side** (`useLibraryFirstWorkspace.ts` line 868-873): The end reference image is explicitly dropped for all API video models with the message "End reference ignored for API video model"
+2. **Client side** (line 1362-1378): Only a single `image_url` string is sent -- never an `images[]` array
+3. **Edge function** (`fal-image/index.ts` line 495): The `alwaysAllowed` set doesn't include `images` or `videos`, so even if sent, they'd be stripped by schema filtering
+4. **Edge function**: No code exists to sign URLs inside an `images[]` array
 
-## Two-Part Fix
+## Changes
 
-### 1. Fix type detection in `toSharedFromWorkspace` (AssetMappers.ts, line 106)
+### 1. `src/types/videoSlots.ts` (NEW FILE)
 
-Add `row.type` as a fallback so optimistic `UnifiedAsset` objects are typed correctly:
-
-```
-// Current
-const assetType = row.asset_type || row.assetType || 'image';
-
-// Fixed
-const assetType = row.asset_type || row.assetType || row.type || 'image';
-```
-
-Also fix the prompt field (line 107) -- optimistic assets use `prompt` not `original_prompt`:
-
-```
-// Current
-const originalPrompt = row.original_prompt || row.originalPrompt || '';
-
-// Fixed
-const originalPrompt = row.original_prompt || row.originalPrompt || row.prompt || '';
-```
-
-### 2. Add retry guard in SharedGridCard (SharedGrid.tsx, lines 298-323)
-
-Even with fix #1, any asset with an empty `originalPath` and no thumbnail would still infinite-loop. Add a `failedToLoad` state to prevent retries after a signing failure:
+Create the `VideoRefSlot` interface and `autoSpaceFrames` utility:
 
 ```typescript
-const [failedToLoad, setFailedToLoad] = useState(false);
+export interface VideoRefSlot {
+  url: string | null;
+  isVideo: boolean;
+  frameNum: number; // 0-160, multiples of 8
+}
 
-// In the fallback effect guard, add: && !failedToLoad
-useEffect(() => {
-  if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible && !failedToLoad) {
-    setIsLoadingFallback(true);
-    // ...existing code...
-    originalImageLoader.load(async () => {
-      try {
-        const url = await signOriginalSafely(asset);
-        setFallbackUrl(url);
-      } catch (err) {
-        console.warn('Failed to load fallback image for asset', asset.id, err);
-        setFailedToLoad(true); // prevent infinite retry
-      }
-    }).finally(() => {
-      clearTimeout(timeout);
-      setIsLoadingFallback(false);
-    });
-  }
-}, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely, failedToLoad]);
+export function autoSpaceFrames(count: number, maxFrame: number = 160): number[] {
+  if (count <= 1) return [0];
+  const step = Math.floor(maxFrame / (count - 1) / 8) * 8;
+  return Array.from({ length: count }, (_, i) => Math.min(i * step, maxFrame));
+}
+
+export function getFrameLabel(frameNum: number): string {
+  return `F${frameNum}`;
+}
 ```
 
-Apply the same guard to the video thumbnail effect (lines 326-358) for consistency -- add a `failedVideoThumb` state.
+### 2. `src/hooks/useLibraryFirstWorkspace.ts`
 
-## Files Changed
+**a) Remove the "end reference ignored" block (lines 867-874)**
 
-| File | Change |
-|------|--------|
-| `src/lib/services/AssetMappers.ts` (line 106-107) | Add `row.type` and `row.prompt` fallbacks in `toSharedFromWorkspace` |
-| `src/components/shared/SharedGrid.tsx` (lines 213-323) | Add `failedToLoad` state to prevent infinite retry loop on signing failure |
+Stop dropping the end reference for API models. Instead, compute `endRefUrl` for all video modes:
 
-## Why This Fixes the Crash
+```typescript
+// Before (drops end ref for API):
+const endRefUrl = (mode === 'video' && isLocalRoute) ? ... : undefined;
 
-- Fix 1 ensures optimistic video placeholders retain their correct `'video'` type, so the image fallback effect never fires for them
-- Fix 2 is a safety net: if any asset fails to sign, it won't retry infinitely, preventing the React state update storm
+// After (always compute):
+const endRefUrl = mode === 'video'
+  ? (overrideEndingRefImageUrl || endingRefImageUrl || ...)
+  : undefined;
+```
+
+**b) Add MultiCondition detection and images[] construction (lines 1362-1378)**
+
+After the existing extend/i2v logic, add a branch for multi:
+
+```typescript
+if (isFalVideo) {
+  const refImageUrl = startRefUrl || effRefUrl;
+  const isExtendModel = cachedCaps?.input_schema?.video?.required === true;
+  const isMultiModel = selectedModel.tasks?.includes('multi') || 
+                       cachedCaps?.input_schema?.images !== undefined;
+
+  if (isExtendModel && refImageUrl) {
+    // Existing extend logic...
+    inputObj.video = refImageUrl;
+    if (extendReverseVideo) inputObj.reverse_video = true;
+  } else if (isMultiModel && refImageUrl && endRefUrl) {
+    // MultiCondition: build images[] with temporal positions
+    const filledUrls = [refImageUrl, endRefUrl].filter(Boolean);
+    const frames = autoSpaceFrames(filledUrls.length, 
+      cachedCaps?.input_schema?.num_frames?.max || 160);
+    inputObj.images = filledUrls.map((url, i) => ({
+      url, start_frame_num: frames[i]
+    }));
+    // Don't set image_url -- multi uses images[] array
+    delete inputObj.image_url;
+  } else if (refImageUrl) {
+    inputObj.image_url = refImageUrl; // Standard I2V
+  }
+  inputObj.duration = videoDuration || 5;
+}
+```
+
+### 3. `supabase/functions/fal-image/index.ts`
+
+**a) Add `images` and `videos` to `alwaysAllowed` (line 495)**
+
+```typescript
+// Before:
+const alwaysAllowed = new Set(['prompt', 'image_url', 'image_urls', 'video']);
+
+// After:
+const alwaysAllowed = new Set(['prompt', 'image_url', 'image_urls', 'video', 'images', 'videos']);
+```
+
+**b) Add images[] URL signing block (after the I2V image_url block, around line 457-466)**
+
+Inside the `isVideo` section, add handling for the `images` array before the single `image_url` fallback:
+
+```typescript
+// MultiCondition: images[] array with temporal frame positions
+if (body.input.images && Array.isArray(body.input.images)) {
+  const signedImages = [];
+  for (const img of body.input.images) {
+    const signed = await signIfStoragePath(supabase, img.url, 'user-library');
+    if (signed) {
+      signedImages.push({ url: signed, start_frame_num: img.start_frame_num || 0 });
+    }
+  }
+  if (signedImages.length > 0) {
+    modelInput.images = signedImages;
+    delete modelInput.image_url;
+    console.log(`✅ MultiCondition: ${signedImages.length} temporal images set`);
+  }
+}
+
+// MultiCondition: videos[] array
+if (body.input.videos && Array.isArray(body.input.videos)) {
+  const signedVideos = [];
+  for (const vid of body.input.videos) {
+    const url = typeof vid === 'string' ? vid : vid.url;
+    const signed = await signIfStoragePath(supabase, url, 'reference_images');
+    if (signed) signedVideos.push({ url: signed });
+  }
+  if (signedVideos.length > 0) {
+    modelInput.videos = signedVideos;
+    console.log(`✅ MultiCondition: ${signedVideos.length} video refs set`);
+  }
+}
+```
+
+## Files Summary
+
+| File | Action | What |
+|------|--------|------|
+| `src/types/videoSlots.ts` | Create | VideoRefSlot, autoSpaceFrames utility |
+| `src/hooks/useLibraryFirstWorkspace.ts` | Modify | Stop dropping end ref; detect multi model; build images[] array with frame positions |
+| `supabase/functions/fal-image/index.ts` | Modify | Sign URLs in images[]/videos[] arrays; add to alwaysAllowed set |
+
+## What This Enables
+
+- Start + End images are sent as `images: [{ url, start_frame_num: 0 }, { url, start_frame_num: 160 }]`
+- The MultiCondition model receives properly signed temporal references
+- Standard I2V (single ref) and Extend flows remain unchanged
+- Foundation is laid for the full 10-slot timeline UI (next phase)
 
