@@ -1,143 +1,65 @@
 
+# Fix Plan: 4 Multi-Ref Issues
 
-# Dynamic Multi-Ref Slot Roles with Reference Tagging
+## Issue 1: Cannot change ref image type (role badge not working)
 
-## Overview
+**Root cause**: In `MobileQuickBar.tsx` line 183, the role badge popover only renders when `role && role !== 'reference'`. This means:
+- Slots defaulting to `reference` (slots 5-10) never show the role badge
+- Empty slots have no way to pre-assign a role before filling
 
-Update the workspace multi-ref system with 6 slot roles and add a tagging system so images across the app can be tagged with their "ref role" (character, clothing, position, scene, style). This enables future quick-assignment workflows where the system can suggest or auto-populate ref slots based on tagged images.
+**Fix** (`src/components/workspace/MobileQuickBar.tsx`):
+- Remove the `role !== 'reference'` guard so ALL filled slots show the role badge popover, including generic "Ref" slots
+- Change condition from `role && role !== 'reference' && onRoleChange` to just `role && onRoleChange`
+- This allows users to tap the badge on any filled slot and cycle through all 6 roles
 
-## The 6 Roles
+## Issue 2: Lightbox missing role tag button
 
-| Role | Meaning | Example |
-|------|---------|---------|
-| **Character** | Use this exact person's identity/face | Headshot, full body |
-| **Clothing** | Use this exact outfit/garment | Photo of a dress, suit |
-| **Position** | Use this exact body pose/composition | Someone sitting, action pose |
-| **Scene** | Use this exact environment/background | A room, landscape |
-| **Style** | Use this visual aesthetic/mood | Painting style, film look |
-| **Reference** | Generic reference (no special prompt logic) | Anything else |
+**Root cause**: `LightboxActions.tsx` already accepts `onRoleTagToggle` and `tags` props, and `RoleTagButton` is built. But neither caller passes them:
+- `UpdatedOptimizedLibrary.tsx` (line 471) renders `LibraryAssetActions` without `onRoleTagToggle` or `tags`
+- `MobileSimplifiedWorkspace.tsx` (line 773) renders `WorkspaceAssetActions` without `onRoleTagToggle` or `tags`
 
-## Default Slot Assignments
+**Fix**:
+- **`src/components/library/UpdatedOptimizedLibrary.tsx`**: Add a `handleRoleTagToggle` function that reads the asset's current tags, calls `toggleRoleTag()`, then updates the `user_library` row via Supabase. Pass `onRoleTagToggle` and `tags` to `LibraryAssetActions`.
+- **`src/pages/MobileSimplifiedWorkspace.tsx`**: Similar handler for workspace assets. Since workspace assets may not have persistent tags (they're ephemeral), the tag button should only appear for library assets in the lightbox. For workspace lightbox, we can skip this (workspace images get tagged when saved to library).
 
-| Slot | Default Role | Label |
-|------|-------------|-------|
-| 1 | Character | Char 1 |
-| 2 | Character | Char 2 |
-| 3 | Position | Position |
-| 4 | Clothing | Clothing |
-| 5-10 | Reference | Ref 5-10 |
+## Issue 3: Default multi model not switching when 2+ refs loaded
 
-## Workflow Example
+**Root cause**: The `applySmartDefault('i2i_multi')` call exists for ref2 (line 508) and some additional slots (lines 516, 524), but:
+1. **Model dropdown is not filtered** -- `MobileSettingsSheet.tsx` `ModelChipPopover` shows ALL image models regardless of multi-ref state. It doesn't receive or check `tasks` arrays.
+2. **QuickBar model dropdown** (line 514 in MobileQuickBar) also shows all models unfiltered.
 
-**Goal**: Character 1 sitting in a specific dress in a garden.
+**Fix**:
+- **`src/components/workspace/MobileSimplePromptInput.tsx`**: Compute `multiRefActive` (count filled ref slots >= 2). Pass it to both `MobileQuickBar` and `MobileSettingsSheet`.
+- **`src/components/workspace/MobileQuickBar.tsx`**: Accept `multiRefActive` prop. When true and mode is `image`, filter `imageModels` to only those with `tasks` including `i2i_multi`. Need to expand the `imageModels` prop type to include `tasks?: string[]`.
+- **`src/components/workspace/MobileSettingsSheet.tsx`**: Same -- accept `multiRefActive` and `tasks` on model items, filter the model list.
+- **`src/hooks/useImageModels.ts`**: Already includes `tasks` in the query and `ImageModel` type. But `MobileSimplePromptInput` strips it when mapping to the QuickBar prop (line 587-591). Fix: include `tasks` in the mapped object.
 
-| Slot | Role | Image |
-|------|------|-------|
-| 1 | Character | Photo of your character |
-| 2 | Position | Image of someone sitting |
-| 3 | Clothing | Photo of the specific dress |
-| 4 | Scene | Photo of a garden |
+## Issue 4: Sparkle button not keying off ref images / no template hover tooltip
 
-Auto-generated prefix: "Show the character from Figure 1 in the position from Figure 2 wearing the clothing from Figure 3 in the scene from Figure 4:"
+**Root cause**: The `handleEnhance` function (MobileSimplePromptInput line 165) sends `model_id`, `job_type`, and `contentType` to the `enhance-prompt` edge function but does NOT send any reference image context or slot role metadata. There's also no hover tooltip showing which template will be used.
 
-User prompt: "relaxed expression, golden hour lighting"
+**Fix** (`src/components/workspace/MobileSimplePromptInput.tsx`):
+- Update `handleEnhance` to include `has_reference_images: true` and `slot_roles` metadata in the request body when multi-ref is active. This lets the edge function select the appropriate multi-ref template.
+- Add a `title` attribute (tooltip) to the sparkle button that shows the expected template context, e.g. "Enhance prompt (Multi-ref: Char, Position, Clothing)" or "Enhance prompt (single image)" based on the current ref state and selected model.
 
-## Image Tagging Strategy
+## Files to Modify
 
-### Recommendation: Tag via Lightbox Action Bar (not separate library tabs)
+| File | Changes |
+|------|---------|
+| `src/components/workspace/MobileQuickBar.tsx` | Remove `role !== 'reference'` guard; add `multiRefActive` prop; add `tasks` to imageModels type; filter models when multi-ref |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Compute `multiRefActive`; pass to QuickBar + SettingsSheet; include `tasks` in model mapping; update sparkle handler with ref context; add sparkle tooltip |
+| `src/components/workspace/MobileSettingsSheet.tsx` | Accept `multiRefActive`; filter model list for `i2i_multi` when active |
+| `src/components/library/UpdatedOptimizedLibrary.tsx` | Wire `onRoleTagToggle` + `tags` to `LibraryAssetActions` with Supabase update handler |
+| `src/pages/MobileSimplifiedWorkspace.tsx` | No changes needed (already passes `slotRoles` correctly) |
 
-Rather than adding new tabs to the library, the most natural UX is a **role tag button in the lightbox action bar**. When viewing any image in the lightbox (library, workspace, or character studio), the user sees a small tag/label icon. Tapping it reveals a popover with the 5 meaningful roles (character, clothing, position, scene, style) as toggleable chips -- multiple can be selected. This writes to the existing `tags` text[] column on `user_library` or `character_canon`.
+## Status of Previously Planned Changes
 
-**Why this is better than library tabs:**
-- Tags are applied in context, while looking at the image
-- No need to navigate to a separate tab or view
-- Works across all lightbox contexts (library, workspace, studio)
-- The existing `tags` column on both tables already supports this -- no schema change needed
-- Library can later add a filter-by-role-tag feature using the existing tag filter UI
-
-### Tag Format
-
-Use a namespaced prefix to distinguish role tags from other tags: `role:character`, `role:clothing`, `role:position`, `role:scene`, `role:style`. This avoids collision with existing freeform tags like character names.
-
-### Character Studio Auto-Tagging
-
-Images generated or saved in Character Studio should auto-receive role tags based on context:
-- Portraits tab images get `role:character` automatically
-- Position tab images get `role:position` automatically
-- These auto-tags make character studio assets immediately usable as typed references in the workspace
-
-## Technical Changes
-
-### 1. Type Definitions
-
-**File**: `src/components/workspace/MobileQuickBar.tsx`
-
-- Add `SlotRole` type: `'character' | 'clothing' | 'position' | 'scene' | 'style' | 'reference'`
-- Add `SLOT_ROLE_LABELS` map and `SLOT_ROLE_ICONS` map
-- Update `FIXED_IMAGE_SLOTS` defaults (Char 1, Char 2, Position, Clothing, Ref 5-10)
-- Add `onSlotRoleChange?: (index: number, role: SlotRole) => void` prop
-- Add a small role badge on each slot that opens a popover to change role on tap
-
-### 2. Figure Notation Builder
-
-**File**: `src/hooks/useLibraryFirstWorkspace.ts`
-
-- Accept `slotRoles: SlotRole[]` in the prefix builder
-- Group filled slots by role and build prefix in order: Character, Position, Clothing, Scene, Style
-- Skip "reference" role slots in the prefix (they're passed as images but not described)
-- Handle multiples of same role (e.g., 2 characters: "the characters from Figure 1 and Figure 2")
-
-### 3. State and Wiring
-
-**File**: `src/pages/MobileSimplifiedWorkspace.tsx`
-
-- Add `slotRoles` state initialized from defaults
-- Wire `handleSlotRoleChange` callback
-- Pass roles to prompt builder and quick bar
-- Compute `multiRefActive` (2+ filled slots) and pass to settings sheet
-
-### 4. Model Filtering
-
-**File**: `src/components/workspace/MobileSettingsSheet.tsx`
-
-- When `multiRefActive`, filter image models to those with `i2i_multi` in `tasks`
-- Auto-select the `i2i_multi` default model
-
-**File**: `src/hooks/useImageModels.ts`
-
-- Ensure `tasks` field is included in returned model data
-
-### 5. Lightbox Role Tagging
-
-**File**: `src/components/shared/LightboxActions.tsx` (or new `RoleTagButton.tsx`)
-
-- Add a "Tag" button to `LibraryAssetActions` and `WorkspaceAssetActions`
-- On click, show a popover with 5 role chips (character, clothing, position, scene, style)
-- Toggle adds/removes `role:X` from the asset's `tags` array
-- Calls `supabase.from('user_library').update({ tags })` or `supabase.from('character_canon').update({ tags })`
-
-**File**: `src/components/library/UpdatedOptimizedLibrary.tsx`
-
-- Pass the tag button through the `actionsSlot` in the lightbox
-
-### 6. Character Studio Auto-Tagging
-
-**File**: `src/hooks/useCharacterStudio.ts`
-
-- When saving a portrait, auto-include `role:character` in the tags array
-- When saving a position, auto-include `role:position` in the tags array
-- When saving an outfit/style, auto-include the corresponding `role:clothing` or `role:style` tag
-
-### 7. Prompt Input Passthrough
-
-**File**: `src/components/workspace/MobileSimplePromptInput.tsx`
-
-- Accept and pass `slotRoles` and `onSlotRoleChange` through to `MobileQuickBar`
-
-## Edge Function Note
-
-No edge function changes needed. The Figure notation is constructed client-side in the prompt text. The `fal-image` edge function already accepts an `image_urls` array and passes them to the model as-is. The prompt text is what tells the model how to interpret each Figure.
-
-## Build Error Fixes (Separate)
-
-The current build errors in `playground-chat`, `replicate-image`, `replicate-webhook`, and `roleplay-chat` are unrelated to this feature. They stem from missing Supabase type definitions for tables like `messages`, `conversations`, and `system_config`. These need `as any` casts or type regeneration, and should be fixed in a separate pass.
+- **SlotRole types** (`src/types/slotRoles.ts`): Done -- 6 roles, labels, colors, `buildFigurePrefix`
+- **`RoleTagButton` component**: Done -- built and functional
+- **`LightboxActions` prop wiring**: Props added but NOT connected to callers (this plan fixes it)
+- **`MobileQuickBar` role badge**: Built but gated behind `role !== 'reference'` (this plan fixes it)
+- **`slotRoles` state in workspace page**: Done -- state, setter, and passthrough all wired
+- **`buildFigurePrefix` in generate flow**: Done -- `useLibraryFirstWorkspace.ts` accepts and uses `slotRoles`
+- **Character Studio auto-tagging**: Changes were made to `useCharacterStudio.ts` and `CharacterStudioV3.tsx` (needs verification)
+- **Model filtering for `i2i_multi`**: NOT done (this plan adds it)
+- **Sparkle/enhance with ref context**: NOT done (this plan adds it)
