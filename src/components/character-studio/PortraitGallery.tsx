@@ -19,6 +19,7 @@ import {
   Info,
   X,
   Crosshair,
+  ExternalLink,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -76,6 +77,7 @@ interface PortraitGalleryProps {
   onRegenerate?: (prompt: string, referenceUrl: string) => void;
   onCopyPrompt?: (prompt: string) => void;
   onSaveAsPosition?: (imageUrl: string) => void;
+  onSendToWorkspace?: (imageUrl: string) => void;
   characterAppearanceTags?: string[];
 }
 
@@ -93,6 +95,7 @@ export function PortraitGallery({
   onRegenerate,
   onCopyPrompt,
   onSaveAsPosition,
+  onSendToWorkspace,
   characterAppearanceTags = [],
 }: PortraitGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -287,6 +290,11 @@ export function PortraitGallery({
                         {onSaveAsPosition && (
                           <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSaveAsPosition(portrait.image_url); }}>
                             <Crosshair className="w-4 h-4 mr-2" />Save as Position
+                          </DropdownMenuItem>
+                        )}
+                        {onSendToWorkspace && (
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSendToWorkspace(portrait.image_url); }}>
+                            <ExternalLink className="w-4 h-4 mr-2" />Send to Workspace
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
