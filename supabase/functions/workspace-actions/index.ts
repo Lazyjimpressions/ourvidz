@@ -945,7 +945,7 @@ serve(async (req) => {
         .select('id')
         .eq('user_id', user.id)
         .eq('original_prompt', libraryAsset.original_prompt)
-        .eq('generation_seed', libraryAsset.generation_seed)
+        .eq('generation_seed', libraryAsset.generation_seed ?? 0)
         .eq('model_used', libraryAsset.model_used)
         .maybeSingle()
 
@@ -1134,7 +1134,7 @@ serve(async (req) => {
           duration_seconds: libraryAsset.duration_seconds,
           original_prompt: libraryAsset.original_prompt,
           model_used: libraryAsset.model_used,
-          generation_seed: libraryAsset.generation_seed,
+          generation_seed: libraryAsset.generation_seed ?? 0,
           // Copy generation settings if available
           generation_settings: {
             source: 'library_copy',
