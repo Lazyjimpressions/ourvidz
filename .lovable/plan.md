@@ -1,130 +1,129 @@
 
-# Character Hub UX/UI Audit
 
-## Wireframe Elements Identified
+# Add Pose Description to Scoring Flow
 
-The Character Hub is a 3-panel desktop layout with a mobile drawer fallback:
+## The Idea
 
-```text
-+------------------+---------------------+-----------------+
-| Left Sidebar     | Center Grid         | Right Panel     |
-| (320px)          | (flex-1)            | (280px)         |
-| Selected char    | Filter bar          | Create char     |
-| detail view      | + Character cards   | + History grid  |
-| (4 tabs)         |                     |                 |
-+------------------+---------------------+-----------------+
+Right now, the scoring flow calls `describe-image` once in `scoring` mode and gets back a full description plus scores. The `description` field contains everything -- faces, clothing, scene, pose -- which is perfect for scoring but **counterproductive** when that image is later used as a position reference (face/scene details bleed into the combined prompt).
+
+Instead of adding a separate process for pose descriptions, we extend the **existing scoring call** to produce two descriptions in one pass:
+
+1. **`description`** -- Full description (existing, unchanged, used for scoring)
+2. **`pose_description`** -- Spatial/composition-only description (new, strips identity/scene, used for position references)
+
+This means every scored image automatically has a pose-ready description. No extra API calls. No separate workflow. One flow, two outputs.
+
+## What Changes
+
+### 1. Update the Scoring Prompt Template
+
+**Where**: The scoring system prompt (either in `prompt_templates` table for `use_case = 'scoring'`, or the fallback template in `describe-image/index.ts` lines 140-161)
+
+Add `pose_description` to the required JSON output:
+
+```json
+{
+  "action_match": 3,
+  "appearance_match": 4,
+  "overall_quality": 4,
+  "description": "Full description with all elements...",
+  "pose_description": "Spatial-only: two figures standing side by side, left figure slightly taller, both facing camera at 3/4 angle, arms at sides, medium shot from waist up",
+  "elements_present": [...],
+  "elements_missing": [...],
+  "issues": [...],
+  "strengths": [...]
+}
 ```
 
-- **Header**: 48px bar with icon, title/subtitle, "Create Character" CTA
-- **Left Sidebar**: `CharacterHubSidebar` -- avatar, name, badges, 4-tab detail view (Identity, Visuals, Style, Media), footer actions
-- **Center Grid**: `CharacterFilters` (search + genre chips + popover filters) above a responsive card grid using `CharacterCard` + `AssetTile`
-- **Right Panel**: `CharacterCreatePanel` -- two creation modes ("Start from Images" / "Start from Description") + character history thumbnails
-- **Mobile Drawer**: Fixed overlay with backdrop when a character is selected on smaller screens
+Add instruction text to the scoring template:
 
----
+```
+"pose_description": "Describe ONLY the spatial layout, body positions, composition, camera angle, and figure count. 
+Do NOT include any identity features (face, hair, skin tone, ethnicity), clothing details, or scene/background elements. 
+Treat all people as anonymous mannequins. Focus on: how many figures, their relative positions, body poses, spacing, framing, and camera perspective."
+```
 
-## Design System Conformance Assessment
+### 2. Update the Fallback Template in describe-image
 
-### What's Good (Conforms to Minimalist Aesthetic)
+**File**: `supabase/functions/describe-image/index.ts` (lines 140-161)
 
-- **Card tiles use AssetTile** with 3:4 aspect ratio and signed URLs -- consistent with Library/Workspace
-- **Typography mostly follows the design system**: text-sm for headings, text-[10px] for captions, text-[9px] for badges
-- **Compact header**: 48px (h-12), correct icon sizing, properly dense
-- **Dark theme**: Correct use of bg-background, bg-card/30, border-border/50
-- **Sidebar tabs**: h-7 TabsList, text-[10px] triggers -- matches design system specs
-- **Empty state**: Clean, minimal, single CTA
+Add `pose_description` field to the fallback JSON schema in `getScoringTemplate()`, with the same instruction as above. This ensures even without a database template, the field is requested.
 
-### Issues Found
+### 3. Update VisionScoringResult Type in score-generation
 
-#### 1. Filter Bar is Oversized and Wasteful (HIGH)
+**File**: `supabase/functions/score-generation/index.ts` (lines 32-41)
 
-The `CharacterFilters` component has significant spacing issues:
-- **Search input is h-10** (40px) -- should be h-8 (32px) per design system
-- **Filter button is h-10** -- should be h-7 or h-8
-- **Genre chips row adds a second full row** with "Genres:" label permanently visible
-- **Double padding**: The filter bar has its own `pb-4 pt-2 border-b`, AND the parent wraps it in another `px-4 py-3 border-b` -- creating a thick double-bordered filter band that wastes ~80px of vertical space
-- Total filter area height: ~100px. Should be ~48px (single row with search + chip overflow)
+Add `pose_description?: string` to the `VisionScoringResult` interface. The field flows through automatically since `visionAnalysis` spreads the full result into the JSONB column (line 224: `...visionResult`).
 
-**Recommendation**: Collapse to a single compact row. Search (h-8) + filter popover trigger inline. Move genre chips inside the popover or make them a horizontally scrollable row without the "Genres:" label.
+No additional storage logic needed -- `pose_description` will be stored inside `vision_analysis` JSONB alongside `description`, `elements_present`, etc.
 
-#### 2. Right Panel ("Create & History") is Low-Value Real Estate (MEDIUM)
+### 4. Update Frontend Type
 
-The right panel permanently occupies 280px showing:
-- Two creation buttons (which are also in the header CTA)
-- A 3x3 grid of recent character thumbnails (duplicates the center grid)
+**File**: `src/hooks/usePromptScores.ts` (lines 44-55)
 
-This panel provides minimal unique value:
-- The "Create Character" CTA already exists in the header
-- The "Character History" thumbnails are just a subset of the main grid
-- 280px of always-visible panel for 2 buttons + 9 thumbnails is poor information density
+Add `pose_description?: string` to the `VisionAnalysis` interface so the frontend can read it from scored records.
 
-**Recommendation**: Remove the right panel entirely. The header CTA handles creation. If "recent characters" is desired, add a "Sort: Recent" option to the grid filters instead. This frees 280px for the grid, improving card count per row.
+### 5. Wire pose_description into buildQuickScenePrompt
 
-#### 3. Left Sidebar Has Dead Tabs (MEDIUM)
+**File**: `src/types/slotRoles.ts`
 
-- **Style tab**: Only shows one line: "Default (Realistic)". Entire tab for one text field.
-- **Media tab**: Shows only "Configure in the Character Studio." -- completely empty placeholder.
-- Two of four tabs are essentially empty, making the sidebar feel incomplete.
+Add optional `poseDescription` parameter to `buildQuickScenePrompt`. When provided, inject it into the Image 3 block:
 
-**Recommendation**: Collapse Style and Media into the Identity tab as small sections, or remove them from the sidebar view entirely (they're editing concerns, not browsing concerns). A character detail sidebar for a Hub should focus on read-only overview, not replicate Studio tabs.
+```
+- Image 3: Pose/composition layout ONLY (treat as mannequin silhouettes).
+  [Spatial layout: {poseDescription}]
+  Use body positions, spacing, and camera angle from Image 3.
+  COMPLETELY IGNORE all faces, skin tone, hair, and identity features from Image 3.
+```
 
-#### 4. Sidebar Footer Links to Wrong Route (LOW)
+### 6. Look Up pose_description When Building Quick Scene
 
-Both "Edit in Studio" and "Generate" buttons navigate to `/character-studio-v2/{id}`, but the app routes use `/character-studio/{id}` (which loads `CharacterStudioV3`). The V2 route doesn't exist in App.tsx.
+**File**: `src/hooks/useLibraryFirstWorkspace.ts` (or wherever Quick Scene prompt is assembled)
 
-**Recommendation**: Fix both buttons to navigate to `/character-studio/${character.id}`.
+When Slot 3 (pose) is filled from an image that has a `prompt_scores` record, query `prompt_scores.vision_analysis->>'pose_description'` for that image's job and pass it to `buildQuickScenePrompt`.
 
-#### 5. Hub Overlay Actions Missing "Send to Workspace" (MEDIUM)
+## Data Flow
 
-The `CharacterCardOverlay` in `hub` context shows: Edit, Generate Image, Duplicate, Delete. There is no "Send to Workspace" option, which we just added to Portraits and Positions. For consistency, character cards in the Hub should also offer "Send to Workspace" (using the primary anchor image).
+```text
+Image Generated
+    |
+    v
+fal-webhook fires --> score-generation --> describe-image (scoring mode)
+    |                                           |
+    |                             Returns: { description, pose_description, scores... }
+    |                                           |
+    v                                           v
+prompt_scores.vision_analysis = { description: "full...", pose_description: "spatial only...", ... }
+    |
+    |--- (later) user drags image into Slot 3 (Pose)
+    |
+    v
+Look up prompt_scores.vision_analysis.pose_description for this image
+    |
+    v
+buildQuickScenePrompt(..., poseDescription: "two figures side by side...")
+    |
+    v
+Injected into Image 3 reference block --> reduces identity bleeding
+```
 
-**Recommendation**: Add an `onSendToWorkspace` prop to `CharacterCardOverlay` for hub context. Wire it from `CharacterHubV2` using the same `navigate('/workspace?mode=image', { state: { referenceUrl } })` pattern.
+## What Does NOT Change
 
-#### 6. Duplicate `getSignedUrl` Helper (LOW)
+- No new database columns (pose_description lives inside existing `vision_analysis` JSONB)
+- No new edge functions
+- No new API calls (the vision model produces both descriptions in a single call)
+- No changes to the scoring UI
+- No changes to user ratings or feedback flow
+- Graceful fallback: if `pose_description` is missing (older records), the existing anti-bleeding language still applies
 
-Both `CharacterHubSidebar.tsx` and `CharacterCreatePanel.tsx` define their own identical `getSignedUrl` helper function. This should use the shared `useSignedUrl` hook that `CharacterCard` already uses.
+## Files Summary
 
-**Recommendation**: Replace inline `getSignedUrl` with `useSignedUrl` hook in both components.
+| File | Change |
+|------|--------|
+| `supabase/functions/describe-image/index.ts` | Add `pose_description` field + instructions to fallback scoring template |
+| `supabase/functions/score-generation/index.ts` | Add `pose_description?: string` to `VisionScoringResult` interface |
+| `src/hooks/usePromptScores.ts` | Add `pose_description?: string` to `VisionAnalysis` interface |
+| `src/types/slotRoles.ts` | Add `poseDescription` param to `buildQuickScenePrompt`, inject into Image 3 block |
+| `src/hooks/useLibraryFirstWorkspace.ts` | Look up `pose_description` from `prompt_scores` when Slot 3 is filled, pass to prompt builder |
+| Database: `prompt_templates` | Update active scoring template to include `pose_description` field (if using DB-driven template) |
 
-#### 7. Filter Bar Has Redundant Sticky Positioning (LOW)
-
-`CharacterFilters` applies its own `sticky top-0 z-30 bg-background/95 backdrop-blur-md` class, but the parent already positions it inside a `border-b` div with `bg-background/50`. The result is double backgrounds and the sticky behavior doesn't actually work since the parent constrains it.
-
-**Recommendation**: Remove the sticky/backdrop-blur from `CharacterFilters` -- let the parent handle positioning.
-
----
-
-## Functionality Assessment
-
-### Keep
-- 3-panel layout concept (but simplify to 2 panels -- see below)
-- CharacterCard with AssetTile and hover overlay
-- Search + genre filtering
-- Content rating and media-ready filters
-- Character select -> sidebar detail view
-- Duplicate and delete actions
-- Mobile drawer for selected character
-
-### Remove
-- Right panel (CharacterCreatePanel) -- redundant with header CTA and main grid
-- Style and Media tabs in sidebar -- empty placeholders
-- Genre chips as a permanent second row -- move into filter popover
-- Duplicate `getSignedUrl` helpers
-
-### Add
-- "Send to Workspace" action on hub card overlay
-- "Sort by" option (Recent, Name, Most Used) in filter bar
-- Character count indicator (e.g., "12 characters" in the header or filter bar)
-
----
-
-## Proposed Changes Summary
-
-| File | Change | Priority |
-|------|--------|----------|
-| `CharacterFilters.tsx` | Compact to single row: h-8 search, move genres into popover, remove redundant sticky/padding | HIGH |
-| `CharacterHubV2.tsx` | Remove right panel (`CharacterCreatePanel`), reclaim 280px for grid; fix grid responsive breakpoints | MEDIUM |
-| `CharacterHubSidebar.tsx` | Remove empty Style/Media tabs; fix route to `/character-studio/`; replace inline getSignedUrl with useSignedUrl | MEDIUM |
-| `CharacterCardOverlay.tsx` | Add "Send to Workspace" button for hub context | MEDIUM |
-| `CharacterCreatePanel.tsx` | Mark for removal (functionality absorbed by header CTA + grid sort) | MEDIUM |
-| `CharacterHubV2.tsx` | Add character count display; add sort option | LOW |
