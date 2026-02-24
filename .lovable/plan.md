@@ -1,59 +1,78 @@
 
 
-# Fix: Library-to-Workspace Copy Fails Due to NULL `generation_seed`
+# Unify Tile, Overlay, and Lightbox Patterns Across All Contexts
 
-## Root Cause
+## Current State
 
-The `workspace_assets.generation_seed` column is `NOT NULL`, but `user_library.generation_seed` is nullable -- and **83 out of 153** library assets have `generation_seed = NULL`. When the `workspace-actions` edge function tries to insert a workspace record with a null seed, the database rejects it silently (500 error).
+Four contexts display image tiles but use inconsistent implementations:
 
-The edge function at line 1137 does:
-```
-generation_seed: libraryAsset.generation_seed,  // NULL for 54% of library assets
-```
+| Feature | Library | Workspace | Portraits | Positions |
+|---------|---------|-----------|-----------|-----------|
+| Uses AssetTile | Yes (via SharedGrid) | Yes (via SharedGrid) | Yes (SignedPortraitTile) | NO (hand-rolled div+img) |
+| UnifiedLightbox | Yes | Yes | Yes | NO |
+| Send to Workspace | Yes (onAddToWorkspace) | N/A | MISSING | Broken (query params) |
+| Hover overlay style | Bottom-right icons | Bottom-right icons | DropdownMenu (top-right) | Full overlay with circles |
 
-## Fix
+## Gaps to Fix
 
-### 1. `supabase/functions/workspace-actions/index.ts` -- Default null seeds to 0
+### 1. PositionsGrid: Replace hand-rolled tile with AssetTile
 
-In the `copy_to_workspace` handler (around line 1137), coalesce null `generation_seed` to `0`:
+The `CanonThumbnail` component (PositionsGrid.tsx ~line 209) currently renders a raw `<div>` with manual aspect-ratio and `<img>`. This misses:
+- The iOS Safari layout fix (absolute inset-0 pattern)
+- Hover-to-play for video positions
+- Drag-and-drop support
+- Consistent border/shadow/hover styling
 
-```typescript
-generation_seed: libraryAsset.generation_seed ?? 0,
-```
+**Change**: Refactor `CanonThumbnail` to use `AssetTile` as its container, passing the signed URL and overlay children the same way `SignedPortraitTile` does.
 
-This is safe because `generation_seed` is only used for deduplication and reproducibility -- a `0` value simply means "no seed recorded."
+### 2. PositionsGrid: Add UnifiedLightbox
 
-### 2. Same file -- Fix deduplication query (lines 943-950)
+Positions currently have no lightbox -- clicking a tile just toggles hover actions. This is inconsistent with Library, Workspace, and Portraits which all open a full-screen lightbox on click.
 
-The existing dedup check matches on `generation_seed`, which means assets with `NULL` seeds would never be caught as duplicates (NULL != NULL in SQL). Update to handle this:
+**Change**: Add `UnifiedLightbox` to `PositionsGrid` with:
+- `items` mapped from `canonImages` (id, signed URL, type)
+- `headerSlot` showing Primary badge and type badge
+- `bottomSlot` with action buttons (Delete, Set Primary, Send to Workspace, Edit Tags)
+- Click on tile opens lightbox; hover still shows quick actions
 
-```typescript
-// Current (broken for null seeds):
-.eq('generation_seed', libraryAsset.generation_seed)
+### 3. PortraitGallery: Add "Send to Workspace" menu item
 
-// Fixed:
-.eq('generation_seed', libraryAsset.generation_seed ?? 0)
-```
+The portrait dropdown menu has: Set Primary, Use as Reference, Copy Prompt, Download, Save as Position, Delete. "Send to Workspace" is missing.
 
-### 3. Optional: Also default `file_size_bytes` defensively
+**Change**: Add a new `DropdownMenuItem` with `ExternalLink` icon between "Save as Position" and the delete separator. Wire it through a new `onSendToWorkspace` prop.
 
-Many library assets have `file_size_bytes = 0` (valid but inaccurate). The workspace insert already passes this through, and `0` satisfies the NOT NULL constraint, so no fix is needed here. But if we want accurate sizes, the edge function could check the blob size after download:
+### 4. Fix Positions "Send to Workspace" navigation
 
-```typescript
-file_size_bytes: libraryAsset.file_size_bytes || fileData.size,
-```
+Currently uses `navigate('/workspace?mode=image&ref=...')` but the Workspace reads `location.state.referenceUrl`.
 
-This is low priority and optional.
+**Change**: Update to `navigate('/workspace?mode=image', { state: { referenceUrl: signedUrl } })`.
 
-## Files Changed
+### 5. Wire "Send to Workspace" from StudioWorkspace container
+
+`StudioWorkspace.tsx` needs to:
+- Accept an `onSendToWorkspace` prop (or use `useNavigate` internally)
+- Pass it to both `PortraitGallery` and `PositionsGrid`
+- The handler signs the URL and navigates with `location.state`
+
+## File Changes
 
 | File | Change |
 |------|--------|
-| `supabase/functions/workspace-actions/index.ts` | Default `generation_seed` to `0` when null (line ~1137); fix dedup query to use coalesced value (line ~949) |
+| `src/components/character-studio-v3/PositionsGrid.tsx` | Replace raw div+img in CanonThumbnail with AssetTile; add UnifiedLightbox; fix Send to Workspace navigation to use location.state |
+| `src/components/character-studio/PortraitGallery.tsx` | Add "Send to Workspace" DropdownMenuItem; add `onSendToWorkspace` prop |
+| `src/components/character-studio-v3/StudioWorkspace.tsx` | Wire `onSendToWorkspace` to both PortraitGallery and PositionsGrid using navigate + location.state |
 
-## Scope
+## What Stays the Same
 
-- Single file change, two lines
-- No frontend changes needed
-- No DB migration needed
-- Fixes the failure for 54% of library assets
+- Library and Workspace tiles (already use SharedGrid + AssetTile + UnifiedLightbox)
+- The hover overlay **style** difference between Portraits (dropdown menu) and Positions (icon buttons) is acceptable -- Portraits have many actions that need a menu, while Positions have fewer actions that work as direct buttons. Both will now sit on top of AssetTile.
+- UnifiedLightbox props pattern (actionsSlot, bottomSlot, headerSlot) -- already proven in Library/Workspace/Portraits
+
+## UX Result
+
+All four contexts will:
+- Use `AssetTile` for consistent 3:4 tiles with the iOS Safari fix
+- Open `UnifiedLightbox` on click for full-screen preview
+- Offer "Send to Workspace" on hover (and in lightbox actions)
+- Navigate to workspace using `location.state.referenceUrl` (consumed by existing useEffect)
+
