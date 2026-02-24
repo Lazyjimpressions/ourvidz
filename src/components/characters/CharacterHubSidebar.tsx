@@ -1,61 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Edit, User, Sparkles, X } from 'lucide-react';
 import { CharacterV2, DEFAULT_PERSONALITY_SLIDERS } from '@/types/character-hub-v2';
-import { supabase } from '@/integrations/supabase/client';
+import { useSignedUrl } from '@/hooks/useSignedUrl';
 
 interface CharacterHubSidebarProps {
     character: CharacterV2 | null;
     onClose: () => void;
 }
 
-// Helper to sign storage URLs
-async function getSignedUrl(url: string): Promise<string> {
-    if (!url) return '';
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
-        return url;
-    }
-    const knownBuckets = ['workspace-temp', 'user-library', 'characters', 'reference_images'];
-    const parts = url.split('/');
-    let bucket = 'characters';
-    let path = url;
-
-    if (knownBuckets.includes(parts[0])) {
-        bucket = parts[0];
-        path = parts.slice(1).join('/');
-    }
-
-    try {
-        const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-        if (error) return url;
-        return data.signedUrl;
-    } catch {
-        return url;
-    }
-}
-
 export const CharacterHubSidebar: React.FC<CharacterHubSidebarProps> = ({ character, onClose }) => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('identity');
-    const [signedImageUrl, setSignedImageUrl] = useState('');
 
-    // Sign the image URL
-    useEffect(() => {
-        const signUrl = async () => {
-            const imageSource = character?.character_anchors?.find(a => a.is_primary)?.image_url || character?.image_url;
-            if (imageSource) {
-                const signed = await getSignedUrl(imageSource);
-                setSignedImageUrl(signed);
-            } else {
-                setSignedImageUrl('');
-            }
-        };
-        signUrl();
-    }, [character?.image_url, character?.character_anchors]);
+    const imageSource = character?.character_anchors?.find(a => a.is_primary)?.image_url || character?.image_url;
+    const { signedUrl: signedImageUrl } = useSignedUrl(imageSource);
 
     if (!character) {
         return (
@@ -109,14 +72,12 @@ export const CharacterHubSidebar: React.FC<CharacterHubSidebarProps> = ({ charac
                 </button>
             </div>
 
-            {/* Tabs */}
+            {/* Tabs — Identity + Visuals only */}
             <div className="px-3 py-2 border-b border-border/50">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                    <TabsList className="grid w-full grid-cols-4 h-7 bg-muted/50 p-0.5">
+                    <TabsList className="grid w-full grid-cols-2 h-7 bg-muted/50 p-0.5">
                         <TabsTrigger value="identity" className="text-[10px] h-6">Identity</TabsTrigger>
                         <TabsTrigger value="appearance" className="text-[10px] h-6">Visuals</TabsTrigger>
-                        <TabsTrigger value="style" className="text-[10px] h-6">Style</TabsTrigger>
-                        <TabsTrigger value="media" className="text-[10px] h-6">Media</TabsTrigger>
                     </TabsList>
                 </Tabs>
             </div>
@@ -173,6 +134,12 @@ export const CharacterHubSidebar: React.FC<CharacterHubSidebarProps> = ({ charac
                                 </div>
                             </div>
                         )}
+
+                        {/* Style (collapsed from former tab) */}
+                        <div className="pt-3 border-t border-border/30">
+                            <Label className="text-[10px] text-muted-foreground">Style Preset</Label>
+                            <p className="text-xs mt-1 text-foreground/80">{character.style_preset || 'Realistic'}</p>
+                        </div>
                     </div>
                 )}
 
@@ -190,26 +157,6 @@ export const CharacterHubSidebar: React.FC<CharacterHubSidebarProps> = ({ charac
                         )}
                     </div>
                 )}
-
-                {activeTab === 'style' && (
-                    <div className="space-y-3">
-                        <div>
-                            <Label className="text-[10px] text-muted-foreground">Style Preset</Label>
-                            <p className="text-xs mt-1">{character.style_preset || 'Default (Realistic)'}</p>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'media' && (
-                    <div className="space-y-3">
-                        <div>
-                            <Label className="text-[10px] text-muted-foreground">Media Defaults</Label>
-                            <p className="text-[10px] text-muted-foreground/70 mt-1">
-                                Configure in the Character Studio.
-                            </p>
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Footer Actions */}
@@ -218,7 +165,7 @@ export const CharacterHubSidebar: React.FC<CharacterHubSidebarProps> = ({ charac
                     size="sm"
                     variant="outline"
                     className="flex-1 text-[10px] h-7"
-                    onClick={() => navigate(`/character-studio-v2/${character.id}`)}
+                    onClick={() => navigate(`/character-studio/${character.id}`)}
                 >
                     <Edit className="w-3 h-3 mr-1" />
                     Edit in Studio
@@ -226,7 +173,7 @@ export const CharacterHubSidebar: React.FC<CharacterHubSidebarProps> = ({ charac
                 <Button
                     size="sm"
                     className="flex-1 text-[10px] h-7"
-                    onClick={() => navigate(`/character-studio-v2/${character.id}`)}
+                    onClick={() => navigate(`/character-studio/${character.id}`)}
                 >
                     <Sparkles className="w-3 h-3 mr-1" />
                     Generate
@@ -236,13 +183,9 @@ export const CharacterHubSidebar: React.FC<CharacterHubSidebarProps> = ({ charac
     );
 };
 
-// Small anchor thumbnail component
+// Small anchor thumbnail component using useSignedUrl
 const AnchorThumbnail: React.FC<{ anchor: { id: string; image_url: string; is_primary: boolean } }> = ({ anchor }) => {
-    const [signedUrl, setSignedUrl] = useState('');
-
-    useEffect(() => {
-        getSignedUrl(anchor.image_url).then(setSignedUrl);
-    }, [anchor.image_url]);
+    const { signedUrl } = useSignedUrl(anchor.image_url);
 
     return (
         <div className={`aspect-square rounded overflow-hidden border ${anchor.is_primary ? 'border-primary ring-1 ring-primary/30' : 'border-border/50'}`}>

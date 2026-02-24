@@ -3,16 +3,14 @@ import {
     Eye,
     MessageCircle,
     Pencil,
-    Sparkles,
     Copy,
     Trash,
-    Video,
     Download,
     Share2,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { CharacterCardContext } from './CharacterCard';
 
 interface CharacterCardOverlayProps {
@@ -26,6 +24,7 @@ interface CharacterCardOverlayProps {
     onDelete?: () => void;
     onDownload?: () => void;
     onShare?: () => void;
+    onSendToWorkspace?: () => void;
     isOwner?: boolean;
 }
 
@@ -40,11 +39,12 @@ export const CharacterCardOverlay: React.FC<CharacterCardOverlayProps> = ({
     onDelete,
     onDownload,
     onShare,
+    onSendToWorkspace,
     isOwner
 }) => {
     if (!isOpen) return null;
 
-    // Render Roleplay Actions
+    // Roleplay Actions
     if (context === 'roleplay') {
         return (
             <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex flex-col items-center justify-center gap-3 animate-in fade-in duration-200">
@@ -78,7 +78,7 @@ export const CharacterCardOverlay: React.FC<CharacterCardOverlayProps> = ({
         );
     }
 
-    // Render Hub Actions
+    // Hub Actions
     if (context === 'hub') {
         return (
             <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex flex-col items-end justify-start p-3 animate-in fade-in duration-200 pointer-events-none">
@@ -101,6 +101,17 @@ export const CharacterCardOverlay: React.FC<CharacterCardOverlayProps> = ({
                             title="Generate Image"
                         >
                             <ImageIcon className="w-4 h-4" />
+                        </Button>
+                    )}
+                    {onSendToWorkspace && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full bg-black/40 hover:bg-black/60 text-white border border-white/10 shadow-sm backdrop-blur-md"
+                            onClick={(e) => { e.stopPropagation(); onSendToWorkspace(); }}
+                            title="Send to Workspace"
+                        >
+                            <Send className="w-4 h-4" />
                         </Button>
                     )}
                     <Button
@@ -126,7 +137,7 @@ export const CharacterCardOverlay: React.FC<CharacterCardOverlayProps> = ({
         );
     }
 
-    // Render Library Actions
+    // Library Actions
     return (
         <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex items-center justify-center gap-2 animate-in fade-in duration-200">
             <Button

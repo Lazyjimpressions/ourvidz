@@ -25,6 +25,7 @@ export interface CharacterCardProps {
     onDelete?: (characterId: string) => Promise<void>;
     onGenerate?: () => void;
     onDuplicate?: () => void;
+    onSendToWorkspace?: () => void;
     className?: string;
     showStats?: boolean;
 }
@@ -38,6 +39,7 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
     onDelete,
     onGenerate,
     onDuplicate,
+    onSendToWorkspace,
     className,
     showStats = true
 }) => {
@@ -161,6 +163,7 @@ export const CharacterCard: React.FC<CharacterCardProps> = ({
                 onGenerate={handleGenerateImage}
                 onDuplicate={onDuplicate}
                 onDelete={onDelete ? () => onDelete(character.id) : undefined}
+                onSendToWorkspace={onSendToWorkspace}
                 isOwner={user?.id === character.user_id || !!isAdmin}
             />
 

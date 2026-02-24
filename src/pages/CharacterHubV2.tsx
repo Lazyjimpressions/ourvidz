@@ -4,9 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { CharacterCard } from '@/components/characters/CharacterCard';
-import { CharacterFilters } from '@/components/characters/CharacterFilters';
+import { CharacterFilters, CharacterSortOption } from '@/components/characters/CharacterFilters';
 import { CharacterHubSidebar } from '@/components/characters/CharacterHubSidebar';
-import { CharacterCreatePanel } from '@/components/characters/CharacterCreatePanel';
 import { CharacterHubFilters, CharacterV2 } from '@/types/character-hub-v2';
 import { Button } from '@/components/ui/button';
 import { Plus, Users, Loader2 } from 'lucide-react';
@@ -17,10 +16,9 @@ export default function CharacterHubV2() {
     const { user } = useAuth();
     const { toast } = useToast();
 
-    // Selected character state
     const [selectedCharacter, setSelectedCharacter] = useState<CharacterV2 | null>(null);
+    const [sort, setSort] = useState<CharacterSortOption>('recent');
 
-    // Filter State
     const [filters, setFilters] = useState<CharacterHubFilters>({
         search: '',
         genres: [],
@@ -59,22 +57,19 @@ export default function CharacterHubV2() {
         enabled: !!user
     });
 
-    // Client-side filtering
+    // Client-side filtering + sorting
     const filteredCharacters = useMemo(() => {
         if (!characters) return [];
 
-        return characters.filter(char => {
-            // Search filter
+        let result = characters.filter(char => {
             if (filters.search) {
                 const query = filters.search.toLowerCase();
                 const matchesName = char.name.toLowerCase().includes(query);
                 const matchesTagline = char.description?.toLowerCase().includes(query);
                 const matchesTags = char.appearance_tags?.some(tag => tag.toLowerCase().includes(query));
-
                 if (!matchesName && !matchesTagline && !matchesTags) return false;
             }
 
-            // Genre filter
             if (filters.genres && filters.genres.length > 0) {
                 const hasGenre = filters.genres.some(genre =>
                     char.category?.toLowerCase() === genre.toLowerCase() ||
@@ -83,20 +78,25 @@ export default function CharacterHubV2() {
                 if (!hasGenre) return false;
             }
 
-            // Content Rating filter
             if (filters.contentRating && filters.contentRating !== 'all') {
-                const charRating = char.content_rating || 'sfw';
-                if (charRating !== filters.contentRating) return false;
+                if ((char.content_rating || 'sfw') !== filters.contentRating) return false;
             }
 
-            // Media Ready filter
-            if (filters.mediaReady) {
-                if (!char.image_url) return false;
-            }
+            if (filters.mediaReady && !char.image_url) return false;
 
             return true;
         });
-    }, [characters, filters]);
+
+        // Sort
+        if (sort === 'name') {
+            result = [...result].sort((a, b) => a.name.localeCompare(b.name));
+        } else if (sort === 'most_used') {
+            result = [...result].sort((a, b) => (b.interaction_count || 0) - (a.interaction_count || 0));
+        }
+        // 'recent' is default from DB order
+
+        return result;
+    }, [characters, filters, sort]);
 
     // Handlers
     const handleSelect = (character: CharacterV2) => {
@@ -111,47 +111,34 @@ export default function CharacterHubV2() {
         try {
             const { error } = await supabase.from('characters').delete().eq('id', id);
             if (error) throw error;
-
             toast({ title: 'Character deleted', description: 'Character successfully removed.' });
-            if (selectedCharacter?.id === id) {
-                setSelectedCharacter(null);
-            }
+            if (selectedCharacter?.id === id) setSelectedCharacter(null);
             refetch();
         } catch (error: any) {
-            toast({
-                title: 'Delete failed',
-                description: error.message,
-                variant: 'destructive'
-            });
+            toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
         }
     };
 
     const handleDuplicate = async (char: CharacterV2) => {
         try {
             const { id, created_at, updated_at, character_anchors, ...charData } = char;
-
-            const newChar = {
-                ...charData,
-                name: `${charData.name} (Copy)`,
-                user_id: user?.id,
-            };
-
+            const newChar = { ...charData, name: `${charData.name} (Copy)`, user_id: user?.id };
             const { error } = await supabase.from('characters').insert(newChar as any);
             if (error) throw error;
-
             toast({ title: 'Character duplicated', description: 'Copy created successfully.' });
             refetch();
         } catch (error: any) {
-            toast({
-                title: 'Duplication failed',
-                description: error.message,
-                variant: 'destructive'
-            });
+            toast({ title: 'Duplication failed', description: error.message, variant: 'destructive' });
         }
     };
 
-    const handleFilterChange = (newFilters: CharacterHubFilters) => {
-        setFilters(newFilters);
+    const handleSendToWorkspace = (char: CharacterV2) => {
+        const imageUrl = char.character_anchors?.find(a => a.is_primary)?.image_url || char.image_url;
+        if (imageUrl) {
+            navigate('/workspace?mode=image', { state: { referenceUrl: imageUrl } });
+        } else {
+            toast({ title: 'No image available', description: 'This character has no anchor image to send.', variant: 'destructive' });
+        }
     };
 
     return (
@@ -178,7 +165,7 @@ export default function CharacterHubV2() {
                 </Button>
             </div>
 
-            {/* Main 3-Panel Layout */}
+            {/* 2-Panel Layout */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Left Sidebar - Selected Character */}
                 <div className="w-[320px] border-r border-border/50 bg-card/30 flex-shrink-0 hidden lg:block">
@@ -190,12 +177,14 @@ export default function CharacterHubV2() {
 
                 {/* Center - Character Grid */}
                 <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                    {/* Filters */}
-                    <div className="px-4 py-3 border-b border-border/50 bg-background/50">
+                    {/* Filters — single compact row */}
+                    <div className="px-4 py-2 border-b border-border/50 bg-background/50">
                         <CharacterFilters
                             filters={filters}
-                            onFilterChange={handleFilterChange}
-                            className="max-w-none"
+                            onFilterChange={setFilters}
+                            sort={sort}
+                            onSortChange={setSort}
+                            characterCount={filteredCharacters.length}
                         />
                     </div>
 
@@ -218,17 +207,14 @@ export default function CharacterHubV2() {
                                         : "No characters match your filters."}
                                 </p>
                                 {characters?.length === 0 && (
-                                     <Button
-                                        size="sm"
-                                        onClick={() => navigate('/character-studio')}
-                                    >
+                                    <Button size="sm" onClick={() => navigate('/character-studio')}>
                                         <Plus className="w-3 h-3 mr-1" />
                                         Create Character
                                     </Button>
                                 )}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                                 {filteredCharacters.map((character) => (
                                     <div
                                         key={character.id}
@@ -243,17 +229,13 @@ export default function CharacterHubV2() {
                                             onDelete={() => handleDelete(character.id)}
                                             onDuplicate={() => handleDuplicate(character)}
                                             onGenerate={() => navigate(`/character-studio/${character.id}`)}
+                                            onSendToWorkspace={() => handleSendToWorkspace(character)}
                                         />
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
-                </div>
-
-                {/* Right Panel - Create & History */}
-                <div className="w-[280px] border-l border-border/50 bg-card/30 flex-shrink-0 hidden lg:block">
-                    <CharacterCreatePanel recentCharacters={characters?.slice(0, 9) || []} />
                 </div>
             </div>
 
