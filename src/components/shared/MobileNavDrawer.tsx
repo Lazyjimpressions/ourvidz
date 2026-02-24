@@ -72,9 +72,9 @@ export const MobileNavDrawer = ({ isOpen, onClose }: MobileNavDrawerProps) => {
     },
     { 
       icon: Users, 
-      label: "Character Studio",
-      path: "/character-studio",
-      active: isActiveRoute("/character-studio")
+      label: "Character Hub",
+      path: "/character-hub-v2",
+      active: isActiveRoute("/character-hub-v2")
     },
     { 
       icon: Brain, 
