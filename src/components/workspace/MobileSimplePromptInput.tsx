@@ -487,12 +487,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   const hasDisplayReference = !!ref1Url;
 
-  // Fixed 10-slot structure for image mode: Char1, Char2, Char3, Pose, Ref5-10
-  // Maps to: ref1 (referenceImageUrl), ref2 (referenceImage2Url), additionalRefUrls[0..7]
+  // Quick Scene: 5 fixed slots for image mode (Char A, Char B, Pose, Scene?, Outfit?)
+  // Maps to: ref1 (referenceImageUrl), ref2 (referenceImage2Url), additionalRefUrls[0..2]
   const fixedSlots: Array<{ url?: string | null; isVideo?: boolean }> = [
     { url: referenceImageUrl, isVideo: false },
     { url: referenceImage2Url, isVideo: false },
-    ...Array.from({ length: 8 }, (_, i) => ({
+    ...Array.from({ length: 3 }, (_, i) => ({
       url: additionalRefUrls[i] || null,
       isVideo: false,
     })),
