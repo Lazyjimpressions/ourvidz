@@ -52,7 +52,9 @@ export function buildQuickScenePrompt(
     'REFERENCE ORDER (do not reinterpret):',
     '- Image 1: Character A identity reference. Preserve face, hair, body proportions, and likeness exactly.',
     '- Image 2: Character B identity reference. Preserve face, hair, body proportions, and likeness exactly.',
-    '- Image 3: Pose/composition reference for BOTH characters only. Do not copy identity from Image 3.',
+    '- Image 3: Pose/composition layout ONLY (treat as mannequin silhouettes).',
+    '  Use body positions, spacing, and camera angle from Image 3.',
+    '  COMPLETELY IGNORE all faces, skin tone, hair, and identity features from Image 3.',
   ];
 
   if (hasScene) {
@@ -65,9 +67,18 @@ export function buildQuickScenePrompt(
   lines.push(
     '',
     'HIGHEST PRIORITY CONSTRAINTS:',
-    '- Keep Character A exactly as Image 1 and Character B exactly as Image 2.',
-    '- Do NOT merge identities. Do NOT blend faces. Keep both characters distinct.',
-    '- Pose is taken from Image 3 only. Identities are taken from Images 1 and 2 only.',
+    '- EXACTLY 2 characters in the final image. No more, no fewer.',
+    '- Character A face: EXACT match from Image 1 (eyes, nose, mouth, bone structure, skin tone, hair).',
+    '- Character B face: EXACT match from Image 2 (eyes, nose, mouth, bone structure, skin tone, hair).',
+    '- Image 3 faces are DUMMY PLACEHOLDERS for positioning only -- reject all identity from Image 3.',
+    '- Do NOT merge identities. Do NOT blend faces. Keep both characters visually distinct.',
+    '',
+    'AVOID (critical):',
+    '- Do NOT produce more than exactly 2 characters in the output.',
+    '- Do NOT use any facial features, hair, or skin from Image 3.',
+    '- Do NOT blend or merge faces from different reference images.',
+    '- Do NOT add extra people, reflections, or background figures.',
+    '- If Image 3 contains faces, treat them as blank mannequin placeholders.',
   );
 
   // Conditional scene/outfit rules
@@ -87,6 +98,7 @@ export function buildQuickScenePrompt(
   lines.push(
     '',
     'QUALITY / CLEANUP:',
+    '- Output must contain EXACTLY 2 distinct people matching Images 1 and 2.',
     '- Correct anatomy and remove artifacts: natural proportions, clean edges, coherent lighting/shadows.',
     '- Hands: five fingers per hand, no extra digits, no fused fingers, natural knuckles/nails.',
     '- Skin: reduce blotches while keeping natural texture.',
