@@ -11,7 +11,7 @@ import { ReferenceMetadata } from '@/types/workspace';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 import { useVideoModelSettings } from './useVideoModelSettings';
-import { SlotRole, buildFigurePrefix } from '@/types/slotRoles';
+import { SlotRole, buildFigurePrefix, buildQuickScenePrompt, QUICK_SCENE_SLOTS } from '@/types/slotRoles';
 
 // STAGING-FIRST: Simplified workspace state using staging assets
 export interface LibraryFirstWorkspaceState {
@@ -1341,17 +1341,29 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             inputObj.strength = computedReferenceStrength;
             console.log('✅ Multi-ref: Added image_urls array with', allRefUrls.length, 'images');
             
-            // Auto-inject Figure notation using role-aware builder
-            const filledSlots: { figureIndex: number; role: SlotRole }[] = allRefUrls.map((_, i) => ({
-              figureIndex: i + 1,
-              role: slotRoles?.[i] || 'reference',
-            }));
+            // Quick Scene mode: use deterministic prompt when we have 3-5 refs
+            // (Char A, Char B, Pose, optional Scene, optional Outfit)
+            const isQuickScene = allRefUrls.length >= 3 && allRefUrls.length <= 5;
             
-            const figurePrefix = buildFigurePrefix(filledSlots);
-            
-            if (figurePrefix && !finalPrompt.includes('Figure ')) {
-              finalPrompt = figurePrefix + finalPrompt;
-              console.log('🎯 Auto-injected Figure notation:', figurePrefix);
+            if (isQuickScene) {
+              const hasScene = allRefUrls.length >= 4;
+              const hasOutfit = allRefUrls.length >= 5;
+              // Replace the user prompt with the full Quick Scene system prompt
+              finalPrompt = buildQuickScenePrompt(finalPrompt, hasScene, hasOutfit);
+              console.log('🎯 Quick Scene: Built deterministic system prompt (hasScene:', hasScene, 'hasOutfit:', hasOutfit, ')');
+            } else {
+              // Fallback: legacy Figure notation for non-Quick-Scene multi-ref
+              const filledSlots: { figureIndex: number; role: SlotRole }[] = allRefUrls.map((_, i) => ({
+                figureIndex: i + 1,
+                role: slotRoles?.[i] || 'reference',
+              }));
+              
+              const figurePrefix = buildFigurePrefix(filledSlots);
+              
+              if (figurePrefix && !finalPrompt.includes('Figure ')) {
+                finalPrompt = figurePrefix + finalPrompt;
+                console.log('🎯 Legacy: Auto-injected Figure notation:', figurePrefix);
+              }
             }
           } else if (allRefUrls.length === 1) {
             // Single ref: send as image_url (standard I2I)

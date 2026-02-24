@@ -172,6 +172,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     setIsEnhancing(true);
     try {
       const playgroundSettings = JSON.parse(localStorage.getItem('playground-settings') || '{}');
+      // Quick Scene mode: enhance creative intent only, no slot_roles or Figure notation
       const enhanceBody: Record<string, any> = {
         prompt: prompt.trim(),
         model_id: selectedModel.id,
@@ -179,12 +180,6 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         contentType: contentType || 'sfw',
         enhancement_model: playgroundSettings.enhancementModel || undefined,
       };
-      // Include multi-ref context for template selection
-      const _filledCount = [referenceImageUrl, referenceImage2Url, ...additionalRefUrls].filter(Boolean).length;
-      if (_filledCount >= 2 && slotRoles) {
-        enhanceBody.has_reference_images = true;
-        enhanceBody.slot_roles = slotRoles.slice(0, _filledCount);
-      }
       const { data, error } = await supabase.functions.invoke('enhance-prompt', {
         body: enhanceBody,
       });
