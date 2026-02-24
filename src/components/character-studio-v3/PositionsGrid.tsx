@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useCallback } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PillFilter } from '@/components/ui/pill-filter';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
+import { AssetTile } from '@/components/shared/AssetTile';
+import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
 import { useSignedUrl } from '@/hooks/useSignedUrl';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 
@@ -31,12 +34,12 @@ interface PositionsGridProps {
   onUpdateTags: (id: string, tags: string[]) => void;
   onAssignPoseKey?: (canonId: string, poseKey: string) => void;
   isUploading?: boolean;
-  // Canon position generation
   canonPosePresets?: Record<string, CanonPosePreset>;
   onGeneratePosition?: (poseKey: string) => Promise<string | null>;
   generatingPoseKey?: string | null;
   hasReferenceImage?: boolean;
   onUpdatePresetPrompt?: (poseKey: string, newFragment: string) => Promise<void>;
+  onSendToWorkspace?: (signedUrl: string) => void;
 }
 
 // Fixed position slot component
@@ -149,34 +152,55 @@ function PositionSlot({
   );
 }
 
+/** Wrapper that signs a canon URL and renders an AssetTile */
+const SignedCanonTile: React.FC<{
+  canon: CharacterCanon;
+  onClick: () => void;
+  children?: React.ReactNode;
+}> = ({ canon, onClick, children }) => {
+  const { signedUrl } = useSignedUrl(canon.output_url);
+  return (
+    <AssetTile
+      src={signedUrl}
+      alt={canon.label || canon.output_type}
+      aspectRatio="3/4"
+      onClick={onClick}
+    >
+      {children}
+    </AssetTile>
+  );
+};
+
 function CanonThumbnail({
   canon,
+  index,
   onDelete,
   onSetPrimary,
   onUpdateTags,
   onAssignPoseKey,
   canonPosePresets,
+  onOpenLightbox,
+  onSendToWorkspace,
 }: {
   canon: CharacterCanon;
+  index: number;
   onDelete: (id: string) => void;
   onSetPrimary: (id: string) => void;
   onUpdateTags: (id: string, tags: string[]) => void;
   onAssignPoseKey?: (canonId: string, poseKey: string) => void;
   canonPosePresets?: Record<string, CanonPosePreset>;
+  onOpenLightbox: (index: number) => void;
+  onSendToWorkspace?: (signedUrl: string) => void;
 }) {
   const { signedUrl } = useSignedUrl(canon.output_url);
-  const navigate = useNavigate();
-  const { toast } = useToast();
   const [showActions, setShowActions] = useState(false);
   const [editingTags, setEditingTags] = useState(false);
   const [localTags, setLocalTags] = useState<string[]>(canon.tags || []);
   const [tagInput, setTagInput] = useState('');
 
   const handleSendToWorkspace = () => {
-    if (signedUrl) {
-      const encoded = encodeURIComponent(signedUrl);
-      toast({ title: 'Reference ready', description: 'Opening workspace with reference...' });
-      navigate(`/workspace?mode=image&ref=${encoded}`);
+    if (signedUrl && onSendToWorkspace) {
+      onSendToWorkspace(signedUrl);
     }
   };
 
@@ -207,20 +231,10 @@ function CanonThumbnail({
   };
 
   return (
-    <div
-      className="relative aspect-[3/4] rounded-md overflow-hidden bg-muted group cursor-pointer"
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => { setShowActions(false); setEditingTags(false); }}
-      onClick={() => setShowActions(s => !s)}
+    <SignedCanonTile
+      canon={canon}
+      onClick={() => onOpenLightbox(index)}
     >
-      {signedUrl ? (
-        <img src={signedUrl} alt={canon.label || canon.output_type} className="absolute inset-0 w-full h-full object-cover" />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
       {/* Type badge */}
       <Badge variant="secondary" className="absolute bottom-1 left-1 text-[9px] px-1 h-4 capitalize">
         {canon.output_type}
@@ -239,67 +253,71 @@ function CanonThumbnail({
       )}
 
       {/* Hover actions */}
-      {showActions && (
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity">
-          <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
-            <Trash2 className="w-3 h-3" />
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }} className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')} title="Set as primary">
-            <Star className="w-3 h-3" />
-          </button>
+      <div
+        className="absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity opacity-0 group-hover:opacity-100"
+        onMouseEnter={() => setShowActions(true)}
+        onMouseLeave={() => { setShowActions(false); setEditingTags(false); }}
+      >
+        <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
+          <Trash2 className="w-3 h-3" />
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }} className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')} title="Set as primary">
+          <Star className="w-3 h-3" />
+        </button>
+        {onSendToWorkspace && (
           <button onClick={(e) => { e.stopPropagation(); handleSendToWorkspace(); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Send to Workspace">
             <ExternalLink className="w-3 h-3" />
           </button>
-          <Popover open={editingTags} onOpenChange={setEditingTags}>
+        )}
+        <Popover open={editingTags} onOpenChange={setEditingTags}>
+          <PopoverTrigger asChild>
+            <button onClick={(e) => { e.stopPropagation(); setEditingTags(true); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
+              <Tag className="w-3 h-3" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-2 space-y-2" align="start" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-wrap gap-1">
+              {COMMON_TAGS.map(tag => (
+                <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
+              ))}
+            </div>
+            <div className="flex gap-1">
+              <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Custom tag..." className="h-6 text-xs" />
+              <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={handleAddTag}><Plus className="w-3 h-3" /></Button>
+            </div>
+            {localTags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {localTags.map(tag => (
+                  <Badge key={tag} variant="secondary" className="text-[9px] cursor-pointer hover:bg-destructive/20" onClick={() => handleRemoveTag(tag)}>{tag} ×</Badge>
+                ))}
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+        {/* Assign to base position */}
+        {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
+          <Popover>
             <PopoverTrigger asChild>
-              <button onClick={(e) => { e.stopPropagation(); setEditingTags(true); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
-                <Tag className="w-3 h-3" />
+              <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Assign to position">
+                <Crosshair className="w-3 h-3" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-56 p-2 space-y-2" align="start" onClick={(e) => e.stopPropagation()}>
-              <div className="flex flex-wrap gap-1">
-                {COMMON_TAGS.map(tag => (
-                  <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
-                ))}
-              </div>
-              <div className="flex gap-1">
-                <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Custom tag..." className="h-6 text-xs" />
-                <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={handleAddTag}><Plus className="w-3 h-3" /></Button>
-              </div>
-              {localTags.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {localTags.map(tag => (
-                    <Badge key={tag} variant="secondary" className="text-[9px] cursor-pointer hover:bg-destructive/20" onClick={() => handleRemoveTag(tag)}>{tag} ×</Badge>
-                  ))}
-                </div>
-              )}
+            <PopoverContent className="w-40 p-1.5" align="start" onClick={(e) => e.stopPropagation()}>
+              <p className="text-[10px] text-muted-foreground font-medium px-1 mb-1">Assign to slot</p>
+              {POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => (
+                <button
+                  key={k}
+                  onClick={() => onAssignPoseKey(canon.id, k)}
+                  className="w-full text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors"
+                >
+                  {canonPosePresets[k].label}
+                </button>
+              ))}
             </PopoverContent>
           </Popover>
-          {/* Assign to base position */}
-          {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Assign to position">
-                  <Crosshair className="w-3 h-3" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-40 p-1.5" align="start" onClick={(e) => e.stopPropagation()}>
-                <p className="text-[10px] text-muted-foreground font-medium px-1 mb-1">Assign to slot</p>
-                {POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => (
-                  <button
-                    key={k}
-                    onClick={() => onAssignPoseKey(canon.id, k)}
-                    className="w-full text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors"
-                  >
-                    {canonPosePresets[k].label}
-                  </button>
-                ))}
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </SignedCanonTile>
   );
 }
 
@@ -317,6 +335,7 @@ export function PositionsGrid({
   generatingPoseKey,
   hasReferenceImage,
   onUpdatePresetPrompt,
+  onSendToWorkspace,
 }: PositionsGridProps) {
   const [typeFilter, setTypeFilter] = useState<OutputTypeFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
@@ -327,6 +346,10 @@ export function PositionsGrid({
   const [newTags, setNewTags] = useState<string[]>([]);
   const [newLabel, setNewLabel] = useState('');
   const navigate = useNavigate();
+
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   // Match canon images to fixed position slots by pose_key in metadata
   const getCanonForPoseKey = (poseKey: string): CharacterCanon | null => {
@@ -341,6 +364,31 @@ export function PositionsGrid({
     if (tagFilter && !c.tags?.some(t => t.includes(tagFilter.toLowerCase()))) return false;
     return true;
   });
+
+  // Convert filtered canon images to LightboxItem[]
+  const lightboxItems: LightboxItem[] = useMemo(
+    () => filtered.map(c => ({
+      id: c.id,
+      url: c.output_url,
+      type: 'image' as const,
+      metadata: {
+        output_type: c.output_type,
+        label: c.label,
+        tags: c.tags,
+        is_primary: c.is_primary,
+      },
+    })),
+    [filtered]
+  );
+
+  const handleRequireOriginal = useCallback(async (item: LightboxItem): Promise<string> => {
+    const url = item.url;
+    if (url.includes('user-library/') || url.includes('workspace-temp/') || url.includes('character-canon/')) {
+      const bucket = url.includes('user-library/') ? 'user-library' : 'workspace-temp';
+      return urlSigningService.getSignedUrl(url, bucket as any);
+    }
+    return url;
+  }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -417,8 +465,19 @@ export function PositionsGrid({
 
       {/* Grid */}
       <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-        {filtered.map(canon => (
-          <CanonThumbnail key={canon.id} canon={canon} onDelete={onDelete} onSetPrimary={onSetPrimary} onUpdateTags={onUpdateTags} onAssignPoseKey={onAssignPoseKey} canonPosePresets={canonPosePresets} />
+        {filtered.map((canon, index) => (
+          <CanonThumbnail
+            key={canon.id}
+            canon={canon}
+            index={index}
+            onDelete={onDelete}
+            onSetPrimary={onSetPrimary}
+            onUpdateTags={onUpdateTags}
+            onAssignPoseKey={onAssignPoseKey}
+            canonPosePresets={canonPosePresets}
+            onOpenLightbox={(i) => { setLightboxIndex(i); setLightboxOpen(true); }}
+            onSendToWorkspace={onSendToWorkspace}
+          />
         ))}
 
         {/* Upload button */}
@@ -472,6 +531,71 @@ export function PositionsGrid({
       <button onClick={() => navigate('/workspace?mode=image')} className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2">
         Create in Workspace →
       </button>
+
+      {/* Unified Lightbox */}
+      {lightboxOpen && filtered.length > 0 && (
+        <UnifiedLightbox
+          items={lightboxItems}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+          onIndexChange={setLightboxIndex}
+          onRequireOriginalUrl={handleRequireOriginal}
+          showPromptDetails={false}
+          enableSwipeClose
+          headerSlot={(item) => {
+            const canon = filtered.find(c => c.id === item.id);
+            return canon ? (
+              <div className="flex items-center gap-1.5">
+                <Badge variant="secondary" className="text-xs capitalize">{canon.output_type}</Badge>
+                {canon.is_primary && (
+                  <Badge className="bg-yellow-500/90 text-yellow-950 gap-0.5 text-xs">
+                    <Star className="w-3 h-3 fill-current" />
+                    Primary
+                  </Badge>
+                )}
+              </div>
+            ) : null;
+          }}
+          bottomSlot={(item) => {
+            const canon = filtered.find(c => c.id === item.id);
+            if (!canon) return null;
+            return (
+              <div className="bg-gradient-to-t from-black via-black/95 to-transparent p-4 pb-safe">
+                <div className="flex items-center gap-2 max-w-2xl mx-auto">
+                  {!canon.is_primary && (
+                    <Button variant="ghost" size="sm" onClick={() => onSetPrimary(canon.id)} className="gap-1.5 text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10">
+                      <Star className="w-4 h-4" />
+                      Set Primary
+                    </Button>
+                  )}
+                  {onSendToWorkspace && (
+                    <Button variant="ghost" size="sm" onClick={async () => {
+                      const signed = await urlSigningService.getSignedUrl(canon.output_url, 'workspace-temp' as any);
+                      onSendToWorkspace(signed);
+                      setLightboxOpen(false);
+                    }} className="gap-1.5 text-white/70 hover:text-white hover:bg-white/10">
+                      <ExternalLink className="w-4 h-4" />
+                      Send to Workspace
+                    </Button>
+                  )}
+                  <div className="ml-auto">
+                    <Button variant="ghost" size="icon" onClick={() => {
+                      onDelete(canon.id);
+                      if (filtered.length <= 1) {
+                        setLightboxOpen(false);
+                      } else if (lightboxIndex >= filtered.length - 1) {
+                        setLightboxIndex(lightboxIndex - 1);
+                      }
+                    }} className="text-destructive/70 hover:text-destructive hover:bg-destructive/10">
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -3,6 +3,9 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Image as ImageIcon, Film, Crosshair } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { PortraitGallery } from '@/components/character-studio/PortraitGallery';
 import { ScenesGallery } from '@/components/character-studio/ScenesGallery';
 import { PosePresets } from '@/components/character-studio/PosePresets';
@@ -81,6 +84,21 @@ export function StudioWorkspace({
   canonPosePresets, onGeneratePosition, generatingPoseKey, hasReferenceImage,
   onUpdatePresetPrompt,
 }: StudioWorkspaceProps) {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleSendToWorkspace = async (imageUrl: string) => {
+    try {
+      let signedUrl = imageUrl;
+      if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/') || imageUrl.includes('character-')) {
+        signedUrl = await urlSigningService.getSignedUrl(imageUrl, 'user-library');
+      }
+      toast({ title: 'Opening workspace with reference...' });
+      navigate('/workspace?mode=image', { state: { referenceUrl: signedUrl } });
+    } catch {
+      toast({ title: 'Failed to prepare image', variant: 'destructive' });
+    }
+  };
 
   // Scenes-only mode for mobile scenes tab
   if (scenesOnly) {
@@ -116,6 +134,7 @@ export function StudioWorkspace({
           generatingPoseKey={generatingPoseKey}
           hasReferenceImage={hasReferenceImage}
           onUpdatePresetPrompt={onUpdatePresetPrompt}
+          onSendToWorkspace={handleSendToWorkspace}
         />
       </ScrollArea>
     );
@@ -142,6 +161,7 @@ export function StudioWorkspace({
               onRegenerate={onRegenerate}
               onCopyPrompt={onCopyPrompt}
               onSaveAsPosition={onSaveAsPosition}
+              onSendToWorkspace={handleSendToWorkspace}
               characterAppearanceTags={characterAppearanceTags}
             />
           </div>
@@ -228,6 +248,7 @@ export function StudioWorkspace({
                 onRegenerate={onRegenerate}
                 onCopyPrompt={onCopyPrompt}
                 onSaveAsPosition={onSaveAsPosition}
+                onSendToWorkspace={handleSendToWorkspace}
                 characterAppearanceTags={characterAppearanceTags}
               />
             </div>
@@ -269,6 +290,7 @@ export function StudioWorkspace({
                 generatingPoseKey={generatingPoseKey}
                 hasReferenceImage={hasReferenceImage}
                 onUpdatePresetPrompt={onUpdatePresetPrompt}
+                onSendToWorkspace={handleSendToWorkspace}
               />
             ) : (
               <p className="text-xs text-muted-foreground">Positions not available.</p>
