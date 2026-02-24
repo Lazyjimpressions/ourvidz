@@ -111,7 +111,7 @@ export interface LibraryFirstWorkspaceActions {
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   setReferenceType: (type: 'style' | 'character' | 'composition') => void;
-  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[]) => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -654,7 +654,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     overrideEndingRefImageUrl?: string | null,
     overrideSeed?: number | null,
     additionalImageUrls?: string[],
-    slotRoles?: SlotRole[]
+    slotRoles?: SlotRole[],
+    poseDescription?: string
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
       toast({
@@ -1349,7 +1350,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               const hasScene = allRefUrls.length >= 4;
               const hasOutfit = allRefUrls.length >= 5;
               // Replace the user prompt with the full Quick Scene system prompt
-              finalPrompt = buildQuickScenePrompt(finalPrompt, hasScene, hasOutfit);
+              finalPrompt = buildQuickScenePrompt(finalPrompt, hasScene, hasOutfit, 'Both', poseDescription);
               console.log('🎯 Quick Scene: Built deterministic system prompt (hasScene:', hasScene, 'hasOutfit:', hasOutfit, ')');
             } else {
               // Fallback: legacy Figure notation for non-Quick-Scene multi-ref

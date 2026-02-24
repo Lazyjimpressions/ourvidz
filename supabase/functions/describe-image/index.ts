@@ -145,11 +145,14 @@ Analyze this AI-generated image against the original prompt and return ONLY vali
   "appearance_match": <1-5: Do characters look as described?>,
   "overall_quality": <1-5: Technical and aesthetic quality>,
   "description": "Brief description of what is in the image",
+  "pose_description": "Spatial/composition-only description (see instructions below)",
   "elements_present": ["element1", "element2"],
   "elements_missing": ["element1", "element2"],
   "issues": ["issue1", "issue2"],
   "strengths": ["strength1", "strength2"]
 }
+
+For "pose_description": Describe ONLY the spatial layout, body positions, composition, camera angle, and figure count. Do NOT include any identity features (face, hair, skin tone, ethnicity), clothing details, or scene/background elements. Treat all people as anonymous mannequins. Focus on: how many figures, their relative positions, body poses, spacing, framing, and camera perspective.
 
 Scoring guide (1-5 scale):
 - 5: Excellent match, minor or no issues

@@ -17,6 +17,7 @@ import { useImageModels } from '@/hooks/useApiModels';
 import { useSmartModelDefaults } from '@/hooks/useSmartModelDefaults';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
+import { supabase } from '@/integrations/supabase/client';
 
 import { SlotRole, DEFAULT_SLOT_ROLES, QUICK_SCENE_SLOTS } from '@/types/slotRoles';
 
@@ -108,6 +109,8 @@ const MobileSimplifiedWorkspace = () => {
   const [referenceImage2Url, setReferenceImage2Url] = useState<string | null>(null);
   // Additional refs (slots 3+) for multi-ref models
   const [additionalRefUrls, setAdditionalRefUrls] = useState<string[]>([]);
+  // Track the job_id for the pose slot (index 2) so we can look up pose_description
+  const [poseSlotJobId, setPoseSlotJobId] = useState<string | null>(null);
 
   // Smart model auto-switching helper
   const applySmartDefault = useCallback((task: 't2i' | 'i2i' | 'i2i_multi' | 't2v' | 'i2v' | 'extend' | 'multi') => {
@@ -238,6 +241,7 @@ const MobileSimplifiedWorkspace = () => {
         setReferenceImage2(null);
         setReferenceImage2Url(null);
         setAdditionalRefUrls([]);
+        setPoseSlotJobId(null);
         if (mode === 'image') applySmartDefault('t2i');
         else applySmartDefault('t2v');
         break;
@@ -335,7 +339,27 @@ const MobileSimplifiedWorkspace = () => {
       ...(referenceImage2Url ? [referenceImage2Url] : []),
       ...additionalRefUrls
     ];
-    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles);
+
+    // Look up pose_description from prompt_scores if we have a pose slot job_id
+    let poseDesc: string | undefined;
+    if (poseSlotJobId) {
+      try {
+        const { data: scoreData } = await supabase
+          .from('prompt_scores')
+          .select('vision_analysis')
+          .eq('job_id', poseSlotJobId)
+          .single();
+        const va = scoreData?.vision_analysis as any;
+        if (va?.pose_description) {
+          poseDesc = va.pose_description;
+          console.log('🎯 Pose description found for slot 3:', poseDesc?.substring(0, 80));
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not look up pose_description:', err);
+      }
+    }
+
+    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc);
   };
 
 
@@ -526,6 +550,11 @@ const MobileSimplifiedWorkspace = () => {
             newAdditional[additionalIndex] = referenceUrl!;
             setAdditionalRefUrls(newAdditional);
             applySmartDefault('i2i_multi');
+            // Track job_id for pose slot (index 2) to look up pose_description later
+            if (emptyIndex === 2) {
+              const slotJobId = asset.metadata?.job_id || null;
+              setPoseSlotJobId(slotJobId);
+            }
             toast.success(`Image set as ${QUICK_SCENE_SLOTS[emptyIndex]?.label || `Ref ${emptyIndex + 1}`}`);
           }
         } else if (mode === 'video' && beginningRefImageUrl) {

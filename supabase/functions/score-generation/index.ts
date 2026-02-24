@@ -34,6 +34,7 @@ interface VisionScoringResult {
   appearance_match: number;
   overall_quality: number;
   description?: string;
+  pose_description?: string;
   elements_present?: string[];
   elements_missing?: string[];
   issues?: string[];

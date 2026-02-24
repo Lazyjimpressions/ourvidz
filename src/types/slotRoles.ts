@@ -45,6 +45,7 @@ export function buildQuickScenePrompt(
   hasScene: boolean,
   hasOutfit: boolean,
   outfitTarget: OutfitTarget = 'Both',
+  poseDescription?: string,
 ): string {
   const lines: string[] = [
     'You are performing a multi-reference edit. Follow the reference map exactly.',
@@ -53,9 +54,16 @@ export function buildQuickScenePrompt(
     '- Image 1: Character A identity reference. Preserve face, hair, body proportions, and likeness exactly.',
     '- Image 2: Character B identity reference. Preserve face, hair, body proportions, and likeness exactly.',
     '- Image 3: Pose/composition layout ONLY (treat as mannequin silhouettes).',
+  ];
+
+  if (poseDescription) {
+    lines.push(`  [Spatial layout: ${poseDescription}]`);
+  }
+
+  lines.push(
     '  Use body positions, spacing, and camera angle from Image 3.',
     '  COMPLETELY IGNORE all faces, skin tone, hair, and identity features from Image 3.',
-  ];
+  );
 
   if (hasScene) {
     lines.push('- Image 4: Scene/environment reference. Use for location/background only.');
