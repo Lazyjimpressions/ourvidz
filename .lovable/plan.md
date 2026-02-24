@@ -1,96 +1,130 @@
 
-# Fix: Identity Bleeding from Pose Reference (Image 3) in Multi-Reference Generation
+# Character Hub UX/UI Audit
 
-## Problem
+## Wireframe Elements Identified
 
-When generating 2-character scenes using the Quick Scene Builder (3-5 reference images), facial features from Image 3 (the pose/composition reference) leak into the output. The model conflates identity from the pose image with the two character identity references, producing faces that are a blend of all three inputs -- or sometimes generating 3+ characters.
+The Character Hub is a 3-panel desktop layout with a mobile drawer fallback:
 
-The current `buildQuickScenePrompt` in `src/types/slotRoles.ts` says:
-
-```
-- Image 3: Pose/composition reference for BOTH characters only. Do not copy identity from Image 3.
-```
-
-This is too weak. Multi-reference diffusion models (Seedream v4/v4.5, Flux-2) treat all input images as potential identity sources unless explicitly instructed otherwise with strong, redundant language.
-
-## Root Cause
-
-The prompt scaffold lacks:
-1. An explicit **AVOID** section (proven effective in Flux-2 and Seedream prompting guides)
-2. Redundant anti-bleeding anchors for Image 3
-3. "Mannequin/silhouette" framing that tells the model to treat Image 3 as a layout template, not a person
-4. A cap on character count -- "exactly TWO characters in the output"
-
-## Solution
-
-Update `buildQuickScenePrompt()` in `src/types/slotRoles.ts` with the following improvements:
-
-### 1. Strengthen Image 3 reference description
-
-Replace the current single-line Image 3 reference with explicit mannequin/silhouette language:
-
-```
-Before:
-- Image 3: Pose/composition reference for BOTH characters only. Do not copy identity from Image 3.
-
-After:
-- Image 3: Pose/composition layout ONLY (treat as mannequin silhouettes).
-  Use body positions, spacing, and camera angle from Image 3.
-  COMPLETELY IGNORE all faces, skin tone, hair, and identity features from Image 3.
+```text
++------------------+---------------------+-----------------+
+| Left Sidebar     | Center Grid         | Right Panel     |
+| (320px)          | (flex-1)            | (280px)         |
+| Selected char    | Filter bar          | Create char     |
+| detail view      | + Character cards   | + History grid  |
+| (4 tabs)         |                     |                 |
++------------------+---------------------+-----------------+
 ```
 
-### 2. Add explicit AVOID section
+- **Header**: 48px bar with icon, title/subtitle, "Create Character" CTA
+- **Left Sidebar**: `CharacterHubSidebar` -- avatar, name, badges, 4-tab detail view (Identity, Visuals, Style, Media), footer actions
+- **Center Grid**: `CharacterFilters` (search + genre chips + popover filters) above a responsive card grid using `CharacterCard` + `AssetTile`
+- **Right Panel**: `CharacterCreatePanel` -- two creation modes ("Start from Images" / "Start from Description") + character history thumbnails
+- **Mobile Drawer**: Fixed overlay with backdrop when a character is selected on smaller screens
 
-Insert a new "AVOID (critical)" block after the priority constraints:
+---
 
-```
-AVOID (critical):
-- Do NOT produce more than exactly 2 characters in the output.
-- Do NOT use any facial features, hair, or skin from Image 3.
-- Do NOT blend or merge faces from different reference images.
-- Do NOT add extra people, reflections, or background figures.
-- If Image 3 contains faces, treat them as blank mannequin placeholders.
-```
+## Design System Conformance Assessment
 
-### 3. Strengthen identity anchoring
+### What's Good (Conforms to Minimalist Aesthetic)
 
-Upgrade the existing priority constraints with redundant, model-tested phrasing:
+- **Card tiles use AssetTile** with 3:4 aspect ratio and signed URLs -- consistent with Library/Workspace
+- **Typography mostly follows the design system**: text-sm for headings, text-[10px] for captions, text-[9px] for badges
+- **Compact header**: 48px (h-12), correct icon sizing, properly dense
+- **Dark theme**: Correct use of bg-background, bg-card/30, border-border/50
+- **Sidebar tabs**: h-7 TabsList, text-[10px] triggers -- matches design system specs
+- **Empty state**: Clean, minimal, single CTA
 
-```
-HIGHEST PRIORITY CONSTRAINTS:
-- EXACTLY 2 characters in the final image. No more, no fewer.
-- Character A face: EXACT match from Image 1 (eyes, nose, mouth, bone structure, skin tone, hair).
-- Character B face: EXACT match from Image 2 (eyes, nose, mouth, bone structure, skin tone, hair).
-- Image 3 faces are DUMMY PLACEHOLDERS for positioning only -- reject all identity from Image 3.
-- Do NOT merge identities. Do NOT blend faces. Keep both characters visually distinct.
-```
+### Issues Found
 
-### 4. Add character count to quality section
+#### 1. Filter Bar is Oversized and Wasteful (HIGH)
 
-Add an output validation line:
+The `CharacterFilters` component has significant spacing issues:
+- **Search input is h-10** (40px) -- should be h-8 (32px) per design system
+- **Filter button is h-10** -- should be h-7 or h-8
+- **Genre chips row adds a second full row** with "Genres:" label permanently visible
+- **Double padding**: The filter bar has its own `pb-4 pt-2 border-b`, AND the parent wraps it in another `px-4 py-3 border-b` -- creating a thick double-bordered filter band that wastes ~80px of vertical space
+- Total filter area height: ~100px. Should be ~48px (single row with search + chip overflow)
 
-```
-QUALITY / CLEANUP:
-- Output must contain EXACTLY 2 distinct people matching Images 1 and 2.
-  (existing anatomy/hands/skin rules remain)
-```
+**Recommendation**: Collapse to a single compact row. Search (h-8) + filter popover trigger inline. Move genre chips inside the popover or make them a horizontally scrollable row without the "Genres:" label.
 
-## File Changes
+#### 2. Right Panel ("Create & History") is Low-Value Real Estate (MEDIUM)
 
-| File | Change |
-|------|--------|
-| `src/types/slotRoles.ts` | Rewrite `buildQuickScenePrompt()` with stronger anti-bleeding language in 4 areas: Image 3 description, new AVOID section, stronger identity anchors, character count enforcement |
+The right panel permanently occupies 280px showing:
+- Two creation buttons (which are also in the header CTA)
+- A 3x3 grid of recent character thumbnails (duplicates the center grid)
 
-## Why This Works
+This panel provides minimal unique value:
+- The "Create Character" CTA already exists in the header
+- The "Character History" thumbnails are just a subset of the main grid
+- 280px of always-visible panel for 2 buttons + 9 thumbnails is poor information density
 
-- **Redundancy**: Multi-ref models respond better to repeated constraints in different phrasings (tested pattern from Flux-2 and Seedream guides)
-- **Mannequin framing**: Explicitly telling the model "treat as silhouettes" prevents it from extracting identity features from the pose image
-- **Character count cap**: "Exactly 2" prevents the model from rendering the pose reference as a third person
-- **AVOID section**: Both Seedream and Flux-2 prompting guides confirm that explicit AVOID/negative language in the prompt significantly reduces unwanted artifacts
+**Recommendation**: Remove the right panel entirely. The header CTA handles creation. If "recent characters" is desired, add a "Sort: Recent" option to the grid filters instead. This frees 280px for the grid, improving card count per row.
 
-## Scope
+#### 3. Left Sidebar Has Dead Tabs (MEDIUM)
 
-- Single file, single function
-- No edge function changes needed (the prompt is built client-side and sent as the `prompt` field)
-- No database changes
-- Works identically for Seedream v4 Edit (default), Seedream v4.5 Edit, and Flux-2 Flash Edit
+- **Style tab**: Only shows one line: "Default (Realistic)". Entire tab for one text field.
+- **Media tab**: Shows only "Configure in the Character Studio." -- completely empty placeholder.
+- Two of four tabs are essentially empty, making the sidebar feel incomplete.
+
+**Recommendation**: Collapse Style and Media into the Identity tab as small sections, or remove them from the sidebar view entirely (they're editing concerns, not browsing concerns). A character detail sidebar for a Hub should focus on read-only overview, not replicate Studio tabs.
+
+#### 4. Sidebar Footer Links to Wrong Route (LOW)
+
+Both "Edit in Studio" and "Generate" buttons navigate to `/character-studio-v2/{id}`, but the app routes use `/character-studio/{id}` (which loads `CharacterStudioV3`). The V2 route doesn't exist in App.tsx.
+
+**Recommendation**: Fix both buttons to navigate to `/character-studio/${character.id}`.
+
+#### 5. Hub Overlay Actions Missing "Send to Workspace" (MEDIUM)
+
+The `CharacterCardOverlay` in `hub` context shows: Edit, Generate Image, Duplicate, Delete. There is no "Send to Workspace" option, which we just added to Portraits and Positions. For consistency, character cards in the Hub should also offer "Send to Workspace" (using the primary anchor image).
+
+**Recommendation**: Add an `onSendToWorkspace` prop to `CharacterCardOverlay` for hub context. Wire it from `CharacterHubV2` using the same `navigate('/workspace?mode=image', { state: { referenceUrl } })` pattern.
+
+#### 6. Duplicate `getSignedUrl` Helper (LOW)
+
+Both `CharacterHubSidebar.tsx` and `CharacterCreatePanel.tsx` define their own identical `getSignedUrl` helper function. This should use the shared `useSignedUrl` hook that `CharacterCard` already uses.
+
+**Recommendation**: Replace inline `getSignedUrl` with `useSignedUrl` hook in both components.
+
+#### 7. Filter Bar Has Redundant Sticky Positioning (LOW)
+
+`CharacterFilters` applies its own `sticky top-0 z-30 bg-background/95 backdrop-blur-md` class, but the parent already positions it inside a `border-b` div with `bg-background/50`. The result is double backgrounds and the sticky behavior doesn't actually work since the parent constrains it.
+
+**Recommendation**: Remove the sticky/backdrop-blur from `CharacterFilters` -- let the parent handle positioning.
+
+---
+
+## Functionality Assessment
+
+### Keep
+- 3-panel layout concept (but simplify to 2 panels -- see below)
+- CharacterCard with AssetTile and hover overlay
+- Search + genre filtering
+- Content rating and media-ready filters
+- Character select -> sidebar detail view
+- Duplicate and delete actions
+- Mobile drawer for selected character
+
+### Remove
+- Right panel (CharacterCreatePanel) -- redundant with header CTA and main grid
+- Style and Media tabs in sidebar -- empty placeholders
+- Genre chips as a permanent second row -- move into filter popover
+- Duplicate `getSignedUrl` helpers
+
+### Add
+- "Send to Workspace" action on hub card overlay
+- "Sort by" option (Recent, Name, Most Used) in filter bar
+- Character count indicator (e.g., "12 characters" in the header or filter bar)
+
+---
+
+## Proposed Changes Summary
+
+| File | Change | Priority |
+|------|--------|----------|
+| `CharacterFilters.tsx` | Compact to single row: h-8 search, move genres into popover, remove redundant sticky/padding | HIGH |
+| `CharacterHubV2.tsx` | Remove right panel (`CharacterCreatePanel`), reclaim 280px for grid; fix grid responsive breakpoints | MEDIUM |
+| `CharacterHubSidebar.tsx` | Remove empty Style/Media tabs; fix route to `/character-studio/`; replace inline getSignedUrl with useSignedUrl | MEDIUM |
+| `CharacterCardOverlay.tsx` | Add "Send to Workspace" button for hub context | MEDIUM |
+| `CharacterCreatePanel.tsx` | Mark for removal (functionality absorbed by header CTA + grid sort) | MEDIUM |
+| `CharacterHubV2.tsx` | Add character count display; add sort option | LOW |
