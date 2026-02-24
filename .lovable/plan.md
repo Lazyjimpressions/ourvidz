@@ -1,78 +1,96 @@
 
+# Fix: Identity Bleeding from Pose Reference (Image 3) in Multi-Reference Generation
 
-# Unify Tile, Overlay, and Lightbox Patterns Across All Contexts
+## Problem
 
-## Current State
+When generating 2-character scenes using the Quick Scene Builder (3-5 reference images), facial features from Image 3 (the pose/composition reference) leak into the output. The model conflates identity from the pose image with the two character identity references, producing faces that are a blend of all three inputs -- or sometimes generating 3+ characters.
 
-Four contexts display image tiles but use inconsistent implementations:
+The current `buildQuickScenePrompt` in `src/types/slotRoles.ts` says:
 
-| Feature | Library | Workspace | Portraits | Positions |
-|---------|---------|-----------|-----------|-----------|
-| Uses AssetTile | Yes (via SharedGrid) | Yes (via SharedGrid) | Yes (SignedPortraitTile) | NO (hand-rolled div+img) |
-| UnifiedLightbox | Yes | Yes | Yes | NO |
-| Send to Workspace | Yes (onAddToWorkspace) | N/A | MISSING | Broken (query params) |
-| Hover overlay style | Bottom-right icons | Bottom-right icons | DropdownMenu (top-right) | Full overlay with circles |
+```
+- Image 3: Pose/composition reference for BOTH characters only. Do not copy identity from Image 3.
+```
 
-## Gaps to Fix
+This is too weak. Multi-reference diffusion models (Seedream v4/v4.5, Flux-2) treat all input images as potential identity sources unless explicitly instructed otherwise with strong, redundant language.
 
-### 1. PositionsGrid: Replace hand-rolled tile with AssetTile
+## Root Cause
 
-The `CanonThumbnail` component (PositionsGrid.tsx ~line 209) currently renders a raw `<div>` with manual aspect-ratio and `<img>`. This misses:
-- The iOS Safari layout fix (absolute inset-0 pattern)
-- Hover-to-play for video positions
-- Drag-and-drop support
-- Consistent border/shadow/hover styling
+The prompt scaffold lacks:
+1. An explicit **AVOID** section (proven effective in Flux-2 and Seedream prompting guides)
+2. Redundant anti-bleeding anchors for Image 3
+3. "Mannequin/silhouette" framing that tells the model to treat Image 3 as a layout template, not a person
+4. A cap on character count -- "exactly TWO characters in the output"
 
-**Change**: Refactor `CanonThumbnail` to use `AssetTile` as its container, passing the signed URL and overlay children the same way `SignedPortraitTile` does.
+## Solution
 
-### 2. PositionsGrid: Add UnifiedLightbox
+Update `buildQuickScenePrompt()` in `src/types/slotRoles.ts` with the following improvements:
 
-Positions currently have no lightbox -- clicking a tile just toggles hover actions. This is inconsistent with Library, Workspace, and Portraits which all open a full-screen lightbox on click.
+### 1. Strengthen Image 3 reference description
 
-**Change**: Add `UnifiedLightbox` to `PositionsGrid` with:
-- `items` mapped from `canonImages` (id, signed URL, type)
-- `headerSlot` showing Primary badge and type badge
-- `bottomSlot` with action buttons (Delete, Set Primary, Send to Workspace, Edit Tags)
-- Click on tile opens lightbox; hover still shows quick actions
+Replace the current single-line Image 3 reference with explicit mannequin/silhouette language:
 
-### 3. PortraitGallery: Add "Send to Workspace" menu item
+```
+Before:
+- Image 3: Pose/composition reference for BOTH characters only. Do not copy identity from Image 3.
 
-The portrait dropdown menu has: Set Primary, Use as Reference, Copy Prompt, Download, Save as Position, Delete. "Send to Workspace" is missing.
+After:
+- Image 3: Pose/composition layout ONLY (treat as mannequin silhouettes).
+  Use body positions, spacing, and camera angle from Image 3.
+  COMPLETELY IGNORE all faces, skin tone, hair, and identity features from Image 3.
+```
 
-**Change**: Add a new `DropdownMenuItem` with `ExternalLink` icon between "Save as Position" and the delete separator. Wire it through a new `onSendToWorkspace` prop.
+### 2. Add explicit AVOID section
 
-### 4. Fix Positions "Send to Workspace" navigation
+Insert a new "AVOID (critical)" block after the priority constraints:
 
-Currently uses `navigate('/workspace?mode=image&ref=...')` but the Workspace reads `location.state.referenceUrl`.
+```
+AVOID (critical):
+- Do NOT produce more than exactly 2 characters in the output.
+- Do NOT use any facial features, hair, or skin from Image 3.
+- Do NOT blend or merge faces from different reference images.
+- Do NOT add extra people, reflections, or background figures.
+- If Image 3 contains faces, treat them as blank mannequin placeholders.
+```
 
-**Change**: Update to `navigate('/workspace?mode=image', { state: { referenceUrl: signedUrl } })`.
+### 3. Strengthen identity anchoring
 
-### 5. Wire "Send to Workspace" from StudioWorkspace container
+Upgrade the existing priority constraints with redundant, model-tested phrasing:
 
-`StudioWorkspace.tsx` needs to:
-- Accept an `onSendToWorkspace` prop (or use `useNavigate` internally)
-- Pass it to both `PortraitGallery` and `PositionsGrid`
-- The handler signs the URL and navigates with `location.state`
+```
+HIGHEST PRIORITY CONSTRAINTS:
+- EXACTLY 2 characters in the final image. No more, no fewer.
+- Character A face: EXACT match from Image 1 (eyes, nose, mouth, bone structure, skin tone, hair).
+- Character B face: EXACT match from Image 2 (eyes, nose, mouth, bone structure, skin tone, hair).
+- Image 3 faces are DUMMY PLACEHOLDERS for positioning only -- reject all identity from Image 3.
+- Do NOT merge identities. Do NOT blend faces. Keep both characters visually distinct.
+```
+
+### 4. Add character count to quality section
+
+Add an output validation line:
+
+```
+QUALITY / CLEANUP:
+- Output must contain EXACTLY 2 distinct people matching Images 1 and 2.
+  (existing anatomy/hands/skin rules remain)
+```
 
 ## File Changes
 
 | File | Change |
 |------|--------|
-| `src/components/character-studio-v3/PositionsGrid.tsx` | Replace raw div+img in CanonThumbnail with AssetTile; add UnifiedLightbox; fix Send to Workspace navigation to use location.state |
-| `src/components/character-studio/PortraitGallery.tsx` | Add "Send to Workspace" DropdownMenuItem; add `onSendToWorkspace` prop |
-| `src/components/character-studio-v3/StudioWorkspace.tsx` | Wire `onSendToWorkspace` to both PortraitGallery and PositionsGrid using navigate + location.state |
+| `src/types/slotRoles.ts` | Rewrite `buildQuickScenePrompt()` with stronger anti-bleeding language in 4 areas: Image 3 description, new AVOID section, stronger identity anchors, character count enforcement |
 
-## What Stays the Same
+## Why This Works
 
-- Library and Workspace tiles (already use SharedGrid + AssetTile + UnifiedLightbox)
-- The hover overlay **style** difference between Portraits (dropdown menu) and Positions (icon buttons) is acceptable -- Portraits have many actions that need a menu, while Positions have fewer actions that work as direct buttons. Both will now sit on top of AssetTile.
-- UnifiedLightbox props pattern (actionsSlot, bottomSlot, headerSlot) -- already proven in Library/Workspace/Portraits
+- **Redundancy**: Multi-ref models respond better to repeated constraints in different phrasings (tested pattern from Flux-2 and Seedream guides)
+- **Mannequin framing**: Explicitly telling the model "treat as silhouettes" prevents it from extracting identity features from the pose image
+- **Character count cap**: "Exactly 2" prevents the model from rendering the pose reference as a third person
+- **AVOID section**: Both Seedream and Flux-2 prompting guides confirm that explicit AVOID/negative language in the prompt significantly reduces unwanted artifacts
 
-## UX Result
+## Scope
 
-All four contexts will:
-- Use `AssetTile` for consistent 3:4 tiles with the iOS Safari fix
-- Open `UnifiedLightbox` on click for full-screen preview
-- Offer "Send to Workspace" on hover (and in lightbox actions)
-- Navigate to workspace using `location.state.referenceUrl` (consumed by existing useEffect)
-
+- Single file, single function
+- No edge function changes needed (the prompt is built client-side and sent as the `prompt` field)
+- No database changes
+- Works identically for Seedream v4 Edit (default), Seedream v4.5 Edit, and Flux-2 Flash Edit
