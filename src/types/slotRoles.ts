@@ -25,6 +25,79 @@ export const ROLE_TAG_PREFIX = 'role:';
 /** All meaningful roles (excludes generic 'reference') */
 export const MEANINGFUL_ROLES: SlotRole[] = ['character', 'clothing', 'position', 'scene', 'style'];
 
+/** Fixed slot definitions for Quick Scene mode (2-character builder) */
+export const QUICK_SCENE_SLOTS = [
+  { index: 0, label: '1: Char A', required: true },
+  { index: 1, label: '2: Char B', required: true },
+  { index: 2, label: '3: Pose',   required: true },
+  { index: 3, label: '4: Scene',  required: false },
+  { index: 4, label: '5: Outfit', required: false },
+] as const;
+
+export type OutfitTarget = 'A' | 'B' | 'Both';
+
+/**
+ * Build a deterministic system prompt for Quick Scene mode.
+ * Wraps the user's creative prompt with fixed Image 1-5 reference instructions.
+ */
+export function buildQuickScenePrompt(
+  userPrompt: string,
+  hasScene: boolean,
+  hasOutfit: boolean,
+  outfitTarget: OutfitTarget = 'Both',
+): string {
+  const lines: string[] = [
+    'You are performing a multi-reference edit. Follow the reference map exactly.',
+    '',
+    'REFERENCE ORDER (do not reinterpret):',
+    '- Image 1: Character A identity reference. Preserve face, hair, body proportions, and likeness exactly.',
+    '- Image 2: Character B identity reference. Preserve face, hair, body proportions, and likeness exactly.',
+    '- Image 3: Pose/composition reference for BOTH characters only. Do not copy identity from Image 3.',
+  ];
+
+  if (hasScene) {
+    lines.push('- Image 4: Scene/environment reference. Use for location/background only.');
+  }
+  if (hasOutfit) {
+    lines.push('- Image 5: Outfit reference. Use for clothing only as described below.');
+  }
+
+  lines.push(
+    '',
+    'HIGHEST PRIORITY CONSTRAINTS:',
+    '- Keep Character A exactly as Image 1 and Character B exactly as Image 2.',
+    '- Do NOT merge identities. Do NOT blend faces. Keep both characters distinct.',
+    '- Pose is taken from Image 3 only. Identities are taken from Images 1 and 2 only.',
+  );
+
+  // Conditional scene/outfit rules
+  if (hasScene || hasOutfit) {
+    lines.push('', 'SCENE / OUTFIT RULES:');
+    if (hasScene) {
+      lines.push('- Place characters into the environment from Image 4. Match lighting and shadows naturally.');
+    }
+    if (hasOutfit) {
+      const target = outfitTarget === 'A' ? 'Character A'
+        : outfitTarget === 'B' ? 'Character B'
+        : 'both characters';
+      lines.push(`- Apply outfit from Image 5 to ${target}. Do not alter identities.`);
+    }
+  }
+
+  lines.push(
+    '',
+    'QUALITY / CLEANUP:',
+    '- Correct anatomy and remove artifacts: natural proportions, clean edges, coherent lighting/shadows.',
+    '- Hands: five fingers per hand, no extra digits, no fused fingers, natural knuckles/nails.',
+    '- Skin: reduce blotches while keeping natural texture.',
+    '',
+    'USER REQUEST:',
+    userPrompt?.trim() || '(No additional instructions. Produce a faithful edit using the references.)',
+  );
+
+  return lines.join('\n');
+}
+
 /** Default slot role assignments for the 10 image-mode slots */
 export const DEFAULT_SLOT_ROLES: SlotRole[] = [
   'character',  // Slot 1 - Char 1
@@ -48,14 +121,15 @@ export function getSlotLabel(role: SlotRole, index: number): string {
 
 /**
  * Build a Figure notation prefix from filled slots grouped by role.
- * Skips 'reference' role (no special prompt guidance).
+ * @deprecated Use buildQuickScenePrompt for Quick Scene mode instead.
+ * Kept for backward compatibility with non-Quick-Scene flows.
  */
 export function buildFigurePrefix(
   filledSlots: { figureIndex: number; role: SlotRole }[]
 ): string {
   const byRole: Partial<Record<SlotRole, number[]>> = {};
   for (const slot of filledSlots) {
-    if (slot.role === 'reference') continue; // skip generic refs
+    if (slot.role === 'reference') continue;
     if (!byRole[slot.role]) byRole[slot.role] = [];
     byRole[slot.role]!.push(slot.figureIndex);
   }
@@ -69,32 +143,27 @@ export function buildFigurePrefix(
 
   const parts: string[] = [];
 
-  // Character
   const chars = byRole.character;
   if (chars?.length) {
     const label = chars.length === 1 ? 'the character' : 'the characters';
     parts.push(`Show ${label} from ${joinFigures(chars)}`);
   }
 
-  // Position
   const pos = byRole.position;
   if (pos?.length) {
     parts.push(`in the position from ${joinFigures(pos)}`);
   }
 
-  // Clothing
   const cloth = byRole.clothing;
   if (cloth?.length) {
     parts.push(`wearing the clothing from ${joinFigures(cloth)}`);
   }
 
-  // Scene
   const scene = byRole.scene;
   if (scene?.length) {
     parts.push(`in the scene from ${joinFigures(scene)}`);
   }
 
-  // Style
   const style = byRole.style;
   if (style?.length) {
     parts.push(`in the visual style of ${joinFigures(style)}`);

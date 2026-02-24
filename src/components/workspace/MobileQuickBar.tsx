@@ -11,6 +11,7 @@ import {
   MEANINGFUL_ROLES,
   DEFAULT_SLOT_ROLES,
   getSlotLabel,
+  QUICK_SCENE_SLOTS,
 } from '@/types/slotRoles';
 
 export interface RefSlotData {
@@ -20,7 +21,7 @@ export interface RefSlotData {
   label?: string;
 }
 
-/** Fixed slot definitions for image mode (10 slots for multi-ref support) */
+/** Fixed slot definitions for image mode (10 slots for multi-ref support) - legacy */
 export const FIXED_IMAGE_SLOTS: { role: SlotRole; label: string }[] =
   DEFAULT_SLOT_ROLES.map((role, i) => ({ role, label: getSlotLabel(role, i) }));
 
@@ -405,27 +406,21 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
       {/* Ref Slots */}
       <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
         {useFixedSlots ? (
-          /* Fixed 4 labeled slots for image mode */
-          FIXED_IMAGE_SLOTS.map((slotDef, i) => {
-            const effectiveRole = slotRoles?.[i] || slotDef.role;
-            const effectiveLabel = slotRoles?.[i] ? getSlotLabel(slotRoles[i], i) : slotDef.label;
-            return (
-              <RefSlot
-                key={`fixed-${i}`}
-                url={fixedSlots[i]?.url}
-                isVideo={fixedSlots[i]?.isVideo}
-                onAdd={() => onFixedSlotAdd!(i)}
-                onRemove={() => onFixedSlotRemove!(i)}
-                onDrop={(file) => onFixedSlotDrop!(i, file)}
-                onDropUrl={onFixedSlotDropUrl ? (url) => onFixedSlotDropUrl(i, url) : undefined}
-                label={effectiveLabel}
-                disabled={disabled}
-                showLabel
-                role={effectiveRole}
-                onRoleChange={onSlotRoleChange ? (role) => onSlotRoleChange(i, role) : undefined}
-              />
-            );
-          })
+          /* Quick Scene: 5 fixed labeled slots for image mode */
+          QUICK_SCENE_SLOTS.map((slotDef, i) => (
+            <RefSlot
+              key={`qs-${i}`}
+              url={fixedSlots[i]?.url}
+              isVideo={fixedSlots[i]?.isVideo}
+              onAdd={() => onFixedSlotAdd!(i)}
+              onRemove={() => onFixedSlotRemove!(i)}
+              onDrop={(file) => onFixedSlotDrop!(i, file)}
+              onDropUrl={onFixedSlotDropUrl ? (url) => onFixedSlotDropUrl(i, url) : undefined}
+              label={slotDef.label}
+              disabled={disabled}
+              showLabel
+            />
+          ))
         ) : (
           /* Video mode: always 5 fixed labeled slots */
           <>

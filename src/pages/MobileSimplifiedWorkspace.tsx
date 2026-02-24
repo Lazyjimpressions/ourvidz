@@ -18,7 +18,7 @@ import { useSmartModelDefaults } from '@/hooks/useSmartModelDefaults';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 
-import { SlotRole, DEFAULT_SLOT_ROLES } from '@/types/slotRoles';
+import { SlotRole, DEFAULT_SLOT_ROLES, QUICK_SCENE_SLOTS } from '@/types/slotRoles';
 
 const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -26,6 +26,7 @@ const MobileSimplifiedWorkspace = () => {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [batchSize, setBatchSize] = useState(1);
   const [userOverrodeModel, setUserOverrodeModel] = useState(false);
+  // slotRoles kept for backward compat but no longer user-editable in Quick Scene mode
   const [slotRoles, setSlotRoles] = useState<SlotRole[]>([...DEFAULT_SLOT_ROLES]);
   const location = useLocation();
   const navigate = useNavigate();
@@ -496,12 +497,12 @@ const MobileSimplifiedWorkspace = () => {
       } else {
         // Image → auto-overflow fixed slots: Char1 → Char2 → Char3 → Pose
         if (mode === 'image') {
-          // Auto-overflow into first empty fixed slot (0-9)
-          // Slot 0 = referenceImageUrl, Slot 1 = referenceImage2Url, Slots 2-9 = additionalRefUrls[0-7]
+          // Auto-overflow into first empty fixed slot (0-4) — Quick Scene: 5 slots max
+          // Slot 0 = referenceImageUrl, Slot 1 = referenceImage2Url, Slots 2-4 = additionalRefUrls[0-2]
           const slotUrls = [
             referenceImageUrl,
             referenceImage2Url,
-            ...Array.from({ length: 8 }, (_, i) => additionalRefUrls[i] || null),
+            ...Array.from({ length: 3 }, (_, i) => additionalRefUrls[i] || null),
           ];
           const emptyIndex = slotUrls.findIndex(u => !u);
           if (emptyIndex === -1) {
@@ -512,12 +513,12 @@ const MobileSimplifiedWorkspace = () => {
             setReferenceMetadata(null);
             setExactCopyMode(false);
             if (asset.prompt) setPrompt(asset.prompt);
-            toast.success(`Image set as ${slotRoles[0] || 'Ref 1'}`);
+            toast.success(`Image set as ${QUICK_SCENE_SLOTS[0].label}`);
           } else if (emptyIndex === 1) {
             setReferenceImage2(null);
             setReferenceImage2Url(referenceUrl);
             applySmartDefault('i2i_multi');
-            toast.success(`Image set as ${slotRoles[1] || 'Ref 2'}`);
+            toast.success(`Image set as ${QUICK_SCENE_SLOTS[1].label}`);
           } else {
             const additionalIndex = emptyIndex - 2;
             const newAdditional = [...additionalRefUrls];
@@ -525,7 +526,7 @@ const MobileSimplifiedWorkspace = () => {
             newAdditional[additionalIndex] = referenceUrl!;
             setAdditionalRefUrls(newAdditional);
             applySmartDefault('i2i_multi');
-            toast.success(`Image set as Ref ${emptyIndex + 1}`);
+            toast.success(`Image set as ${QUICK_SCENE_SLOTS[emptyIndex]?.label || `Ref ${emptyIndex + 1}`}`);
           }
         } else if (mode === 'video' && beginningRefImageUrl) {
           setEndingRefImage(file);
