@@ -1,40 +1,59 @@
 
-# Add Character Type (User/AI) Selector to Character Studio
+# Add Source Selection Menu to Workspace Reference Slots
 
 ## Overview
-Add a "Type" dropdown to the Character Studio sidebar so users can set a character as either "AI" (companion) or "User" (persona they play as). This uses the existing `role` column in the `characters` table -- no database changes needed.
+When clicking an empty reference slot in image mode, instead of jumping straight to the Library picker, show a small dropdown menu with three options:
+1. **Photo** -- opens the device camera/file picker (native file input)
+2. **Library** -- opens the existing ImagePickerDialog
+3. **File** -- opens native file picker for image files
 
 ## Changes
 
-### 1. Add `role` to `CharacterData` interface
-**File**: `src/hooks/useCharacterStudio.ts`
-- Add `role: 'user' | 'ai'` to the `CharacterData` interface
-- Add `role: 'ai'` to `defaultCharacterData`
-- Map `data.role` when loading a character (in `loadCharacter`, around line 149)
-- Include `character.role` in the save payload instead of the static `defaultRole` (line 269)
+### 1. Add a DropdownMenu to the empty RefSlot click (MobileQuickBar.tsx)
+**File**: `src/components/workspace/MobileQuickBar.tsx`
 
-### 2. Add Type selector to StudioSidebar
-**File**: `src/components/character-studio-v3/StudioSidebar.tsx`
-- Add a "Type" select dropdown in the Basic Info section, alongside the existing Gender and Rating grid
-- Change the grid from `grid-cols-2` to `grid-cols-3` to fit Gender, Rating, and Type
-- Options: "AI" (companion character) and "User" (your persona)
+- Import `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuTrigger` from the existing UI components
+- Import `Camera`, `Library`, `Upload` icons from lucide-react
+- Modify the `RefSlot` component to accept two new optional callbacks:
+  - `onAddFromLibrary?: () => void` -- opens the library picker
+  - `onAddFromFile?: () => void` -- opens native file input
+- When `onAddFromLibrary` is provided (image mode), the empty slot's `+` button becomes a `DropdownMenuTrigger` instead of a plain button
+- The dropdown shows three items:
+  - **Photo** (Camera icon) -- calls `onAdd()` which opens native file input with `capture` attribute
+  - **Library** (Library icon) -- calls `onAddFromLibrary()`
+  - **File** (Upload icon) -- calls `onAddFromFile()` which opens native file input without capture
 
-```text
-Basic Info
-+-------------------+
-| Name              |
-+--------+----+-----+
-| Gender | Rating | Type |
-+--------+--------+------+
-| Description        |
-+--------------------+
-```
+### 2. Pass source-specific callbacks from MobileSimplePromptInput
+**File**: `src/components/workspace/MobileSimplePromptInput.tsx`
+
+- Add a new handler `handleFileUploadForSlot(index)` that opens the native file picker (existing `fileInputRef.current?.click()` path)
+- Add a new handler `handlePhotoForSlot(index)` that opens file input with camera capture
+- Modify `handleFileSelectForSlot` to become `handleLibraryForSlot` (opens library picker)
+- Pass `onFixedSlotAddFromLibrary` and `onFixedSlotAddFromFile` through to `MobileQuickBar`
+- Add a second hidden file input with `capture="environment"` for the Photo option
+
+### 3. Wire through MobileQuickBar props
+**File**: `src/components/workspace/MobileQuickBar.tsx`
+
+- Add `onFixedSlotAddFromLibrary` and `onFixedSlotAddFromFile` to `MobileQuickBarProps`
+- Pass these to `RefSlot` when rendering Quick Scene fixed slots
 
 ## Technical Details
 
 | File | Change |
 |------|--------|
-| `src/hooks/useCharacterStudio.ts` | Add `role` to `CharacterData`, load it, save it |
-| `src/components/character-studio-v3/StudioSidebar.tsx` | Add Type selector in Basic Info section |
+| `src/components/workspace/MobileQuickBar.tsx` | Add dropdown to empty RefSlot; new props for library/file callbacks |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Split slot-add into 3 source handlers; add camera file input; pass new props |
 
-No new database columns, tables, or edge functions required. The `role` column already exists on the `characters` table with a default of `'ai'`.
+The DropdownMenu will reuse the existing Radix dropdown already used throughout the app. No new dependencies needed.
+
+### Dropdown appearance
+```text
++------------------+
+| Camera icon  Photo   |
+| Library icon Library |
+| Upload icon  File    |
++------------------+
+```
+
+The dropdown triggers from the same `+` button in each empty slot, keeping the visual layout unchanged.
