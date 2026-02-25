@@ -1,65 +1,70 @@
 
 
-# Task-Specific Template Selectors in Settings Gear
+# Video Extend: Fix Pipeline and Add UI Controls with Tooltips
 
-## Overview
-Replace the single "Template" dropdown with per-task template selectors, so each model category (Roleplay, Reasoning, Enhancement, Image, Video) has its own paired template dropdown. The System Prompt Editor in the chat body stays as-is for viewing/editing the hydrated prompt text.
-
-## Current State
-- One generic `promptTemplateId` in settings, shown as a single "Template" dropdown
-- Templates in the DB have a `use_case` field (e.g., `roleplay`, `enhancement`, `chat_admin`, `chat_general`, `chat_creative`)
-- Only chat (playground-chat) currently sends `prompt_template_id` to the edge function
+## Problem
+1. Videos of any length CAN be extended -- the model accepts any video and appends up to 161 frames (~5.3s at 30fps) of new footage. The current behavior of "taking the first part" is likely just the model's natural behavior with uncompressed long videos. The `constant_rate_factor` (CRF) param exists specifically to compress input video to match training data, improving results with longer sources.
+2. `reverse_video` is set by the client but the edge function silently drops it.
+3. No UI controls exist for extend-specific settings (Reverse, CRF).
+4. The "Duration" label in extend mode is misleading -- it should say "Extend by".
 
 ## Changes
 
-### 1. Settings Interface (`src/hooks/usePlaygroundSettings.ts`)
-- Replace single `promptTemplateId` with per-task template IDs:
-  - `roleplayTemplateId` (use_case: `roleplay`, `character_roleplay`)
-  - `reasoningTemplateId` (use_case: `chat_general`, `chat_admin`, etc.)
-  - `enhancementTemplateId` (use_case: `enhancement`)
-  - `imageTemplateId` (use_case: `enhancement` with image job_type)
-  - `videoTemplateId` (use_case: `enhancement` with video job_type)
-- Migrate legacy `promptTemplateId` to `roleplayTemplateId`
-- Default all to empty string (auto-select behavior)
+### 1. Edge Function: Forward extend params
+**File:** `supabase/functions/fal-image/index.ts`
 
-### 2. Settings Gear UI (`src/components/playground/PlaygroundSettingsPopover.tsx`)
-- Restructure into paired rows: each model selector followed by its template selector
-- Layout per task block:
+After the video URL handling block (~line 459), add pass-through for:
+- `reverse_video` (boolean)
+- `constant_rate_factor` (integer, 20-60)
 
-```text
-  Roleplay   [Model Dropdown     ]
-  Template   [Template Dropdown   ]
-  --------------------------------
-  Reasoning  [Model Dropdown     ]
-  Template   [Template Dropdown   ]
-  --------------------------------
-  Image      [Model Dropdown     ]
-  Template   [Template Dropdown   ]
-  ... etc
+These are already in the model's `input_schema` allow-list, but the edge function's manual param-copying logic skips them. Add explicit forwarding similar to how `resolution` and `aspect_ratio` are handled.
+
+### 2. UI: Add Extend Controls section to MobileSettingsSheet
+**File:** `src/components/workspace/MobileSettingsSheet.tsx`
+
+When the selected model has `extend` in its tasks (detected via a new `isExtendModel` prop):
+
+- Change "Duration" label to **"Extend by"** with a tooltip: *"Amount of new footage to add to your video (up to ~5s)"*
+- Add a **"Reverse Video"** toggle with tooltip: *"Reverse the input video before extending -- useful for generating footage that leads into your clip"*
+- Add a **"Compression (CRF)"** slider (20-60, default 35) with tooltip: *"Compresses input video to match model training data. Lower = higher quality but slower. Recommended: 35"*
+- Hide **Motion Intensity** slider (not in extend schema)
+
+### 3. Replace phantom `extendStrength` with `extendCrf`
+**Files:** `useLibraryFirstWorkspace.ts`, `MobileSettingsSheet.tsx`, `MobileSimplePromptInput.tsx`, `MobileSimplifiedWorkspace.tsx`
+
+- Rename `extendStrength` state/props to `extendCrf` (number, default 35)
+- When `isExtendModel`, include `constant_rate_factor: extendCrf` in the generation payload alongside `reverse_video`
+
+### 4. Update types
+**File:** `src/types/workspace.ts`
+
+Update `VideoExtendSettings`:
+```
+interface VideoExtendSettings {
+  crf: number;            // 20-60, compression quality for input
+  reverseVideo: boolean;
+}
 ```
 
-- Each template dropdown filters `templates` by the relevant `use_case` values
-- All template dropdowns include "Auto-select" as default
-- Content Mode selector stays at the bottom
+### 5. Detect extend model and thread `isExtendModel` prop
+**File:** `src/hooks/useLibraryFirstWorkspace.ts` (or parent page)
 
-### 3. Template Query (`src/hooks/usePlaygroundModels.ts`)
-- `usePlaygroundTemplates` already fetches all templates -- no change needed
-- Add a helper to group templates by use_case for easy filtering in the popover
+Derive `isExtendModel` from the selected model's tasks array and pass it down to `MobileSettingsSheet` and `MobileSimplePromptInput` so they can conditionally render extend controls.
 
-### 4. Consumer Updates (`src/contexts/PlaygroundContext.tsx`)
-- When sending chat messages, use `settings.roleplayTemplateId` (or `reasoningTemplateId` depending on active model) as `prompt_template_id`
-- For image/video generation, pass the relevant template ID if the edge function supports it
-
-### 5. System Prompt Editor (no changes)
-- Stays in the chat body
-- Continues to show the full hydrated prompt text for review and manual editing
-- Its own template/character selectors remain for quick prompt assembly
+### 6. Add tooltips to all extend controls
+Use the existing `Tooltip` component from `src/components/ui/tooltip.tsx` wrapped around labels for:
+- "Extend by" duration label
+- "Reverse Video" toggle label
+- "Compression (CRF)" slider label
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/hooks/usePlaygroundSettings.ts` | Replace `promptTemplateId` with 5 task-specific template IDs; add migration |
-| `src/components/playground/PlaygroundSettingsPopover.tsx` | Restructure to pair each model row with a template row; filter templates by use_case |
-| `src/contexts/PlaygroundContext.tsx` | Use task-specific template ID when calling edge functions |
+| `supabase/functions/fal-image/index.ts` | Forward `reverse_video` and `constant_rate_factor` from `body.input` to `modelInput` |
+| `src/types/workspace.ts` | Update `VideoExtendSettings` (strength -> crf) |
+| `src/hooks/useLibraryFirstWorkspace.ts` | Replace `extendStrength` with `extendCrf`; send CRF in payload; derive `isExtendModel` |
+| `src/components/workspace/MobileSettingsSheet.tsx` | Add extend controls (Reverse toggle, CRF slider); conditional "Extend by" label; hide Motion Intensity; add tooltips |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Update prop names (strength -> crf); thread `isExtendModel` |
+| `src/pages/MobileSimplifiedWorkspace.tsx` | Update prop threading |
 
