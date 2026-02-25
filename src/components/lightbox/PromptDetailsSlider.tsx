@@ -819,7 +819,15 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
             {/* Vision Details */}
             {score?.vision_analysis?.description && (
               <div className="text-xs bg-muted/50 p-2 rounded border">
+                <p className="text-[10px] font-medium text-muted-foreground mb-1">Vision Description</p>
                 <p className="break-words leading-relaxed">{score.vision_analysis.description}</p>
+              </div>
+            )}
+
+            {score?.vision_analysis?.pose_description && (
+              <div className="text-xs bg-muted/50 p-2 rounded border">
+                <p className="text-[10px] font-medium text-muted-foreground mb-1">Pose/Spatial Layout</p>
+                <p className="break-words leading-relaxed">{score.vision_analysis.pose_description}</p>
               </div>
             )}
 
