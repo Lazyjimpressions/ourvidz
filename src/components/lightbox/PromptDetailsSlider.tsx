@@ -34,6 +34,7 @@ import { toast } from '@/hooks/use-toast';
 import { PromptScoringService } from '@/lib/services/PromptScoringService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 interface PromptDetailsSliderProps {
@@ -549,15 +550,25 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
  */
 const DimensionStars: React.FC<{
   label: string;
+  tooltip: string;
   value: number;
   hoverValue: number | null;
   onRate: (v: number) => void;
   onHover: (v: number | null) => void;
-}> = ({ label, value, hoverValue, onRate, onHover }) => {
+}> = ({ label, tooltip, value, hoverValue, onRate, onHover }) => {
   const display = hoverValue ?? value;
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs text-muted-foreground w-24 shrink-0">{label}</span>
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-xs text-muted-foreground w-24 shrink-0 cursor-help border-b border-dotted border-muted-foreground/40">{label}</span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-[200px] text-xs">
+            {tooltip}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <div className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map((r) => (
           <button
@@ -648,6 +659,8 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
     }
   }, [isOpen, fetchScore]);
 
+  const autoScoreRef = useRef<(() => void) | null>(null);
+
   const handleDimensionRate = useCallback(async (
     dimension: 'user_action_rating' | 'user_appearance_rating' | 'user_quality_rating',
     value: number,
@@ -658,11 +671,13 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
     const result = await PromptScoringService.updateIndividualRating(jobId, user.id, dimension, value);
     if (result.success) {
       toast({ title: `Rating updated`, duration: 1500 });
+      // Auto-trigger vision scoring if image hasn't been scored yet
+      autoScoreRef.current?.();
     } else {
       toast({ title: 'Failed to save rating', variant: 'destructive', duration: 2000 });
       setter(0);
     }
-  }, [jobId, user?.id, fetchScore]);
+  }, [jobId, user?.id]);
 
   const handleTriggerScoring = useCallback(async () => {
     if (!user?.id) return;
@@ -702,6 +717,11 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
       setIsScoring(false);
     }
   }, [jobId, user?.id, score, fetchScore]);
+
+  // Keep autoScoreRef in sync so handleDimensionRate can trigger scoring without circular deps
+  useEffect(() => {
+    autoScoreRef.current = (!score?.vision_analysis && !isScoring) ? handleTriggerScoring : null;
+  }, [score?.vision_analysis, isScoring, handleTriggerScoring]);
 
   const handleSaveFeedback = useCallback(async () => {
     if (!user?.id) return;
@@ -769,20 +789,23 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
               <div className="space-y-1.5">
                 <DimensionStars
                   label="Action Match"
+                  tooltip="Does the action, pose, or activity in the image match what was requested in the prompt?"
                   value={actionRating}
                   hoverValue={hoverAction}
                   onRate={(v) => handleDimensionRate('user_action_rating', v, setActionRating)}
                   onHover={setHoverAction}
                 />
                 <DimensionStars
-                  label="Appearance"
+                  label="Outfit/Look"
+                  tooltip="Do the character's clothes, accessories, and styling match what was described in the prompt? (Not face likeness)"
                   value={appearanceRating}
                   hoverValue={hoverAppearance}
                   onRate={(v) => handleDimensionRate('user_appearance_rating', v, setAppearanceRating)}
                   onHover={setHoverAppearance}
                 />
                 <DimensionStars
-                  label="Quality"
+                  label="Image Quality"
+                  tooltip="Is the image technically well-made? Consider sharpness, anatomy, lighting, artifacts, and overall aesthetic quality."
                   value={qualityRating}
                   hoverValue={hoverQuality}
                   onRate={(v) => handleDimensionRate('user_quality_rating', v, setQualityRating)}
@@ -801,7 +824,7 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
                     <span className={cn('font-medium', getScoreColor(score.action_match))}>{score.action_match}</span>
                   </div>
                   <div className={cn('flex items-center justify-between rounded px-2 py-1 border', getScoreBg(score.appearance_match))}>
-                    <span className="text-muted-foreground">Appear</span>
+                    <span className="text-muted-foreground">Outfit</span>
                     <span className={cn('font-medium', getScoreColor(score.appearance_match))}>{score.appearance_match}</span>
                   </div>
                   <div className={cn('flex items-center justify-between rounded px-2 py-1 border', getScoreBg(score.overall_quality))}>
