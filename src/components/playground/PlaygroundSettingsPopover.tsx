@@ -41,29 +41,52 @@
              </div>
            ) : (
              <div className="space-y-2">
-               {/* Chat Model */}
-               <div className="flex items-center gap-2">
-                 <Label className="text-xs w-12 shrink-0">Chat</Label>
-                 <Select
-                   value={settings.chatModel}
-                   onValueChange={(v) => onSettingsChange({ chatModel: v })}
-                 >
-                   <SelectTrigger className="h-7 text-xs flex-1">
-                     <SelectValue placeholder="Select..." />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {grouped.chat.filter(m => m.model_key).map((m) => (
-                       <SelectItem key={m.id} value={m.model_key} className="text-xs">
-                         {m.display_name}
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-               </div>
+              {/* Roleplay Model */}
+              <div className="flex items-center gap-2">
+                <Label className="text-xs w-16 shrink-0">Roleplay</Label>
+                <Select
+                  value={settings.roleplayModel}
+                  onValueChange={(v) => onSettingsChange({ roleplayModel: v })}
+                >
+                  <SelectTrigger className="h-7 text-xs flex-1">
+                    <SelectValue placeholder="Select..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {grouped.roleplay.filter(m => m.model_key).map((m) => (
+                      <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                        {m.display_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Reasoning Model */}
+              {grouped.reasoning.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs w-16 shrink-0">Reasoning</Label>
+                  <Select
+                    value={settings.reasoningModel || 'auto'}
+                    onValueChange={(v) => onSettingsChange({ reasoningModel: v === 'auto' ? '' : v })}
+                  >
+                    <SelectTrigger className="h-7 text-xs flex-1">
+                      <SelectValue placeholder="Auto (default)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto" className="text-xs">Auto (default)</SelectItem>
+                      {grouped.reasoning.filter(m => m.model_key).map((m) => (
+                        <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                          {m.display_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
  
                {/* Image Model */}
                <div className="flex items-center gap-2">
-                 <Label className="text-xs w-12 shrink-0">Image</Label>
+                 <Label className="text-xs w-16 shrink-0">Image</Label>
                  <Select
                    value={settings.imageModel}
                    onValueChange={(v) => onSettingsChange({ imageModel: v })}
@@ -83,7 +106,7 @@
  
                {/* Video Model */}
                <div className="flex items-center gap-2">
-                 <Label className="text-xs w-12 shrink-0">Video</Label>
+                 <Label className="text-xs w-16 shrink-0">Video</Label>
                  <Select
                    value={settings.videoModel}
                    onValueChange={(v) => onSettingsChange({ videoModel: v })}
@@ -103,7 +126,7 @@
  
                 {/* I2I Model */}
                 <div className="flex items-center gap-2">
-                  <Label className="text-xs w-12 shrink-0">I2I</Label>
+                  <Label className="text-xs w-16 shrink-0">I2I</Label>
                   <Select
                     value={settings.i2iModel}
                     onValueChange={(v) => onSettingsChange({ i2iModel: v })}
@@ -124,7 +147,7 @@
                 {/* Enhancement Model */}
                 {grouped.enhancement.length > 0 && (
                   <div className="flex items-center gap-2">
-                    <Label className="text-xs w-12 shrink-0">Enhance</Label>
+                    <Label className="text-xs w-16 shrink-0">Enhance</Label>
                     <Select
                       value={settings.enhancementModel || 'auto'}
                       onValueChange={(v) => onSettingsChange({ enhancementModel: v === 'auto' ? '' : v })}
@@ -147,7 +170,7 @@
                 <div className="border-t border-border pt-2 mt-2">
                  {/* Template */}
                  <div className="flex items-center gap-2">
-                   <Label className="text-xs w-12 shrink-0">Template</Label>
+                   <Label className="text-xs w-16 shrink-0">Template</Label>
                    <Select
                      value={settings.promptTemplateId || 'none'}
                      onValueChange={(v) => onSettingsChange({ promptTemplateId: v === 'none' ? '' : v })}
@@ -168,7 +191,7 @@
  
                  {/* Content Mode */}
                  <div className="flex items-center gap-2 mt-2">
-                   <Label className="text-xs w-12 shrink-0">Content</Label>
+                   <Label className="text-xs w-16 shrink-0">Content</Label>
                    <Select
                      value={settings.contentMode}
                      onValueChange={(v) => onSettingsChange({ contentMode: v as 'sfw' | 'nsfw' })}
