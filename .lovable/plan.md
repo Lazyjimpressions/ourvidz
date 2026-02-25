@@ -1,83 +1,86 @@
 
 
-# Add Category-Filtered Library Picker to Workspace Reference Slots
+# Simplified: Auto-Tag Duo Positions + Character/Position Filtering
 
-## Overview
+## What's Already Done (Previous Edits)
+- `ImagePickerDialog` has category tabs (All, Characters, Positions, Scenes, Outfits) filtering by `role:*` tags
+- `MobileSimplePromptInput` opens the picker with slot-appropriate `filterTag`
+- Characters tab filters by `role:character` tag in the library -- no extra DB call needed
+- Positions tab filters by `role:position` tag -- works for single and duo once tagged
 
-When clicking an empty reference slot in the workspace, instead of just opening a native file picker, open the `ImagePickerDialog` with **category filter tabs** (All, Characters, Positions, Scenes, Outfits). Each tab filters `user_library` assets by their `tags` column (e.g., `role:character`, `role:position`). This makes it easy to find the right type of reference for each Quick Scene slot.
+## What Still Needs to Happen
 
-## Current State
+### 1. Pass `num_characters` in generation metadata
 
-- Clicking a reference slot calls `handleFileSelectForSlot(index)` which does `fileInputRef.current?.click()` -- a native file upload dialog
-- `ImagePickerDialog` exists with Workspace/Library source toggle but **no category filtering**
-- Library assets have `tags` like `['character', 'portrait']`, `['role:position']`, etc.
-- The Quick Scene slots already have role context (Char A, Char B, Pose, Scene, Outfit)
+**File**: `src/hooks/useLibraryFirstWorkspace.ts`
 
-## Changes
-
-### 1. Add `filterTag` prop to `ImagePickerDialog`
-
-**File**: `src/components/storyboard/ImagePickerDialog.tsx`
-
-Add an optional `filterTag?: string` prop that, when set, pre-filters library assets by that tag. Also add category filter tabs within the Library source view:
+In the Quick Scene branch (around line 1347-1354 where `isQuickScene` is detected), count the filled character slots and add `num_characters` to `baseMetadata`:
 
 ```
-Tabs: All | Characters | Positions | Scenes | Outfits
+// Inside baseMetadata object (around line 1002):
+num_characters: undefined, // set below for Quick Scene
+
+// Then in the Quick Scene block (around line 1347-1354):
+// After detecting isQuickScene, update metadata:
+requestPayload.metadata.num_characters = [effRefUrl, ...additionalImageUrls].filter(Boolean).length >= 2 ? 2 : 1;
 ```
 
-Each tab filters the library query by checking `tags` array contains the corresponding role tag. The `filterTag` prop sets the initially active tab (e.g., clicking the "Pose" slot pre-selects the "Positions" tab).
+Actually simpler: count how many of the first 2 ref slots (Char A, Char B) are filled. Slot 0 = `effRefUrl`, Slot 1 = first item in `additionalImageUrls`. If both filled, `num_characters = 2`.
 
-Implementation:
-- Add state: `activeCategory: 'all' | 'character' | 'position' | 'scene' | 'clothing'`
-- Initialize from `filterTag` prop
-- Filter `filteredAssets` additionally by checking if `asset.tags?.includes(activeCategory)` or `asset.tags?.includes('role:' + activeCategory)`
-- Render small pill tabs above the search bar (only when `activeSource === 'library'`)
+### 2. Store `num_characters` in `workspace_assets.generation_settings`
 
-### 2. Open `ImagePickerDialog` from reference slot clicks
+**File**: `supabase/functions/fal-webhook/index.ts`
 
-**File**: `src/components/workspace/MobileSimplePromptInput.tsx`
+In the workspace_assets insert (line 179-201), pass through `num_characters` from job metadata into `generation_settings`:
 
-Change `handleFileSelectForSlot` to offer both options:
-- Open the `ImagePickerDialog` (with the slot's role as `filterTag`)
-- Keep the native file upload as a secondary option (upload button within the dialog or a separate action)
-
-Add state:
 ```typescript
-const [pickerOpen, setPickerOpen] = useState(false);
-const [pickerSlotIndex, setPickerSlotIndex] = useState<number>(0);
+generation_settings: {
+  ...existing fields...,
+  num_characters: job.metadata?.num_characters,
+}
 ```
 
-Map Quick Scene slot index to a filter tag:
+### 3. Auto-tag duo when saving to library
+
+**File**: `supabase/functions/workspace-actions/index.ts`
+
+In the `save_to_library` action (around line 211-229), before inserting into `user_library`, check the asset's `generation_settings.num_characters`:
+
+```typescript
+// Build tags from request + auto-detect duo
+const baseTags = actionRequest.tags || [];
+if (asset.generation_settings?.num_characters >= 2) {
+  if (!baseTags.includes('role:position')) baseTags.push('role:position');
+  if (!baseTags.includes('duo')) baseTags.push('duo');
+}
 ```
-Slot 0 (Char A) -> filterTag: 'character'
-Slot 1 (Char B) -> filterTag: 'character'
-Slot 2 (Pose)   -> filterTag: 'position'
-Slot 3 (Scene)  -> filterTag: 'scene'
-Slot 4 (Outfit) -> filterTag: 'clothing'
-```
 
-When user selects an image from the dialog, route it through the existing slot-assignment logic (same as drag-and-drop URL handling via `onFixedSlotDropUrl`).
+Do the same in the `clear_asset` action (around line 280+) which also saves to library.
 
-### 3. Add a "Positions" content_category for new position assets
+### 4. Show duo positions on character's PositionsGrid
 
-Currently `user_library` has `content_category` values: `character` (117), `general` (42), `scene` (1). There are no `position`-tagged assets yet.
+**File**: `src/components/character-studio-v3/PositionsGrid.tsx`
 
-When assets are saved from Character Studio's Positions tab, they already get `tags: ['role:position']`. The filter will work based on `tags` -- no schema change needed. As users save position references (single or duo), they'll appear under the Positions tab.
+Add a "Duo Poses" section below the existing 6 fixed canonical slots. This queries `user_library` for assets tagged with both `role:position` and `duo`:
 
-For **duo poses**: these are just position-tagged images that happen to show two people. No special data model needed. When saved to library with `tags: ['role:position', 'duo']`, they show up in the Positions filter tab. If a character is identifiable in the duo image (tagged with the character name), it can also be shown on that character's Positions page by querying `character_canon` or `user_library` by character name tag.
+- Add a prop `characterName?: string` to `PositionsGridProps`
+- Use a simple `useQuery` to fetch: `supabase.from('user_library').select('*').contains('tags', ['role:position', 'duo'])`
+- Display as a simple grid section with title "Duo Poses"
+- Each tile links to the lightbox like existing position tiles
 
 ## File Summary
 
 | File | Change |
 |------|--------|
-| `src/components/storyboard/ImagePickerDialog.tsx` | Add `filterTag` prop; add category pill tabs (All, Characters, Positions, Scenes, Outfits) that filter by `tags`; render tabs only when source is Library |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Change `handleFileSelectForSlot` to open `ImagePickerDialog` with role-based `filterTag`; add picker state; render `ImagePickerDialog` instance; map slot index to filter tag; handle selection by routing through existing URL assignment logic |
-| `src/components/workspace/MobileQuickBar.tsx` | No changes needed -- slot click handlers already call through to parent |
+| `src/hooks/useLibraryFirstWorkspace.ts` | Add `num_characters` to generation metadata when Quick Scene has 2 char slots filled |
+| `supabase/functions/fal-webhook/index.ts` | Pass `num_characters` from job metadata into `workspace_assets.generation_settings` |
+| `supabase/functions/workspace-actions/index.ts` | Auto-tag `['role:position', 'duo']` on save-to-library when `generation_settings.num_characters >= 2` |
+| `src/components/character-studio-v3/PositionsGrid.tsx` | Add "Duo Poses" section querying library for `role:position` + `duo` tagged assets |
 
-## Technical Notes
-
-- The native file input remains available as a fallback (the dialog can include an "Upload from device" button)
-- `ImagePickerDialog` already handles URL signing, search, and asset selection -- we're just adding a tag filter layer
-- The `tags` column in `user_library` has a GIN index, so filtering by tag is efficient
-- Duo poses are simply position-tagged images with a `duo` tag -- no new tables or columns
+## What This Does NOT Change
+- No new tables or columns
+- No new edge functions
+- Characters tab already works via existing `role:character` tag filtering
+- Positions tab already works via existing `role:position` tag filtering
+- No special DB call for character primary refs -- they're already tagged `role:character` in the library
 
