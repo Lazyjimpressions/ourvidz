@@ -21,7 +21,18 @@ import { toSharedFromLibrary, toSharedFromWorkspace } from '@/lib/services/Asset
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { PillFilter } from '@/components/ui/pill-filter';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
+
+type CategoryFilter = 'all' | 'character' | 'position' | 'scene' | 'clothing';
+
+const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'character', label: 'Characters' },
+  { value: 'position', label: 'Positions' },
+  { value: 'scene', label: 'Scenes' },
+  { value: 'clothing', label: 'Outfits' },
+];
 
 interface ImagePickerDialogProps {
   isOpen: boolean;
@@ -29,6 +40,8 @@ interface ImagePickerDialogProps {
   onSelect: (imageUrl: string, source: 'library' | 'workspace') => void;
   title?: string;
   source?: 'workspace' | 'library';
+  /** Pre-select a category filter tab (e.g. 'character', 'position') */
+  filterTag?: string;
 }
 
 export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
@@ -37,11 +50,15 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   onSelect,
   title = 'Select Reference Image',
   source = 'library',
+  filterTag,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [activeSource, setActiveSource] = useState<'workspace' | 'library'>(source);
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>(
+    (filterTag as CategoryFilter) || 'all'
+  );
 
   // Direct signing state
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
@@ -52,6 +69,11 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   useEffect(() => {
     setActiveSource(source);
   }, [source]);
+
+  // Sync filterTag when prop changes
+  useEffect(() => {
+    setActiveCategory((filterTag as CategoryFilter) || 'all');
+  }, [filterTag]);
 
   // Library data
   const { data: paginatedData, isLoading: libraryLoading } = useLibraryAssets();
@@ -85,10 +107,18 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
 
   const isLoading = activeSource === 'library' ? libraryLoading : workspaceLoading;
 
-  // Filter by search query
+  // Filter by search query and category
   const filteredAssets = useMemo(() => {
     const rawAssets = activeSource === 'library' ? libraryImageAssets : workspaceAssets;
     return rawAssets.filter((asset: any) => {
+      // Category filter (library only)
+      if (activeSource === 'library' && activeCategory !== 'all') {
+        const tags: string[] = asset.tags || [];
+        const hasRoleTag = tags.some(
+          (t: string) => t === activeCategory || t === `role:${activeCategory}`
+        );
+        if (!hasRoleTag) return false;
+      }
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase();
       const prompt = asset.prompt || asset.originalPrompt || '';
@@ -100,7 +130,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         tags.some((tag: string) => tag.toLowerCase().includes(query))
       );
     });
-  }, [activeSource, libraryImageAssets, workspaceAssets, searchQuery]);
+  }, [activeSource, libraryImageAssets, workspaceAssets, searchQuery, activeCategory]);
 
   // Convert to SharedAsset format
   const sharedAssets: SharedAsset[] = useMemo(() => {
@@ -264,14 +294,30 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
             </button>
           </div>
 
+          {/* Category Filter Tabs (library only) */}
+          {activeSource === 'library' && (
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+              {CATEGORY_TABS.map((tab) => (
+                <PillFilter
+                  key={tab.value}
+                  active={activeCategory === tab.value}
+                  onClick={() => { setActiveCategory(tab.value); setSelectedAssetId(null); }}
+                  size="sm"
+                >
+                  {tab.label}
+                </PillFilter>
+              ))}
+            </div>
+          )}
+
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
             <Input
               placeholder="Search by prompt, title, or tags..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-gray-900 border-gray-800 text-sm"
+              className="pl-9 bg-muted/50 border-border text-sm"
             />
           </div>
 

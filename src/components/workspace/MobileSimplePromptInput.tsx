@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import type { SlotRole } from '@/types/slotRoles';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +14,7 @@ import { MobileSettingsSheet } from './MobileSettingsSheet';
 import { getSlotLabel } from '@/types/slotRoles';
 import { detectImageType, looksLikeImage, isHeicType, normalizeExtension } from '@/utils/imageTypeDetection';
 import { uploadAndSignReferenceImage } from '@/lib/storage';
+import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
 
 // Detect iOS Safari for special handling
 const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent);
@@ -166,6 +167,14 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   // Settings sheet state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  
+  // Image picker dialog state
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSlotIndex, setPickerSlotIndex] = useState(0);
+  
+  // Map slot index to a library filter tag
+  const SLOT_FILTER_TAGS = ['character', 'character', 'position', 'scene', 'clothing'] as const;
+  const pickerFilterTag = SLOT_FILTER_TAGS[pickerSlotIndex] || undefined;
 
   const handleEnhance = async () => {
     if (!prompt.trim() || !selectedModel?.id) return;
@@ -516,9 +525,32 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   // File select for a specific slot index
   const handleFileSelectForSlot = (index: number) => {
-    pendingSlotIndexRef.current = index;
-    fileInputRef.current?.click();
+    if (currentMode === 'image') {
+      // Open library picker dialog with category pre-selected
+      setPickerSlotIndex(index);
+      setPickerOpen(true);
+    } else {
+      // Video mode: keep native file picker
+      pendingSlotIndexRef.current = index;
+      fileInputRef.current?.click();
+    }
   };
+
+  // Handle image selection from the picker dialog
+  const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace') => {
+    const index = pickerSlotIndex;
+    if (index === 0) {
+      onReferenceImageUrlSet?.(imageUrl, 'single');
+    } else if (index === 1) {
+      onReferenceImage2UrlSet?.(imageUrl);
+    } else {
+      const additionalIndex = index - 2;
+      const newAdditional = [...additionalRefUrls];
+      while (newAdditional.length <= additionalIndex) newAdditional.push('');
+      newAdditional[additionalIndex] = imageUrl;
+      onAdditionalRefsChange?.(newAdditional);
+    }
+  }, [pickerSlotIndex, onReferenceImageUrlSet, onReferenceImage2UrlSet, additionalRefUrls, onAdditionalRefsChange]);
 
   // Handle remove for a specific slot index
   const handleRemoveSlot = (index: number) => {
@@ -789,6 +821,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onMotionIntensityChange={onMotionIntensityChange}
         keyframeStrengths={keyframeStrengths}
         onKeyframeStrengthChange={onKeyframeStrengthChange}
+      />
+
+      {/* Image Picker Dialog for library/workspace browsing */}
+      <ImagePickerDialog
+        isOpen={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handlePickerSelect}
+        title={`Select ${SLOT_FILTER_TAGS[pickerSlotIndex]?.[0]?.toUpperCase()}${SLOT_FILTER_TAGS[pickerSlotIndex]?.slice(1) || 'Reference'} Image`}
+        source="library"
+        filterTag={pickerFilterTag}
       />
     </div>
   );
