@@ -82,7 +82,11 @@ async function analyzeWithVision(
       return null;
     }
 
-    return response.data.data as VisionScoringResult;
+    const result = response.data.data as VisionScoringResult;
+    // Attach resolved model info from describe-image response
+    (result as any)._resolved_model_key = response.data.model_used || null;
+    (result as any)._resolved_model_name = response.data.model_display_name || null;
+    return result;
   } catch (error) {
     console.error("❌ Error calling describe-image:", error);
     return null;
@@ -208,7 +212,7 @@ serve(async (req) => {
     const compositeScore = computeCompositeScore(visionResult, config.scoringWeights);
 
     // ── Look up vision model cost ──
-    let visionModelUsed = config.visionModelId || "default";
+    let visionModelUsed = (visionResult as any)._resolved_model_key || (visionResult as any)._resolved_model_name || config.visionModelId || "default";
     let visionCostEstimate: number | null = null;
     if (config.visionModelId) {
       const { data: modelData } = await supabase
