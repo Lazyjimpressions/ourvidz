@@ -91,18 +91,44 @@ async function signIfStoragePath(
   defaultBucket = 'reference_images'
 ): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
-  if (url.startsWith('http') || url.startsWith('data:')) return url;
+  if (url.startsWith('data:')) return url;
   if (url.trim() === '') return null;
 
   const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
+
+  // If this is an already-signed Supabase storage URL, re-sign it server-side
+  // so fal.ai can access it (anon-signed URLs may not be externally downloadable)
+  if (url.startsWith('http') && url.includes('/object/sign/')) {
+    const signMatch = url.match(/\/object\/sign\/([^/]+)\/(.+?)(?:\?|$)/);
+    if (signMatch) {
+      const bucket = signMatch[1];
+      const path = decodeURIComponent(signMatch[2]);
+      console.log(`🔄 Re-signing Supabase URL for external access: bucket="${bucket}", path="${path.substring(0, 40)}..."`);
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+      if (!error && data?.signedUrl) {
+        // Ensure absolute URL
+        const signed = data.signedUrl.startsWith('/') ? `${SUPABASE_URL}/storage/v1${data.signedUrl}` : data.signedUrl;
+        console.log(`🔏 Re-signed URL for bucket "${bucket}": ${path.substring(0, 40)}...`);
+        return signed;
+      }
+      console.warn(`⚠️ Re-sign failed for bucket "${bucket}":`, error?.message, '— using original URL');
+      return url;
+    }
+  }
+
+  // Already absolute and not a Supabase signed URL — pass through
+  if (url.startsWith('http')) return url;
+
   const parts = url.split('/');
   const bucket = knownBuckets.includes(parts[0]) ? parts[0] : defaultBucket;
   const path = knownBuckets.includes(parts[0]) ? parts.slice(1).join('/') : url;
 
   const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
   if (!error && data?.signedUrl) {
+    const signed = data.signedUrl.startsWith('/') ? `${SUPABASE_URL}/storage/v1${data.signedUrl}` : data.signedUrl;
     console.log(`🔏 Signed URL for bucket "${bucket}": ${path.substring(0, 40)}...`);
-    return data.signedUrl;
+    return signed;
   }
   console.warn(`⚠️ Failed to sign URL for bucket "${bucket}":`, error?.message);
   return url; // Return original — might already be signed or external
