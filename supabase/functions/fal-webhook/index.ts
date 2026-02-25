@@ -197,6 +197,7 @@ serve(async (req) => {
         scene_template_id: job.metadata?.scene_template_id,
         scene_template_name: job.metadata?.scene_template_name,
         original_scene_prompt: job.metadata?.original_scene_prompt || job.original_prompt,
+        num_characters: job.metadata?.num_characters,
       },
     });
 

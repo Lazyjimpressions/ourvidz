@@ -223,7 +223,14 @@ serve(async (req) => {
           generation_seed: asset.generation_seed,
           collection_id: actionRequest.collectionId,
           custom_title: actionRequest.customTitle,
-          tags: actionRequest.tags || []
+          tags: (() => {
+            const baseTags = actionRequest.tags || [];
+            if (asset.generation_settings?.num_characters >= 2) {
+              if (!baseTags.includes('role:position')) baseTags.push('role:position');
+              if (!baseTags.includes('duo')) baseTags.push('duo');
+            }
+            return baseTags;
+          })()
         })
         .select()
         .single()
@@ -404,7 +411,14 @@ serve(async (req) => {
             generation_seed: asset.generation_seed,
             collection_id: actionRequest.collectionId,
             custom_title: actionRequest.customTitle,
-            tags: actionRequest.tags || []
+            tags: (() => {
+              const baseTags = actionRequest.tags || [];
+              if (asset.generation_settings?.num_characters >= 2) {
+                if (!baseTags.includes('role:position')) baseTags.push('role:position');
+                if (!baseTags.includes('duo')) baseTags.push('duo');
+              }
+              return baseTags;
+            })()
           })
           .select()
           .single()
