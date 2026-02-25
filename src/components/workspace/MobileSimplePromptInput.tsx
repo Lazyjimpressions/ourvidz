@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import type { SlotRole } from '@/types/slotRoles';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,8 +51,8 @@ export interface MobileSimplePromptInputProps {
   onClearWorkspace?: () => void;
   onDeleteAllWorkspace?: () => void;
   // Video Extend settings
-  extendStrength?: number;
-  onExtendStrengthChange?: (strength: number) => void;
+  extendCrf?: number;
+  onExtendCrfChange?: (crf: number) => void;
   extendReverseVideo?: boolean;
   onExtendReverseVideoChange?: (reverse: boolean) => void;
   // Batch size
@@ -123,8 +123,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onReferenceStrengthChange,
   onClearWorkspace,
   onDeleteAllWorkspace,
-  extendStrength = 1.0,
-  onExtendStrengthChange,
+  extendCrf = 35,
+  onExtendCrfChange,
   extendReverseVideo = false,
   onExtendReverseVideoChange,
   batchSize = 1,
@@ -164,6 +164,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     currentMode === 'video' && selectedModel?.type === 'fal' ? selectedModel.id : null
   );
   
+  // Detect if current model is an extend model
+  const isExtendModel = useMemo(() => {
+    if (currentMode !== 'video' || !selectedModel?.id) return false;
+    const model = (videoModels || []).find((m: any) => m.id === selectedModel.id);
+    if (!model) return false;
+    const tasks = (model as any).tasks as string[] | undefined;
+    return tasks?.includes('extend') || false;
+  }, [currentMode, selectedModel?.id, videoModels]);
+
   // Settings sheet state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -828,10 +837,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onExactCopyModeChange={onExactCopyModeChange}
         referenceStrength={referenceStrength}
         onReferenceStrengthChange={onReferenceStrengthChange}
-        extendStrength={extendStrength}
-        onExtendStrengthChange={onExtendStrengthChange}
+        extendCrf={extendCrf}
+        onExtendCrfChange={onExtendCrfChange}
         extendReverseVideo={extendReverseVideo}
         onExtendReverseVideoChange={onExtendReverseVideoChange}
+        isExtendModel={isExtendModel}
         onClearWorkspace={onClearWorkspace}
         onDeleteAllWorkspace={onDeleteAllWorkspace}
         shotType={shotType}
