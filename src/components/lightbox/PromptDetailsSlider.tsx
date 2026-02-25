@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Sheet, 
   SheetContent, 
@@ -671,13 +672,15 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
     const result = await PromptScoringService.updateIndividualRating(jobId, user.id, dimension, value);
     if (result.success) {
       toast({ title: `Rating updated`, duration: 1500 });
+      // Refresh local score state (important on first rating when score was null)
+      await fetchScore();
       // Auto-trigger vision scoring if image hasn't been scored yet
       autoScoreRef.current?.();
     } else {
       toast({ title: 'Failed to save rating', variant: 'destructive', duration: 2000 });
       setter(0);
     }
-  }, [jobId, user?.id]);
+  }, [jobId, user?.id, fetchScore]);
 
   const handleTriggerScoring = useCallback(async () => {
     if (!user?.id) return;
@@ -691,8 +694,16 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
       return;
     }
 
-    // Get prompt from score or fetch job
-    const prompt = score?.original_prompt || '';
+    // Get prompt from score, fall back to jobs table
+    let prompt = score?.original_prompt || '';
+    if (!prompt) {
+      const { data: job } = await supabase
+        .from('jobs')
+        .select('original_prompt')
+        .eq('id', jobId)
+        .single();
+      prompt = job?.original_prompt || '';
+    }
     if (!prompt) {
       toast({ title: 'No prompt found for scoring', variant: 'destructive', duration: 2000 });
       setIsScoring(false);
