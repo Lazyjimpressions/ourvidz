@@ -1,61 +1,40 @@
 
 
-# Fix: fal.ai Can't Access workspace-temp Signed URLs
+# Replace Chat Selector with Task-Specific Model Selectors
 
-## Root Cause
+## Overview
+Replace the single "Chat" model dropdown in the Playground settings gear with separate task-specific selectors: **Roleplay** and **Reasoning**. Each will show only models that have the corresponding task in their `tasks` array.
 
-The `fal-image` edge function's re-signing logic correctly detects anon-signed Supabase URLs and tries to re-sign them with the service role. However, **re-signing fails with "Object not found"** for `workspace-temp` files. This means fal.ai receives the original anon-signed URL, which it cannot download externally.
+## Changes
 
-This likely started because:
-- More generation flows now use `workspace-temp` URLs (e.g., using generated images as references), whereas before most refs came from `reference_images` or `user-library`
-- The `workspace-temp` bucket may have restrictive storage policies
+### 1. Update `useGroupedModels` (src/hooks/usePlaygroundModels.ts)
+- Remove the generic `chat` group
+- Add `roleplay` group: chat-modality models with `roleplay` in tasks
+- Add `reasoning` group: chat-modality models with `reasoning` in tasks
+- Keep existing groups (image, video, i2i, enhancement) unchanged
 
-## Fix Strategy
+### 2. Update `PlaygroundSettings` (src/hooks/usePlaygroundSettings.ts)
+- Replace `chatModel` with `roleplayModel` and `reasoningModel`
+- Update `DEFAULT_SETTINGS` with sensible defaults (or empty strings to auto-resolve from DB defaults)
+- Keep backward compat: if `chatModel` exists in localStorage, migrate it to `roleplayModel`
 
-Instead of re-signing (which fails), **download the file server-side and upload it to fal.ai's CDN**, or more practically: **generate a public URL** instead.
+### 3. Update Settings Popover (src/components/playground/PlaygroundSettingsPopover.tsx)
+- Replace the "Chat" row with two rows: **Roleplay** and **Reasoning**
+- Each shows only models from the corresponding group
+- Reasoning row only appears if `grouped.reasoning.length > 0` (like Enhancement)
 
-**Simpler approach**: When re-signing fails, try creating a **public URL** or use Supabase's `getPublicUrl` as a fallback. But since workspace-temp is private, the best fix is:
+### 4. Update consumers of `settings.chatModel`
+- **PlaygroundContext.tsx**: Use `settings.roleplayModel` when invoking `roleplay-chat`, keep using it for `playground-chat` as well (or use `reasoningModel` based on context)
+- **CompareView.tsx**: Update to use `roleplayModel` instead of `chatModel` for default panel state
+- **AdminTools.tsx**: Update model info lookup to use new groups
 
-### Option: Send raw storage path instead of pre-signed URL from frontend
-
-**File: `src/hooks/useLibraryFirstWorkspace.ts`**
-
-When building `image_urls` / `image_url` for the generation request, send the **raw storage path** (e.g., `workspace-temp/userId/file.png`) instead of the pre-signed URL. The edge function already handles raw paths correctly — it signs them with the service role key.
-
-### Changes
-
-1. **`src/hooks/useLibraryFirstWorkspace.ts`** — When building `allRefUrls` and `inputObj.image_url(s)`, strip signed URLs back to raw storage paths before sending to the edge function
-   - Detect Supabase signed URLs (contain `/object/sign/`)
-   - Extract `bucket/path` from the URL
-   - Send that raw path instead
-
-2. **`supabase/functions/fal-image/index.ts`** — Update `signIfStoragePath` to handle `workspace-temp/...` paths correctly (it already does via the `knownBuckets` logic on line 124, but verify the default bucket fallback)
-
-### Implementation Detail
-
-Add a utility function `stripToStoragePath(url)` in `useLibraryFirstWorkspace.ts`:
-
-```text
-Input:  https://xxx.supabase.co/storage/v1/object/sign/workspace-temp/userId/file.png?token=xxx
-Output: workspace-temp/userId/file.png
-
-Input:  https://xxx.supabase.co/storage/v1/object/sign/user-library/userId/file.png?token=xxx  
-Output: user-library/userId/file.png
-
-Input:  https://example.com/external-image.png (non-Supabase)
-Output: https://example.com/external-image.png (unchanged)
-```
-
-This ensures the edge function always receives either:
-- A raw storage path (which it signs server-side with service role -- works)
-- An external URL (passed through -- works)
-
-Never an anon-signed URL (which fal.ai can't download).
-
-### Files to Change
+## Technical Details
 
 | File | Change |
 |------|--------|
-| `src/hooks/useLibraryFirstWorkspace.ts` | Add `stripToStoragePath()` helper; apply it to all URLs in `allRefUrls` before adding to `inputObj` |
-| `supabase/functions/fal-image/index.ts` | No changes needed -- existing `signIfStoragePath` already handles raw `workspace-temp/...` paths |
-
+| `src/hooks/usePlaygroundModels.ts` | Replace `chat` group with `roleplay` and `reasoning` groups |
+| `src/hooks/usePlaygroundSettings.ts` | Replace `chatModel` with `roleplayModel` + `reasoningModel`; add migration |
+| `src/components/playground/PlaygroundSettingsPopover.tsx` | Replace Chat dropdown with Roleplay + Reasoning dropdowns |
+| `src/contexts/PlaygroundContext.tsx` | Use `roleplayModel` instead of `chatModel` |
+| `src/components/playground/CompareView.tsx` | Use `roleplayModel` instead of `chatModel` |
+| `src/components/playground/AdminTools.tsx` | Update grouped references |
