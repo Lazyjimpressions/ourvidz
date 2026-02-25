@@ -1352,14 +1352,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               // Replace the user prompt with the full Quick Scene system prompt
               finalPrompt = buildQuickScenePrompt(finalPrompt, hasScene, hasOutfit, 'Both', poseDescription);
               console.log('🎯 Quick Scene: Built deterministic system prompt (hasScene:', hasScene, 'hasOutfit:', hasOutfit, ')');
-              
-              // Count filled character slots (slot 0 = effRefUrl, slot 1 = first additional)
-              const numCharSlots = (effRefUrl ? 1 : 0) + (additionalImageUrls.length >= 1 && additionalImageUrls[0] ? 1 : 0);
-              if (numCharSlots >= 2) {
-                requestPayload.metadata.num_characters = 2;
-                console.log('👥 Quick Scene: Detected duo (num_characters=2)');
-              }
-            } else {
+               
+               // num_characters will be set after requestPayload is built (see below)
+             } else {
               // Fallback: legacy Figure notation for non-Quick-Scene multi-ref
               const filledSlots: { figureIndex: number; role: SlotRole }[] = allRefUrls.map((_, i) => ({
                 figureIndex: i + 1,
@@ -1463,6 +1458,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             contentType: contentType,
             aspectRatio: finalAspectRatio,
             modality: isFalVideo ? 'video' : 'image',
+            // Deferred from Quick Scene detection above
+            num_characters: (() => {
+              const numCharSlots = (effRefUrl ? 1 : 0) + (additionalImageUrls && additionalImageUrls.length >= 1 && additionalImageUrls[0] ? 1 : 0);
+              return numCharSlots >= 2 ? 2 : undefined;
+            })(),
             duration: isFalVideo ? videoDuration : undefined,
             motion_intensity: isFalVideo ? motionIntensity : undefined,
             video_requires_ref: videoRequiresRefImage // Generic I2V flag
