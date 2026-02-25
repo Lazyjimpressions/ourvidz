@@ -83,6 +83,7 @@ export interface LibraryFirstWorkspaceState {
   // Video Extend settings
   extendCrf: number;
   extendReverseVideo: boolean;
+  sourceVideoDuration: number;
   // Per-keyframe strengths for video multi mode
   keyframeStrengths: number[];
 }
@@ -149,6 +150,7 @@ export interface LibraryFirstWorkspaceActions {
   // Video Extend settings
   setExtendCrf: (crf: number) => void;
   setExtendReverseVideo: (reverse: boolean) => void;
+  setSourceVideoDuration: (duration: number) => void;
   // Per-keyframe strengths
   setKeyframeStrengths: (strengths: number[]) => void;
   
@@ -424,6 +426,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   // Video Extend settings
   const [extendCrf, setExtendCrf] = useState(35);
   const [extendReverseVideo, setExtendReverseVideo] = useState(false);
+  const [sourceVideoDuration, setSourceVideoDuration] = useState(0);
   // Per-keyframe strengths for video multi mode (5 slots)
   const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1, 1, 1, 1, 1]);
 
@@ -1442,6 +1445,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           if (isExtendModel && refImageUrl) {
             // fal.ai LTX extend expects `video` as a plain URL string
             inputObj.video = stripToStoragePath(refImageUrl);
+            // Pass source video duration for tail-conditioning computation in edge function
+            inputObj.source_video_duration = sourceVideoDuration || 0;
             // reverse_video is a top-level param in the schema
             if (extendReverseVideo) inputObj.reverse_video = true;
             // constant_rate_factor: compress input video to match training data
@@ -2111,6 +2116,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     // Video Extend settings
     extendCrf,
     extendReverseVideo,
+    sourceVideoDuration,
     // Per-keyframe strengths
     keyframeStrengths,
     
@@ -2196,6 +2202,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     // Video Extend settings
     setExtendCrf: (c: number) => setExtendCrf(c),
     setExtendReverseVideo: (r: boolean) => setExtendReverseVideo(r),
+    setSourceVideoDuration: (d: number) => setSourceVideoDuration(d),
     // Per-keyframe strengths
     setKeyframeStrengths,
     getJobStats,

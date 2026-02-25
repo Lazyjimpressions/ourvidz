@@ -449,10 +449,29 @@ async function buildModelInput(
         videoUrl = await signIfStoragePath(supabase, videoUrl, 'reference_images');
 
         if (videoUrl && typeof videoUrl === 'string' && (videoUrl.startsWith('http') || videoUrl.startsWith('data:'))) {
-          modelInput.video = { video_url: videoUrl };
+          // Build full VideoConditioningInput with tail-conditioning
+          const fps = modelInput.frame_rate || 30;
+          const maxCondFrames = 48; // ~1.6s conditioning window
+          const sourceDuration = body.input.source_video_duration || 0;
+          const totalFrames = sourceDuration > 0 ? Math.round(sourceDuration * fps) : 0;
+
+          let startFrameNum = 0;
+          if (totalFrames > maxCondFrames) {
+            // Tail-conditioning: start from near the end, aligned to multiple of 8
+            startFrameNum = Math.floor((totalFrames - maxCondFrames) / 8) * 8;
+          }
+
+          modelInput.video = {
+            video_url: videoUrl,
+            start_frame_num: startFrameNum,
+            max_num_frames: maxCondFrames,
+            limit_num_frames: true,
+            conditioning_type: "rgb",
+            strength: 1,
+          };
           delete modelInput.image_url;
           delete modelInput.image;
-          console.log('🎬 Video URL set for extend:', videoUrl.substring(0, 80) + '...');
+          console.log(`🎬 Video extend: duration=${sourceDuration}s, totalFrames=${totalFrames}, startFrame=${startFrameNum}, maxCond=${maxCondFrames}`);
         } else {
           console.warn('⚠️ Video input could not resolve to valid URL');
         }

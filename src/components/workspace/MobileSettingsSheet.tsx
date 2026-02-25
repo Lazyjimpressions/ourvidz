@@ -512,7 +512,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[200px] text-xs">
                           {isExtendModel
-                            ? 'Amount of new footage to add to your video (up to ~5s)'
+                            ? 'Generates up to ~5s of continuation footage conditioned on the end of your source video. The output may include brief overlap frames for continuity.'
                             : 'Total video duration'}
                         </TooltipContent>
                       </Tooltip>

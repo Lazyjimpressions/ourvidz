@@ -83,6 +83,7 @@ const MobileSimplifiedWorkspace = () => {
     setExtendCrf,
     extendReverseVideo,
     setExtendReverseVideo,
+    setSourceVideoDuration,
     // Creative Direction
     shotType,
     setShotType,
@@ -728,6 +729,7 @@ const MobileSimplifiedWorkspace = () => {
           onExtendCrfChange={setExtendCrf}
           extendReverseVideo={extendReverseVideo}
           onExtendReverseVideoChange={setExtendReverseVideo}
+          onSourceVideoDuration={setSourceVideoDuration}
           batchSize={batchSize}
           onBatchSizeChange={setBatchSize}
           shotType={shotType}

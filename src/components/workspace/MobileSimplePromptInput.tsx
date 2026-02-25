@@ -90,6 +90,8 @@ export interface MobileSimplePromptInputProps {
   // Per-keyframe strengths (video multi mode)
   keyframeStrengths?: number[];
   onKeyframeStrengthChange?: (index: number, strength: number) => void;
+  // Source video duration callback (for tail-conditioning)
+  onSourceVideoDuration?: (duration: number) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -154,6 +156,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onSlotRoleChange,
   keyframeStrengths,
   onKeyframeStrengthChange,
+  onSourceVideoDuration,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -281,6 +284,27 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       } else {
         toast.error('No video extend model available');
         return;
+      }
+
+      // Probe video duration for tail-conditioning
+      try {
+        const probedDuration = await new Promise<number>((resolve) => {
+          const vid = document.createElement('video');
+          vid.preload = 'metadata';
+          vid.onloadedmetadata = () => {
+            const dur = vid.duration;
+            URL.revokeObjectURL(vid.src);
+            resolve(isFinite(dur) ? dur : 0);
+          };
+          vid.onerror = () => resolve(0);
+          vid.src = URL.createObjectURL(file);
+        });
+        if (probedDuration > 0) {
+          onSourceVideoDuration?.(probedDuration);
+          console.log(`🎬 Probed video duration: ${probedDuration.toFixed(2)}s`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not probe video duration:', e);
       }
 
       // Upload the video as a reference
