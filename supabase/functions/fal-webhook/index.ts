@@ -187,7 +187,7 @@ serve(async (req) => {
       original_prompt: job.original_prompt || "",
       model_used: modelKey,
       generation_seed: generationSeed,
-      generation_settings: {
+    generation_settings: {
         model_key: modelKey,
         provider: job.metadata?.provider_name || "fal",
         content_mode: job.metadata?.content_mode || "nsfw",
@@ -198,6 +198,15 @@ serve(async (req) => {
         scene_template_name: job.metadata?.scene_template_name,
         original_scene_prompt: job.metadata?.original_scene_prompt || job.original_prompt,
         num_characters: job.metadata?.num_characters,
+        // Extend metadata for "Play Full" and "Extend Again" chaining
+        ...(generationMode?.includes('extend') && {
+          is_extend_result: true,
+          source_video_url: job.metadata?.start_reference_url,
+          conditioning_settings: {
+            start_frame_num: job.metadata?.input_used?.video?.start_frame_num,
+            max_num_frames: job.metadata?.input_used?.video?.max_num_frames,
+          },
+        }),
       },
     });
 
