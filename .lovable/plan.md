@@ -1,62 +1,102 @@
 
 
-# Show Pose Description in Generation Details
+# Clarify Scoring Labels, Add Tooltips, and Auto-Score on First Rating
 
-## Context
+## Problem
 
-The `pose_description` is already being generated and stored in `prompt_scores.vision_analysis` (confirmed working with clean spatial-only output). The Generation Details slider already displays the full `description` (line 820-823 in PromptDetailsSlider.tsx). We just need to add the pose description below it.
-
-## Also Fix: "default" Label for Vision Model
-
-Currently `score-generation` logs `vision_model_used: "default"` because it doesn't know the resolved model name. We can improve this by having `describe-image` return the resolved model name in its response, so `score-generation` can store it accurately.
+1. The three rating dimensions ("Action Match", "Appearance", "Quality") lack clear descriptions -- users don't know exactly what to evaluate
+2. No tooltips exist to explain what each dimension means
+3. Clicking stars in the lightbox only saves the user's rating to the database -- it does NOT trigger the vision model to score the image. Users must separately click the "Score Image" button
 
 ## Changes
 
-### 1. Add pose_description display to PromptDetailsSlider
+### 1. Update DimensionStars to Support Tooltips
 
-**File**: `src/components/lightbox/PromptDetailsSlider.tsx` (after line 823)
+**File**: `src/components/lightbox/PromptDetailsSlider.tsx`
 
-Add a second block below the existing description display:
+Add a `tooltip` prop to `DimensionStars`. Wrap the label in a Radix Tooltip so hovering shows the explanation:
 
-```tsx
-{score?.vision_analysis?.pose_description && (
-  <div className="text-xs bg-muted/50 p-2 rounded border">
-    <p className="text-[10px] font-medium text-muted-foreground mb-1">Pose/Spatial Layout</p>
-    <p className="break-words leading-relaxed">{score.vision_analysis.pose_description}</p>
-  </div>
-)}
+```
+DimensionStars props:
+  label: string
+  tooltip: string      <-- NEW
+  value, hoverValue, onRate, onHover (unchanged)
 ```
 
-This shows the spatial-only description with a "Pose/Spatial Layout" label, only when the field exists (graceful for older scores).
+The label text gets wrapped in a `<Tooltip>` from the existing `@/components/ui/tooltip` -- already in the project.
 
-### 2. Label the full description for clarity
+### 2. Update Labels and Add Tooltip Text
 
-Update the existing description block (line 820-823) to add a "Vision Description" label, so the two are visually distinct:
+| Dimension | Current Label | Updated Label | Tooltip |
+|-----------|--------------|---------------|---------|
+| Action Match | "Action Match" | "Action Match" (keep) | "Does the action, pose, or activity in the image match what was requested in the prompt?" |
+| Appearance | "Appearance" | "Outfit/Look" | "Do the character's clothes, accessories, and styling match what was described in the prompt? (Not face likeness)" |
+| Quality | "Quality" | "Image Quality" | "Is the image technically well-made? Consider sharpness, anatomy, lighting, artifacts, and overall aesthetic quality." |
+
+### 3. Auto-Trigger Vision Scoring on First User Star Rating
+
+**File**: `src/components/lightbox/PromptDetailsSlider.tsx`
+
+Modify `handleDimensionRate` so that after saving the user's rating, if the image has NOT been vision-scored yet (`!score?.vision_analysis`), it automatically triggers scoring -- the same logic as the "Score Image" button (`handleTriggerScoring`).
+
+Flow:
+1. User clicks a star on any dimension
+2. User rating is saved to DB (existing behavior, unchanged)
+3. If `score?.vision_analysis` is null/undefined (never been scored), auto-call `handleTriggerScoring()`
+4. If already scored, do nothing extra (user is just updating their rating)
+
+This means clicking stars on an unscored image will both save the user's rating AND kick off vision analysis in one action. The "Score/Re-score" button remains for manual re-scoring of already-scored images.
+
+### 4. Update Vision Analysis Labels to Match
+
+The Vision Analysis grid (lines 798-815) also uses short labels ("Action", "Appear", "Quality"). Update these to match the user-facing names for consistency:
+
+| Current | Updated |
+|---------|---------|
+| "Action" | "Action" (keep) |
+| "Appear" | "Outfit" |
+| "Quality" | "Quality" (keep) |
+
+## Technical Details
+
+### DimensionStars with Tooltip (updated component)
+
+The component will import `Tooltip, TooltipTrigger, TooltipContent, TooltipProvider` from `@/components/ui/tooltip` and wrap the label `<span>` in:
 
 ```tsx
-{score?.vision_analysis?.description && (
-  <div className="text-xs bg-muted/50 p-2 rounded border">
-    <p className="text-[10px] font-medium text-muted-foreground mb-1">Vision Description</p>
-    <p className="break-words leading-relaxed">{score.vision_analysis.description}</p>
-  </div>
-)}
+<TooltipProvider delayDuration={300}>
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span className="text-xs text-muted-foreground w-24 shrink-0 cursor-help border-b border-dotted border-muted-foreground/40">
+        {label}
+      </span>
+    </TooltipTrigger>
+    <TooltipContent side="left" className="max-w-[200px] text-xs">
+      {tooltip}
+    </TooltipContent>
+  </Tooltip>
+</TooltipProvider>
 ```
 
-### 3. Store resolved vision model name (optional improvement)
+The dotted underline on the label signals to users that a tooltip is available.
 
-**File**: `supabase/functions/describe-image/index.ts`
+### Auto-scoring trigger in handleDimensionRate
 
-Include the resolved `model_key` and `display_name` in the response data so `score-generation` can log it accurately instead of `"default"`.
+After the successful `updateIndividualRating` call, add:
 
-**File**: `supabase/functions/score-generation/index.ts`
+```tsx
+// Auto-trigger vision scoring if image hasn't been scored yet
+if (!score?.vision_analysis && !isScoring) {
+  handleTriggerScoring();
+}
+```
 
-Read the returned model name and store it in `vision_analysis.vision_model_used` instead of the current `config.visionModelId || "default"`.
+This reuses the existing `handleTriggerScoring` function (which handles signed URL fetching, the edge function call, and polling for results).
 
-## Files Summary
+## Files Modified
 
 | File | Change |
 |------|--------|
-| `src/components/lightbox/PromptDetailsSlider.tsx` | Add pose_description display block; add label to existing description block |
-| `supabase/functions/describe-image/index.ts` | Include resolved model name in response (minor) |
-| `supabase/functions/score-generation/index.ts` | Read and store actual model name from describe-image response |
+| `src/components/lightbox/PromptDetailsSlider.tsx` | Add tooltip prop to DimensionStars; update labels; add auto-score trigger on first rating; update Vision Analysis grid labels |
 
+No edge function changes. No database changes. Single file modification.
