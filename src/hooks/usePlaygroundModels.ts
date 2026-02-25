@@ -88,13 +88,14 @@
  export const useGroupedModels = () => {
    const { data: models, isLoading, error } = usePlaygroundModels();
  
-   const grouped = {
-      chat: models?.filter(m => m.modality === 'chat' && !m.tasks?.includes('enhancement')) || [],
-      image: models?.filter(m => m.tasks?.includes('t2i')) || [],
-      video: models?.filter(m => m.modality === 'video') || [],
-      i2i: models?.filter(m => m.tasks?.includes('i2i')) || [],
-      enhancement: models?.filter(m => m.modality === 'chat' && m.tasks?.includes('enhancement')) || [],
-   };
+    const grouped = {
+       roleplay: models?.filter(m => m.modality === 'chat' && m.tasks?.includes('roleplay')) || [],
+       reasoning: models?.filter(m => m.modality === 'chat' && m.tasks?.includes('reasoning')) || [],
+       image: models?.filter(m => m.tasks?.includes('t2i')) || [],
+       video: models?.filter(m => m.modality === 'video') || [],
+       i2i: models?.filter(m => m.tasks?.includes('i2i')) || [],
+       enhancement: models?.filter(m => m.modality === 'chat' && m.tasks?.includes('enhancement')) || [],
+    };
  
    return { grouped, isLoading, error };
  };

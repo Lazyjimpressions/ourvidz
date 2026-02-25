@@ -63,10 +63,10 @@ const defaultPanel = (model: string): PanelState => ({
 export const CompareView: React.FC = () => {
   const { grouped } = useGroupedModels();
   const { settings } = usePlayground();
-  const chatModels = grouped.chat.filter(m => m.model_key);
+  const chatModels = [...grouped.roleplay, ...grouped.reasoning].filter(m => m.model_key);
 
   const [panelA, setPanelA] = useState<PanelState>(() =>
-    defaultPanel(settings.chatModel || chatModels[0]?.model_key || '')
+    defaultPanel(settings.roleplayModel || chatModels[0]?.model_key || '')
   );
   const [panelB, setPanelB] = useState<PanelState>(() =>
     defaultPanel(chatModels[1]?.model_key || chatModels[0]?.model_key || '')

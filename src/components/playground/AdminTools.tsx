@@ -58,12 +58,13 @@
  
    // Get target model info for context
    const getModelInfo = (modelKey: string) => {
-     const allModels = [
-       ...grouped.chat.map(m => ({ ...m, category: 'Chat/Roleplay' })),
-       ...grouped.image.map(m => ({ ...m, category: 'Image Generation' })),
-       ...grouped.video.map(m => ({ ...m, category: 'Video Generation' })),
-       ...grouped.i2i.map(m => ({ ...m, category: 'Image-to-Image' })),
-     ];
+    const allModels = [
+      ...grouped.roleplay.map(m => ({ ...m, category: 'Roleplay' })),
+      ...grouped.reasoning.map(m => ({ ...m, category: 'Reasoning' })),
+      ...grouped.image.map(m => ({ ...m, category: 'Image Generation' })),
+      ...grouped.video.map(m => ({ ...m, category: 'Video Generation' })),
+      ...grouped.i2i.map(m => ({ ...m, category: 'Image-to-Image' })),
+    ];
      return allModels.find(m => m.model_key === modelKey);
    };
  
@@ -172,18 +173,30 @@
                                ))}
                              </>
                            )}
-                           {grouped.chat.length > 0 && (
-                             <>
-                               <SelectItem value="_chat_h" disabled className="text-[10px] font-medium text-muted-foreground py-1">
-                                 — Chat/RP Models —
-                               </SelectItem>
-                               {grouped.chat.filter(m => m.model_key).map(m => (
-                                 <SelectItem key={m.id} value={m.model_key} className="text-xs">
-                                   {m.display_name}
-                                 </SelectItem>
-                               ))}
-                             </>
-                           )}
+                          {grouped.roleplay.length > 0 && (
+                            <>
+                              <SelectItem value="_rp_h" disabled className="text-[10px] font-medium text-muted-foreground py-1">
+                                — Roleplay Models —
+                              </SelectItem>
+                              {grouped.roleplay.filter(m => m.model_key).map(m => (
+                                <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                                  {m.display_name}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
+                          {grouped.reasoning.length > 0 && (
+                            <>
+                              <SelectItem value="_reason_h" disabled className="text-[10px] font-medium text-muted-foreground py-1">
+                                — Reasoning Models —
+                              </SelectItem>
+                              {grouped.reasoning.filter(m => m.model_key).map(m => (
+                                <SelectItem key={m.id} value={m.model_key} className="text-xs">
+                                  {m.display_name}
+                                </SelectItem>
+                              ))}
+                            </>
+                          )}
                          </SelectContent>
                        </Select>
                      </div>

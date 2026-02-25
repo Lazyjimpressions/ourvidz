@@ -3,7 +3,8 @@
  const STORAGE_KEY = 'playground-settings';
  
 export interface PlaygroundSettings {
-  chatModel: string;
+  roleplayModel: string;
+  reasoningModel: string;
   imageModel: string;
   videoModel: string;
   i2iModel: string;
@@ -13,7 +14,8 @@ export interface PlaygroundSettings {
 }
 
 const DEFAULT_SETTINGS: PlaygroundSettings = {
-  chatModel: 'gryphe/mythomax-l2-13b',
+  roleplayModel: 'gryphe/mythomax-l2-13b',
+  reasoningModel: '',
   imageModel: 'fal-ai/seedream-v4',
   videoModel: 'fal-ai/wan-i2v',
   i2iModel: 'fal-ai/seedream-v4.5-edit',
@@ -23,18 +25,24 @@ const DEFAULT_SETTINGS: PlaygroundSettings = {
 };
  
  export const usePlaygroundSettings = () => {
-   const [settings, setSettingsState] = useState<PlaygroundSettings>(() => {
-     if (typeof window === 'undefined') return DEFAULT_SETTINGS;
-     try {
-       const stored = localStorage.getItem(STORAGE_KEY);
-       if (stored) {
-         return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
-       }
-     } catch (e) {
-       console.warn('Failed to load playground settings:', e);
-     }
-     return DEFAULT_SETTINGS;
-   });
+  const [settings, setSettingsState] = useState<PlaygroundSettings>(() => {
+    if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Migrate legacy chatModel → roleplayModel
+        if (parsed.chatModel && !parsed.roleplayModel) {
+          parsed.roleplayModel = parsed.chatModel;
+          delete parsed.chatModel;
+        }
+        return { ...DEFAULT_SETTINGS, ...parsed };
+      }
+    } catch (e) {
+      console.warn('Failed to load playground settings:', e);
+    }
+    return DEFAULT_SETTINGS;
+  });
  
    // Persist to localStorage on change
    useEffect(() => {
