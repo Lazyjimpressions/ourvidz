@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { AssetTile } from '@/components/shared/AssetTile';
@@ -17,6 +17,8 @@ import { useSignedUrl } from '@/hooks/useSignedUrl';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 const OUTPUT_TYPES = ['all', 'pose', 'outfit', 'style', 'position'] as const;
 type OutputTypeFilter = typeof OUTPUT_TYPES[number];
@@ -40,6 +42,7 @@ interface PositionsGridProps {
   hasReferenceImage?: boolean;
   onUpdatePresetPrompt?: (poseKey: string, newFragment: string) => Promise<void>;
   onSendToWorkspace?: (signedUrl: string) => void;
+  characterName?: string;
 }
 
 // Fixed position slot component
@@ -336,6 +339,7 @@ export function PositionsGrid({
   hasReferenceImage,
   onUpdatePresetPrompt,
   onSendToWorkspace,
+  characterName,
 }: PositionsGridProps) {
   const [typeFilter, setTypeFilter] = useState<OutputTypeFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
@@ -350,6 +354,19 @@ export function PositionsGrid({
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Query duo poses from user_library
+  const { data: duoPoses } = useQuery({
+    queryKey: ['duo-poses'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('user_library')
+        .select('id, storage_path, tags, custom_title, original_prompt, created_at')
+        .contains('tags', ['role:position', 'duo'])
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+  });
 
   // Match canon images to fixed position slots by pose_key in metadata
   const getCanonForPoseKey = (poseKey: string): CharacterCanon | null => {
@@ -446,6 +463,39 @@ export function PositionsGrid({
                 onUpdatePresetPrompt={onUpdatePresetPrompt}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Duo Poses section */}
+      {duoPoses && duoPoses.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Duo Poses</span>
+            <Badge variant="secondary" className="text-[9px] h-4 px-1">{duoPoses.length}</Badge>
+          </div>
+          <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+            {duoPoses.map((pose) => {
+              const DuoPoseTile = () => {
+                const { signedUrl } = useSignedUrl(pose.storage_path);
+                return (
+                  <AssetTile
+                    src={signedUrl}
+                    alt={pose.custom_title || 'Duo pose'}
+                    aspectRatio="3/4"
+                    onClick={() => {
+                      if (signedUrl && onSendToWorkspace) onSendToWorkspace(signedUrl);
+                    }}
+                  >
+                    <Badge variant="secondary" className="absolute bottom-1 left-1 text-[9px] px-1 h-4">
+                      Duo
+                    </Badge>
+                  </AssetTile>
+                );
+              };
+              return <DuoPoseTile key={pose.id} />;
+            })}
           </div>
         </div>
       )}

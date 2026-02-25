@@ -1352,6 +1352,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               // Replace the user prompt with the full Quick Scene system prompt
               finalPrompt = buildQuickScenePrompt(finalPrompt, hasScene, hasOutfit, 'Both', poseDescription);
               console.log('🎯 Quick Scene: Built deterministic system prompt (hasScene:', hasScene, 'hasOutfit:', hasOutfit, ')');
+              
+              // Count filled character slots (slot 0 = effRefUrl, slot 1 = first additional)
+              const numCharSlots = (effRefUrl ? 1 : 0) + (additionalImageUrls.length >= 1 && additionalImageUrls[0] ? 1 : 0);
+              if (numCharSlots >= 2) {
+                requestPayload.metadata.num_characters = 2;
+                console.log('👥 Quick Scene: Detected duo (num_characters=2)');
+              }
             } else {
               // Fallback: legacy Figure notation for non-Quick-Scene multi-ref
               const filledSlots: { figureIndex: number; role: SlotRole }[] = allRefUrls.map((_, i) => ({
