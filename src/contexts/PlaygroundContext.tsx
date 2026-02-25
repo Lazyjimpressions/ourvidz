@@ -150,7 +150,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
           model_variant: settings.roleplayModel,
           memory_tier: 'conversation',
           content_tier: settings.contentMode,
-          prompt_template_id: settings.promptTemplateId || undefined,
+          prompt_template_id: (hasCharacter ? settings.roleplayTemplateId : settings.reasoningTemplateId) || undefined,
           system_prompt_override: options?.systemPromptOverride || undefined,
         },
       });
