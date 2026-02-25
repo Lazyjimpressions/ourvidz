@@ -523,10 +523,37 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   // No-op: video always has 5 fixed slots
   const handleAddSlot = () => {};
 
-  // File select for a specific slot index
+  // Open library picker for a slot (image mode)
+  const handleLibraryForSlot = (index: number) => {
+    if (currentMode === 'image') {
+      setPickerSlotIndex(index);
+      setPickerOpen(true);
+    }
+  };
+
+  // Open native file picker for a slot (no capture)
+  const handleFileUploadForSlot = (index: number) => {
+    pendingSlotIndexRef.current = index;
+    if (index === 1) pendingFileTypeRef.current = 'ref2';
+    else if (index === 0) pendingFileTypeRef.current = 'single';
+    else pendingFileTypeRef.current = 'single';
+    fileInputRef.current?.click();
+  };
+
+  // Open native file picker with camera capture for a slot
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const handlePhotoForSlot = (index: number) => {
+    pendingSlotIndexRef.current = index;
+    if (index === 1) pendingFileTypeRef.current = 'ref2';
+    else if (index === 0) pendingFileTypeRef.current = 'single';
+    else pendingFileTypeRef.current = 'single';
+    cameraInputRef.current?.click();
+  };
+
+  // Legacy: file select for video mode (direct file picker)
   const handleFileSelectForSlot = (index: number) => {
     if (currentMode === 'image') {
-      // Open library picker dialog with category pre-selected
+      // In image mode, default to library picker (legacy path)
       setPickerSlotIndex(index);
       setPickerOpen(true);
     } else {
@@ -633,6 +660,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         className="hidden"
         aria-hidden="true"
       />
+      {/* Hidden camera input (with capture) */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handleFileInputChange}
+        className="hidden"
+        aria-hidden="true"
+      />
       
       {/* Quick Bar */}
       <MobileQuickBar
@@ -649,9 +686,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onAddSlot={handleAddSlot}
         selectedModelTasks={selectedModelTasks}
         fixedSlots={fixedSlots}
-        onFixedSlotAdd={(index) => handleFileSelectForSlot(index)}
+        onFixedSlotAdd={(index) => handlePhotoForSlot(index)}
         onFixedSlotRemove={handleRemoveSlot}
         onFixedSlotDrop={handleDropSlot}
+        onFixedSlotAddFromLibrary={(index) => handleLibraryForSlot(index)}
+        onFixedSlotAddFromFile={(index) => handleFileUploadForSlot(index)}
         onFixedSlotDropUrl={(index, url) => {
           if (index === 0) {
             onReferenceImageUrlSet?.(url, 'single');

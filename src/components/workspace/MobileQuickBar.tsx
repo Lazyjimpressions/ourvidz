@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Camera, Video, Settings, X, Plus, Film, ChevronDown, Check, Loader2 } from 'lucide-react';
+import { Camera, Video, Settings, X, Plus, Film, ChevronDown, Check, Loader2, ImageIcon, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { cn } from '@/lib/utils';
 import {
@@ -52,6 +53,10 @@ export interface MobileQuickBarProps {
   onFixedSlotDrop?: (index: number, file: File) => void;
   /** Handle URL-based drops (from grid tile drag) — no upload needed */
   onFixedSlotDropUrl?: (index: number, url: string) => void;
+  /** Open library picker for a given slot */
+  onFixedSlotAddFromLibrary?: (index: number) => void;
+  /** Open native file picker (no capture) for a given slot */
+  onFixedSlotAddFromFile?: (index: number) => void;
   /** Slot role assignments (parallel to fixedSlots) */
   slotRoles?: SlotRole[];
   onSlotRoleChange?: (index: number, role: SlotRole) => void;
@@ -92,7 +97,9 @@ const RefSlot: React.FC<{
   showLabel?: boolean;
   role?: SlotRole;
   onRoleChange?: (role: SlotRole) => void;
-}> = ({ url, isVideo, onAdd, onRemove, onDrop, onDropUrl, label, disabled, showLabel = false, role, onRoleChange }) => {
+  onAddFromLibrary?: () => void;
+  onAddFromFile?: () => void;
+}> = ({ url, isVideo, onAdd, onRemove, onDrop, onDropUrl, label, disabled, showLabel = false, role, onRoleChange, onAddFromLibrary, onAddFromFile }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [justDropped, setJustDropped] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -235,6 +242,58 @@ const RefSlot: React.FC<{
     );
   }
 
+  // If source callbacks provided, show dropdown; otherwise plain button
+  if (onAddFromLibrary) {
+    return (
+      <div className="flex flex-col items-center shrink-0">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={disabled}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDropEvent}
+              className={cn(
+                `${slotSize} rounded border border-dashed flex items-center justify-center hover:border-primary/60 hover:bg-muted/30 transition-all duration-200 disabled:opacity-30`,
+                isDragOver
+                  ? "border-primary bg-primary/20 scale-110 ring-2 ring-primary/50"
+                  : justDropped
+                    ? "border-green-500 ring-2 ring-green-500/50 scale-105"
+                    : "border-muted-foreground/40"
+              )}
+            >
+              <Plus className="h-3 w-3 text-muted-foreground" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            sideOffset={4}
+            className="min-w-[130px] z-[100] bg-popover border border-border shadow-lg"
+          >
+            <DropdownMenuItem onClick={onAdd} className="gap-2 text-xs">
+              <Camera className="h-3.5 w-3.5" />
+              Photo
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onAddFromLibrary} className="gap-2 text-xs">
+              <ImageIcon className="h-3.5 w-3.5" />
+              Library
+            </DropdownMenuItem>
+            {onAddFromFile && (
+              <DropdownMenuItem onClick={onAddFromFile} className="gap-2 text-xs">
+                <Upload className="h-3.5 w-3.5" />
+                File
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {showLabel && (
+          <span className="text-[8px] text-muted-foreground mt-0.5 leading-none">{label}</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center shrink-0">
       <button
@@ -364,6 +423,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onFixedSlotRemove,
   onFixedSlotDrop,
   onFixedSlotDropUrl,
+  onFixedSlotAddFromLibrary,
+  onFixedSlotAddFromFile,
   slotRoles,
   onSlotRoleChange,
   contentType = 'nsfw',
@@ -416,6 +477,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
               onRemove={() => onFixedSlotRemove!(i)}
               onDrop={(file) => onFixedSlotDrop!(i, file)}
               onDropUrl={onFixedSlotDropUrl ? (url) => onFixedSlotDropUrl(i, url) : undefined}
+              onAddFromLibrary={onFixedSlotAddFromLibrary ? () => onFixedSlotAddFromLibrary(i) : undefined}
+              onAddFromFile={onFixedSlotAddFromFile ? () => onFixedSlotAddFromFile(i) : undefined}
               label={slotDef.label}
               disabled={disabled}
               showLabel
