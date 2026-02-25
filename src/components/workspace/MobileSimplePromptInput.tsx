@@ -6,6 +6,7 @@ import { Sparkles, Loader2, X, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
 import { supabase } from '@/integrations/supabase/client';
+import { probeVideoDurationFromUrl } from '@/lib/utils/probeVideoDuration';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useVideoModels } from '@/hooks/useApiModels';
 import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
@@ -287,8 +288,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       }
 
       // Probe video duration for tail-conditioning
+      let fileProbedDuration = 0;
       try {
-        const probedDuration = await new Promise<number>((resolve) => {
+        fileProbedDuration = await new Promise<number>((resolve) => {
           const vid = document.createElement('video');
           vid.preload = 'metadata';
           vid.onloadedmetadata = () => {
@@ -299,9 +301,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           vid.onerror = () => resolve(0);
           vid.src = URL.createObjectURL(file);
         });
-        if (probedDuration > 0) {
-          onSourceVideoDuration?.(probedDuration);
-          console.log(`🎬 Probed video duration: ${probedDuration.toFixed(2)}s`);
+        if (fileProbedDuration > 0) {
+          onSourceVideoDuration?.(fileProbedDuration);
+          console.log(`🎬 Probed video duration: ${fileProbedDuration.toFixed(2)}s`);
         }
       } catch (e) {
         console.warn('⚠️ Could not probe video duration:', e);
@@ -324,6 +326,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           onReferenceImageUrlSet(signedUrl, type as 'single' | 'start' | 'end');
         }
         toast.success('Video source uploaded');
+
+        // Fallback: if file-based probe returned 0, re-probe from the uploaded signed URL
+        if (!fileProbedDuration || fileProbedDuration === 0) {
+          const urlDuration = await probeVideoDurationFromUrl(signedUrl);
+          if (urlDuration > 0) {
+            onSourceVideoDuration?.(urlDuration);
+            console.log(`🎬 Fallback URL probe got duration: ${urlDuration.toFixed(2)}s`);
+          }
+        }
       } catch (uploadError) {
         const errorMessage = uploadError instanceof Error ? uploadError.message : 'Unknown error';
         toast.error(`Upload failed: ${errorMessage}`);
