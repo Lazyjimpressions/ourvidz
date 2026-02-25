@@ -1,102 +1,83 @@
 
 
-# Clarify Scoring Labels, Add Tooltips, and Auto-Score on First Rating
+# Add Category-Filtered Library Picker to Workspace Reference Slots
 
-## Problem
+## Overview
 
-1. The three rating dimensions ("Action Match", "Appearance", "Quality") lack clear descriptions -- users don't know exactly what to evaluate
-2. No tooltips exist to explain what each dimension means
-3. Clicking stars in the lightbox only saves the user's rating to the database -- it does NOT trigger the vision model to score the image. Users must separately click the "Score Image" button
+When clicking an empty reference slot in the workspace, instead of just opening a native file picker, open the `ImagePickerDialog` with **category filter tabs** (All, Characters, Positions, Scenes, Outfits). Each tab filters `user_library` assets by their `tags` column (e.g., `role:character`, `role:position`). This makes it easy to find the right type of reference for each Quick Scene slot.
+
+## Current State
+
+- Clicking a reference slot calls `handleFileSelectForSlot(index)` which does `fileInputRef.current?.click()` -- a native file upload dialog
+- `ImagePickerDialog` exists with Workspace/Library source toggle but **no category filtering**
+- Library assets have `tags` like `['character', 'portrait']`, `['role:position']`, etc.
+- The Quick Scene slots already have role context (Char A, Char B, Pose, Scene, Outfit)
 
 ## Changes
 
-### 1. Update DimensionStars to Support Tooltips
+### 1. Add `filterTag` prop to `ImagePickerDialog`
 
-**File**: `src/components/lightbox/PromptDetailsSlider.tsx`
+**File**: `src/components/storyboard/ImagePickerDialog.tsx`
 
-Add a `tooltip` prop to `DimensionStars`. Wrap the label in a Radix Tooltip so hovering shows the explanation:
+Add an optional `filterTag?: string` prop that, when set, pre-filters library assets by that tag. Also add category filter tabs within the Library source view:
 
 ```
-DimensionStars props:
-  label: string
-  tooltip: string      <-- NEW
-  value, hoverValue, onRate, onHover (unchanged)
+Tabs: All | Characters | Positions | Scenes | Outfits
 ```
 
-The label text gets wrapped in a `<Tooltip>` from the existing `@/components/ui/tooltip` -- already in the project.
+Each tab filters the library query by checking `tags` array contains the corresponding role tag. The `filterTag` prop sets the initially active tab (e.g., clicking the "Pose" slot pre-selects the "Positions" tab).
 
-### 2. Update Labels and Add Tooltip Text
+Implementation:
+- Add state: `activeCategory: 'all' | 'character' | 'position' | 'scene' | 'clothing'`
+- Initialize from `filterTag` prop
+- Filter `filteredAssets` additionally by checking if `asset.tags?.includes(activeCategory)` or `asset.tags?.includes('role:' + activeCategory)`
+- Render small pill tabs above the search bar (only when `activeSource === 'library'`)
 
-| Dimension | Current Label | Updated Label | Tooltip |
-|-----------|--------------|---------------|---------|
-| Action Match | "Action Match" | "Action Match" (keep) | "Does the action, pose, or activity in the image match what was requested in the prompt?" |
-| Appearance | "Appearance" | "Outfit/Look" | "Do the character's clothes, accessories, and styling match what was described in the prompt? (Not face likeness)" |
-| Quality | "Quality" | "Image Quality" | "Is the image technically well-made? Consider sharpness, anatomy, lighting, artifacts, and overall aesthetic quality." |
+### 2. Open `ImagePickerDialog` from reference slot clicks
 
-### 3. Auto-Trigger Vision Scoring on First User Star Rating
+**File**: `src/components/workspace/MobileSimplePromptInput.tsx`
 
-**File**: `src/components/lightbox/PromptDetailsSlider.tsx`
+Change `handleFileSelectForSlot` to offer both options:
+- Open the `ImagePickerDialog` (with the slot's role as `filterTag`)
+- Keep the native file upload as a secondary option (upload button within the dialog or a separate action)
 
-Modify `handleDimensionRate` so that after saving the user's rating, if the image has NOT been vision-scored yet (`!score?.vision_analysis`), it automatically triggers scoring -- the same logic as the "Score Image" button (`handleTriggerScoring`).
-
-Flow:
-1. User clicks a star on any dimension
-2. User rating is saved to DB (existing behavior, unchanged)
-3. If `score?.vision_analysis` is null/undefined (never been scored), auto-call `handleTriggerScoring()`
-4. If already scored, do nothing extra (user is just updating their rating)
-
-This means clicking stars on an unscored image will both save the user's rating AND kick off vision analysis in one action. The "Score/Re-score" button remains for manual re-scoring of already-scored images.
-
-### 4. Update Vision Analysis Labels to Match
-
-The Vision Analysis grid (lines 798-815) also uses short labels ("Action", "Appear", "Quality"). Update these to match the user-facing names for consistency:
-
-| Current | Updated |
-|---------|---------|
-| "Action" | "Action" (keep) |
-| "Appear" | "Outfit" |
-| "Quality" | "Quality" (keep) |
-
-## Technical Details
-
-### DimensionStars with Tooltip (updated component)
-
-The component will import `Tooltip, TooltipTrigger, TooltipContent, TooltipProvider` from `@/components/ui/tooltip` and wrap the label `<span>` in:
-
-```tsx
-<TooltipProvider delayDuration={300}>
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <span className="text-xs text-muted-foreground w-24 shrink-0 cursor-help border-b border-dotted border-muted-foreground/40">
-        {label}
-      </span>
-    </TooltipTrigger>
-    <TooltipContent side="left" className="max-w-[200px] text-xs">
-      {tooltip}
-    </TooltipContent>
-  </Tooltip>
-</TooltipProvider>
+Add state:
+```typescript
+const [pickerOpen, setPickerOpen] = useState(false);
+const [pickerSlotIndex, setPickerSlotIndex] = useState<number>(0);
 ```
 
-The dotted underline on the label signals to users that a tooltip is available.
-
-### Auto-scoring trigger in handleDimensionRate
-
-After the successful `updateIndividualRating` call, add:
-
-```tsx
-// Auto-trigger vision scoring if image hasn't been scored yet
-if (!score?.vision_analysis && !isScoring) {
-  handleTriggerScoring();
-}
+Map Quick Scene slot index to a filter tag:
+```
+Slot 0 (Char A) -> filterTag: 'character'
+Slot 1 (Char B) -> filterTag: 'character'
+Slot 2 (Pose)   -> filterTag: 'position'
+Slot 3 (Scene)  -> filterTag: 'scene'
+Slot 4 (Outfit) -> filterTag: 'clothing'
 ```
 
-This reuses the existing `handleTriggerScoring` function (which handles signed URL fetching, the edge function call, and polling for results).
+When user selects an image from the dialog, route it through the existing slot-assignment logic (same as drag-and-drop URL handling via `onFixedSlotDropUrl`).
 
-## Files Modified
+### 3. Add a "Positions" content_category for new position assets
+
+Currently `user_library` has `content_category` values: `character` (117), `general` (42), `scene` (1). There are no `position`-tagged assets yet.
+
+When assets are saved from Character Studio's Positions tab, they already get `tags: ['role:position']`. The filter will work based on `tags` -- no schema change needed. As users save position references (single or duo), they'll appear under the Positions tab.
+
+For **duo poses**: these are just position-tagged images that happen to show two people. No special data model needed. When saved to library with `tags: ['role:position', 'duo']`, they show up in the Positions filter tab. If a character is identifiable in the duo image (tagged with the character name), it can also be shown on that character's Positions page by querying `character_canon` or `user_library` by character name tag.
+
+## File Summary
 
 | File | Change |
 |------|--------|
-| `src/components/lightbox/PromptDetailsSlider.tsx` | Add tooltip prop to DimensionStars; update labels; add auto-score trigger on first rating; update Vision Analysis grid labels |
+| `src/components/storyboard/ImagePickerDialog.tsx` | Add `filterTag` prop; add category pill tabs (All, Characters, Positions, Scenes, Outfits) that filter by `tags`; render tabs only when source is Library |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Change `handleFileSelectForSlot` to open `ImagePickerDialog` with role-based `filterTag`; add picker state; render `ImagePickerDialog` instance; map slot index to filter tag; handle selection by routing through existing URL assignment logic |
+| `src/components/workspace/MobileQuickBar.tsx` | No changes needed -- slot click handlers already call through to parent |
 
-No edge function changes. No database changes. Single file modification.
+## Technical Notes
+
+- The native file input remains available as a fallback (the dialog can include an "Upload from device" button)
+- `ImagePickerDialog` already handles URL signing, search, and asset selection -- we're just adding a tag filter layer
+- The `tags` column in `user_library` has a GIN index, so filtering by tag is efficient
+- Duo poses are simply position-tagged images with a `duo` tag -- no new tables or columns
+
