@@ -1259,7 +1259,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         
         // Validate reference image URL ONLY for I2I requests (not T2I)
         // Check if this is an I2I-capable model that requires a reference image
-        const hasReferenceImage = !!(referenceImage || referenceImageUrl || effRefUrl || startRefUrl);
+        const hasReferenceImage = !!(referenceImage || referenceImageUrl || effRefUrl || startRefUrl || (additionalImageUrls && additionalImageUrls.some(u => u && u.trim() !== '')));
         const isI2IRequest = hasReferenceImage && !isFalVideo;
         const isI2VRequest = hasReferenceImage && isFalVideo;
         
@@ -1289,9 +1289,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         }
         
         // Validate reference image for I2I requests
-        // IMPORTANT: effRefUrl is computed AFTER upload, so if we have referenceImage file, 
-        // it should be uploaded. But if upload fails, we need to check the file too.
-        if (isI2IRequest && !effRefUrl) {
+        // Allow multi-ref: if effRefUrl is missing but additionalImageUrls has images, still valid
+        const hasAdditionalRefs = additionalImageUrls && additionalImageUrls.some(u => u && typeof u === 'string' && u.trim() !== '');
+        if (isI2IRequest && !effRefUrl && !hasAdditionalRefs) {
           // If we have a file but no URL, the upload might have failed
           if (referenceImage) {
             console.error('❌ I2I request: Reference image file exists but upload failed or URL not available');
