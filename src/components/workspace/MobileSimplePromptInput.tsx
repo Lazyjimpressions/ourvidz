@@ -540,14 +540,13 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     fileInputRef.current?.click();
   };
 
-  // Open native file picker with camera capture for a slot
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  // Open native photo library picker for a slot (no camera capture)
   const handlePhotoForSlot = (index: number) => {
     pendingSlotIndexRef.current = index;
     if (index === 1) pendingFileTypeRef.current = 'ref2';
     else if (index === 0) pendingFileTypeRef.current = 'single';
     else pendingFileTypeRef.current = 'single';
-    cameraInputRef.current?.click();
+    fileInputRef.current?.click();
   };
 
   // Legacy: file select for video mode (direct file picker)
@@ -656,16 +655,6 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         ref={fileInputRef}
         type="file"
         accept="image/*,image/heic,image/heif,video/mp4,video/webm,video/quicktime"
-        onChange={handleFileInputChange}
-        className="hidden"
-        aria-hidden="true"
-      />
-      {/* Hidden camera input (with capture) */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
         onChange={handleFileInputChange}
         className="hidden"
         aria-hidden="true"

@@ -272,8 +272,8 @@ const RefSlot: React.FC<{
             className="min-w-[130px] z-[100] bg-popover border border-border shadow-lg"
           >
             <DropdownMenuItem onClick={onAdd} className="gap-2 text-xs">
-              <Camera className="h-3.5 w-3.5" />
-              Photo
+              <ImageIcon className="h-3.5 w-3.5" />
+              Photo Library
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onAddFromLibrary} className="gap-2 text-xs">
               <ImageIcon className="h-3.5 w-3.5" />
