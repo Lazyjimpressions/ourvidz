@@ -1,59 +1,61 @@
 
-# Add Source Selection Menu to Workspace Reference Slots
 
-## Overview
-When clicking an empty reference slot in image mode, instead of jumping straight to the Library picker, show a small dropdown menu with three options:
-1. **Photo** -- opens the device camera/file picker (native file input)
-2. **Library** -- opens the existing ImagePickerDialog
-3. **File** -- opens native file picker for image files
+# Fix: fal.ai Can't Access workspace-temp Signed URLs
 
-## Changes
+## Root Cause
 
-### 1. Add a DropdownMenu to the empty RefSlot click (MobileQuickBar.tsx)
-**File**: `src/components/workspace/MobileQuickBar.tsx`
+The `fal-image` edge function's re-signing logic correctly detects anon-signed Supabase URLs and tries to re-sign them with the service role. However, **re-signing fails with "Object not found"** for `workspace-temp` files. This means fal.ai receives the original anon-signed URL, which it cannot download externally.
 
-- Import `DropdownMenu`, `DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuTrigger` from the existing UI components
-- Import `Camera`, `Library`, `Upload` icons from lucide-react
-- Modify the `RefSlot` component to accept two new optional callbacks:
-  - `onAddFromLibrary?: () => void` -- opens the library picker
-  - `onAddFromFile?: () => void` -- opens native file input
-- When `onAddFromLibrary` is provided (image mode), the empty slot's `+` button becomes a `DropdownMenuTrigger` instead of a plain button
-- The dropdown shows three items:
-  - **Photo** (Camera icon) -- calls `onAdd()` which opens native file input with `capture` attribute
-  - **Library** (Library icon) -- calls `onAddFromLibrary()`
-  - **File** (Upload icon) -- calls `onAddFromFile()` which opens native file input without capture
+This likely started because:
+- More generation flows now use `workspace-temp` URLs (e.g., using generated images as references), whereas before most refs came from `reference_images` or `user-library`
+- The `workspace-temp` bucket may have restrictive storage policies
 
-### 2. Pass source-specific callbacks from MobileSimplePromptInput
-**File**: `src/components/workspace/MobileSimplePromptInput.tsx`
+## Fix Strategy
 
-- Add a new handler `handleFileUploadForSlot(index)` that opens the native file picker (existing `fileInputRef.current?.click()` path)
-- Add a new handler `handlePhotoForSlot(index)` that opens file input with camera capture
-- Modify `handleFileSelectForSlot` to become `handleLibraryForSlot` (opens library picker)
-- Pass `onFixedSlotAddFromLibrary` and `onFixedSlotAddFromFile` through to `MobileQuickBar`
-- Add a second hidden file input with `capture="environment"` for the Photo option
+Instead of re-signing (which fails), **download the file server-side and upload it to fal.ai's CDN**, or more practically: **generate a public URL** instead.
 
-### 3. Wire through MobileQuickBar props
-**File**: `src/components/workspace/MobileQuickBar.tsx`
+**Simpler approach**: When re-signing fails, try creating a **public URL** or use Supabase's `getPublicUrl` as a fallback. But since workspace-temp is private, the best fix is:
 
-- Add `onFixedSlotAddFromLibrary` and `onFixedSlotAddFromFile` to `MobileQuickBarProps`
-- Pass these to `RefSlot` when rendering Quick Scene fixed slots
+### Option: Send raw storage path instead of pre-signed URL from frontend
 
-## Technical Details
+**File: `src/hooks/useLibraryFirstWorkspace.ts`**
+
+When building `image_urls` / `image_url` for the generation request, send the **raw storage path** (e.g., `workspace-temp/userId/file.png`) instead of the pre-signed URL. The edge function already handles raw paths correctly — it signs them with the service role key.
+
+### Changes
+
+1. **`src/hooks/useLibraryFirstWorkspace.ts`** — When building `allRefUrls` and `inputObj.image_url(s)`, strip signed URLs back to raw storage paths before sending to the edge function
+   - Detect Supabase signed URLs (contain `/object/sign/`)
+   - Extract `bucket/path` from the URL
+   - Send that raw path instead
+
+2. **`supabase/functions/fal-image/index.ts`** — Update `signIfStoragePath` to handle `workspace-temp/...` paths correctly (it already does via the `knownBuckets` logic on line 124, but verify the default bucket fallback)
+
+### Implementation Detail
+
+Add a utility function `stripToStoragePath(url)` in `useLibraryFirstWorkspace.ts`:
+
+```text
+Input:  https://xxx.supabase.co/storage/v1/object/sign/workspace-temp/userId/file.png?token=xxx
+Output: workspace-temp/userId/file.png
+
+Input:  https://xxx.supabase.co/storage/v1/object/sign/user-library/userId/file.png?token=xxx  
+Output: user-library/userId/file.png
+
+Input:  https://example.com/external-image.png (non-Supabase)
+Output: https://example.com/external-image.png (unchanged)
+```
+
+This ensures the edge function always receives either:
+- A raw storage path (which it signs server-side with service role -- works)
+- An external URL (passed through -- works)
+
+Never an anon-signed URL (which fal.ai can't download).
+
+### Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/workspace/MobileQuickBar.tsx` | Add dropdown to empty RefSlot; new props for library/file callbacks |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Split slot-add into 3 source handlers; add camera file input; pass new props |
+| `src/hooks/useLibraryFirstWorkspace.ts` | Add `stripToStoragePath()` helper; apply it to all URLs in `allRefUrls` before adding to `inputObj` |
+| `supabase/functions/fal-image/index.ts` | No changes needed -- existing `signIfStoragePath` already handles raw `workspace-temp/...` paths |
 
-The DropdownMenu will reuse the existing Radix dropdown already used throughout the app. No new dependencies needed.
-
-### Dropdown appearance
-```text
-+------------------+
-| Camera icon  Photo   |
-| Library icon Library |
-| Upload icon  File    |
-+------------------+
-```
-
-The dropdown triggers from the same `+` button in each empty slot, keeping the visual layout unchanged.
