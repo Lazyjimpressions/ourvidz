@@ -1336,6 +1336,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             }
           }
 
+          // Mutable model reference — Quick Scene may auto-switch if selected model can't handle ref count
+          let effectiveModel = { ...selectedModel };
+          
           if (allRefUrls.length > 1) {
             // Multi-ref: send as image_urls array (for Seedream, Flux-2 etc.)
             inputObj.image_urls = allRefUrls;
@@ -1346,12 +1349,60 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // (Char A, Char B, Pose, optional Scene, optional Outfit)
             const isQuickScene = allRefUrls.length >= 3 && allRefUrls.length <= 5;
             
-            if (isQuickScene) {
+           if (isQuickScene) {
               const hasScene = allRefUrls.length >= 4;
               const hasOutfit = allRefUrls.length >= 5;
               // Replace the user prompt with the full Quick Scene system prompt
               finalPrompt = buildQuickScenePrompt(finalPrompt, hasScene, hasOutfit, 'Both', poseDescription);
               console.log('🎯 Quick Scene: Built deterministic system prompt (hasScene:', hasScene, 'hasOutfit:', hasOutfit, ')');
+              
+              // Validate selected model supports enough image refs
+              // Fetch max_images from the selected model's capabilities
+              try {
+                const { data: selModelCaps } = await supabase
+                  .from('api_models')
+                  .select('capabilities')
+                  .eq('id', selectedModel.id)
+                  .single();
+                const maxImages = (selModelCaps?.capabilities as any)?.max_images;
+                if (maxImages && allRefUrls.length > maxImages) {
+                  console.warn(`⚠️ Selected model supports max ${maxImages} images but ${allRefUrls.length} provided. Auto-switching to Seedream v4.5 Edit.`);
+                  // Find a model that supports enough refs
+                  const { data: fallbackModel } = await supabase
+                    .from('api_models')
+                    .select('id, display_name, model_key')
+                    .eq('is_active', true)
+                    .gte('capabilities->>max_images', String(allRefUrls.length))
+                    .order('priority', { ascending: false })
+                    .limit(1)
+                    .single();
+                  if (fallbackModel) {
+                    console.log(`✅ Auto-switched to ${fallbackModel.display_name} (${fallbackModel.model_key}) for ${allRefUrls.length}-image Quick Scene`);
+                    effectiveModel = { ...effectiveModel, id: fallbackModel.id, display_name: fallbackModel.display_name, model_key: fallbackModel.model_key };
+                  }
+                } else if (!maxImages) {
+                  // Model has no max_images defined — check if it's NOT a known multi-ref model
+                  // Default fal.ai limit is 4 for most edit models
+                  const DEFAULT_FAL_MAX = 4;
+                  if (allRefUrls.length > DEFAULT_FAL_MAX) {
+                    console.warn(`⚠️ Selected model has no max_images cap (assumed ${DEFAULT_FAL_MAX}) but ${allRefUrls.length} refs provided. Auto-switching.`);
+                    const { data: fallbackModel } = await supabase
+                      .from('api_models')
+                      .select('id, display_name, model_key')
+                      .eq('is_active', true)
+                      .gte('capabilities->>max_images', String(allRefUrls.length))
+                      .order('priority', { ascending: false })
+                      .limit(1)
+                      .single();
+                    if (fallbackModel) {
+                      console.log(`✅ Auto-switched to ${fallbackModel.display_name} (${fallbackModel.model_key})`);
+                      effectiveModel = { ...effectiveModel, id: fallbackModel.id, display_name: fallbackModel.display_name, model_key: fallbackModel.model_key };
+                    }
+                  }
+                }
+              } catch (err) {
+                console.warn('⚠️ Could not validate model max_images capability:', err);
+              }
                
                // num_characters will be set after requestPayload is built (see below)
              } else {
@@ -1445,7 +1496,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         
         requestPayload = {
           prompt: finalPrompt,
-          apiModelId: selectedModel.id,
+          apiModelId: effectiveModel.id,
           job_type: isFalVideo ? 'fal_video' : 'fal_image',
           modality: isFalVideo ? 'video' : 'image',
           quality: quality,
