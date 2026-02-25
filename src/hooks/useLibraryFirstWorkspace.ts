@@ -12,6 +12,7 @@ import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 import { useVideoModelSettings } from './useVideoModelSettings';
 import { SlotRole, buildFigurePrefix, buildQuickScenePrompt, QUICK_SCENE_SLOTS } from '@/types/slotRoles';
+import { stripToStoragePath } from '@/lib/utils/stripToStoragePath';
 
 // STAGING-FIRST: Simplified workspace state using staging assets
 export interface LibraryFirstWorkspaceState {
@@ -1326,12 +1327,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           // Build image_urls array from all ref slots (multi-ref support)
           const allRefUrls: string[] = [];
           if (effRefUrl && typeof effRefUrl === 'string' && effRefUrl.trim() !== '') {
-            allRefUrls.push(effRefUrl);
+            allRefUrls.push(stripToStoragePath(effRefUrl));
           }
           if (additionalImageUrls && additionalImageUrls.length > 0) {
             for (const url of additionalImageUrls) {
               if (url && typeof url === 'string' && url.trim() !== '') {
-                allRefUrls.push(url);
+                allRefUrls.push(stripToStoragePath(url));
               }
             }
           }
@@ -1440,7 +1441,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           
           if (isExtendModel && refImageUrl) {
             // fal.ai LTX extend expects `video` as a plain URL string
-            inputObj.video = refImageUrl;
+            inputObj.video = stripToStoragePath(refImageUrl);
             // reverse_video is a top-level param in the schema
             if (extendReverseVideo) inputObj.reverse_video = true;
           } else if (isMultiModel && refImageUrl) {
@@ -1448,16 +1449,16 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             const { autoSpaceFrames } = await import('@/types/videoSlots');
             // Gather all ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
             const filledEntries: { url: string; slotIndex: number }[] = [];
-            if (refImageUrl) filledEntries.push({ url: refImageUrl, slotIndex: 0 });
+            if (refImageUrl) filledEntries.push({ url: stripToStoragePath(refImageUrl), slotIndex: 0 });
             // additionalImageUrls holds mid-slot refs for multi video mode (slots 1-3)
             if (additionalImageUrls) {
               additionalImageUrls.forEach((url, i) => {
                 if (url && typeof url === 'string' && url.trim() !== '') {
-                  filledEntries.push({ url, slotIndex: i + 1 });
+                  filledEntries.push({ url: stripToStoragePath(url), slotIndex: i + 1 });
                 }
               });
             }
-            if (endRefUrl) filledEntries.push({ url: endRefUrl, slotIndex: 4 });
+            if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
             // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
             const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
             const actualNumFrames = (videoDuration || 5) * fps;
@@ -1472,7 +1473,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             delete inputObj.image_url;
             console.log(`🎬 MultiCondition: ${filledEntries.length} temporal images, frames: ${frames.join(', ')}, strengths: ${filledEntries.map(e => keyframeStrengths[e.slotIndex] ?? 1).join(', ')}`);
           } else if (refImageUrl) {
-            inputObj.image_url = refImageUrl; // Standard I2V
+            inputObj.image_url = stripToStoragePath(refImageUrl); // Standard I2V
           }
           inputObj.duration = videoDuration || 5; // Edge function converts to num_frames using model's frame_rate
         }
