@@ -12,6 +12,7 @@ export interface CharacterData {
   description: string;
   gender: string;
   content_rating: 'sfw' | 'nsfw';
+  role: 'user' | 'ai';
   is_public: boolean;
   traits: string;
   persona: string;
@@ -74,6 +75,7 @@ const defaultCharacterData: CharacterData = {
   description: '',
   gender: 'female',
   content_rating: 'nsfw',
+  role: 'ai',
   is_public: false,
   traits: '',
   persona: '',
@@ -152,6 +154,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
           description: data.description || '',
           gender: data.gender || 'female',
           content_rating: (data.content_rating as 'sfw' | 'nsfw') || 'nsfw',
+          role: (data.role as 'user' | 'ai') || 'ai',
           is_public: data.is_public ?? false,
           traits: data.traits || '',
           persona: data.persona || '',
@@ -266,7 +269,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
         voice_examples: character.voice_examples,
         default_presets: character.default_presets,
         user_id: user.id,
-        role: defaultRole
+        role: character.role
       };
 
       let result;

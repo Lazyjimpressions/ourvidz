@@ -234,7 +234,7 @@ export function StudioSidebar({
                 <Label className="text-[10px] text-muted-foreground">Name</Label>
                 <Input value={character.name} onChange={e => updateCharacter({ name: e.target.value })} placeholder="Character name" className="h-7" />
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-3 gap-1.5">
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">Gender</Label>
                   <Select value={character.gender} onValueChange={v => updateCharacter({ gender: v })}>
@@ -254,6 +254,16 @@ export function StudioSidebar({
                     <SelectContent className="z-[100] bg-popover">
                       <SelectItem value="sfw">SFW</SelectItem>
                       <SelectItem value="nsfw">NSFW</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground">Type</Label>
+                  <Select value={character.role || 'ai'} onValueChange={(v: 'user' | 'ai') => updateCharacter({ role: v })}>
+                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent className="z-[100] bg-popover">
+                      <SelectItem value="ai">AI</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
