@@ -9,7 +9,11 @@ export interface PlaygroundSettings {
   videoModel: string;
   i2iModel: string;
   enhancementModel: string;
-  promptTemplateId: string;
+  roleplayTemplateId: string;
+  reasoningTemplateId: string;
+  enhancementTemplateId: string;
+  imageTemplateId: string;
+  videoTemplateId: string;
   contentMode: 'sfw' | 'nsfw';
 }
 
@@ -20,7 +24,11 @@ const DEFAULT_SETTINGS: PlaygroundSettings = {
   videoModel: 'fal-ai/wan-i2v',
   i2iModel: 'fal-ai/seedream-v4.5-edit',
   enhancementModel: '',
-  promptTemplateId: '',
+  roleplayTemplateId: '',
+  reasoningTemplateId: '',
+  enhancementTemplateId: '',
+  imageTemplateId: '',
+  videoTemplateId: '',
   contentMode: 'nsfw',
 };
  
@@ -35,6 +43,11 @@ const DEFAULT_SETTINGS: PlaygroundSettings = {
         if (parsed.chatModel && !parsed.roleplayModel) {
           parsed.roleplayModel = parsed.chatModel;
           delete parsed.chatModel;
+        }
+        // Migrate legacy promptTemplateId → roleplayTemplateId
+        if (parsed.promptTemplateId && !parsed.roleplayTemplateId) {
+          parsed.roleplayTemplateId = parsed.promptTemplateId;
+          delete parsed.promptTemplateId;
         }
         return { ...DEFAULT_SETTINGS, ...parsed };
       }
