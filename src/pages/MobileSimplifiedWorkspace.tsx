@@ -321,15 +321,11 @@ const MobileSimplifiedWorkspace = () => {
     });
     
     // Validate reference image if I2I model is selected
-    // Check BOTH file and URL - file will be uploaded, URL is already signed
-    if (isI2IModel && !referenceImage && !referenceImageUrl) {
-      console.error('❌ MOBILE WORKSPACE: I2I model selected but no reference image file or URL');
-      console.error('❌ MOBILE WORKSPACE: Model details:', {
-        id: selectedModel?.id,
-        displayName: selectedModel?.display_name,
-        type: selectedModel?.type
-      });
-      toast.error('Please select a reference image for I2I generation. The image preview should appear after selection.');
+    // Check ALL ref slots - multi-ref models can have images in any combination of slots
+    const hasAnyRefImage = !!referenceImage || !!referenceImageUrl || !!referenceImage2Url || additionalRefUrls.some(u => !!u);
+    if (isI2IModel && !hasAnyRefImage) {
+      console.error('❌ MOBILE WORKSPACE: I2I model selected but no reference images in any slot');
+      toast.error('Please select at least one reference image for I2I generation.');
       return;
     }
     
