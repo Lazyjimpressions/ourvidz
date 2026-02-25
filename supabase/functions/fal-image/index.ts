@@ -476,6 +476,10 @@ async function buildModelInput(
       if (body.input.frame_rate !== undefined) modelInput.frame_rate = body.input.frame_rate;
       if (body.input.fps !== undefined) modelInput.fps = body.input.fps;
 
+      // Extend-specific params: reverse_video and constant_rate_factor
+      if (body.input.reverse_video !== undefined) modelInput.reverse_video = body.input.reverse_video;
+      if (body.input.constant_rate_factor !== undefined) modelInput.constant_rate_factor = body.input.constant_rate_factor;
+
       // Quality-based resolution
       if (body.quality === 'fast' && !body.input?.resolution) modelInput.resolution = '480p';
       else if (body.quality === 'high' && !body.input?.resolution) modelInput.resolution = modelInput.resolution || '720p';

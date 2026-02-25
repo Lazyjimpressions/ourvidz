@@ -79,8 +79,8 @@ const MobileSimplifiedWorkspace = () => {
     deleteAllWorkspace,
     setLightboxIndex: setWorkspaceLightboxIndex,
     // Video Extend settings
-    extendStrength,
-    setExtendStrength,
+    extendCrf,
+    setExtendCrf,
     extendReverseVideo,
     setExtendReverseVideo,
     // Creative Direction
@@ -724,8 +724,8 @@ const MobileSimplifiedWorkspace = () => {
           onReferenceStrengthChange={setReferenceStrength}
           onClearWorkspace={clearWorkspace}
           onDeleteAllWorkspace={deleteAllWorkspace}
-          extendStrength={extendStrength}
-          onExtendStrengthChange={setExtendStrength}
+          extendCrf={extendCrf}
+          onExtendCrfChange={setExtendCrf}
           extendReverseVideo={extendReverseVideo}
           onExtendReverseVideoChange={setExtendReverseVideo}
           batchSize={batchSize}

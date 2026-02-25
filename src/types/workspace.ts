@@ -33,7 +33,7 @@ export interface VideoReferenceImages {
 
 /** Settings for video extend (LTX Extend) workflow */
 export interface VideoExtendSettings {
-  strength: number;        // 0-1, how much the model can deviate from source
+  crf: number;             // 20-60, compression quality for input video
   reverseVideo: boolean;   // Reverse input video before extending
 }
 

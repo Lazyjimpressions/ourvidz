@@ -81,7 +81,7 @@ export interface LibraryFirstWorkspaceState {
   originalClothingColor: string;
   targetGarments: string[];
   // Video Extend settings
-  extendStrength: number;
+  extendCrf: number;
   extendReverseVideo: boolean;
   // Per-keyframe strengths for video multi mode
   keyframeStrengths: number[];
@@ -147,7 +147,7 @@ export interface LibraryFirstWorkspaceActions {
   setOriginalClothingColor: (color: string) => void;
   setTargetGarments: (garments: string[]) => void;
   // Video Extend settings
-  setExtendStrength: (strength: number) => void;
+  setExtendCrf: (crf: number) => void;
   setExtendReverseVideo: (reverse: boolean) => void;
   // Per-keyframe strengths
   setKeyframeStrengths: (strengths: number[]) => void;
@@ -422,7 +422,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [originalClothingColor, setOriginalClothingColor] = useState('black');
   const [targetGarments, setTargetGarments] = useState<string[]>([]);
   // Video Extend settings
-  const [extendStrength, setExtendStrength] = useState(1.0);
+  const [extendCrf, setExtendCrf] = useState(35);
   const [extendReverseVideo, setExtendReverseVideo] = useState(false);
   // Per-keyframe strengths for video multi mode (5 slots)
   const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1, 1, 1, 1, 1]);
@@ -1444,6 +1444,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             inputObj.video = stripToStoragePath(refImageUrl);
             // reverse_video is a top-level param in the schema
             if (extendReverseVideo) inputObj.reverse_video = true;
+            // constant_rate_factor: compress input video to match training data
+            if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
           } else if (isMultiModel && refImageUrl) {
             // MultiCondition: build images[] with temporal positions from all ref slots
             const { autoSpaceFrames } = await import('@/types/videoSlots');
@@ -2107,7 +2109,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     originalClothingColor,
     targetGarments,
     // Video Extend settings
-    extendStrength,
+    extendCrf,
     extendReverseVideo,
     // Per-keyframe strengths
     keyframeStrengths,
@@ -2192,7 +2194,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setOriginalClothingColor,
     setTargetGarments,
     // Video Extend settings
-    setExtendStrength: (s: number) => setExtendStrength(s),
+    setExtendCrf: (c: number) => setExtendCrf(c),
     setExtendReverseVideo: (r: boolean) => setExtendReverseVideo(r),
     // Per-keyframe strengths
     setKeyframeStrengths,

@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { X, Copy, Settings2, ChevronDown, Check, Plus, Lock } from 'lucide-react';
+import { X, Copy, Settings2, ChevronDown, Check, Plus, Lock, Info } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
@@ -65,10 +66,11 @@ export interface MobileSettingsSheetProps {
   // (Video reference props removed — now unified via refSlots)
   
   // Video Extend settings
-  extendStrength?: number;
-  onExtendStrengthChange?: (strength: number) => void;
+  extendCrf?: number;
+  onExtendCrfChange?: (crf: number) => void;
   extendReverseVideo?: boolean;
   onExtendReverseVideoChange?: (reverse: boolean) => void;
+  isExtendModel?: boolean;
   
   // Workspace Actions
   onClearWorkspace?: () => void;
@@ -301,10 +303,11 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onReferenceStrengthChange,
   onClearWorkspace,
   onDeleteAllWorkspace,
-  extendStrength = 1.0,
-  onExtendStrengthChange,
+  extendCrf = 35,
+  onExtendCrfChange,
   extendReverseVideo = false,
   onExtendReverseVideoChange,
+  isExtendModel = false,
   shotType = 'wide',
   onShotTypeChange,
   cameraAngle = 'eye_level',
@@ -492,14 +495,28 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
           {currentMode === 'video' && (onVideoDurationChange || onMotionIntensityChange) && (
             <div className="space-y-2 p-2 rounded-lg border bg-muted/30">
               <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-                Video Controls
+                {isExtendModel ? 'Video Extend' : 'Video Controls'}
               </label>
               
-              {/* Duration */}
+              {/* Duration / Extend by */}
               {onVideoDurationChange && videoDurationOptions.length > 0 && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-muted-foreground">Duration</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            {isExtendModel ? 'Extend by' : 'Duration'}
+                            <Info className="h-2.5 w-2.5 opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px] text-xs">
+                          {isExtendModel
+                            ? 'Amount of new footage to add to your video (up to ~5s)'
+                            : 'Total video duration'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <span className="text-[9px] text-muted-foreground font-mono">{videoDuration}s</span>
                   </div>
                   <div className="flex items-center gap-1 flex-wrap">
@@ -521,9 +538,64 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Extend-specific controls */}
+              {isExtendModel && (
+                <div className="space-y-2 pt-1 border-t border-border/50">
+                  {/* Reverse Video toggle */}
+                  <div className="flex items-center justify-between">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            Reverse Video
+                            <Info className="h-2.5 w-2.5 opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          Reverse the input video before extending — useful for generating footage that leads into your clip
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <Switch
+                      checked={extendReverseVideo}
+                      onCheckedChange={onExtendReverseVideoChange}
+                      className="scale-75"
+                    />
+                  </div>
+                  
+                  {/* CRF slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                              Compression (CRF)
+                              <Info className="h-2.5 w-2.5 opacity-50" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[240px] text-xs">
+                            Compresses input video to match model training data. Lower = higher quality but slower. Recommended: 35
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      <span className="text-[9px] text-muted-foreground font-mono">{extendCrf}</span>
+                    </div>
+                    <Slider
+                      size="xs"
+                      min={20}
+                      max={60}
+                      step={1}
+                      value={[extendCrf]}
+                      onValueChange={([v]) => onExtendCrfChange?.(v)}
+                    />
+                  </div>
+                </div>
+              )}
               
-              {/* Motion Intensity - hidden for multi model */}
-              {onMotionIntensityChange && !multiRefActive && (
+              {/* Motion Intensity - hidden for extend and multi model */}
+              {onMotionIntensityChange && !multiRefActive && !isExtendModel && (
                 <div className="space-y-0.5">
                   <div className="flex items-center justify-between text-[9px] text-muted-foreground">
                     <span>Motion Intensity</span>
