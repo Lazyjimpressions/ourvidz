@@ -12,6 +12,7 @@ import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightb
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
+import { probeVideoDurationFromUrl } from '@/lib/utils/probeVideoDuration';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
 import { useImageModels } from '@/hooks/useApiModels';
 import { useSmartModelDefaults } from '@/hooks/useSmartModelDefaults';
@@ -515,6 +516,13 @@ const MobileSimplifiedWorkspace = () => {
           applySmartDefault('extend');
           toast.success('Video set as reference for extension');
         }
+        // Probe video duration from URL for tail-conditioning
+        probeVideoDurationFromUrl(referenceUrl).then((dur) => {
+          if (dur > 0) {
+            setSourceVideoDuration(dur);
+            console.log(`🎬 Probed video duration from URL: ${dur.toFixed(2)}s`);
+          }
+        });
       } else {
         // Image → auto-overflow fixed slots: Char1 → Char2 → Char3 → Pose
         if (mode === 'image') {
