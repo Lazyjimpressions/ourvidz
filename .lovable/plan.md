@@ -1,127 +1,81 @@
 
 
-# Video Extend: Tail-Conditioning Fix with Server-Side Start Frame Computation
+# Fix: Source Video Duration Not Reaching Edge Function
 
-## Problem Summary
-The extend model conditions on the **beginning** of the source video because `start_frame_num` defaults to 0. For a 15s video, this means the model sees the first ~1.6s and generates continuation from there -- not from the end. The user expects their video to be extended from where it left off.
+## Root Cause
 
-## User Workflow (Current vs Fixed)
+The tail-conditioning logic in the edge function is working correctly, BUT it receives `source_video_duration: 0` because the duration probing only runs when a user **uploads a video file from their device**. When a video is selected **from the library/workspace** (the most common extend workflow), no `File` object exists -- only a URL -- so the HTML5 video probe never fires.
 
-**Current**: User uploads 15s video -> model reads frames 0-47 -> generates 5s continuation of the opening -> user gets a 5s clip that continues the beginning, not the end.
-
-**Fixed**: User uploads 15s video -> client measures duration (15s) -> edge function computes tail offset (15s x 30fps = 450 frames, start at frame 400) -> model reads last 48 frames -> generates 5s continuation from the ending -> user gets a 5s clip that seamlessly continues where their video left off.
-
-**Constraint**: Each extend call produces up to ~5.3s of new footage. To make a 15s video into 20s, the user would need to stitch the original + extension (future feature). For now, they get the continuation clip and can "Extend Again" iteratively.
-
-## Changes
-
-### 1. Client: Capture source video duration on upload
-**File:** `src/components/workspace/MobileSimplePromptInput.tsx` (~line 286)
-
-After uploading the video file, probe its duration using a temporary `<video>` element:
-
-```typescript
-const videoDurationMs = await new Promise<number>((resolve) => {
-  const vid = document.createElement('video');
-  vid.preload = 'metadata';
-  vid.onloadedmetadata = () => {
-    resolve(vid.duration);
-    URL.revokeObjectURL(vid.src);
-  };
-  vid.onerror = () => resolve(0);
-  vid.src = URL.createObjectURL(file);
-});
+The edge function log proves this:
+```
+Video extend: duration=0s, totalFrames=0, startFrame=0, maxCond=48
 ```
 
-Store this as `sourceVideoDuration` state (new prop threaded up to the workspace hook) so the generation payload can include it.
+With `totalFrames=0`, the tail computation falls through to `startFrame=0`, conditioning from the beginning of the video -- exactly the pre-fix behavior.
 
-### 2. Client: Pass source duration in generation payload
-**File:** `src/hooks/useLibraryFirstWorkspace.ts` (~line 1442)
+## Fix: Probe Duration from URL (Not Just File)
 
-When building the extend payload, include the source video duration:
+### 1. Add URL-based duration probing
+**File:** `src/components/workspace/MobileSimplePromptInput.tsx`
 
-```typescript
-if (isExtendModel && refImageUrl) {
-  inputObj.video = stripToStoragePath(refImageUrl);
-  inputObj.source_video_duration = sourceVideoDuration || 0;
-  if (extendReverseVideo) inputObj.reverse_video = true;
-  if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
-}
-```
-
-### 3. Edge Function: Compute tail start_frame_num and build full conditioning object
-**File:** `supabase/functions/fal-image/index.ts` (~line 451)
-
-Replace the simple `modelInput.video = { video_url }` with full tail-conditioning logic:
+When a video reference is set via URL (from library, workspace, or "Use as Reference"), probe its duration using the same `<video>` element technique but with the URL instead of a blob:
 
 ```typescript
-// Build VideoConditioningInput with tail-conditioning
-const fps = modelInput.frame_rate || 30;
-const maxCondFrames = 48; // ~1.6s conditioning window
-const sourceDuration = body.input.source_video_duration || 0;
-const totalFrames = sourceDuration > 0 ? Math.round(sourceDuration * fps) : 0;
-
-let startFrameNum = 0;
-if (totalFrames > maxCondFrames) {
-  // Tail-conditioning: start from the end minus overlap
-  startFrameNum = Math.floor((totalFrames - maxCondFrames) / 8) * 8;
-}
-
-modelInput.video = {
-  video_url: videoUrl,
-  start_frame_num: startFrameNum,
-  max_num_frames: maxCondFrames,
-  limit_num_frames: true,
-  conditioning_type: "rgb",
-  strength: 1,
+// Probe duration from URL for videos used as extend references
+const probeVideoDurationFromUrl = async (url: string): Promise<number> => {
+  return new Promise((resolve) => {
+    const vid = document.createElement('video');
+    vid.preload = 'metadata';
+    vid.crossOrigin = 'anonymous';
+    vid.onloadedmetadata = () => {
+      resolve(isFinite(vid.duration) ? vid.duration : 0);
+    };
+    vid.onerror = () => resolve(0);
+    vid.src = url;
+  });
 };
 ```
 
-This ensures: short videos (under ~1.6s) use all frames; longer videos condition on the tail only.
+### 2. Call the probe when a library video is set as reference
+**File:** `src/pages/MobileSimplifiedWorkspace.tsx`
 
-### 4. Webhook: Store source metadata for "Extend Again" chaining
-**File:** `supabase/functions/fal-webhook/index.ts` (~line 190)
-
-When `generation_mode` includes `extend`, persist source info in `generation_settings`:
+In the `handleUseAsReference` callback (~line 130), after setting the reference URL for a video asset, probe its duration:
 
 ```typescript
-generation_settings: {
-  ...existingSettings,
-  ...(generationMode?.includes('extend') && {
-    is_extend_result: true,
-    source_video_url: job.metadata?.start_reference_url,
-    conditioning_settings: {
-      start_frame_num: startFrameNum,
-      max_num_frames: 48,
-    },
-  }),
-}
+case 'single':
+  setReferenceImage(null);
+  setReferenceImageUrl(url);
+  // If this is a video URL, probe its duration for extend tail-conditioning
+  if (url && (asset?.type === 'video' || url.includes('.mp4'))) {
+    probeAndSetDuration(url);
+  }
+  break;
+case 'start':
+  setBeginningRefImage(null);
+  setBeginningRefImageUrl(url);
+  if (url && (asset?.type === 'video' || url.includes('.mp4'))) {
+    probeAndSetDuration(url);
+  }
+  break;
 ```
 
-### 5. UI: Update tooltip copy
-**File:** `src/components/workspace/MobileSettingsSheet.tsx`
+The `probeAndSetDuration` helper fetches metadata from the signed URL and calls `setSourceVideoDuration`.
 
-Update the "Extend by" tooltip:
-- From: *"Amount of new footage to add to your video (up to ~5s)"*
-- To: *"Generates up to ~5s of continuation footage conditioned on the end of your source video. The output may include brief overlap frames for continuity."*
+### 3. Also probe when the extend model auto-switches from file upload
+**File:** `src/components/workspace/MobileSimplePromptInput.tsx`
 
-### 6. State threading for sourceVideoDuration
-**Files:** `MobileSimplePromptInput.tsx`, `MobileSimplifiedWorkspace.tsx`, `useLibraryFirstWorkspace.ts`
-
-- Add `sourceVideoDuration` state in the workspace hook (default 0)
-- Thread it from `MobileSimplePromptInput` (where the video file is uploaded and probed) up through `MobileSimplifiedWorkspace` to the generation payload
+The existing file-based probe (lines 290-308) is correct but may fail on some mobile browsers for large files. Add a fallback: if file probe returns 0, try probing from the uploaded signed URL after upload completes (~line 310-320).
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Probe video duration on upload; call new `onSourceVideoDuration` callback |
-| `src/pages/MobileSimplifiedWorkspace.tsx` | Thread `sourceVideoDuration` state between prompt input and workspace hook |
-| `src/hooks/useLibraryFirstWorkspace.ts` | Accept `sourceVideoDuration`; include in extend payload as `source_video_duration` |
-| `supabase/functions/fal-image/index.ts` | Compute `start_frame_num` from source duration; build full `VideoConditioningInput` |
-| `supabase/functions/fal-webhook/index.ts` | Store `is_extend_result`, `source_video_url`, and `conditioning_settings` in asset metadata |
-| `src/components/workspace/MobileSettingsSheet.tsx` | Update tooltip to mention tail-conditioning and possible overlap |
+| `src/pages/MobileSimplifiedWorkspace.tsx` | Add `probeAndSetDuration` helper; call it in `handleUseAsReference` for video URLs |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Extract `probeVideoDurationFromUrl` as a shared utility; add fallback URL probe after file upload |
 
-## Why Option B (server-side computation) over Option A (client-side trimming)
+## What This Fixes
 
-Client-side video trimming requires either Canvas frame extraction or MediaRecorder APIs, which are unreliable on mobile Safari and add significant complexity. Computing `start_frame_num` server-side from the known duration is an approximation (could be off by a few frames for variable-rate video) but is robust, simple, and works on all browsers. If the approximation proves insufficient, we can add client-side trimming later as an enhancement.
+- Library videos selected for extend will have their duration probed from the signed URL
+- The edge function will receive the actual duration (e.g., 15s)
+- Tail-conditioning will compute the correct `start_frame_num` (e.g., frame 400 for a 15s video)
+- The model will condition on the last ~1.6s of the source video and generate continuation from the ending
