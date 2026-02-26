@@ -1,0 +1,1 @@
+ALTER TABLE public.playground_prompts ADD COLUMN model_family text;

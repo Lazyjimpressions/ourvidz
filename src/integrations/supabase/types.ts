@@ -1508,6 +1508,7 @@ export type Database = {
           created_at: string
           id: string
           is_standard: boolean
+          model_family: string | null
           name: string
           prompt_text: string
           tags: string[]
@@ -1519,6 +1520,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_standard?: boolean
+          model_family?: string | null
           name: string
           prompt_text: string
           tags?: string[]
@@ -1530,6 +1532,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_standard?: boolean
+          model_family?: string | null
           name?: string
           prompt_text?: string
           tags?: string[]

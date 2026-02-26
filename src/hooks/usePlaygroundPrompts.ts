@@ -8,6 +8,7 @@ export interface PlaygroundPrompt {
   prompt_text: string;
   tags: string[];
   task_type: string;
+  model_family: string | null;
   is_standard: boolean;
   created_at: string;
   updated_at: string;
@@ -16,13 +17,13 @@ export interface PlaygroundPrompt {
 interface UsePlaygroundPromptsReturn {
   prompts: PlaygroundPrompt[];
   isLoading: boolean;
-  savePrompt: (name: string, promptText: string, tags: string[], taskType: string) => Promise<void>;
-  updatePrompt: (id: string, updates: Partial<Pick<PlaygroundPrompt, 'name' | 'prompt_text' | 'tags' | 'task_type'>>) => Promise<void>;
+  savePrompt: (name: string, promptText: string, tags: string[], taskType: string, modelFamily?: string | null) => Promise<void>;
+  updatePrompt: (id: string, updates: Partial<Pick<PlaygroundPrompt, 'name' | 'prompt_text' | 'tags' | 'task_type' | 'model_family'>>) => Promise<void>;
   deletePrompt: (id: string) => Promise<void>;
   refresh: () => void;
 }
 
-export function usePlaygroundPrompts(taskType?: string): UsePlaygroundPromptsReturn {
+export function usePlaygroundPrompts(taskType?: string, modelFamily?: string | null): UsePlaygroundPromptsReturn {
   const [prompts, setPrompts] = useState<PlaygroundPrompt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -38,6 +39,10 @@ export function usePlaygroundPrompts(taskType?: string): UsePlaygroundPromptsRet
       query = query.eq('task_type', taskType);
     }
 
+    if (modelFamily) {
+      query = query.eq('model_family', modelFamily);
+    }
+
     const { data, error } = await query;
     if (error) {
       console.error('❌ Failed to fetch playground prompts:', error);
@@ -45,13 +50,13 @@ export function usePlaygroundPrompts(taskType?: string): UsePlaygroundPromptsRet
       setPrompts((data as any[]) || []);
     }
     setIsLoading(false);
-  }, [taskType]);
+  }, [taskType, modelFamily]);
 
   useEffect(() => {
     fetchPrompts();
   }, [fetchPrompts]);
 
-  const savePrompt = useCallback(async (name: string, promptText: string, tags: string[], taskType: string) => {
+  const savePrompt = useCallback(async (name: string, promptText: string, tags: string[], taskType: string, modelFamily?: string | null) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not authenticated');
 
@@ -63,13 +68,14 @@ export function usePlaygroundPrompts(taskType?: string): UsePlaygroundPromptsRet
         prompt_text: promptText,
         tags,
         task_type: taskType,
+        model_family: modelFamily || null,
       } as any);
 
     if (error) throw error;
     await fetchPrompts();
   }, [fetchPrompts]);
 
-  const updatePrompt = useCallback(async (id: string, updates: Partial<Pick<PlaygroundPrompt, 'name' | 'prompt_text' | 'tags' | 'task_type'>>) => {
+  const updatePrompt = useCallback(async (id: string, updates: Partial<Pick<PlaygroundPrompt, 'name' | 'prompt_text' | 'tags' | 'task_type' | 'model_family'>>) => {
     const { error } = await supabase
       .from('playground_prompts' as any)
       .update(updates as any)
