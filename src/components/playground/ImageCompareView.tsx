@@ -231,18 +231,24 @@ export const ImageCompareView: React.FC = () => {
         // Replicate returns async — poll for completion
         console.log('⏳ Polling Replicate prediction:', data.predictionId);
         const pollInterval = 2000;
-        const maxWait = 120000;
+        const maxWait = 300000; // 5 minutes for cold start models like Flux Colossus
         const deadline = Date.now() + maxWait;
+        let lastStatus = '';
 
         while (Date.now() < deadline) {
           await new Promise(r => setTimeout(r, pollInterval));
           const { data: statusData, error: statusError } = await supabase.functions.invoke('replicate-image', {
-            body: { predictionId: data.predictionId },
+            body: { predictionId: data.predictionId, apiModelId: panel.modelId },
           });
 
           if (statusError) {
             console.error('❌ Poll error:', statusError);
             continue;
+          }
+
+          if (statusData?.status && statusData.status !== lastStatus) {
+            console.log(`🔄 Replicate status: ${lastStatus || 'unknown'} → ${statusData.status}`);
+            lastStatus = statusData.status;
           }
 
           if (statusData?.status === 'succeeded') {
