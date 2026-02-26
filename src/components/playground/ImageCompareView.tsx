@@ -130,7 +130,7 @@ export const ImageCompareView: React.FC = () => {
     setPanel(prev => ({ ...prev, elapsedMs: 0 }));
     timerRef.current = setInterval(() => {
       setPanel(prev => ({ ...prev, elapsedMs: Date.now() - startTime }));
-    }, 100);
+    }, 1000);
   };
 
   const stopTimer = (timerRef: React.MutableRefObject<ReturnType<typeof setInterval> | null>) => {
