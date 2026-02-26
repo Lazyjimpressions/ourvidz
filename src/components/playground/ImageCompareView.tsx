@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Send, RotateCcw, Loader2, ZoomIn, AlertCircle } from 'lucide-react';
+import { Send, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { useAllVisualModels } from '@/hooks/useApiModels';
 import { ReferenceImageSlots, type ReferenceImage } from './ReferenceImageSlots';
+import { AssetTile } from '@/components/shared/AssetTile';
+import { UnifiedLightbox, type LightboxItem } from '@/components/shared/UnifiedLightbox';
+import { QuickRating } from '@/components/QuickRating';
 
 interface PromptTemplate {
   id: string;
@@ -75,8 +77,16 @@ export const ImageCompareView: React.FC = () => {
   const [panelB, setPanelB] = useState<PanelState>(() => defaultPanel(''));
   const [prompt, setPrompt] = useState('');
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [lightboxPanel, setLightboxPanel] = useState<'a' | 'b' | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Fetch current user for QuickRating
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) setUserId(data.user.id);
+    });
+  }, []);
 
   const scrollRefA = useRef<HTMLDivElement>(null);
   const scrollRefB = useRef<HTMLDivElement>(null);
@@ -428,6 +438,7 @@ export const ImageCompareView: React.FC = () => {
     panel: PanelState,
     setPanel: React.Dispatch<React.SetStateAction<PanelState>>,
     label: string,
+    panelKey: 'a' | 'b',
     scrollRef: React.RefObject<HTMLDivElement>,
     refChangeOverride?: (imgs: ReferenceImage[]) => void
   ) => {
@@ -509,40 +520,28 @@ export const ImageCompareView: React.FC = () => {
             </p>
           ) : (
             <>
-              {panel.generations.map((gen) => (
+              {panel.generations.map((gen, idx) => (
                 <div key={gen.id} className="space-y-1">
                   <p className="text-[11px] text-muted-foreground truncate" title={gen.prompt}>
                     {gen.prompt}
                   </p>
-                  <div
-                    className="relative group cursor-pointer rounded overflow-hidden border border-border"
+                  <AssetTile
+                    src={gen.mediaUrl}
+                    alt={gen.prompt}
+                    aspectRatio="3/4"
+                    isVideo={gen.isVideo}
+                    videoSrc={gen.isVideo ? gen.mediaUrl : undefined}
                     onClick={() => {
-                      setLightboxUrl(gen.mediaUrl);
-                      setLightboxIsVideo(gen.isVideo);
+                      setLightboxIndex(idx);
+                      setLightboxPanel(panelKey);
                     }}
                   >
-                    {gen.isVideo ? (
-                      <video
-                        src={gen.mediaUrl}
-                        controls
-                        className="w-full h-auto"
-                        preload="metadata"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <>
-                        <img
-                          src={gen.mediaUrl}
-                          alt={gen.prompt}
-                          className="w-full h-auto"
-                          loading="lazy"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                          <ZoomIn className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </>
+                    {userId && (
+                      <div className="absolute bottom-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <QuickRating jobId={gen.id} userId={userId} />
+                      </div>
                     )}
-                  </div>
+                  </AssetTile>
                   <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                     <span>{gen.modelName}</span>
                     <span>•</span>
@@ -574,8 +573,8 @@ export const ImageCompareView: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-border overflow-hidden">
-        {renderPanel(panelA, setPanelA, 'A', scrollRefA)}
-        {renderPanel(panelB, setPanelB, 'B', scrollRefB, handlePanelBRefChange)}
+        {renderPanel(panelA, setPanelA, 'A', 'a', scrollRefA)}
+        {renderPanel(panelB, setPanelB, 'B', 'b', scrollRefB, handlePanelBRefChange)}
       </div>
 
       {/* Shared prompt input */}
@@ -606,17 +605,22 @@ export const ImageCompareView: React.FC = () => {
       </div>
 
       {/* Lightbox */}
-      <Dialog open={!!lightboxUrl} onOpenChange={() => setLightboxUrl(null)}>
-        <DialogContent className="max-w-4xl p-1 bg-background/95">
-          {lightboxUrl && (
-            lightboxIsVideo ? (
-              <video src={lightboxUrl} controls autoPlay className="w-full h-auto rounded" />
-            ) : (
-              <img src={lightboxUrl} alt="Generated" className="w-full h-auto rounded" />
-            )
-          )}
-        </DialogContent>
-      </Dialog>
+      {lightboxIndex !== null && lightboxPanel && (
+        <UnifiedLightbox
+          items={(lightboxPanel === 'a' ? panelA : panelB).generations.map(g => ({
+            id: g.id,
+            url: g.mediaUrl,
+            type: (g.isVideo ? 'video' : 'image') as 'image' | 'video',
+            title: g.modelName,
+            prompt: g.prompt,
+            modelType: g.modelName,
+            metadata: { seed: g.seed, generationTime: g.time },
+          }))}
+          startIndex={lightboxIndex}
+          onClose={() => { setLightboxIndex(null); setLightboxPanel(null); }}
+          onIndexChange={setLightboxIndex}
+        />
+      )}
     </div>
   );
 };
