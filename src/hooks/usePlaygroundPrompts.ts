@@ -23,25 +23,17 @@ interface UsePlaygroundPromptsReturn {
   refresh: () => void;
 }
 
-export function usePlaygroundPrompts(taskType?: string, modelFamily?: string | null): UsePlaygroundPromptsReturn {
+export function usePlaygroundPrompts(): UsePlaygroundPromptsReturn {
   const [prompts, setPrompts] = useState<PlaygroundPrompt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchPrompts = useCallback(async () => {
     setIsLoading(true);
-    let query = supabase
+    const query = supabase
       .from('playground_prompts' as any)
       .select('*')
       .order('is_standard', { ascending: false })
       .order('updated_at', { ascending: false });
-
-    if (taskType) {
-      query = query.eq('task_type', taskType);
-    }
-
-    if (modelFamily) {
-      query = query.eq('model_family', modelFamily);
-    }
 
     const { data, error } = await query;
     if (error) {
@@ -50,7 +42,7 @@ export function usePlaygroundPrompts(taskType?: string, modelFamily?: string | n
       setPrompts((data as any[]) || []);
     }
     setIsLoading(false);
-  }, [taskType, modelFamily]);
+  }, []);
 
   useEffect(() => {
     fetchPrompts();

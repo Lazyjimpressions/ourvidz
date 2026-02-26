@@ -95,10 +95,7 @@ export const ImageCompareView: React.FC = () => {
   const activeTaskType = drawerTaskType ?? (modelAMeta?.tasks?.[0] || null);
   const activeModelFamily = drawerModelFamily ?? (modelAMeta?.model_family || null);
 
-  const { prompts: savedPrompts, isLoading: promptsLoading, savePrompt, deletePrompt: deletePlaygroundPrompt } = usePlaygroundPrompts(
-    activeTaskType || undefined,
-    activeModelFamily
-  );
+  const { prompts: savedPrompts, isLoading: promptsLoading, savePrompt, deletePrompt: deletePlaygroundPrompt } = usePlaygroundPrompts();
 
   // Fetch current user for QuickRating
   useEffect(() => {
