@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Send, RotateCcw, Loader2, ZoomIn, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -66,10 +66,10 @@ const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url);
 
 export const ImageCompareView: React.FC = () => {
   const { data: visualModels } = useAllVisualModels();
-  const t2iModels = visualModels?.t2i ?? [];
-  const i2iModels = visualModels?.i2i ?? [];
-  const i2vModels = visualModels?.i2v ?? [];
-  const allModels = visualModels?.all ?? [];
+  const t2iModels = useMemo(() => visualModels?.t2i ?? [], [visualModels]);
+  const i2iModels = useMemo(() => visualModels?.i2i ?? [], [visualModels]);
+  const i2vModels = useMemo(() => visualModels?.i2v ?? [], [visualModels]);
+  const allModels = useMemo(() => visualModels?.all ?? [], [visualModels]);
 
   const [panelA, setPanelA] = useState<PanelState>(() => defaultPanel(''));
   const [panelB, setPanelB] = useState<PanelState>(() => defaultPanel(''));
@@ -147,7 +147,7 @@ export const ImageCompareView: React.FC = () => {
     return `${tpl.system_prompt}\n\n${userPrompt}`;
   };
 
-  const getModelById = (id: string) => allModels.find(m => m.id === id);
+  const getModelById = useCallback((id: string) => allModels.find(m => m.id === id), [allModels]);
 
   const panelIsActive = (panel: PanelState) => panel.modelId && panel.modelId !== NONE_VALUE;
 
@@ -313,19 +313,23 @@ export const ImageCompareView: React.FC = () => {
 
   // Auto-sync: copy Panel A's ref images to Panel B
   const wasBAutoSynced = useRef(true);
+  const isSyncing = useRef(false);
 
   useEffect(() => {
+    if (isSyncing.current) return;
     const modelB = getModelById(panelB.modelId);
     const bNeedsRef = modelB ? modelNeedsRef(modelB) : false;
     if (!bNeedsRef) return;
     if (panelA.referenceImages.length === 0) return;
     if (panelB.referenceImages.length === 0 || wasBAutoSynced.current) {
+      isSyncing.current = true;
       const copied = panelA.referenceImages.map(img => ({
         ...img,
         id: crypto.randomUUID(),
       }));
       setPanelB(prev => ({ ...prev, referenceImages: copied }));
       wasBAutoSynced.current = true;
+      requestAnimationFrame(() => { isSyncing.current = false; });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelA.referenceImages, panelB.modelId]);

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { usePlaygroundSettings, PlaygroundSettings } from '@/hooks/usePlaygroundSettings';
 
@@ -313,7 +313,7 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     await sendMessage(userMsg.content, { conversationId: state.activeConversationId || undefined });
   };
 
-  const value: PlaygroundContextType = {
+  const value = useMemo<PlaygroundContextType>(() => ({
     messages,
     sendMessage,
     isLoading,
@@ -331,7 +331,13 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
     regenerateAssistantMessage,
     settings,
     updateSettings,
-  };
+  }), [
+    messages, isLoading, state, isLoadingMessages,
+    conversations, isLoadingConversations, sfwMode, settings,
+    sendMessage, createConversation, refreshPromptCache,
+    setSfwMode, deleteConversation, updateConversationTitle,
+    setActiveConversation, regenerateAssistantMessage, updateSettings,
+  ]);
 
   return (
     <PlaygroundContext.Provider value={value}>
