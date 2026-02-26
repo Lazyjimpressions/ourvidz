@@ -5,7 +5,7 @@
  * Follows the principle: anchor prompts include full identity, chained prompts focus on motion.
  */
 
-import { StoryboardScene, StoryboardClip } from '@/types/storyboard';
+import { StoryboardScene, StoryboardClip, ClipType } from '@/types/storyboard';
 import { Character } from '@/types/roleplay';
 
 /**
@@ -290,8 +290,9 @@ export function suggestPromptsForScene(
         scene_id: scene.id,
         clip_order: i - 1,
         prompt: suggestions[i - 1],
+        clip_type: 'quick' as ClipType,
         status: 'completed',
-        extracted_frame_url: 'placeholder', // Indicates chaining is available
+        extracted_frame_url: 'placeholder',
         generation_metadata: {},
         created_at: '',
         updated_at: '',

@@ -381,7 +381,7 @@ export class StoryboardService {
 
     const { data, error } = await supabase
       .from('storyboard_clips')
-      .insert({
+      .insert([{
         scene_id: input.scene_id,
         clip_order: nextOrder,
         prompt: input.prompt,
@@ -396,8 +396,8 @@ export class StoryboardService {
         resolved_model_id: input.resolved_model_id || null,
         prompt_template_id: input.prompt_template_id || null,
         enhanced_prompt: input.enhanced_prompt || null,
-        generation_config: input.generation_config || null,
-      })
+        generation_config: (input.generation_config as any) || null,
+      }])
       .select()
       .single();
 

@@ -333,16 +333,17 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
 
           if (job?.status === 'completed') {
             // Extract video URL from job metadata (set by fal-webhook)
-            const videoUrl = job.metadata?.result_url ||
-              job.metadata?.fal_response?.video?.url ||
-              job.metadata?.original_fal_url;
+            const meta = job.metadata as Record<string, any> | null;
+            const videoUrl = meta?.result_url ||
+              meta?.fal_response?.video?.url ||
+              meta?.original_fal_url;
 
             if (videoUrl) {
               // Update clip
               await StoryboardService.updateClip(orch.clipId, {
                 status: 'completed',
                 video_url: videoUrl,
-                duration_seconds: job.metadata?.fal_response?.video?.duration ||
+                duration_seconds: meta?.fal_response?.video?.duration ||
                   CLIP_TYPE_DURATIONS[orch.clipType],
               });
 
