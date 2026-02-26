@@ -128,7 +128,7 @@ export const PlaygroundSettingsPopover: React.FC<PlaygroundSettingsPopoverProps>
                     value={settings.reasoningTemplateId}
                     onChange={(v) => onSettingsChange({ reasoningTemplateId: v })}
                     templates={templates}
-                    useCases={['chat_general', 'chat_admin', 'chat_creative']}
+                    useCases={['admin']}
                   />
                 </>
               )}
