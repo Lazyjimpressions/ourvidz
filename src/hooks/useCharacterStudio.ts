@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePortraitVersions, CharacterPortrait } from './usePortraitVersions';
 import { ROLE_TAG_PREFIX } from '@/types/slotRoles';
 import { Json } from '@/integrations/supabase/types';
+import { mapGenerationError, extractErrorDetails } from '@/lib/utils/generationErrors';
 
 export interface CharacterData {
   id?: string;
@@ -453,9 +454,19 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
         }
       });
       
-      if (error) {
-        console.error('Edge function error:', error);
-        throw new Error(error.message || 'Edge function failed');
+      if (error || data?.error) {
+        console.error('Edge function error:', error || data?.error);
+        const details = extractErrorDetails(data, error);
+        const userMessage = mapGenerationError(details);
+        clearInterval(progressInterval);
+        setGenerationProgress(null);
+        toast({
+          title: "Generation failed",
+          description: userMessage,
+          variant: "destructive"
+        });
+        setIsGenerating(false);
+        return null;
       }
       
       console.log('🎨 Portrait generation response:', data);
@@ -485,10 +496,6 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
         setIsGenerating(false);
         setGenerationProgress(null);
         return data.imageUrl;
-      } else if (data?.error) {
-        clearInterval(progressInterval);
-        setGenerationProgress(null);
-        throw new Error(data.error);
       }
 
       // Unexpected response structure
@@ -499,9 +506,10 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
       console.error('Error generating portrait:', err);
       clearInterval(progressInterval);
       setGenerationProgress(null);
+      const errMsg = err instanceof Error ? err.message : "Failed to generate portrait";
       toast({
         title: "Generation failed",
-        description: err instanceof Error ? err.message : "Failed to generate portrait",
+        description: mapGenerationError(errMsg),
         variant: "destructive"
       });
       setIsGenerating(false);
