@@ -689,27 +689,45 @@ You say: ...`;
     
     console.log(`🎯 Content tier resolved: ${finalTier} (reason: ${tierReason}, admin: ${isAdmin}, ageVerified: ${ageVerified})`);
     
-    // Get system prompt -- use client override if provided, otherwise resolve from templates
+    // Get system prompt -- use client override if provided, then explicit template_id, then auto-resolve
     dbReadTime = Date.now() - dbStart;
     const promptStart = Date.now();
     let systemPrompt: string;
+    let promptSource = 'auto';
     if (system_prompt_override && system_prompt_override.trim()) {
       systemPrompt = system_prompt_override.trim();
-      console.log('📝 System prompt source: client_override');
+      promptSource = 'client_override';
+    } else if (prompt_template_id && contextType !== 'character_roleplay') {
+      // Explicit template selected by the user (e.g., reasoning template from settings)
+      const { data: explicitTemplate } = await supabaseClient
+        .from('prompt_templates')
+        .select('system_prompt, template_name')
+        .eq('id', prompt_template_id)
+        .eq('is_active', true)
+        .maybeSingle();
+      
+      if (explicitTemplate?.system_prompt) {
+        systemPrompt = explicitTemplate.system_prompt;
+        promptSource = `explicit_template:${explicitTemplate.template_name}`;
+        console.log(`📝 Using explicit template: ${explicitTemplate.template_name}`);
+      } else {
+        console.warn(`⚠️ Template ${prompt_template_id} not found or inactive, falling back to auto`);
+        systemPrompt = await getSystemPromptForChat(
+          message, conversationHistory, contextType, cache,
+          characterData, ageVerified || allowNSFWOverride, finalTier,
+          roleplay_settings, participants
+        );
+        promptSource = 'template_resolved_fallback';
+      }
     } else {
       systemPrompt = await getSystemPromptForChat(
-        message,
-        conversationHistory,
-        contextType,
-        cache,
-        characterData,
-        ageVerified || allowNSFWOverride,
-        finalTier,
-        roleplay_settings,
-        participants
+        message, conversationHistory, contextType, cache,
+        characterData, ageVerified || allowNSFWOverride, finalTier,
+        roleplay_settings, participants
       );
-      console.log('📝 System prompt source: template_resolved');
+      promptSource = 'template_resolved';
     }
+    console.log('📝 System prompt source:', promptSource);
     promptTime = Date.now() - promptStart;
 
     // Log a small system prompt snippet and markers for diagnostics
@@ -1118,6 +1136,7 @@ You say: ...`;
         content_tier: chosenTier,
         nsfw_enforce: nsfwEnforce || false,
         template_meta: lastPromptMeta,
+        prompt_template_name: promptSource,
         enforcement_diagnostics: enforcementDiagnostics,
         model_provider,
         model_used: model_provider === 'openrouter' ? (model_variant || DEFAULT_OPENROUTER_MODEL) : model_provider,

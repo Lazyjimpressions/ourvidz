@@ -205,6 +205,7 @@ export const ImageCompareView: React.FC = () => {
           prompt: finalPrompt,
           apiModelId: panel.modelId,
           jobType: isVideo ? 'video' : 'image_high',
+          job_type: isVideo ? 'video' : 'image_high',
           input: { ...input },
           metadata: { source: 'playground-image-compare' },
         };
@@ -222,17 +223,58 @@ export const ImageCompareView: React.FC = () => {
         body: requestPayload,
       });
 
+      if (error) throw error;
+
+      let resultUrl: string | null = null;
+
+      if (providerName === 'replicate' && data?.predictionId && !data?.resultUrl) {
+        // Replicate returns async — poll for completion
+        console.log('⏳ Polling Replicate prediction:', data.predictionId);
+        const pollInterval = 2000;
+        const maxWait = 120000;
+        const deadline = Date.now() + maxWait;
+
+        while (Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, pollInterval));
+          const { data: statusData, error: statusError } = await supabase.functions.invoke('replicate-image', {
+            body: { predictionId: data.predictionId },
+          });
+
+          if (statusError) {
+            console.error('❌ Poll error:', statusError);
+            continue;
+          }
+
+          if (statusData?.status === 'succeeded') {
+            // Extract URL from output
+            const output = statusData.output;
+            if (Array.isArray(output) && output.length > 0) {
+              resultUrl = typeof output[0] === 'string' ? output[0] : output[0]?.url;
+            } else if (typeof output === 'string') {
+              resultUrl = output;
+            }
+            break;
+          } else if (statusData?.status === 'failed' || statusData?.status === 'canceled') {
+            throw new Error(`Replicate prediction ${statusData.status}: ${statusData.error || 'unknown'}`);
+          }
+          // else still processing, continue polling
+        }
+
+        if (!resultUrl) throw new Error('Replicate prediction timed out');
+      } else {
+        resultUrl = data?.resultUrl;
+      }
+
       const elapsed = Date.now() - startTime;
       stopTimer(timerRef);
 
-      if (error) throw error;
-      if (!data?.resultUrl) throw new Error('No result URL returned');
+      if (!resultUrl) throw new Error('No result URL returned');
 
       const gen: Generation = {
         id: data.jobId || crypto.randomUUID(),
         prompt: userPrompt,
-        mediaUrl: data.resultUrl,
-        isVideo: isVideo || isVideoUrl(data.resultUrl),
+        mediaUrl: resultUrl,
+        isVideo: isVideo || isVideoUrl(resultUrl),
         modelName: model.display_name,
         time: elapsed,
         seed: data.seed || null,

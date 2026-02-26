@@ -141,13 +141,18 @@ export const PlaygroundProvider: React.FC<{ children: ReactNode }> = ({ children
       const hasCharacter = !!(state.selectedCharacter?.id || options?.characterId);
       const edgeFunction = hasCharacter ? 'roleplay-chat' : 'playground-chat';
 
+      // Use reasoningModel for general chat (no character), roleplayModel for roleplay
+      const activeModel = hasCharacter
+        ? (settings.roleplayModel || 'openrouter')
+        : (settings.reasoningModel || settings.roleplayModel || 'openrouter');
+
       const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: {
           message: messageText,
           conversation_id: conversationId,
           character_id: state.selectedCharacter?.id || options?.characterId || null,
-          model_provider: settings.roleplayModel || 'openrouter',
-          model_variant: settings.roleplayModel,
+          model_provider: activeModel,
+          model_variant: activeModel,
           memory_tier: 'conversation',
           content_tier: settings.contentMode,
           prompt_template_id: (hasCharacter ? settings.roleplayTemplateId : settings.reasoningTemplateId) || undefined,
