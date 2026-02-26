@@ -6,6 +6,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ── Replicate polling helper ──────────────────────────────────────────────
+async function pollReplicatePrediction(
+  predictionUrl: string,
+  apiKey: string,
+  timeoutMs = 120_000,
+  intervalMs = 2_000
+): Promise<any> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await fetch(predictionUrl, {
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Replicate poll error ${res.status}: ${text}`);
+    }
+    const prediction = await res.json();
+    if (prediction.status === 'succeeded') return prediction;
+    if (prediction.status === 'failed' || prediction.status === 'canceled') {
+      throw new Error(`Replicate prediction ${prediction.status}: ${prediction.error || 'unknown'}`);
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(`Replicate prediction timed out after ${timeoutMs}ms`);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -91,11 +117,11 @@ serve(async (req) => {
     const isI2I = !!referenceImageUrl;
     const effectiveContentRating = contentRating || character.content_rating || 'nsfw';
 
-    // Resolve API model dynamically
+    // ── Resolve API model dynamically (table-driven, any provider) ──
     let apiModel: any = null;
 
     if (apiModelId) {
-      // Use specific model by ID
+      // Use specific model by ID (UI override)
       const { data: model, error: modelError } = await supabase
         .from('api_models')
         .select(`*, api_providers!inner(*)`)
@@ -112,41 +138,51 @@ serve(async (req) => {
       }
       apiModel = model;
     } else {
-      // Auto-select based on I2I mode
-      const modelQuery = supabase
+      // Auto-select: find default model for the task, any provider
+      const task = isI2I ? 'i2i' : 't2i';
+      const { data: defaultModel } = await supabase
         .from('api_models')
         .select(`*, api_providers!inner(*)`)
         .eq('modality', 'image')
         .eq('is_active', true)
-        .eq('api_providers.name', 'fal');
-
-      if (isI2I) {
-        // Get I2I-capable model (Seedream v4.5 Edit)
-        modelQuery.eq('capabilities->supports_i2i', true);
-      }
-
-      const { data: models, error: modelsError } = await modelQuery
+        .contains('default_for_tasks', [task])
         .order('priority', { ascending: true })
-        .limit(1);
+        .limit(1)
+        .single();
 
-      if (modelsError || !models || models.length === 0) {
-        console.error('❌ No suitable fal.ai models found:', modelsError);
-        return new Response(
-          JSON.stringify({ error: 'No suitable image models configured' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      if (defaultModel) {
+        apiModel = defaultModel;
+      } else {
+        // Fallback: any active image model by priority
+        console.log('⚠️ No default model for task', task, '— falling back to any active image model');
+        const { data: fallbackModels, error: fallbackError } = await supabase
+          .from('api_models')
+          .select(`*, api_providers!inner(*)`)
+          .eq('modality', 'image')
+          .eq('is_active', true)
+          .order('priority', { ascending: true })
+          .limit(1);
+
+        if (fallbackError || !fallbackModels || fallbackModels.length === 0) {
+          console.error('❌ No suitable image models found:', fallbackError);
+          return new Response(
+            JSON.stringify({ error: 'No suitable image models configured' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        apiModel = fallbackModels[0];
       }
-      apiModel = models[0];
     }
 
-    console.log('✅ Using model:', apiModel.display_name, 'I2I:', isI2I);
+    const providerName: string = apiModel.api_providers.name;
+    console.log('✅ Using model:', apiModel.display_name, '| Provider:', providerName, '| I2I:', isI2I);
 
-    // Get fal.ai API key
-    const falApiKey = Deno.env.get(apiModel.api_providers.secret_name);
-    if (!falApiKey) {
-      console.error('❌ fal.ai API key not found');
+    // Get API key from provider's secret_name
+    const apiKey = Deno.env.get(apiModel.api_providers.secret_name);
+    if (!apiKey) {
+      console.error(`❌ API key not found for provider ${providerName} (secret: ${apiModel.api_providers.secret_name})`);
       return new Response(
-        JSON.stringify({ error: 'fal.ai API key not configured' }),
+        JSON.stringify({ error: `API key not configured for provider: ${apiModel.api_providers.display_name}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -163,7 +199,6 @@ serve(async (req) => {
     if (canonPoseKey) {
       console.log(`📐 Canon position generation: ${canonPoseKey}`);
 
-      // Fetch canon_position template from prompt_templates
       const { data: canonTemplate, error: canonTemplateError } = await supabase
         .from('prompt_templates')
         .select('*')
@@ -192,7 +227,6 @@ serve(async (req) => {
         );
       }
 
-      // Build [PRESERVE]/[CHANGE] prompt directly (no LLM enhancer needed for base poses)
       const appearanceTags = (character.appearance_tags || []).join(', ');
       const clothingTags = (character.clothing_tags || []).join(', ');
       const preserveBlock = `same character identity, face${appearanceTags ? `, ${appearanceTags}` : ''}${clothingTags ? `, clothing: ${clothingTags}` : ''}`;
@@ -208,31 +242,23 @@ serve(async (req) => {
     const gender = character.gender?.toLowerCase() || 'unspecified';
 
     if (canonPoseKey && canonPromptOverride) {
-      // Canon position mode: use the [PRESERVE]/[CHANGE] prompt directly
       promptParts.push(canonPromptOverride);
     } else if (isI2I) {
       // === I2I (Directing Mode) ===
-      // Reference image handles identity and style. Prompt describes ONLY what changes.
-      // No style boilerplate — it fights the reference image.
-
-      // Gender tag for model routing only
       if (gender === 'male') promptParts.push('1boy');
       else if (gender === 'female') promptParts.push('1girl');
       else promptParts.push('1person');
 
-      // Appearance tags (identity descriptors the model needs to maintain)
       if (character.appearance_tags?.length) {
         promptParts.push(...character.appearance_tags.slice(0, 8));
       }
 
-      // User's directorial instruction (outfit, scene, pose, companions)
       if (promptOverride && typeof promptOverride === 'string' && promptOverride.trim()) {
         const cleanedOverride = promptOverride.trim().slice(0, 200);
         promptParts.push(cleanedOverride);
         console.log('📝 I2I promptOverride (directorial):', cleanedOverride.substring(0, 50) + '...');
       }
 
-      // Add preset tags (these are user-chosen directives, not style boilerplate)
       if (presets?.pose) promptParts.push(presets.pose);
       if (presets?.expression) promptParts.push(presets.expression);
       if (presets?.outfit) promptParts.push(presets.outfit);
@@ -240,7 +266,6 @@ serve(async (req) => {
 
     } else {
       // === T2I (Exploration Mode) ===
-      // No visual anchor — style tags establish quality.
       promptParts.push('masterpiece', 'best quality', 'photorealistic');
 
       if (gender === 'male') {
@@ -251,25 +276,21 @@ serve(async (req) => {
         promptParts.push('1person', 'portrait');
       }
 
-      // Add preset tags
       if (presets?.pose) promptParts.push(presets.pose);
       if (presets?.expression) promptParts.push(presets.expression);
       if (presets?.outfit) promptParts.push(presets.outfit);
       if (presets?.camera) promptParts.push(presets.camera);
 
-      // Appearance tags
       if (character.appearance_tags?.length) {
         promptParts.push(...character.appearance_tags.slice(0, 8));
       }
 
-      // User prompt override
       if (promptOverride && typeof promptOverride === 'string' && promptOverride.trim()) {
         const cleanedOverride = promptOverride.trim().slice(0, 200);
         promptParts.push(cleanedOverride);
         console.log('📝 T2I promptOverride:', cleanedOverride.substring(0, 50) + '...');
       }
 
-      // Quality enhancers (T2I only)
       promptParts.push('studio photography', 'professional lighting', 'sharp focus', 'detailed face');
     }
 
@@ -279,7 +300,8 @@ serve(async (req) => {
       characterId: characterId || 'new',
       prompt: prompt.substring(0, 150) + '...',
       isI2I,
-      model: apiModel.model_key
+      model: apiModel.model_key,
+      provider: providerName
     });
 
     // Create job record
@@ -292,7 +314,7 @@ serve(async (req) => {
         status: 'queued',
         quality: 'high',
         api_model_id: apiModel.id,
-        model_type: 'sdxl',
+        model_type: apiModel.model_family?.toLowerCase() || providerName,
         format: 'image',
         metadata: {
           type: 'character_portrait',
@@ -302,6 +324,7 @@ serve(async (req) => {
           generation_mode: isI2I ? 'i2i' : 'txt2img',
           generation_intent: generationIntent,
           content_rating: effectiveContentRating,
+          provider_name: providerName,
           presets,
           prompt_override: promptOverride || null
         }
@@ -319,43 +342,10 @@ serve(async (req) => {
 
     console.log('✅ Job created:', jobData.id);
 
-    // Build fal.ai input
-    const modelInput: Record<string, any> = {
-      prompt,
-      ...(apiModel.input_defaults || {})
-    };
-
-    // Determine batch count: cap against model's max from input_schema
-    const capabilities = apiModel.capabilities as Record<string, any> || {};
-    const inputSchema = capabilities.input_schema || {};
-    const modelMaxImages = inputSchema?.num_images?.max || 1;
-    const requestedImages = Math.min(Math.max(1, numImages || 1), 4, modelMaxImages);
-    if (requestedImages > 1 && modelMaxImages > 1) {
-      modelInput.num_images = requestedImages;
-      console.log(`📸 Batch generation: ${requestedImages} images (model max: ${modelMaxImages})`);
-    }
-
-    // Force 3:4 portrait aspect ratio to match frontend display containers
-    // Seedream v4.5 requires preset strings for sizes under 2560x1440 pixels
-    // "portrait_4_3" generates 4:3 portrait orientation (closest to 3:4 UI tiles)
-    modelInput.image_size = 'portrait_4_3';
-
-    // Safety checker based on content
-    modelInput.enable_safety_checker = effectiveContentRating !== 'nsfw';
-
-    // I2I: Add reference image and strength
+    // ── Sign reference image if needed ──
+    let signedReferenceUrl: string | null = null;
     if (isI2I && referenceImageUrl) {
-      // Map user-facing referenceStrength to fal.ai prompt_strength (inverse)
-      // referenceStrength 0.8 = strong ref = low prompt influence = prompt_strength 0.2
-      // Default to 0.75 for I2I directing mode (was 0.65) — reference should dominate
-      // Canon poses override with their own strength from the template metadata
-      const effectiveRefStrength = canonReferenceStrength ?? (typeof referenceStrength === 'number' ? referenceStrength : 0.75);
-      const promptStrength = Math.round((1 - effectiveRefStrength) * 100) / 100;
-      modelInput.prompt_strength = promptStrength;
-      console.log(`🎛️ Reference strength: ${effectiveRefStrength} → prompt_strength: ${promptStrength}`);
-      let finalImageUrl = referenceImageUrl;
-
-      // Sign if it's a storage path
+      signedReferenceUrl = referenceImageUrl;
       if (!referenceImageUrl.startsWith('http') && !referenceImageUrl.startsWith('data:')) {
         const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
         const parts = referenceImageUrl.split('/');
@@ -372,29 +362,93 @@ serve(async (req) => {
           .createSignedUrl(path, 3600);
 
         if (signed?.signedUrl) {
-          finalImageUrl = signed.signedUrl;
+          signedReferenceUrl = signed.signedUrl;
           console.log('🔏 Signed reference image URL');
         }
       }
-
-      // Check model's input_schema to determine image field name
-      const caps = apiModel.capabilities as Record<string, any> || {};
-      const inputSchema = caps.input_schema || {};
-      const requiresArray = caps.requires_image_urls_array === true;
-
-      if (requiresArray || inputSchema?.image_urls) {
-        modelInput.image_urls = [finalImageUrl];
-      } else {
-        modelInput.image_url = finalImageUrl;
-      }
     }
 
-    // Call fal.ai using synchronous endpoint (no polling needed)
-    const modelKey = apiModel.model_key;
-    const startTime = Date.now();
-    const falEndpoint = `https://fal.run/${modelKey}`;
+    // ── Provider-specific input building ──
+    const capabilities = apiModel.capabilities as Record<string, any> || {};
+    const inputSchema = capabilities.input_schema || {};
+    const modelMaxImages = inputSchema?.num_images?.max || 1;
+    const requestedImages = Math.min(Math.max(1, numImages || 1), 4, modelMaxImages);
 
-    console.log('📤 Calling fal.ai (sync):', falEndpoint);
+    let modelInput: Record<string, any> = {};
+
+    if (providerName === 'fal') {
+      // ── Fal input ──
+      modelInput = {
+        prompt,
+        ...(apiModel.input_defaults || {}),
+        image_size: 'portrait_4_3',
+        enable_safety_checker: effectiveContentRating !== 'nsfw',
+      };
+
+      if (requestedImages > 1 && modelMaxImages > 1) {
+        modelInput.num_images = requestedImages;
+        console.log(`📸 Batch generation: ${requestedImages} images (model max: ${modelMaxImages})`);
+      }
+
+      if (isI2I && signedReferenceUrl) {
+        const effectiveRefStrength = canonReferenceStrength ?? (typeof referenceStrength === 'number' ? referenceStrength : 0.75);
+        const promptStrength = Math.round((1 - effectiveRefStrength) * 100) / 100;
+        modelInput.prompt_strength = promptStrength;
+        console.log(`🎛️ Reference strength: ${effectiveRefStrength} → prompt_strength: ${promptStrength}`);
+
+        const requiresArray = capabilities.requires_image_urls_array === true;
+        if (requiresArray || inputSchema?.image_urls) {
+          modelInput.image_urls = [signedReferenceUrl];
+        } else {
+          modelInput.image_url = signedReferenceUrl;
+        }
+      }
+
+    } else if (providerName === 'replicate') {
+      // ── Replicate input ──
+      modelInput = {
+        prompt,
+        width: 768,
+        height: 1024,
+        ...(apiModel.input_defaults || {}),
+        prompt: prompt, // Ensure prompt overrides input_defaults
+      };
+
+      if (requestedImages > 1) {
+        modelInput.num_outputs = requestedImages;
+        console.log(`📸 Batch generation: ${requestedImages} images`);
+      }
+
+      // Replicate models are generally uncensored; some support disable_safety_checker
+      if (effectiveContentRating === 'nsfw') {
+        modelInput.disable_safety_checker = true;
+      }
+
+      if (isI2I && signedReferenceUrl) {
+        const inputKeyMappings = (typeof capabilities.input_key_mappings === 'object' && capabilities.input_key_mappings) || {};
+        const imageKey = inputKeyMappings.i2i_image_key || 'image';
+        const strengthKey = inputKeyMappings.i2i_strength_key || 'strength';
+
+        modelInput[imageKey] = signedReferenceUrl;
+
+        const effectiveRefStrength = canonReferenceStrength ?? (typeof referenceStrength === 'number' ? referenceStrength : 0.75);
+        // Replicate strength = how much to change (inverse of reference strength)
+        modelInput[strengthKey] = Math.round((1 - effectiveRefStrength) * 100) / 100;
+        console.log(`🎛️ Reference strength: ${effectiveRefStrength} → ${strengthKey}: ${modelInput[strengthKey]}`);
+      }
+
+    } else {
+      // Unknown provider — try generic approach with input_defaults
+      console.warn(`⚠️ Unknown provider "${providerName}", using generic input with input_defaults`);
+      modelInput = {
+        prompt,
+        ...(apiModel.input_defaults || {}),
+      };
+    }
+
+    // ── Provider-specific API call ──
+    const startTime = Date.now();
+    let allImages: string[] = [];
 
     // Update job as processing
     await supabase
@@ -402,66 +456,146 @@ serve(async (req) => {
       .update({ status: 'processing', started_at: new Date().toISOString() })
       .eq('id', jobData.id);
 
-    const falResponse = await fetch(falEndpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${falApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(modelInput)
-    });
+    if (providerName === 'fal') {
+      // ── Fal: synchronous call ──
+      const falEndpoint = `https://fal.run/${apiModel.model_key}`;
+      console.log('📤 Calling fal.ai (sync):', falEndpoint);
 
-    const generationTime = Date.now() - startTime;
-    console.log(`⏱️ Generation completed in ${generationTime}ms`);
+      const falResponse = await fetch(falEndpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(modelInput)
+      });
 
-    if (!falResponse.ok) {
-      const errorText = await falResponse.text();
-      console.error('❌ fal.ai error:', falResponse.status, errorText);
-
-      await supabase
-        .from('jobs')
-        .update({
+      if (!falResponse.ok) {
+        const errorText = await falResponse.text();
+        console.error('❌ fal.ai error:', falResponse.status, errorText);
+        await supabase.from('jobs').update({
           status: 'failed',
           error_message: `fal.ai error: ${falResponse.status} - ${errorText.substring(0, 200)}`,
           completed_at: new Date().toISOString()
-        })
-        .eq('id', jobData.id);
+        }).eq('id', jobData.id);
 
+        return new Response(
+          JSON.stringify({ error: 'Image generation failed', details: errorText }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const result = await falResponse.json();
+      console.log('📥 Fal result received:', JSON.stringify(result).substring(0, 300));
+
+      // Parse fal response
+      if (result.images && Array.isArray(result.images)) {
+        for (const img of result.images) {
+          if (img?.url) allImages.push(img.url);
+        }
+      } else if (result.image?.url) {
+        allImages.push(result.image.url);
+      } else if (result.output?.url) {
+        allImages.push(result.output.url);
+      }
+
+    } else if (providerName === 'replicate') {
+      // ── Replicate: create prediction + poll ──
+      if (!apiModel.version) {
+        console.error('❌ Replicate model missing version:', apiModel.model_key);
+        await supabase.from('jobs').update({
+          status: 'failed',
+          error_message: 'Replicate model requires version in api_models table',
+          completed_at: new Date().toISOString()
+        }).eq('id', jobData.id);
+        return new Response(
+          JSON.stringify({ error: 'Replicate model requires version in api_models table' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log('📤 Calling Replicate:', apiModel.model_key, 'version:', apiModel.version);
+
+      // Clean null/undefined from input
+      Object.keys(modelInput).forEach(k => {
+        if (modelInput[k] === null || modelInput[k] === undefined) delete modelInput[k];
+      });
+
+      const createRes = await fetch('https://api.replicate.com/v1/predictions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'wait',
+        },
+        body: JSON.stringify({
+          version: apiModel.version,
+          input: modelInput,
+        })
+      });
+
+      if (!createRes.ok) {
+        const errorText = await createRes.text();
+        console.error('❌ Replicate create error:', createRes.status, errorText);
+        await supabase.from('jobs').update({
+          status: 'failed',
+          error_message: `Replicate error: ${createRes.status} - ${errorText.substring(0, 200)}`,
+          completed_at: new Date().toISOString()
+        }).eq('id', jobData.id);
+        return new Response(
+          JSON.stringify({ error: 'Image generation failed', details: errorText }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let prediction = await createRes.json();
+      console.log('📥 Replicate prediction created:', prediction.id, 'status:', prediction.status);
+
+      // If not immediately succeeded, poll
+      if (prediction.status !== 'succeeded') {
+        const pollUrl = prediction.urls?.get || `https://api.replicate.com/v1/predictions/${prediction.id}`;
+        console.log('⏳ Polling Replicate prediction:', pollUrl);
+        prediction = await pollReplicatePrediction(pollUrl, apiKey);
+      }
+
+      console.log('📥 Replicate result:', JSON.stringify(prediction.output).substring(0, 300));
+
+      // Parse replicate output — typically an array of URL strings
+      if (Array.isArray(prediction.output)) {
+        for (const item of prediction.output) {
+          if (typeof item === 'string') allImages.push(item);
+          else if (item?.url) allImages.push(item.url);
+        }
+      } else if (typeof prediction.output === 'string') {
+        allImages.push(prediction.output);
+      }
+
+    } else {
+      // Unknown provider — fail gracefully
+      await supabase.from('jobs').update({
+        status: 'failed',
+        error_message: `Unsupported provider: ${providerName}`,
+        completed_at: new Date().toISOString()
+      }).eq('id', jobData.id);
       return new Response(
-        JSON.stringify({ error: 'Image generation failed', details: errorText }),
+        JSON.stringify({ error: `Unsupported provider: ${providerName}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const result = await falResponse.json();
-    console.log('📥 Result received:', JSON.stringify(result).substring(0, 300));
-
-    // Extract all image URLs from response
-    const allImages: string[] = [];
-    if (result.images && Array.isArray(result.images)) {
-      for (const img of result.images) {
-        if (img?.url) allImages.push(img.url);
-      }
-    } else if (result.image?.url) {
-      allImages.push(result.image.url);
-    } else if (result.output?.url) {
-      allImages.push(result.output.url);
-    }
+    const generationTime = Date.now() - startTime;
+    console.log(`⏱️ Generation completed in ${generationTime}ms`);
 
     if (allImages.length === 0) {
-      console.error('❌ No image URL in response. Keys:', Object.keys(result));
-
-      await supabase
-        .from('jobs')
-        .update({
-          status: 'failed',
-          error_message: `No image URL in response: ${JSON.stringify(result).substring(0, 200)}`,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', jobData.id);
+      console.error('❌ No image URL in response');
+      await supabase.from('jobs').update({
+        status: 'failed',
+        error_message: 'No image URL in generation response',
+        completed_at: new Date().toISOString()
+      }).eq('id', jobData.id);
 
       return new Response(
-        JSON.stringify({ error: 'No image returned from generation', resultKeys: Object.keys(result) }),
+        JSON.stringify({ error: 'No image returned from generation' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -564,6 +698,7 @@ serve(async (req) => {
             generation_metadata: {
               model: apiModel.display_name,
               model_key: apiModel.model_key,
+              provider: providerName,
               generation_mode: isI2I ? 'i2i' : 'txt2img',
               generation_time_ms: generationTime,
               presets,
@@ -616,6 +751,7 @@ serve(async (req) => {
               job_id: jobData.id,
               generation_time_ms: generationTime,
               model_key: apiModel.model_key,
+              provider: providerName,
             }
           })
           .select('id')
@@ -644,7 +780,8 @@ serve(async (req) => {
           generation_intent: generationIntent,
           result_url: processedImages[0]?.imageUrl,
           storage_path: processedImages[0]?.storagePath,
-          batch_count: processedImages.length
+          batch_count: processedImages.length,
+          provider: providerName,
         }
       })
       .eq('id', jobData.id);
