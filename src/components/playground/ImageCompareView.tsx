@@ -195,14 +195,31 @@ export const ImageCompareView: React.FC = () => {
         }
       }
 
-      const { data, error } = await supabase.functions.invoke('fal-image', {
-        body: {
+      // Resolve provider to route to correct edge function
+      const providerName = (model as any).api_providers?.name || 'fal';
+      const edgeFunction = providerName === 'replicate' ? 'replicate-image' : 'fal-image';
+
+      let requestPayload;
+      if (providerName === 'replicate') {
+        requestPayload = {
+          prompt: finalPrompt,
+          apiModelId: panel.modelId,
+          jobType: isVideo ? 'video' : 'image_high',
+          input: { ...input },
+          metadata: { source: 'playground-image-compare' },
+        };
+      } else {
+        requestPayload = {
           prompt: finalPrompt,
           apiModelId: panel.modelId,
           job_type: isVideo ? 'video' : 'image_high',
           input,
           metadata: { source: 'playground-image-compare' },
-        },
+        };
+      }
+
+      const { data, error } = await supabase.functions.invoke(edgeFunction, {
+        body: requestPayload,
       });
 
       const elapsed = Date.now() - startTime;
