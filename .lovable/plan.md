@@ -1,138 +1,125 @@
 
 
-# Align Playground Image Compare Tiles with App-Wide Standards
+# Playground Prompt Management for Model Comparison
 
-## Current State
+## The Problem (and Why It's Two Problems That Share a Solution)
 
-The playground's `ImageCompareView` renders generated images using raw `<img>` tags with `w-full h-auto` sizing, a basic hover overlay with a zoom icon, and a minimal `Dialog` lightbox that only shows the image -- no generation details, no scoring, no consistent tile treatment.
+You're trying to answer two related but distinct questions:
 
-This is inconsistent with every other page (Library, Workspace, Studio) which all use:
-- **AssetTile** -- 3:4 aspect ratio, consistent border/shadow/hover styling, iOS Safari safe layout
-- **UnifiedLightbox** -- full-featured preview with navigation, pinch-to-zoom, PromptDetailsSlider for generation details
-- **QuickRating** -- 5-star overlay for scoring images
+1. **"Is this prompt good?"** -- Prompt effectiveness testing. Does the prompt produce the intended result regardless of model?
+2. **"Is this model good?"** -- Model effectiveness testing. Given a known-good prompt, which model produces better output?
 
-## Proposed Changes
+The Image Compare tab is uniquely positioned to answer BOTH simultaneously: same prompt, two models, side-by-side. But right now, prompts are ephemeral -- typed once, used, then lost. There's no way to reuse a proven prompt or build a library of standard test prompts.
 
-### 1. Replace raw img/video rendering with AssetTile
+## How This Relates to the Existing Test Architecture
 
-In the `renderPanel` function (lines 512-557), replace the current inline `<div>` + `<img>` rendering for each generation with the shared `AssetTile` component.
+The admin `PromptTestingTab` already has:
+- Hardcoded `TestSeries` arrays (SDXL-specific prompts with artistic/explicit/unrestricted tiers)
+- A `model_test_results` table for storing scores (overall, technical, content, consistency)
+- Generation + scoring workflow with notes
 
-Each generation tile will:
-- Use `AssetTile` with `aspectRatio="3/4"` for visual consistency
-- Pass the generation's `mediaUrl` as `src`
-- Pass `videoSrc` and `isVideo` props for video generations
-- Include a `QuickRating` overlay as a child (bottom-left positioned), using the generation's `id` as `jobId`
-- Include a small model-name + time badge overlay as a child
-- On click, open the UnifiedLightbox at the correct index instead of the basic Dialog
+**Similarities:**
+- Both need a curated prompt library
+- Both need scoring/rating of outputs
+- Both compare model performance
 
-### 2. Replace basic Dialog lightbox with UnifiedLightbox
+**Key Differences:**
+- Admin testing is SDXL/WAN-specific with hardcoded tag-soup prompts (legacy)
+- Playground compare is model-agnostic (Flux, Seedream, any provider)
+- Admin testing runs one model at a time; Playground runs two simultaneously
+- Admin prompts are frozen in code; Playground needs editable, saveable prompts
 
-Remove the current `Dialog`-based lightbox (lines 608-619) and replace it with `UnifiedLightbox`:
+**Recommendation:** These should NOT be merged. The admin test harness is a legacy SDXL tool. The Playground compare view is the modern, model-agnostic testing surface. But they should share the same storage table for results so scoring data aggregates in one place.
 
-- Map each panel's `generations` array to `LightboxItem[]`, populating `id`, `url`, `type`, `prompt`, `modelType`, and `metadata` (seed, time, template)
-- This automatically provides: keyboard navigation between generated images, pinch-to-zoom, swipe gestures, and the PromptDetailsSlider (generation details panel)
-- Track `lightboxPanelKey` ('a' | 'b') alongside `lightboxIndex` so the lightbox knows which panel's generations to navigate
+## Proposed UX: "Prompt Drawer" in Image Compare
 
-### 3. Add QuickRating to generation tiles
+Instead of a complex management UI, add a lightweight **collapsible drawer** above the shared prompt input. This keeps the compare view clean while giving power users prompt management.
 
-- Import `QuickRating` component
-- Render it as a child of each `AssetTile`, positioned at bottom-left
-- The `jobId` will be the generation's `id` (which comes from `data.jobId` returned by the edge function)
-- The `userId` will come from the current auth session (add a `useSession` or `supabase.auth.getUser()` call)
-- This allows users to rate playground generations the same way they rate images everywhere else
-
-### 4. Generation metadata display
-
-Below each `AssetTile`, keep the existing compact metadata line (model name, generation time, seed) but style it consistently with other grid captions in the app.
-
-## Technical Details
-
-### File: `src/components/playground/ImageCompareView.tsx`
-
-**New imports:**
-```typescript
-import { AssetTile } from '@/components/shared/AssetTile';
-import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
-import { QuickRating } from '@/components/QuickRating';
-```
-
-**State changes:**
-- Remove: `lightboxUrl`, `lightboxIsVideo`
-- Add: `lightboxIndex: number | null`, `lightboxPanel: 'a' | 'b' | null`
-- Add: `userId` from auth session (via `useEffect` on mount)
-
-**Generation tile rendering** (replacing lines 512-557):
 ```text
-{panel.generations.map((gen, idx) => (
-  <div key={gen.id} className="space-y-1">
-    <p className="text-[11px] text-muted-foreground truncate">{gen.prompt}</p>
-    <AssetTile
-      src={gen.mediaUrl}
-      alt={gen.prompt}
-      aspectRatio="3/4"
-      isVideo={gen.isVideo}
-      videoSrc={gen.isVideo ? gen.mediaUrl : undefined}
-      onClick={() => {
-        setLightboxIndex(idx);
-        setLightboxPanel(panelKey);
-      }}
-    >
-      {/* Quick Rating overlay */}
-      {userId && (
-        <div className="absolute bottom-2 left-2 z-10
-                        opacity-0 group-hover:opacity-100 transition-opacity">
-          <QuickRating jobId={gen.id} userId={userId} />
-        </div>
-      )}
-    </AssetTile>
-    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-      <span>{gen.modelName}</span>
-      <span>-</span>
-      <span>{(gen.time / 1000).toFixed(1)}s</span>
-      {gen.seed && <><span>-</span><span>Seed: {gen.seed}</span></>}
-    </div>
-  </div>
-))}
++--------------------------------------------------+
+|  Panel A (Model + Results)  |  Panel B (Model + Results)  |
+|                             |                             |
++--------------------------------------------------+
+| [v] Saved Prompts                          [+ Save] |
+|  +-----------+  +-----------+  +-----------+       |
+|  | Portrait  |  | Landscape |  | Action    |  ...  |
+|  | lighting  |  | wide shot |  | scene     |       |
+|  +-----------+  +-----------+  +-----------+       |
++--------------------------------------------------+
+| [Prompt input area...]                    [Send]  |
++--------------------------------------------------+
 ```
 
-**Lightbox replacement** (replacing lines 608-619):
-```text
-{lightboxIndex !== null && lightboxPanel && (
-  <UnifiedLightbox
-    items={(lightboxPanel === 'a' ? panelA : panelB).generations.map(g => ({
-      id: g.id,
-      url: g.mediaUrl,
-      type: g.isVideo ? 'video' : 'image',
-      title: g.modelName,
-      prompt: g.prompt,
-      modelType: g.modelName,
-      metadata: { seed: g.seed, generationTime: g.time },
-    }))}
-    startIndex={lightboxIndex}
-    onClose={() => { setLightboxIndex(null); setLightboxPanel(null); }}
-    onIndexChange={setLightboxIndex}
-  />
-)}
-```
+### How It Works
 
-**Auth session** (for QuickRating userId):
-```text
-const [userId, setUserId] = useState<string | null>(null);
-useEffect(() => {
-  supabase.auth.getUser().then(({ data }) => {
-    if (data.user) setUserId(data.user.id);
-  });
-}, []);
-```
+1. **Save a prompt**: User types a prompt, clicks "Save" (bookmark icon). Prompt gets a short name and optional tags (t2i, i2i, flux, anatomy, lighting, etc.)
+2. **Load a prompt**: Click a saved prompt chip to populate the input area. Edit freely before sending.
+3. **Prompt cards**: Small horizontally-scrollable chips showing name + truncated text. Click to load, long-press/right-click to edit or delete.
+4. **No categories or folders**: Tags only. Filter by tag if the list grows. Keep it flat and fast.
 
-## Summary of Consistency Gains
+### Where Prompts Live
 
-| Feature | Before | After |
-|---------|--------|-------|
-| Tile component | Raw img/div | AssetTile (3:4 aspect, consistent styling) |
-| Lightbox | Basic Dialog (image only) | UnifiedLightbox (nav, zoom, swipe, details) |
-| Generation details | None in lightbox | PromptDetailsSlider via UnifiedLightbox |
-| Scoring | Not available | QuickRating 5-star overlay |
-| Video support | Inline video tag | AssetTile hover-to-play + UnifiedLightbox video player |
-| iOS Safari | Potential layout bugs | Fixed via AssetTile's absolute inset-0 pattern |
+**New table: `playground_prompts`** (not reusing `prompt_templates` -- those are system prompts for enhancement/roleplay, not user test prompts)
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| id | uuid | PK |
+| user_id | uuid | Owner (RLS) |
+| name | text | Short label ("Portrait lighting test") |
+| prompt_text | text | The actual prompt |
+| tags | text[] | Filterable tags: t2i, i2i, flux, seedream, anatomy, etc. |
+| task_type | text | t2i, i2i, i2v (to filter by current model type) |
+| is_standard | boolean | Admin-created standard prompts visible to all users |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**RLS:** Users see their own prompts + any row where `is_standard = true`.
+
+This lets admins seed standard benchmark prompts (the 10 test prompts from the Flux audit) while users can save their own.
+
+### Scoring Integration
+
+The `QuickRating` component is already on every tile (from the previous plan). Ratings are per-generation and tied to `jobId`. No additional scoring UI needed -- the existing `QuickRating` + `UnifiedLightbox` with generation details covers it.
+
+For aggregate analysis (which model scores better across N prompts), that's a reporting/admin concern, not a playground UX concern. The data is already being collected via QuickRating.
+
+### Vision Model Assist
+
+The vision model could analyze outputs and auto-suggest scores, but that's a separate feature. The immediate need is just: save, load, and reuse prompts. Vision-assisted scoring can layer on top later without changing the prompt management architecture.
+
+## Technical Plan
+
+### 1. Create `playground_prompts` table
+
+SQL migration to create the table with RLS policies allowing users to manage their own prompts and read standard ones.
+
+### 2. Create `usePlaygroundPrompts` hook
+
+- `usePlaygroundPrompts(taskType?)` -- fetches user's prompts + standard prompts, filtered by task_type if provided
+- `savePrompt(name, text, tags, taskType)` -- insert
+- `updatePrompt(id, updates)` -- update own prompts only
+- `deletePrompt(id)` -- delete own prompts only
+
+### 3. Add Prompt Drawer to ImageCompareView
+
+- Collapsible section between panels and prompt input (collapsed by default)
+- Horizontal scroll of prompt chips
+- "Save" button (bookmark icon) next to the send button
+- Simple inline dialog for naming when saving
+- Tag filter pills when list exceeds ~8 prompts
+- Auto-detect `task_type` from currently selected model (t2i vs i2i vs i2v)
+
+### 4. Seed standard test prompts
+
+Insert ~10 admin-owned standard prompts (`is_standard = true`) covering the benchmark categories from the Flux audit: texture/anatomy, spatial logic, lighting, color accuracy, multi-subject, surgical edits.
+
+### Files to Create/Modify
+
+| File | Action |
+|------|--------|
+| SQL migration (via dashboard) | Create `playground_prompts` table + RLS |
+| `src/hooks/usePlaygroundPrompts.ts` | New hook for CRUD |
+| `src/components/playground/PromptDrawer.tsx` | New component -- collapsible prompt chips |
+| `src/components/playground/SavePromptDialog.tsx` | New component -- name + tags input |
+| `src/components/playground/ImageCompareView.tsx` | Add PromptDrawer above prompt input |
 
