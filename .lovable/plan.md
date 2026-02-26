@@ -1,58 +1,50 @@
 
-# Fix Playground to Use Existing Job Infrastructure
 
-## The Core Insight
+# Fix Score-Generation Edge Function Duplicate Key Error
 
-You're right -- the playground is reinventing the wheel. The `fal-image` edge function **already creates** a `jobs` row AND a `workspace_assets` row on every call. It returns the real `jobId` in the response. But `ImageCompareView` uses `data.jobId || crypto.randomUUID()` and treats the result as ephemeral, breaking every downstream system (ratings, details, scoring) that keys off real job/asset records.
+## Root Cause
 
-The fix is NOT to build playground-specific alternatives. It's to stop ignoring the infrastructure that's already working.
+The `score-generation` edge function fails with a `23505` duplicate key error when trying to INSERT into `prompt_scores`. This happens because:
 
-## What's Actually Broken (and Why)
+1. The function checks if a `prompt_scores` row exists (line 182-186)
+2. If no row exists and `force=false`, it runs vision analysis and then tries to INSERT
+3. But between the existence check and the INSERT, a QuickRating (from the user clicking stars on a tile) can create the row via `upsertQuickRating`
+4. The INSERT then fails with "duplicate key value violates unique constraint"
 
-1. **QuickRating fails silently**: `PromptScoringService.upsertQuickRating` looks up the `jobs` table to get prompt/model info. When `gen.id` is a `crypto.randomUUID()` with no corresponding row, it returns "Job not found" and the rating is lost.
+There's also a secondary issue: the `force` flag in `PromptDetailsSlider.tsx` is set to `!!score?.vision_analysis`. When a user has given a QuickRating (creating a score row) but no vision analysis has run yet, `force` is `false`. The edge function then sees the existing row and returns "Score already exists" -- never running vision analysis at all.
 
-2. **Generation details modal is empty**: `PromptDetailsSlider` queries `workspace_assets` by ID. Since the playground ignores the real `jobId`, the lightbox passes a fake UUID that matches nothing.
+## Fix (2 changes)
 
-3. **Model dropdown incomplete**: Only shows `t2i`, `i2i`, `i2v` groups. Missing `t2v`, `extend`, `multi`.
+### 1. Edge function: Replace INSERT with UPSERT (score-generation/index.ts)
 
-## The Fix: 3 Surgical Changes
+In the "New score: INSERT" branch (around line 276), change from `.insert(...)` to `.upsert(..., { onConflict: 'job_id' })`. This way if a QuickRating created the row in the meantime, the vision columns are merged in rather than causing a conflict. User ratings set by QuickRating are preserved since the upsert payload only contains vision-related columns.
 
-### 1. Use the real `jobId` from edge function responses
+### 2. Frontend: Fix force flag logic (PromptDetailsSlider.tsx)
 
-In `ImageCompareView.tsx`, the `generateForPanel` function already receives `data.jobId` from `fal-image`/`replicate-image`. The edge function creates the job row, workspace asset, everything. Just stop falling back to `crypto.randomUUID()`:
+Line 716 currently passes `force: !!score?.vision_analysis` -- meaning "only force if vision analysis already exists." But the real intent of the rescore button is "always run vision analysis, even if a score row exists." Change to:
 
 ```typescript
-// BEFORE (line 296):
-id: data.jobId || crypto.randomUUID(),
-
-// AFTER:
-id: data.jobId,
+// Always force when user explicitly clicks rescore
+const result = await PromptScoringService.triggerVisionScoring(
+  jobId,
+  signedUrl,
+  true  // user explicitly requested scoring
+);
 ```
 
-If `data.jobId` is somehow missing, the generation failed and shouldn't be added to the panel. Add a guard for that.
-
-### 2. Pass real job ID to UnifiedLightbox
-
-The lightbox already supports `PromptDetailsSlider` via `showPromptDetails` (default `true`). It queries `workspace_assets` using the `assetId` from `LightboxItem.id`. Since the edge function creates the `workspace_assets` row with the same `job_id`, the details will populate automatically once we pass the real `jobId`.
-
-No changes needed to the lightbox itself -- it already works. The only issue was passing fake UUIDs.
-
-### 3. Add missing model groups to dropdown
-
-Add `t2v`, `extend`, and `multi` groups from `useAllVisualModels()` (already returned, just unused).
+This ensures clicking "Rescore" always runs vision analysis regardless of whether a `prompt_scores` row already exists (with or without prior vision data).
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/playground/ImageCompareView.tsx` | (1) Guard against missing `jobId` instead of falling back to random UUID. (2) Add `t2v`, `extend`, `multi` to model dropdown. (3) Auto-detect `task_type` for SavePromptDialog from selected model. |
+| `supabase/functions/score-generation/index.ts` | Change `.insert(...)` to `.upsert(..., { onConflict: 'job_id' })` on line ~276 |
+| `src/components/lightbox/PromptDetailsSlider.tsx` | Change `force` parameter on line 716 to `true` |
 
-That's it. One file. The ratings, details modal, and scoring all work automatically once the real `jobId` flows through. No new methods, no new components, no playground-specific scoring path.
+## Impact
 
-## What About Replicate Polling?
+- Fixes the duplicate key crash when QuickRating and vision scoring race
+- Fixes the "Score already exists" skip when user has rated but wants vision analysis
+- No schema changes needed
+- Preserves existing user ratings when vision scoring runs
 
-The Replicate path already returns `data.jobId` from the initial call (the edge function creates the job row before returning). The polling loop just checks status -- the `jobId` is already available. Same fix applies.
-
-## What About the Prompt Drawer task_type?
-
-Currently hardcoded to `'t2i'`. Will update to derive from the active panel's model tasks so saved prompts get the correct tag and the drawer filters appropriately.
