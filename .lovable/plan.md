@@ -1,68 +1,55 @@
 
 
-# Fix: Playground Hardcoded to `fal-image` — Enable Multi-Provider Routing
+# Surface Meaningful Generation Errors to Users
 
 ## Problem
+When portrait generation fails due to content policy violations (or other specific errors), users see a generic "Generation failed" / "Edge function failed" toast. The edge function actually returns structured error details (e.g., `{ error: "Image generation failed", details: "content_policy_violation" }`), but the client never parses or displays them.
 
-The Playground's `ImageCompareView.tsx` hardcodes `supabase.functions.invoke('fal-image', ...)` at line 198, regardless of which provider the selected model belongs to. When a user picks a Replicate model in the Playground, the request goes to the `fal-image` edge function, which correctly rejects it with `"Model provider must be fal"`.
+## Solution
 
-The main workspace (`useLibraryFirstWorkspace.ts`) already has proper multi-provider routing (lines 1147-1151), but the Playground never adopted that pattern.
+### 1. Parse structured errors from edge function responses
+**Files:** `src/hooks/useCharacterStudio.ts`, `src/pages/CreateCharacter.tsx`
 
-## Fix
+When `supabase.functions.invoke` returns an error or the response body contains `data.error`, extract the `details` field and map known error codes to user-friendly messages.
 
-**File:** `src/components/playground/ImageCompareView.tsx`
+### 2. Error message mapping utility
+**New file:** `src/lib/utils/generationErrors.ts`
 
-In the `generateForPanel` function (~line 175), resolve the provider from the model's `api_providers.name` field (already available via `useAllVisualModels`) and route to the correct edge function:
+A small utility that maps known provider error codes/strings to actionable user messages:
 
-```typescript
-const model = getModelById(panel.modelId);
-if (!model) return;
+| Provider Error | User Message |
+|---|---|
+| `content_policy_violation` | "This prompt was flagged by the model's content filter. Try adjusting appearance tags or switching to a Flux model." |
+| `rate_limit` / `429` | "Too many requests. Please wait a moment and try again." |
+| `timeout` / `504` | "Generation timed out. Try again or use a faster model." |
+| `invalid_input` / `422` (non-policy) | "Invalid generation settings. Try different options." |
+| Unknown | "Generation failed. Please try again or switch models." |
 
-// Resolve edge function from provider
-const providerName = (model as any).api_providers?.name || 'fal';
-const edgeFunction = providerName === 'replicate' ? 'replicate-image' : 'fal-image';
-```
+### 3. Update error handling in both call sites
 
-Then at line 198, replace `'fal-image'` with the resolved `edgeFunction`.
+**`useCharacterStudio.ts` (~lines 456-508):**
+- When `error` is returned from `invoke`, attempt to parse `error.message` or the response context for structured details
+- When `data?.error` is returned, also check `data?.details`
+- Pass the raw details string through the mapping utility
+- Show the mapped message in the toast `description`
 
-For Replicate models, the payload shape differs from fal (Replicate expects `apiModelId` at the top level and dimensions in `input`). We need to branch the payload construction similarly to how `useLibraryFirstWorkspace.ts` does it (lines 1166-1240).
+**`CreateCharacter.tsx` (~lines 215-232):**
+- Same pattern: check `data?.details` alongside `data?.error`
+- Use the mapping utility for the toast description
 
-### Payload branching
-
-```typescript
-if (providerName === 'replicate') {
-  requestPayload = {
-    prompt: finalPrompt,
-    apiModelId: panel.modelId,
-    jobType: isVideo ? 'video' : 'image_high',
-    input: { ...input },
-    metadata: { source: 'playground-image-compare' },
-  };
-} else {
-  requestPayload = {
-    prompt: finalPrompt,
-    apiModelId: panel.modelId,
-    job_type: isVideo ? 'video' : 'image_high',
-    input,
-    metadata: { source: 'playground-image-compare' },
-  };
-}
-
-const { data, error } = await supabase.functions.invoke(edgeFunction, {
-  body: requestPayload,
-});
-```
-
-Note: For Replicate, the field name is `jobType` (camelCase) while fal uses `job_type` (snake_case) — matching existing patterns in `useLibraryFirstWorkspace.ts`.
+### 4. Suggest model switch for content policy errors
+When the error is specifically `content_policy_violation`, append a hint: "Flux models are more permissive for this type of content." This aligns with the existing knowledge that Flux-family models bypass provider-level filters.
 
 ## Files to Change
 
 | File | Change |
-|------|--------|
-| `src/components/playground/ImageCompareView.tsx` | Resolve provider from model data; route to correct edge function; branch payload shape for Replicate vs Fal |
+|---|---|
+| `src/lib/utils/generationErrors.ts` | **New** -- error code to user message mapper (~30 lines) |
+| `src/hooks/useCharacterStudio.ts` | Parse `data.details` from edge response; use mapper for toast description |
+| `src/pages/CreateCharacter.tsx` | Same structured error parsing and user-friendly toast |
 
 ## What This Fixes
+- Content policy violations show "Prompt flagged by content filter -- try a Flux model" instead of "Edge function failed"
+- Timeouts, rate limits, and other known failures get specific, actionable messages
+- Unknown errors still show a reasonable fallback
 
-- Replicate models in the Playground will route to `replicate-image` instead of `fal-image`
-- Fal models continue working as before
-- Future providers (OpenAI, etc.) can be added by extending the routing map
