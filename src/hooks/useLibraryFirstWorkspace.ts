@@ -1122,12 +1122,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       });
 
 
-      // Fix 3: Pre-generate guard — if model ID is a UUID but type is 'sdxl', re-resolve from DB
-      // This catches any remaining async race or stale localStorage state
+      // Fix 3: Pre-generate guard — ALWAYS re-resolve provider type from DB for UUID model IDs
+      // This catches stale localStorage, smart-model-switching race conditions, and type mismatches
       let effectiveModel = selectedModel;
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedModel?.id || '');
-      if (isUUID && selectedModel?.type === 'sdxl') {
-        console.warn('⚠️ UUID model ID with sdxl type detected — re-resolving from DB');
+      if (isUUID) {
         const { data: modelRow } = await supabase
           .from('api_models')
           .select('id, model_key, display_name, api_providers!inner(name)')
@@ -1136,8 +1135,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         if (modelRow) {
           const pName = (modelRow.api_providers as any)?.name || '';
           const resolvedType = pName === 'fal' ? 'fal' : pName === 'replicate' ? 'replicate' : 'sdxl';
+          if (resolvedType !== selectedModel?.type) {
+            console.warn(`⚠️ Model type mismatch: stored=${selectedModel?.type}, actual=${resolvedType} — correcting`);
+          }
           effectiveModel = { ...selectedModel, type: resolvedType };
-          console.log('✅ Re-resolved model type:', resolvedType, 'for provider:', pName);
           localStorage.setItem('workspace-selected-model', JSON.stringify(effectiveModel));
         }
       }
@@ -1162,7 +1163,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       
       let requestPayload;
       
-      if (selectedModel?.type === 'replicate') {
+      if (effectiveModel?.type === 'replicate') {
         // Guard: Check if model ID is valid (not empty and not legacy)
         if (!selectedModel.id || selectedModel.id === 'legacy-rv51') {
           toast({
