@@ -1,73 +1,77 @@
 
-# Fix Flux Colossus Rendering in Playground Image Compare
 
-## Root Cause
+# Fix Image Compare Tab Freezing on I2I Model Selection
 
-The Flux Colossus model on Replicate has cold starts of ~100-300 seconds. The client-side polling timeout in `ImageCompareView.tsx` is only 120 seconds, causing most attempts to time out before the prediction completes. The server-side logs confirm the prediction DOES succeed (at ~103 seconds in the latest attempt), but the client gives up too early on cold starts.
+## Root Causes
 
-## Secondary Issue: Wasteful Polling
+The freeze stems from a cascade of unnecessary re-renders in `ImageCompareView.tsx`:
 
-Each 2-second poll request goes through the FULL edge function pipeline (model resolution from DB, version validation, API key retrieval) before reaching the simple `predictionId` status check at line 310. This adds unnecessary latency and DB load.
+### 1. Inline array derivations trigger effects repeatedly
+Lines 69-72 compute `t2iModels`, `i2iModels`, `i2vModels`, `allModels` as new array references on every render. When `visualModels` is undefined (during initial load or after a query refetch), `visualModels?.t2i ?? []` creates a NEW empty array each time. The `useEffect` at line 87 depends on `[t2iModels]`, so it re-fires on every render during loading, calling `setPanelA`/`setPanelB` each time (even though they bail out via functional update checks, the effect itself still runs).
 
-## Changes
+### 2. `renderPanel` is a function, not a component
+Because `renderPanel` is a plain function (not a React component), React cannot skip re-rendering its output. Every state change to either panel re-renders BOTH panels fully, including all their Select dropdowns, ReferenceImageSlots, and generation history.
 
-### 1. Edge Function: Move `predictionId` check before model resolution
+### 3. PlaygroundContext value is not memoized
+`PlaygroundProvider` creates a new `value` object on every render (line 316). Since `ChatInterface` consumes this context, ANY state change in PlaygroundProvider forces `ChatInterface` to re-render, which forces `ImageCompareView` to re-render, which forces both panels to re-render.
 
-**File:** `supabase/functions/replicate-image/index.ts`
+### 4. Auto-sync effect creates new objects on every sync
+The auto-sync effect (line 317) creates new `ReferenceImage` objects with `crypto.randomUUID()` on every run. If it fires multiple times (due to cascading renders), it creates new array references each time for Panel B.
 
-Move the `body.predictionId` status check block (lines 310-321) to BEFORE the model resolution logic (line 191). This way, polling requests skip the entire model resolution pipeline and go directly to the Replicate API status check.
+## Fix
 
-The moved block needs its own Replicate client initialization using `REPLICATE_API_TOKEN` directly (since there's no model to resolve the secret from):
+### File: `src/components/playground/ImageCompareView.tsx`
 
-```text
-// Right after auth check (~line 189), before model resolution:
-if (body.predictionId) {
-  const replicateKey = Deno.env.get('REPLICATE_API_TOKEN');
-  if (!replicateKey) {
-    return error response;
-  }
-  const rep = new Replicate({ auth: replicateKey });
-  const prediction = await rep.predictions.get(body.predictionId);
-  // Ensure output URLs are plain strings (not FileOutput objects)
-  let output = prediction.output;
-  if (Array.isArray(output)) {
-    output = output.map(item =>
-      typeof item === 'string' ? item
-        : item?.url ? (typeof item.url === 'function' ? item.url() : item.url)
-        : String(item)
-    );
-  }
-  return Response({ ...prediction, output });
-}
+**A. Memoize model arrays** (lines 69-72):
+```typescript
+const t2iModels = useMemo(() => visualModels?.t2i ?? [], [visualModels]);
+const i2iModels = useMemo(() => visualModels?.i2i ?? [], [visualModels]);
+const i2vModels = useMemo(() => visualModels?.i2v ?? [], [visualModels]);
+const allModels = useMemo(() => visualModels?.all ?? [], [visualModels]);
+```
+This prevents the default-model useEffect from re-firing on every render.
+
+**B. Memoize `getModelById`**:
+```typescript
+const getModelById = useCallback(
+  (id: string) => allModels.find(m => m.id === id),
+  [allModels]
+);
 ```
 
-### 2. Client: Increase polling timeout and pass apiModelId
+**C. Wrap the auto-sync effect with a guard** to prevent cascading updates. Add a `useRef` flag to skip redundant syncs:
+```typescript
+const isSyncing = useRef(false);
 
-**File:** `src/components/playground/ImageCompareView.tsx`
+useEffect(() => {
+  if (isSyncing.current) return;
+  // ... existing logic
+  isSyncing.current = true;
+  setPanelB(prev => ({ ... }));
+  requestAnimationFrame(() => { isSyncing.current = false; });
+}, [panelA.referenceImages, panelB.modelId]);
+```
 
-- Increase `maxWait` from `120000` (120s) to `300000` (5 minutes) for Replicate models
-- Pass `apiModelId` in polling requests for efficiency (even though the edge function fix makes this less critical)
-- Add progress status display during polling (show "starting", "processing" states)
+### File: `src/contexts/PlaygroundContext.tsx`
 
-The relevant changes in the `generateForPanel` function:
-
-```text
-// Line 234: Increase timeout
-const maxWait = 300000; // 5 minutes for cold start models
-
-// Line 239: Pass apiModelId in poll request
-body: { predictionId: data.predictionId, apiModelId: panel.modelId }
-
-// Add: Log progress transitions
-if (statusData?.status && statusData.status !== lastStatus) {
-  console.log(`Replicate status: ${statusData.status}`);
-  lastStatus = statusData.status;
-}
+**D. Memoize the context value** to stop cascading re-renders into ChatInterface and ImageCompareView:
+```typescript
+const value = useMemo<PlaygroundContextType>(() => ({
+  messages, sendMessage, isLoading, state, isLoadingMessages,
+  createConversation, refreshPromptCache, sfwMode, setSfwMode,
+  deleteConversation, updateConversationTitle, conversations,
+  isLoadingConversations, setActiveConversation,
+  regenerateAssistantMessage, settings, updateSettings,
+}), [
+  messages, isLoading, state, isLoadingMessages,
+  conversations, isLoadingConversations, sfwMode, settings
+]);
 ```
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
-| `supabase/functions/replicate-image/index.ts` | Move predictionId check before model resolution; add output URL normalization |
-| `src/components/playground/ImageCompareView.tsx` | Increase poll timeout to 300s; pass apiModelId in poll requests |
+| `src/components/playground/ImageCompareView.tsx` | Memoize model arrays, getModelById, and guard auto-sync effect |
+| `src/contexts/PlaygroundContext.tsx` | Memoize context value object |
+
