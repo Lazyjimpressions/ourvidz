@@ -1,50 +1,59 @@
 
 
-# Fix Score-Generation Edge Function Duplicate Key Error
+# Add Model Family + Task Type Filtering to Prompt Drawer
 
-## Root Cause
+## Problem
 
-The `score-generation` edge function fails with a `23505` duplicate key error when trying to INSERT into `prompt_scores`. This happens because:
+Prompts are not categorized by model family or task type. Seedream works best with structured, keyword-dense prompts while Flux prefers natural language with extended tokens. Similarly, t2i prompts are structured differently than i2i prompts (which focus on edit instructions). The drawer currently shows everything in a flat list with only content-based tags (anatomy, lighting, etc.).
 
-1. The function checks if a `prompt_scores` row exists (line 182-186)
-2. If no row exists and `force=false`, it runs vision analysis and then tries to INSERT
-3. But between the existence check and the INSERT, a QuickRating (from the user clicking stars on a tile) can create the row via `upsertQuickRating`
-4. The INSERT then fails with "duplicate key value violates unique constraint"
+## Solution
 
-There's also a secondary issue: the `force` flag in `PromptDetailsSlider.tsx` is set to `!!score?.vision_analysis`. When a user has given a QuickRating (creating a score row) but no vision analysis has run yet, `force` is `false`. The edge function then sees the existing row and returns "Score already exists" -- never running vision analysis at all.
+Two-tier filtering in the PromptDrawer: **task type** (derived from active model) as automatic context, and **model family** as a taggable/filterable dimension.
 
-## Fix (2 changes)
+### 1. Add `model_family` column to `playground_prompts`
 
-### 1. Edge function: Replace INSERT with UPSERT (score-generation/index.ts)
+Add a nullable `model_family` text column to the `playground_prompts` table. This stores which model family a prompt was written for (e.g., `flux`, `seedream`, `wan`, or `null` for generic prompts).
 
-In the "New score: INSERT" branch (around line 276), change from `.insert(...)` to `.upsert(..., { onConflict: 'job_id' })`. This way if a QuickRating created the row in the meantime, the vision columns are merged in rather than causing a conflict. User ratings set by QuickRating are preserved since the upsert payload only contains vision-related columns.
+### 2. Auto-filter PromptDrawer by active task type
 
-### 2. Frontend: Fix force flag logic (PromptDetailsSlider.tsx)
+- Pass the detected `taskType` (from the active panel's model) into `usePlaygroundPrompts(taskType)` so the hook's existing `task_type` filter activates
+- This means when you have a t2i model selected, you only see t2i prompts; switch to i2i and you see i2i prompts
+- Add an "All" option to override the filter when browsing
 
-Line 716 currently passes `force: !!score?.vision_analysis` -- meaning "only force if vision analysis already exists." But the real intent of the rescore button is "always run vision analysis, even if a score row exists." Change to:
+### 3. Add model family filter pills to PromptDrawer
 
-```typescript
-// Always force when user explicitly clicks rescore
-const result = await PromptScoringService.triggerVisionScoring(
-  jobId,
-  signedUrl,
-  true  // user explicitly requested scoring
-);
-```
+Add a second row of filter pills above the existing tag pills:
+- Row 1: Task type pills (auto-highlighted based on active model, clickable to switch): `All | t2i | i2i | i2v | t2v`
+- Row 2: Model family pills: `All | Flux | Seedream | WAN | LTX` (derived from unique `model_family` values in fetched prompts)
+- Row 3: Existing content tag pills (anatomy, lighting, etc.)
 
-This ensures clicking "Rescore" always runs vision analysis regardless of whether a `prompt_scores` row already exists (with or without prior vision data).
+### 4. Update SavePromptDialog to capture model family
+
+- Auto-detect `model_family` from the active panel's model metadata and display it as a read-only badge
+- Allow override via a small dropdown if user wants to save as generic (null)
+- Add model-family-specific suggested tags: for Seedream add `structured`, `keyword-dense`; for Flux add `natural-language`, `hex-color`
+
+### 5. Update usePlaygroundPrompts hook
+
+- Accept optional `modelFamily` parameter alongside existing `taskType`
+- Add `.eq('model_family', modelFamily)` filter when provided
+- Return all when both filters are null (the "All" state)
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `supabase/functions/score-generation/index.ts` | Change `.insert(...)` to `.upsert(..., { onConflict: 'job_id' })` on line ~276 |
-| `src/components/lightbox/PromptDetailsSlider.tsx` | Change `force` parameter on line 716 to `true` |
+| `playground_prompts` table | Add `model_family` text column (nullable) via SQL migration |
+| `src/hooks/usePlaygroundPrompts.ts` | Accept `modelFamily` param, add filter |
+| `src/components/playground/PromptDrawer.tsx` | Add task type + model family filter pill rows |
+| `src/components/playground/SavePromptDialog.tsx` | Auto-detect and display model family, add family-specific tags |
+| `src/components/playground/ImageCompareView.tsx` | Pass `taskType` and `modelFamily` from active model to hook and components |
 
-## Impact
+## UX Flow
 
-- Fixes the duplicate key crash when QuickRating and vision scoring race
-- Fixes the "Score already exists" skip when user has rated but wants vision analysis
-- No schema changes needed
-- Preserves existing user ratings when vision scoring runs
+1. User selects **Flux Pro** (t2i) in Panel A -- drawer auto-filters to `t2i` + `flux` prompts
+2. User opens drawer, sees: `[t2i] [i2i] [i2v] [t2v] [All]` then `[Flux] [Seedream] [All]` then content tags
+3. User clicks a Flux-optimized prompt chip -- natural language prompt loads into textarea
+4. User switches Panel A to **Seedream v4** -- drawer auto-updates to show `t2i` + `seedream` prompts
+5. User saves a new prompt -- dialog shows "Model family: Seedream" badge, offers `structured` and `keyword-dense` as suggested tags
 
