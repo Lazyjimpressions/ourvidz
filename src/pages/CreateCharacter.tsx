@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ArrowLeft, ChevronDown, Loader2, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { mapGenerationError, extractErrorDetails } from '@/lib/utils/generationErrors';
 import { PortraitPanel } from '@/components/roleplay/PortraitPanel';
 import { CharacterGreetingsEditor } from '@/components/roleplay/CharacterGreetingsEditor';
 import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
@@ -212,7 +213,16 @@ const CreateCharacter: React.FC = () => {
         }
       });
 
-      if (error) throw error;
+      if (error || data?.error) {
+        console.error('Generation error:', error || data?.error);
+        const details = extractErrorDetails(data, error);
+        toast({
+          title: 'Generation Failed',
+          description: mapGenerationError(details),
+          variant: 'destructive',
+        });
+        return;
+      }
 
       if (data?.imageUrl) {
         setImageUrl(data.imageUrl);
@@ -227,7 +237,7 @@ const CreateCharacter: React.FC = () => {
       console.error('Generation error:', error);
       toast({
         title: 'Generation Failed',
-        description: error instanceof Error ? error.message : 'Failed to generate portrait.',
+        description: mapGenerationError(error instanceof Error ? error.message : null),
         variant: 'destructive',
       });
     } finally {
