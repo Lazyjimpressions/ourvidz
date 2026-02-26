@@ -1416,6 +1416,51 @@ export type Database = {
           },
         ]
       }
+      motion_presets: {
+        Row: {
+          category: string | null
+          created_at: string | null
+          description: string | null
+          duration_seconds: number | null
+          id: string
+          is_active: boolean | null
+          is_builtin: boolean | null
+          name: string
+          thumbnail_url: string | null
+          updated_at: string | null
+          user_id: string | null
+          video_url: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_builtin?: boolean | null
+          name: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          video_url: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          is_active?: boolean | null
+          is_builtin?: boolean | null
+          name?: string
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          video_url?: string
+        }
+        Relationships: []
+      }
       negative_prompts: {
         Row: {
           content_mode: string
@@ -1922,18 +1967,26 @@ export type Database = {
         Row: {
           api_model_id: string | null
           clip_order: number
+          clip_type: string | null
           created_at: string | null
           duration_seconds: number | null
+          end_frame_url: string | null
+          enhanced_prompt: string | null
           extracted_frame_url: string | null
           extraction_percentage: number | null
           extraction_timestamp_ms: number | null
+          generation_config: Json | null
           generation_metadata: Json | null
           id: string
           job_id: string | null
           model_used: string | null
+          motion_preset_id: string | null
+          parent_clip_id: string | null
           prompt: string
+          prompt_template_id: string | null
           reference_image_source: string | null
           reference_image_url: string | null
+          resolved_model_id: string | null
           scene_id: string
           status: string | null
           thumbnail_url: string | null
@@ -1943,18 +1996,26 @@ export type Database = {
         Insert: {
           api_model_id?: string | null
           clip_order?: number
+          clip_type?: string | null
           created_at?: string | null
           duration_seconds?: number | null
+          end_frame_url?: string | null
+          enhanced_prompt?: string | null
           extracted_frame_url?: string | null
           extraction_percentage?: number | null
           extraction_timestamp_ms?: number | null
+          generation_config?: Json | null
           generation_metadata?: Json | null
           id?: string
           job_id?: string | null
           model_used?: string | null
+          motion_preset_id?: string | null
+          parent_clip_id?: string | null
           prompt: string
+          prompt_template_id?: string | null
           reference_image_source?: string | null
           reference_image_url?: string | null
+          resolved_model_id?: string | null
           scene_id: string
           status?: string | null
           thumbnail_url?: string | null
@@ -1964,18 +2025,26 @@ export type Database = {
         Update: {
           api_model_id?: string | null
           clip_order?: number
+          clip_type?: string | null
           created_at?: string | null
           duration_seconds?: number | null
+          end_frame_url?: string | null
+          enhanced_prompt?: string | null
           extracted_frame_url?: string | null
           extraction_percentage?: number | null
           extraction_timestamp_ms?: number | null
+          generation_config?: Json | null
           generation_metadata?: Json | null
           id?: string
           job_id?: string | null
           model_used?: string | null
+          motion_preset_id?: string | null
+          parent_clip_id?: string | null
           prompt?: string
+          prompt_template_id?: string | null
           reference_image_source?: string | null
           reference_image_url?: string | null
+          resolved_model_id?: string | null
           scene_id?: string
           status?: string | null
           thumbnail_url?: string | null
@@ -1995,6 +2064,34 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_clips_motion_preset_id_fkey"
+            columns: ["motion_preset_id"]
+            isOneToOne: false
+            referencedRelation: "motion_presets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_clips_parent_clip_id_fkey"
+            columns: ["parent_clip_id"]
+            isOneToOne: false
+            referencedRelation: "storyboard_clips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_clips_prompt_template_id_fkey"
+            columns: ["prompt_template_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_templates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "storyboard_clips_resolved_model_id_fkey"
+            columns: ["resolved_model_id"]
+            isOneToOne: false
+            referencedRelation: "api_models"
             referencedColumns: ["id"]
           },
           {
@@ -2066,7 +2163,9 @@ export type Database = {
       storyboard_projects: {
         Row: {
           ai_assistance_level: string | null
+          ai_story_plan: Json | null
           aspect_ratio: string | null
+          content_mode: string | null
           content_tier: string | null
           created_at: string | null
           description: string | null
@@ -2088,7 +2187,9 @@ export type Database = {
         }
         Insert: {
           ai_assistance_level?: string | null
+          ai_story_plan?: Json | null
           aspect_ratio?: string | null
+          content_mode?: string | null
           content_tier?: string | null
           created_at?: string | null
           description?: string | null
@@ -2110,7 +2211,9 @@ export type Database = {
         }
         Update: {
           ai_assistance_level?: string | null
+          ai_story_plan?: Json | null
           aspect_ratio?: string | null
+          content_mode?: string | null
           content_tier?: string | null
           created_at?: string | null
           description?: string | null
@@ -2216,12 +2319,14 @@ export type Database = {
       storyboard_scenes: {
         Row: {
           actual_duration_seconds: number | null
+          ai_suggestions: Json | null
           characters: Json | null
           created_at: string | null
           description: string | null
           id: string
           metadata: Json | null
           mood: string | null
+          motion_style: string | null
           narrative_context: string | null
           project_id: string
           scene_order: number
@@ -2234,12 +2339,14 @@ export type Database = {
         }
         Insert: {
           actual_duration_seconds?: number | null
+          ai_suggestions?: Json | null
           characters?: Json | null
           created_at?: string | null
           description?: string | null
           id?: string
           metadata?: Json | null
           mood?: string | null
+          motion_style?: string | null
           narrative_context?: string | null
           project_id: string
           scene_order: number
@@ -2252,12 +2359,14 @@ export type Database = {
         }
         Update: {
           actual_duration_seconds?: number | null
+          ai_suggestions?: Json | null
           characters?: Json | null
           created_at?: string | null
           description?: string | null
           id?: string
           metadata?: Json | null
           mood?: string | null
+          motion_style?: string | null
           narrative_context?: string | null
           project_id?: string
           scene_order?: number
@@ -2597,6 +2706,10 @@ export type Database = {
       }
       get_safe_profile_view: { Args: { profile_id: string }; Returns: Json }
       get_system_stats: { Args: { p_days?: number }; Returns: Json }
+      get_task_for_clip_type: {
+        Args: { p_clip_type: string }
+        Returns: string[]
+      }
       get_user_role_priority: { Args: { _user_id: string }; Returns: number }
       has_role: {
         Args: {
