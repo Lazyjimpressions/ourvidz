@@ -74,6 +74,9 @@ export const ImageCompareView: React.FC = () => {
   const t2iModels = useMemo(() => visualModels?.t2i ?? [], [visualModels]);
   const i2iModels = useMemo(() => visualModels?.i2i ?? [], [visualModels]);
   const i2vModels = useMemo(() => visualModels?.i2v ?? [], [visualModels]);
+  const t2vModels = useMemo(() => visualModels?.t2v ?? [], [visualModels]);
+  const extendModels = useMemo(() => visualModels?.extend ?? [], [visualModels]);
+  const multiModels = useMemo(() => visualModels?.multi ?? [], [visualModels]);
   const allModels = useMemo(() => visualModels?.all ?? [], [visualModels]);
 
   const [panelA, setPanelA] = useState<PanelState>(() => defaultPanel(''));
@@ -292,8 +295,13 @@ export const ImageCompareView: React.FC = () => {
 
       if (!resultUrl) throw new Error('No result URL returned');
 
+      if (!data.jobId) {
+        console.warn('⚠️ No jobId returned from edge function — generation not tracked');
+        throw new Error('No jobId returned');
+      }
+
       const gen: Generation = {
-        id: data.jobId || crypto.randomUUID(),
+        id: data.jobId,
         prompt: userPrompt,
         mediaUrl: resultUrl,
         isVideo: isVideo || isVideoUrl(resultUrl),
@@ -432,6 +440,30 @@ export const ImageCompareView: React.FC = () => {
           <SelectGroup>
             <SelectLabel className="text-[11px] text-muted-foreground">Image-to-Video</SelectLabel>
             {i2vModels.map(m => (
+              <SelectItem key={m.id} value={m.id} className="text-xs">{m.display_name}</SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+        {t2vModels.length > 0 && (
+          <SelectGroup>
+            <SelectLabel className="text-[11px] text-muted-foreground">Text-to-Video</SelectLabel>
+            {t2vModels.map(m => (
+              <SelectItem key={m.id} value={m.id} className="text-xs">{m.display_name}</SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+        {extendModels.length > 0 && (
+          <SelectGroup>
+            <SelectLabel className="text-[11px] text-muted-foreground">Video Extend</SelectLabel>
+            {extendModels.map(m => (
+              <SelectItem key={m.id} value={m.id} className="text-xs">{m.display_name}</SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+        {multiModels.length > 0 && (
+          <SelectGroup>
+            <SelectLabel className="text-[11px] text-muted-foreground">Multi-Conditioning</SelectLabel>
+            {multiModels.map(m => (
               <SelectItem key={m.id} value={m.id} className="text-xs">{m.display_name}</SelectItem>
             ))}
           </SelectGroup>
@@ -638,9 +670,14 @@ export const ImageCompareView: React.FC = () => {
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
         promptText={prompt}
-        taskType="t2i"
+        taskType={(() => {
+          const modelA = getModelById(panelA.modelId);
+          return modelA?.tasks?.[0] || 't2i';
+        })()}
         onSave={async (name, tags) => {
-          await savePrompt(name, prompt, tags, 't2i');
+          const modelA = getModelById(panelA.modelId);
+          const taskType = modelA?.tasks?.[0] || 't2i';
+          await savePrompt(name, prompt, tags, taskType);
         }}
       />
 
