@@ -6,27 +6,50 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { PlaygroundPrompt } from '@/hooks/usePlaygroundPrompts';
 
+const TASK_TYPES = ['t2i', 'i2i', 'i2v', 't2v'] as const;
+
 interface PromptDrawerProps {
   prompts: PlaygroundPrompt[];
   isLoading: boolean;
   onSelect: (promptText: string) => void;
   onDelete: (id: string) => Promise<void>;
+  /** Currently active task type from the selected model */
+  activeTaskType?: string | null;
+  /** Currently active model family from the selected model */
+  activeModelFamily?: string | null;
+  /** Called when user overrides the task type filter */
+  onTaskTypeChange?: (taskType: string | null) => void;
+  /** Called when user overrides the model family filter */
+  onModelFamilyChange?: (modelFamily: string | null) => void;
 }
 
 export const PromptDrawer: React.FC<PromptDrawerProps> = ({
   prompts, isLoading, onSelect, onDelete,
+  activeTaskType, activeModelFamily,
+  onTaskTypeChange, onModelFamilyChange,
 }) => {
   const [open, setOpen] = useState(false);
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
   if (prompts.length === 0 && !isLoading) return null;
 
-  // Collect unique tags
+  // Collect unique model families from prompts
+  const allFamilies = Array.from(
+    new Set(prompts.map(p => p.model_family).filter(Boolean) as string[])
+  ).sort();
+
+  // Collect unique content tags
   const allTags = Array.from(new Set(prompts.flatMap(p => p.tags))).sort();
 
-  const filtered = activeTag
-    ? prompts.filter(p => p.tags.includes(activeTag))
+  // Apply model family filter (client-side since hook may fetch all)
+  let filtered = activeModelFamily
+    ? prompts.filter(p => p.model_family === activeModelFamily)
     : prompts;
+
+  // Apply content tag filter
+  if (activeTag) {
+    filtered = filtered.filter(p => p.tags.includes(activeTag));
+  }
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -37,7 +60,51 @@ export const PromptDrawer: React.FC<PromptDrawerProps> = ({
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="px-2 pb-2 space-y-1.5">
-        {/* Tag filter */}
+        {/* Row 1: Task type filter */}
+        <div className="flex flex-wrap gap-1">
+          <PillButton
+            size="xs"
+            variant={!activeTaskType ? 'default' : 'ghost'}
+            onClick={() => onTaskTypeChange?.(null)}
+          >
+            All
+          </PillButton>
+          {TASK_TYPES.map(task => (
+            <PillButton
+              key={task}
+              size="xs"
+              variant={activeTaskType === task ? 'default' : 'ghost'}
+              onClick={() => onTaskTypeChange?.(activeTaskType === task ? null : task)}
+            >
+              {task}
+            </PillButton>
+          ))}
+        </div>
+
+        {/* Row 2: Model family filter */}
+        {allFamilies.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            <PillButton
+              size="xs"
+              variant={!activeModelFamily ? 'default' : 'ghost'}
+              onClick={() => onModelFamilyChange?.(null)}
+            >
+              All families
+            </PillButton>
+            {allFamilies.map(family => (
+              <PillButton
+                key={family}
+                size="xs"
+                variant={activeModelFamily === family ? 'default' : 'ghost'}
+                onClick={() => onModelFamilyChange?.(activeModelFamily === family ? null : family)}
+              >
+                {family}
+              </PillButton>
+            ))}
+          </div>
+        )}
+
+        {/* Row 3: Content tag filter */}
         {allTags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             <PillButton
@@ -45,7 +112,7 @@ export const PromptDrawer: React.FC<PromptDrawerProps> = ({
               variant={activeTag === null ? 'default' : 'ghost'}
               onClick={() => setActiveTag(null)}
             >
-              All
+              All tags
             </PillButton>
             {allTags.map(tag => (
               <PillButton
@@ -87,9 +154,14 @@ export const PromptDrawer: React.FC<PromptDrawerProps> = ({
               </TooltipTrigger>
               <TooltipContent side="bottom" className="max-w-xs text-xs">
                 <p className="line-clamp-3">{p.prompt_text}</p>
-                {p.tags.length > 0 && (
-                  <p className="text-muted-foreground mt-1">{p.tags.join(', ')}</p>
-                )}
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {p.model_family && (
+                    <span className="text-primary font-medium">{p.model_family}</span>
+                  )}
+                  {p.tags.length > 0 && (
+                    <span className="text-muted-foreground">{p.tags.join(', ')}</span>
+                  )}
+                </div>
               </TooltipContent>
             </Tooltip>
           ))}

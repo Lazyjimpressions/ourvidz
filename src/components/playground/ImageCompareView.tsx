@@ -87,8 +87,18 @@ export const ImageCompareView: React.FC = () => {
   const [lightboxPanel, setLightboxPanel] = useState<'a' | 'b' | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [drawerTaskType, setDrawerTaskType] = useState<string | null>(null);
+  const [drawerModelFamily, setDrawerModelFamily] = useState<string | null>(null);
 
-  const { prompts: savedPrompts, isLoading: promptsLoading, savePrompt, deletePrompt: deletePlaygroundPrompt } = usePlaygroundPrompts();
+  // Derive active task type and model family from Panel A's model
+  const modelAMeta = useMemo(() => allModels.find(m => m.id === panelA.modelId), [panelA.modelId, allModels]);
+  const activeTaskType = drawerTaskType ?? (modelAMeta?.tasks?.[0] || null);
+  const activeModelFamily = drawerModelFamily ?? (modelAMeta?.model_family || null);
+
+  const { prompts: savedPrompts, isLoading: promptsLoading, savePrompt, deletePrompt: deletePlaygroundPrompt } = usePlaygroundPrompts(
+    activeTaskType || undefined,
+    activeModelFamily
+  );
 
   // Fetch current user for QuickRating
   useEffect(() => {
@@ -167,6 +177,12 @@ export const ImageCompareView: React.FC = () => {
   };
 
   const getModelById = useCallback((id: string) => allModels.find(m => m.id === id), [allModels]);
+
+  // Reset drawer overrides when Panel A model changes
+  useEffect(() => {
+    setDrawerTaskType(null);
+    setDrawerModelFamily(null);
+  }, [panelA.modelId]);
 
   const panelIsActive = (panel: PanelState) => panel.modelId && panel.modelId !== NONE_VALUE;
 
@@ -622,6 +638,10 @@ export const ImageCompareView: React.FC = () => {
           isLoading={promptsLoading}
           onSelect={(text) => setPrompt(text)}
           onDelete={deletePlaygroundPrompt}
+          activeTaskType={activeTaskType}
+          activeModelFamily={activeModelFamily}
+          onTaskTypeChange={setDrawerTaskType}
+          onModelFamilyChange={setDrawerModelFamily}
         />
         <div className="p-3 pt-1.5">
           <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex items-end gap-2">
@@ -670,14 +690,10 @@ export const ImageCompareView: React.FC = () => {
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
         promptText={prompt}
-        taskType={(() => {
-          const modelA = getModelById(panelA.modelId);
-          return modelA?.tasks?.[0] || 't2i';
-        })()}
-        onSave={async (name, tags) => {
-          const modelA = getModelById(panelA.modelId);
-          const taskType = modelA?.tasks?.[0] || 't2i';
-          await savePrompt(name, prompt, tags, taskType);
+        taskType={activeTaskType || 't2i'}
+        modelFamily={activeModelFamily}
+        onSave={async (name, tags, family) => {
+          await savePrompt(name, prompt, tags, activeTaskType || 't2i', family);
         }}
       />
 

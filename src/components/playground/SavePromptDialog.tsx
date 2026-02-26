@@ -1,26 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { PillButton } from '@/components/ui/pill-button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-const SUGGESTED_TAGS = ['anatomy', 'lighting', 'spatial', 'color', 'texture', 'multi-subject', 'portrait', 'landscape', 'action'];
+const BASE_TAGS = ['anatomy', 'lighting', 'spatial', 'color', 'texture', 'multi-subject', 'portrait', 'landscape', 'action'];
+
+const FAMILY_TAGS: Record<string, string[]> = {
+  seedream: ['structured', 'keyword-dense'],
+  flux: ['natural-language', 'hex-color'],
+  wan: ['motion', 'cinematic'],
+  ltx: ['motion', 'fast'],
+};
 
 interface SavePromptDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   promptText: string;
   taskType: string;
-  onSave: (name: string, tags: string[]) => Promise<void>;
+  modelFamily?: string | null;
+  onSave: (name: string, tags: string[], modelFamily: string | null) => Promise<void>;
 }
 
 export const SavePromptDialog: React.FC<SavePromptDialogProps> = ({
-  open, onOpenChange, promptText, taskType, onSave,
+  open, onOpenChange, promptText, taskType, modelFamily: detectedFamily, onSave,
 }) => {
   const [name, setName] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [familyOverride, setFamilyOverride] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Reset family override when dialog opens with new detected family
+  const effectiveFamily = familyOverride !== null ? (familyOverride || null) : (detectedFamily || null);
+
+  const suggestedTags = useMemo(() => {
+    const familySpecific = effectiveFamily ? (FAMILY_TAGS[effectiveFamily.toLowerCase()] || []) : [];
+    return [...new Set([...familySpecific, ...BASE_TAGS])];
+  }, [effectiveFamily]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
@@ -30,9 +48,10 @@ export const SavePromptDialog: React.FC<SavePromptDialogProps> = ({
     if (!name.trim()) return;
     setIsSaving(true);
     try {
-      await onSave(name.trim(), selectedTags);
+      await onSave(name.trim(), selectedTags, effectiveFamily);
       setName('');
       setSelectedTags([]);
+      setFamilyOverride(null);
       onOpenChange(false);
     } catch (err) {
       console.error('❌ Failed to save prompt:', err);
@@ -65,10 +84,39 @@ export const SavePromptDialog: React.FC<SavePromptDialogProps> = ({
               {promptText}
             </p>
           </div>
+
+          {/* Model family badge + override */}
+          <div>
+            <Label className="text-xs text-muted-foreground">Model Family</Label>
+            <div className="flex items-center gap-2 mt-1">
+              {detectedFamily && (
+                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                  {detectedFamily}
+                </span>
+              )}
+              <Select
+                value={familyOverride ?? '__auto__'}
+                onValueChange={(v) => setFamilyOverride(v === '__auto__' ? null : v === '__none__' ? '' : v)}
+              >
+                <SelectTrigger className="h-7 text-xs w-[140px]">
+                  <SelectValue placeholder="Auto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__auto__" className="text-xs">Auto-detect</SelectItem>
+                  <SelectItem value="__none__" className="text-xs text-muted-foreground">Generic (none)</SelectItem>
+                  <SelectItem value="seedream" className="text-xs">Seedream</SelectItem>
+                  <SelectItem value="flux" className="text-xs">Flux</SelectItem>
+                  <SelectItem value="wan" className="text-xs">WAN</SelectItem>
+                  <SelectItem value="ltx" className="text-xs">LTX</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           <div>
             <Label className="text-xs text-muted-foreground">Tags</Label>
             <div className="flex flex-wrap gap-1.5 mt-1">
-              {SUGGESTED_TAGS.map(tag => (
+              {suggestedTags.map(tag => (
                 <PillButton
                   key={tag}
                   size="xs"
@@ -80,7 +128,7 @@ export const SavePromptDialog: React.FC<SavePromptDialogProps> = ({
               ))}
             </div>
           </div>
-          <p className="text-[10px] text-muted-foreground">Task type: {taskType}</p>
+          <p className="text-[10px] text-muted-foreground">Task: {taskType} • Family: {effectiveFamily || 'generic'}</p>
         </div>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-xs">
