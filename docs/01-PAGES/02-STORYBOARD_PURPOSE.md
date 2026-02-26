@@ -41,6 +41,7 @@ This creates implicit temporal continuity while avoiding identity drift.
 ### Database Tables
 
 #### storyboard_projects
+
 - Core project settings (title, description, status)
 - Target duration, aspect ratio, quality preset
 - AI assistance level configuration
@@ -48,6 +49,7 @@ This creates implicit temporal continuity while avoiding identity drift.
 - Source conversation link (roleplay integration)
 
 #### storyboard_scenes
+
 - Scene order within project
 - Title, description, setting, mood
 - Character assignments
@@ -55,6 +57,7 @@ This creates implicit temporal continuity while avoiding identity drift.
 - Scene status tracking
 
 #### storyboard_clips
+
 - Clip order within scene
 - Generation prompt
 - Reference image for frame chaining
@@ -63,12 +66,14 @@ This creates implicit temporal continuity while avoiding identity drift.
 - Generation status and metadata
 
 #### storyboard_frames
+
 - Extracted frames from clips
 - Timestamp and quality score
 - Chain frame indicator
 - Used-in-clip reference
 
 #### storyboard_renders
+
 - Final video render configuration
 - Quality, transitions, output URL
 - Render status and progress
@@ -128,26 +133,49 @@ Following industry best practices for professional video editing interfaces:
 ## Component Architecture
 
 ### Page Components
-- `Storyboard.tsx` - Project list page
-- `StoryboardEditor.tsx` - Project editor with timeline
+
+- `Storyboard.tsx` - Project list page with AI story plan integration
+- `StoryboardEditor.tsx` - V2 project editor with scene strip, clip canvas, detail panel
 
 ### Storyboard Components (`src/components/storyboard/`)
+
+**Core Components:**
 - `ProjectCard.tsx` - Compact project card for grid display
 - `NewProjectDialog.tsx` - Project creation dialog
+
+**V2 Clip Components:**
+- `SceneStrip.tsx` - Horizontal scene navigation
+- `ClipCanvas.tsx` - Drag-and-drop clip strip
+- `ClipTile.tsx` - Individual clip with status badges
+- `ClipDetailPanel.tsx` - Bottom panel with type, prompt, frame selector
+- `ClipTypeSelector.tsx` - Clip type dropdown with AI recommendations
+- `ClipLibrary.tsx` - Right sidebar with character canons
+- `MotionLibrary.tsx` - Motion preset browser with video previews
+
+**Generation Components:**
 - `ClipCard.tsx` - Video clip display with status indicators
 - `ClipWorkspace.tsx` - Main clip generation area with prompt input
 - `FrameSelector.tsx` - Visual frame extraction slider
 - `ChainIndicator.tsx` - Frame chain relationship visualization
 
+**Preview Components:**
+- `AssemblyPreview.tsx` - Sequential video playback with scene markers
+
 ### Hooks
+
 - `useStoryboard.ts` - State management for projects, scenes, clips
-- `useClipGeneration.ts` - Video clip generation with WAN 2.1 I2V
+- `useClipOrchestration.ts` - V2 generation orchestration (replaces useClipGeneration)
+- `useStoryboardAI.ts` - AI assistance integration (story planning, prompt suggestions)
+- `useClipGeneration.ts` - Legacy video clip generation (deprecated)
 
 ### Services
+
 - `StoryboardService.ts` - CRUD operations for all storyboard entities
+- `ClipOrchestrationService.ts` - Dynamic model selection, prompt templates, generation config
 - `FrameExtractionService.ts` - Client-side video frame extraction
 
 ### Utilities
+
 - `storyboardPrompts.ts` - Prompt generation for anchor and chained clips
 
 ---
@@ -184,6 +212,7 @@ Following industry best practices for professional video editing interfaces:
 ### Prompt Generation Strategy
 
 **Initial Clip (Anchor):**
+
 ```
 [full character description],
 [pose],
@@ -194,6 +223,7 @@ slow natural movement, cinematic motion
 ```
 
 **Chained Clips:**
+
 ```
 same character and setting,
 continuing the motion,
@@ -254,21 +284,25 @@ Generate Clips for Each Scene → Export
 - [x] Chain indicator showing frame relationships in UI
 - [x] Reference image selector for first clip (upload, character portrait)
 
-### Phase 3: AI Assistance 🔲 PENDING
+### Phase 3: AI Assistance ✅ COMPLETE
 
-- [ ] Create `storyboard-ai-assist` edge function (uses existing OpenRouter/Qwen)
-- [ ] Implement StoryAIService
-- [ ] Build collapsible AI suggestions panel
-- [ ] Story beat generation
-- [ ] Prompt suggestions based on scene context
+- [x] Create `storyboard-ai-assist` edge function (uses existing OpenRouter/Qwen)
+- [x] Implement StoryAIService and useStoryboardAI hook
+- [x] AI story planning on project creation (when ai_assistance_level='full')
+- [x] Story beat generation from project description
+- [x] Prompt suggestions based on scene context
+- [x] AI clip type recommendations
+- [x] Prompt enhancement integration
 
-### Phase 4: Preview + Export 🔲 PENDING
+### Phase 4: Generation Flows ✅ COMPLETE
 
-- [ ] AssemblyPreview component (client-side playback of clips in sequence)
-- [ ] Export popover with render settings
-- [ ] `stitch-clips` edge function using FFmpeg in Deno
-- [ ] Handle shorter assemblies within edge function timeout
-- [ ] Download individual clips as fallback
+- [x] ClipOrchestrationService with dynamic model selection
+- [x] Clip type system (quick, extended, controlled, keyframed)
+- [x] Prompt template integration from prompt_templates table
+- [x] Motion presets library (10 built-in presets)
+- [x] AssemblyPreview component (client-side playback of clips in sequence)
+- [x] FrameSelector integration in ClipDetailPanel
+- [x] Job polling via jobs table for async completion
 
 ### Phase 5: Roleplay Integration 🔲 PENDING
 
@@ -307,10 +341,12 @@ Generate Clips for Each Scene → Export
 ## Key Files
 
 ### Pages
+
 - [Storyboard.tsx](../../src/pages/Storyboard.tsx) - Project list
 - [StoryboardEditor.tsx](../../src/pages/StoryboardEditor.tsx) - Project editor
 
 ### Components
+
 - [ProjectCard.tsx](../../src/components/storyboard/ProjectCard.tsx)
 - [NewProjectDialog.tsx](../../src/components/storyboard/NewProjectDialog.tsx)
 - [ClipCard.tsx](../../src/components/storyboard/ClipCard.tsx)
@@ -319,17 +355,21 @@ Generate Clips for Each Scene → Export
 - [ChainIndicator.tsx](../../src/components/storyboard/ChainIndicator.tsx)
 
 ### Hooks
+
 - [useStoryboard.ts](../../src/hooks/useStoryboard.ts)
 - [useClipGeneration.ts](../../src/hooks/useClipGeneration.ts)
 
 ### Services
+
 - [StoryboardService.ts](../../src/lib/services/StoryboardService.ts)
 - [FrameExtractionService.ts](../../src/lib/services/FrameExtractionService.ts)
 
 ### Utilities
+
 - [storyboardPrompts.ts](../../src/lib/utils/storyboardPrompts.ts)
 
 ### Types
+
 - [storyboard.ts](../../src/types/storyboard.ts)
 
 ---

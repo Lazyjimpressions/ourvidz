@@ -1,4 +1,5 @@
 # Storyboard User Guide
+
 ## Creating Multi-Clip Videos with Character Consistency
 
 > This guide explains how to use the Storyboard feature to create longer-form videos with consistent characters across multiple clips. It covers project setup, clip generation, frame chaining, and best practices.
@@ -44,7 +45,118 @@ Storyboard lets you create videos by chaining together multiple AI-generated cli
 
 ---
 
-## 3. Generating Your First Clip (Anchor Clip)
+## 3. Understanding Clip Types (V2)
+
+The Storyboard V2 system offers five different clip types, each designed for specific use cases.
+
+### Clip Type Overview
+
+| Type | Duration | Best For | Reference Source |
+|------|----------|----------|------------------|
+| **Quick** | 5s | First clips, establishing shots | Character portrait or uploaded image |
+| **Extended** | 10s | Continuing from previous clip | Previous clip video |
+| **Controlled** | 5s | Precise motion with identity preservation | Character image + motion preset |
+| **Long** | 15s | Extended sequences (auto-orchestrated) | Character image |
+| **Keyframed** | 5s | Specific start/end poses | Start and end frame images |
+
+### Choosing the Right Type
+
+| Scenario | Recommended Type |
+|----------|------------------|
+| First clip in a scene | **Quick** |
+| Smooth continuation from previous | **Extended** |
+| Need specific motion (breathing, turn) | **Controlled** |
+| Character needs to hold identity | **Controlled** |
+| Longer uninterrupted sequence | **Long** |
+| Known start and end poses | **Keyframed** |
+
+### How Clip Types Affect Generation
+
+- **Quick**: Uses Image-to-Video (I2V) - transforms your reference image into motion
+- **Extended**: Uses Video Extend - continues the video from where the last clip ended
+- **Controlled**: Uses MultiConditioning - combines identity reference with motion reference
+- **Keyframed**: Uses multi-image input - interpolates between your start/end frames
+
+---
+
+## 4. Using AI Assistance
+
+Storyboard V2 includes comprehensive AI assistance throughout the workflow.
+
+### AI Story Planning
+
+When creating a new project with AI assistance level set to "Full":
+
+1. Provide a project description (e.g., "A romantic scene at sunset on the beach")
+2. The AI generates:
+   - **Story beats**: High-level narrative structure
+   - **Scene breakdown**: Specific scenes with titles and descriptions
+   - **Mood suggestions**: Emotional tone for each scene
+   - **Duration allocation**: How to distribute time across scenes
+
+3. Scenes are automatically created from the AI plan
+4. You can edit, reorder, or delete any AI-generated scenes
+
+### AI Prompt Suggestions
+
+When writing clip prompts, the AI can suggest motion prompts based on:
+
+- **Scene context**: The scene's mood, setting, and description
+- **Previous clip**: What motion came before (for continuity)
+- **Character**: Any character-specific movement patterns
+
+Suggestions come in three intensity levels:
+- **Subtle**: Minimal motion (breathing, blinking)
+- **Medium**: Moderate action (turning, stepping)
+- **Dynamic**: Active motion (walking, gesturing)
+
+### AI Prompt Enhancement
+
+Before generation, you can enhance your prompt:
+
+1. Write your basic prompt
+2. Click the **Enhance** button (sparkle icon)
+3. The AI expands your prompt for better video generation
+4. Review and edit the enhanced prompt if needed
+
+**Example:**
+- Your prompt: "walks toward water"
+- Enhanced: "same character and setting, continuing natural movement, walks slowly toward the water's edge with graceful steps, gentle breeze affecting hair and clothing, golden sunset reflections on wet sand"
+
+---
+
+## 5. Motion Presets
+
+Motion presets provide reference videos that guide how your character should move.
+
+### Accessing the Motion Library
+
+1. Select a clip and set type to **Controlled**
+2. Click the **Motion Preset** selector
+3. Browse categories or search for specific motions
+4. Preview any preset by hovering over its thumbnail
+
+### Available Categories
+
+| Category | Presets | Use Cases |
+|----------|---------|-----------|
+| **Breathing** | Subtle, Deep | Calm scenes, close-ups |
+| **Turn** | Left, Right | Changing direction, reveals |
+| **Walk** | Forward, Backward | Movement sequences |
+| **Camera** | Orbit, Handheld | Cinematic effects |
+| **Expression** | Smile Transition | Emotional moments |
+| **General** | Look Around | Ambient movement |
+
+### Tips for Effective Motion Presets
+
+- **Match energy**: Choose presets that fit your scene's mood
+- **Combine with prompts**: Your text prompt adds context to the motion
+- **Test first**: Generate a test clip to see how the preset works with your character
+- **Subtle works best**: Dramatic motions can cause identity drift
+
+---
+
+## 6. Generating Your First Clip (Anchor Clip)
 
 The first clip is crucial - it establishes the visual foundation for all following clips.
 
@@ -81,7 +193,7 @@ Your first prompt should include comprehensive details:
 
 ---
 
-## 4. Generating Chain Clips
+## 7. Generating Chain Clips
 
 After your first clip, subsequent clips should **NOT** repeat the character description.
 
@@ -119,7 +231,7 @@ same character and setting, [motion intent], [subtle change]
 
 ---
 
-## 5. Frame Extraction
+## 8. Frame Extraction
 
 After each clip generates, you need to extract a frame for the next clip.
 
@@ -153,7 +265,7 @@ After each clip generates, you need to extract a frame for the next clip.
 
 ---
 
-## 6. Model Selection
+## 9. Model Selection
 
 ### Available Video Models
 
@@ -171,7 +283,7 @@ After each clip generates, you need to extract a frame for the next clip.
 
 ---
 
-## 7. Best Practices
+## 10. Best Practices
 
 ### Project Planning
 
@@ -197,7 +309,7 @@ After each clip generates, you need to extract a frame for the next clip.
 
 ---
 
-## 8. Troubleshooting
+## 11. Troubleshooting
 
 ### "My character looks different in each clip"
 
@@ -212,6 +324,7 @@ After each clip generates, you need to extract a frame for the next clip.
 ### "Generation keeps failing"
 
 **Causes & Fixes**:
+
 - Reference image too small → Use higher resolution
 - Prompt too complex → Simplify, focus on essentials
 - Model overloaded → Wait and retry, or switch models
@@ -228,11 +341,12 @@ After each clip generates, you need to extract a frame for the next clip.
 
 ---
 
-## 9. Example Workflow
+## 12. Example Workflow
 
 ### Project: "Beach Sunset Romance" (30 seconds, 6 clips)
 
 **Setup:**
+
 - Aspect ratio: 16:9
 - Primary character: "Emma" (dark hair, green eyes)
 - Target: 6 clips × 5 seconds each
@@ -263,7 +377,7 @@ After each clip generates, you need to extract a frame for the next clip.
 
 ---
 
-## 10. Keyboard Shortcuts (Coming Soon)
+## 13. Keyboard Shortcuts (Coming Soon)
 
 | Shortcut | Action |
 |----------|--------|
@@ -286,6 +400,7 @@ After each clip generates, you need to extract a frame for the next clip.
 ## Need Help?
 
 If you encounter issues not covered here:
+
 1. Check the generation logs for error details
 2. Try a different model
 3. Simplify your prompt

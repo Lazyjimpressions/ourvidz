@@ -1,12 +1,8 @@
-Perfect — below is a **clean, internal reference document** you can drop straight into your repo or `/docs/reference/` folder.
-
-I’ve structured this exactly like your other reference docs: **conceptual → practical → implementation-ready**, with explicit guidance for **Wan 2.1 + Kling**, NSFW-safe assumptions, and zero fluff.
-
----
-
 # Frame Chaining Best Practices
 
-### (Wan 2.1 I2V + Kling I2V)
+**Last Updated:** February 25, 2026
+
+This document covers frame chaining strategies for video models that don’t support first+last frame interpolation (WAN 2.1, Kling I2V).
 
 **Purpose**
 Since **Wan 2.1 does NOT support first+last-frame inputs**, this document defines a **frame chaining strategy** that enables believable scene continuity, character persistence, and pose progression using **single-reference image-to-video models**.
@@ -277,11 +273,28 @@ This produces:
 
 ---
 
-other steps:
+## 11. V2 Clip Type Considerations
 
-* Convert this into a **Supabase schema**
-* Provide a **frame-extraction FFmpeg command**
-* Design a **branching scene system** (user choices)
-* Write a **Kling-specific chaining doc**
+In Storyboard V2, frame chaining behavior varies by clip type:
 
+| Clip Type | Frame Chaining Behavior |
+|-----------|------------------------|
+| **Quick** | Extract at 45-60% for chaining to next clip |
+| **Extended** | No frame extraction needed - continues from video |
+| **Controlled** | Extract frame for identity reference in next controlled clip |
+| **Keyframed** | End frame becomes start frame of next clip |
+
+### When to Extract Frames
+
+- **Always**: After `quick` clips to enable chaining
+- **Optional**: After `controlled` clips if continuing same identity
+- **Never**: After `extended` clips (video continuation handles continuity)
+
+---
+
+## Related Documentation
+
+- [STORYBOARD_USER_GUIDE.md](./STORYBOARD_USER_GUIDE.md) - User how-to guide
+- [STORYBOARD_SYSTEM.md](../03-SYSTEMS/STORYBOARD_SYSTEM.md) - Technical system documentation
+- [WAN2.1_i2v_FAL_AI_GUIDE.md](./WAN2.1_i2v_FAL_AI_GUIDE.md) - WAN model specifics
 

@@ -1,29 +1,27 @@
 /**
- * StoryboardEditor Page
+ * StoryboardEditor Page V2
  *
- * Project editor with timeline, scene panel, and clip workspace.
- * Three-panel layout following the PRD UI/UX guidelines.
+ * Redesigned project editor with:
+ * - SceneStrip for horizontal scene navigation
+ * - ClipCanvas with drag-and-drop clip management
+ * - ClipLibrary sidebar for reference sources
+ * - ClipDetailPanel for editing selected clips
+ * - AI-assisted workflow throughout
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { StoryboardLayout } from '@/components/StoryboardLayout';
 import { useStoryboard } from '@/hooks/useStoryboard';
+import { useStoryboardAI } from '@/hooks/useStoryboardAI';
+import { useClipOrchestration } from '@/hooks/useClipOrchestration';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -38,28 +36,29 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   ArrowLeft,
-  Plus,
   Play,
   Download,
-  Settings,
   Loader2,
-  Film,
-  MoreVertical,
-  Trash2,
-  GripVertical,
   Sparkles,
-  ChevronRight,
   Clock,
-  Pencil,
+  MoreHorizontal,
 } from 'lucide-react';
 import {
   StoryboardScene,
   StoryboardClip,
   CreateSceneInput,
-  UpdateSceneInput,
   ProjectAssembly,
+  ClipType,
+  MotionPreset,
 } from '@/types/storyboard';
-import { ClipWorkspace } from '@/components/storyboard';
+import { CharacterCanon } from '@/types/character-hub-v2';
+import {
+  SceneStrip,
+  ClipCanvas,
+  ClipLibrary,
+  ClipDetailPanel,
+  MotionLibrary,
+} from '@/components/storyboard';
 import { StoryPlannerSheet } from '@/components/storyboard/StoryPlannerSheet';
 import { AssemblyPreview } from '@/components/storyboard/AssemblyPreview';
 import { StoryboardService } from '@/lib/services/StoryboardService';
@@ -82,18 +81,45 @@ const StoryboardEditor = () => {
     deleteScene,
     selectScene,
     updateProject,
+    createClip,
+    updateClip,
+    deleteClip,
   } = useStoryboard();
 
+  const { recommendClipType, isRecommendingClipType } = useStoryboardAI();
+  const { getModelForClipType, generateClip } = useClipOrchestration(activeProject?.content_mode || 'nsfw');
+
   // Local UI state
-  const [isScenePanelOpen, setIsScenePanelOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [sceneToDelete, setSceneToDelete] = useState<StoryboardScene | null>(null);
   const [isAddingScene, setIsAddingScene] = useState(false);
+  const [isAddingClip, setIsAddingClip] = useState(false);
   const [showStoryPlanner, setShowStoryPlanner] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [assembly, setAssembly] = useState<ProjectAssembly | null>(null);
   const [isLoadingAssembly, setIsLoadingAssembly] = useState(false);
+
+  // Selected clip for detail panel
+  const [selectedClip, setSelectedClip] = useState<StoryboardClip | null>(null);
+  const [recommendedClipType, setRecommendedClipType] = useState<ClipType | undefined>();
+  const [isGeneratingClip, setIsGeneratingClip] = useState(false);
+
+  // Character canons (would come from character hub)
+  const [characterCanons, setCharacterCanons] = useState<CharacterCanon[]>([]);
+
+  // Get clips for active scene
+  const activeSceneClips = useMemo(() => {
+    if (!activeScene) return [];
+    return clips.filter((c) => c.scene_id === activeScene.id).sort((a, b) => a.clip_order - b.clip_order);
+  }, [clips, activeScene]);
+
+  // Get previous clip (for context)
+  const previousClip = useMemo(() => {
+    if (!selectedClip) return undefined;
+    const idx = activeSceneClips.findIndex((c) => c.id === selectedClip.id);
+    return idx > 0 ? activeSceneClips[idx - 1] : undefined;
+  }, [selectedClip, activeSceneClips]);
 
   // Load project on mount
   useEffect(() => {
@@ -112,6 +138,25 @@ const StoryboardEditor = () => {
       setEditedTitle(activeProject.title);
     }
   }, [activeProject?.title]);
+
+  // Load recommended clip type when clip selected
+  useEffect(() => {
+    if (selectedClip && activeScene) {
+      const clipIndex = activeSceneClips.findIndex((c) => c.id === selectedClip.id);
+      const position: 'first' | 'middle' | 'last' =
+        clipIndex === 0 ? 'first' :
+        clipIndex === activeSceneClips.length - 1 ? 'last' : 'middle';
+
+      recommendClipType({
+        position,
+        previousClipType: previousClip?.clip_type,
+        sceneMood: activeScene?.mood,
+        hasMotionPreset: !!selectedClip?.motion_preset_id,
+      }).then((result) => {
+        setRecommendedClipType(result.recommended);
+      });
+    }
+  }, [selectedClip?.id, activeScene?.id, previousClip?.id, activeSceneClips.length]);
 
   // Handlers
   const handleBackToList = () => {
@@ -135,7 +180,7 @@ const StoryboardEditor = () => {
       const newScene = await createScene({
         project_id: activeProject.id,
         title: `Scene ${scenes.length + 1}`,
-        target_duration_seconds: 5,
+        target_duration_seconds: 30,
       });
       selectScene(newScene);
     } finally {
@@ -152,8 +197,193 @@ const StoryboardEditor = () => {
 
   const handleSelectScene = (scene: StoryboardScene) => {
     selectScene(scene);
-    setIsScenePanelOpen(true);
+    setSelectedClip(null);
   };
+
+  const handleAddClip = async () => {
+    if (!activeScene) return;
+
+    setIsAddingClip(true);
+    try {
+      const newClip = await createClip({
+        scene_id: activeScene.id,
+        prompt: '',
+        clip_type: 'quick',
+      });
+      setSelectedClip(newClip);
+    } finally {
+      setIsAddingClip(false);
+    }
+  };
+
+  const handleSelectClip = (clip: StoryboardClip) => {
+    setSelectedClip(clip);
+  };
+
+  const handleUpdateClip = async (updates: Partial<StoryboardClip>) => {
+    if (!selectedClip) return;
+    await updateClip(selectedClip.id, updates);
+    // Update local state
+    setSelectedClip((prev) => (prev ? { ...prev, ...updates } : null));
+  };
+
+  const handleDeleteClip = async () => {
+    if (!selectedClip) return;
+    await deleteClip(selectedClip.id);
+    setSelectedClip(null);
+  };
+
+  const handleDuplicateClip = async () => {
+    if (!selectedClip || !activeScene) return;
+    const newClip = await createClip({
+      scene_id: activeScene.id,
+      prompt: selectedClip.prompt,
+      reference_image_url: selectedClip.reference_image_url,
+      reference_image_source: selectedClip.reference_image_source,
+      clip_type: selectedClip.clip_type,
+    });
+    setSelectedClip(newClip);
+  };
+
+  const handleGenerateClip = async () => {
+    if (!selectedClip || !activeScene || !activeProject) return;
+    if (!selectedClip.prompt) {
+      console.error('🎬 Clip has no prompt');
+      return;
+    }
+
+    setIsGeneratingClip(true);
+    try {
+      // Update clip status to generating
+      await updateClip(selectedClip.id, { status: 'generating' });
+
+      // Import and use ClipOrchestrationService directly
+      const { ClipOrchestrationService } = await import('@/lib/services/ClipOrchestrationService');
+
+      // Build generation request from existing clip
+      const genRequest = {
+        clipId: selectedClip.id,
+        clipType: selectedClip.clip_type,
+        prompt: selectedClip.prompt,
+        referenceImageUrl: selectedClip.reference_image_url,
+        referenceVideoUrl: previousClip?.video_url, // For extended clips
+        motionPresetId: selectedClip.motion_preset_id,
+        endFrameUrl: selectedClip.end_frame_url,
+        contentMode: (activeProject.content_mode || 'nsfw') as 'sfw' | 'nsfw',
+        aspectRatio: (activeProject.aspect_ratio || '16:9') as '16:9' | '9:16' | '1:1',
+        durationSeconds: selectedClip.duration_seconds,
+      };
+
+      console.log('🎬 Starting clip generation:', {
+        clipId: selectedClip.id,
+        clipType: selectedClip.clip_type,
+        hasRefImage: !!selectedClip.reference_image_url,
+        hasRefVideo: !!previousClip?.video_url,
+      });
+
+      // Execute full generation flow
+      const result = await ClipOrchestrationService.generateClip(genRequest);
+
+      if (result.success) {
+        // Update clip with generation result
+        await updateClip(selectedClip.id, {
+          resolved_model_id: result.resolvedModelId,
+          prompt_template_id: result.promptTemplateId,
+          enhanced_prompt: result.enhancedPrompt,
+          ...(result.videoUrl ? {
+            status: 'completed',
+            video_url: result.videoUrl,
+          } : {
+            // Async job - status will be updated via polling
+          }),
+        });
+
+        console.log('🎬 Generation initiated:', {
+          success: true,
+          jobId: result.jobId,
+          videoUrl: result.videoUrl,
+        });
+      } else {
+        // Generation failed
+        await updateClip(selectedClip.id, { status: 'failed' });
+        console.error('🎬 Generation failed:', result.error);
+      }
+    } catch (error) {
+      console.error('🎬 Generation error:', error);
+      await updateClip(selectedClip.id, { status: 'failed' });
+    } finally {
+      setIsGeneratingClip(false);
+    }
+  };
+
+  const handleReorderClips = async (fromIndex: number, toIndex: number) => {
+    if (!activeScene) return;
+    // Reorder logic - update clip_order fields
+    const reorderedClips = [...activeSceneClips];
+    const [movedClip] = reorderedClips.splice(fromIndex, 1);
+    reorderedClips.splice(toIndex, 0, movedClip);
+
+    // Update each clip's order
+    for (let i = 0; i < reorderedClips.length; i++) {
+      if (reorderedClips[i].clip_order !== i) {
+        await updateClip(reorderedClips[i].id, { clip_order: i });
+      }
+    }
+  };
+
+  const handleDropImage = async (imageUrl: string, source: 'library' | 'upload') => {
+    if (!activeScene) return;
+
+    setIsAddingClip(true);
+    try {
+      const newClip = await createClip({
+        scene_id: activeScene.id,
+        prompt: '',
+        reference_image_url: imageUrl,
+        reference_image_source: source === 'library' ? 'library' : 'uploaded',
+        clip_type: 'quick',
+      });
+      setSelectedClip(newClip);
+    } finally {
+      setIsAddingClip(false);
+    }
+  };
+
+  const handleSelectReference = (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library') => {
+    if (selectedClip) {
+      handleUpdateClip({
+        reference_image_url: imageUrl,
+        reference_image_source: source,
+      });
+    }
+  };
+
+  const handleSelectMotionPreset = (preset: MotionPreset) => {
+    if (selectedClip) {
+      handleUpdateClip({
+        motion_preset_id: preset.id,
+        clip_type: 'controlled',
+      });
+    }
+  };
+
+  // Handle frame extraction from completed clip
+  const handleFrameExtracted = useCallback(async (frameUrl: string, percentage: number, timestampMs: number) => {
+    if (!selectedClip) return;
+
+    console.log('📸 [StoryboardEditor] Frame extracted:', {
+      clipId: selectedClip.id,
+      percentage,
+      timestampMs,
+    });
+
+    // Update clip with extracted frame
+    await updateClip(selectedClip.id, {
+      extracted_frame_url: frameUrl,
+      extraction_percentage: percentage,
+      extraction_timestamp_ms: timestampMs,
+    });
+  }, [selectedClip, updateClip]);
 
   // Handle preview
   const handleOpenPreview = useCallback(async () => {
@@ -171,12 +401,15 @@ const StoryboardEditor = () => {
   }, [projectId]);
 
   // Handle applying story plan
-  const handleApplyPlan = useCallback(async (sceneInputs: CreateSceneInput[]) => {
-    for (const input of sceneInputs) {
-      const newScene = await createScene(input);
-    }
-    if (projectId) loadProject(projectId);
-  }, [createScene, loadProject, projectId]);
+  const handleApplyPlan = useCallback(
+    async (sceneInputs: CreateSceneInput[]) => {
+      for (const input of sceneInputs) {
+        await createScene(input);
+      }
+      if (projectId) loadProject(projectId);
+    },
+    [createScene, loadProject, projectId]
+  );
 
   // Calculate total duration
   const totalDuration = scenes.reduce((sum, s) => sum + s.target_duration_seconds, 0);
@@ -214,15 +447,10 @@ const StoryboardEditor = () => {
     <StoryboardLayout>
       <div className="flex flex-col h-[calc(100vh-var(--header-height,64px))]">
         {/* Project Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             {/* Back button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleBackToList}
-              className="h-8 w-8 p-0"
-            >
+            <Button variant="ghost" size="sm" onClick={handleBackToList} className="h-8 w-8 p-0">
               <ArrowLeft className="w-4 h-4" />
             </Button>
 
@@ -274,280 +502,114 @@ const StoryboardEditor = () => {
                 onClick={() => setShowStoryPlanner(true)}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                AI Assist
+                AI
               </Button>
             )}
 
             {/* Preview button */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5"
-              onClick={handleOpenPreview}
-            >
+            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleOpenPreview}>
               <Play className="w-3.5 h-3.5" />
               Preview
             </Button>
 
-            {/* Export dropdown */}
+            {/* More menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" className="h-8 text-xs gap-1.5">
-                  <Download className="w-3.5 h-3.5" />
-                  Export
+                <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                  <MoreHorizontal className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Export clips</DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Download className="w-3.5 h-3.5 mr-2" />
+                  Export clips
+                </DropdownMenuItem>
                 <DropdownMenuItem>Render video</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
 
-        {/* Timeline */}
-        <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/50">
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            {scenes.map((scene, index) => (
-              <div
-                key={scene.id}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg cursor-pointer transition-all ${
-                  activeScene?.id === scene.id
-                    ? 'bg-primary/20 border border-primary/50'
-                    : 'bg-gray-800/50 border border-gray-700 hover:bg-gray-800'
-                }`}
-                onClick={() => handleSelectScene(scene)}
-              >
-                <span className="text-[10px] text-gray-500 w-4">S{index + 1}</span>
-                <span className="text-xs text-gray-300 max-w-24 truncate">
-                  {scene.title || 'Untitled'}
-                </span>
-                <span className="text-[10px] text-gray-600">{scene.target_duration_seconds}s</span>
-
-                {/* Scene status indicator */}
-                {scene.clips && scene.clips.length > 0 && (
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                )}
-              </div>
-            ))}
-
-            {/* Add scene button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-9 px-3 text-xs gap-1 flex-shrink-0"
-              onClick={handleAddScene}
-              disabled={isAddingScene}
-            >
-              {isAddingScene ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Plus className="w-3 h-3" />
-              )}
-              Add Scene
-            </Button>
-          </div>
-        </div>
+        {/* Scene Strip */}
+        <SceneStrip
+          scenes={scenes}
+          activeSceneId={activeScene?.id}
+          onSceneSelect={handleSelectScene}
+          onAddScene={handleAddScene}
+          isAddingScene={isAddingScene}
+        />
 
         {/* Main Content Area */}
         <div className="flex-1 flex overflow-hidden">
-          {/* Scene List (Left Panel) */}
-          <div className="w-60 border-r border-gray-800 bg-gray-950/50 overflow-y-auto">
-            <div className="p-3">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Scenes
-                </h2>
-                <span className="text-[10px] text-gray-600">{scenes.length}</span>
-              </div>
-
-              {scenes.length === 0 ? (
-                <div className="text-center py-8">
-                  <Film className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-                  <p className="text-xs text-gray-500 mb-3">No scenes yet</p>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={handleAddScene}
-                    disabled={isAddingScene}
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add Scene
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {scenes.map((scene, index) => (
-                    <div
-                      key={scene.id}
-                      className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-all ${
-                        activeScene?.id === scene.id
-                          ? 'bg-gray-800'
-                          : 'hover:bg-gray-900'
-                      }`}
-                      onClick={() => handleSelectScene(scene)}
-                    >
-                      <GripVertical className="w-3 h-3 text-gray-600 opacity-0 group-hover:opacity-100 cursor-grab" />
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-gray-500">S{index + 1}</span>
-                          <span className="text-xs text-gray-200 truncate">
-                            {scene.title || 'Untitled'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-gray-600">
-                            {scene.target_duration_seconds}s
-                          </span>
-                          {scene.clips && scene.clips.length > 0 && (
-                            <span className="text-[10px] text-gray-600">
-                              {scene.clips.length} clip{scene.clips.length !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Scene menu */}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
-                          >
-                            <MoreVertical className="w-3 h-3" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-32">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectScene(scene);
-                            }}
-                          >
-                            <Pencil className="w-3 h-3 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSceneToDelete(scene);
-                            }}
-                            className="text-red-400 focus:text-red-400"
-                          >
-                            <Trash2 className="w-3 h-3 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Clip Workspace (Main Area) */}
-          <div className="flex-1 p-4 overflow-y-auto">
+          {/* Main Editor Area */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Clip Canvas */}
             {activeScene ? (
-              <div className="max-w-3xl mx-auto">
-                {/* Scene header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-sm font-medium text-gray-100">
-                      {activeScene.title || 'Untitled Scene'}
-                    </h2>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {activeScene.description || 'No description'}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" className="h-7 text-xs">
-                    <Pencil className="w-3 h-3 mr-1" />
-                    Edit Scene
+              <ClipCanvas
+                scene={activeScene}
+                clips={activeSceneClips}
+                selectedClipId={selectedClip?.id}
+                onClipSelect={handleSelectClip}
+                onAddClip={handleAddClip}
+                onReorderClips={handleReorderClips}
+                onDropImage={handleDropImage}
+                isAddingClip={isAddingClip}
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-gray-900/30 border-b border-gray-800">
+                <div className="text-center">
+                  <p className="text-sm text-gray-400 mb-2">Select a scene to view clips</p>
+                  <Button size="sm" className="h-8 text-xs" onClick={handleAddScene}>
+                    Add First Scene
                   </Button>
                 </div>
-
-                {/* Scene settings row */}
-                <div className="flex items-center gap-4 mb-6 text-xs text-gray-400">
-                  {activeScene.setting && (
-                    <span>Setting: {activeScene.setting}</span>
-                  )}
-                  {activeScene.mood && (
-                    <span>Mood: {activeScene.mood}</span>
-                  )}
-                  <span>Duration: {activeScene.target_duration_seconds}s</span>
-                </div>
-
-                {/* Clip Workspace */}
-                <div className="border border-gray-800 rounded-lg overflow-hidden bg-gray-900/30 h-[500px]">
-                  <ClipWorkspace
-                    scene={activeScene}
-                    clips={activeScene.clips || []}
-                    aspectRatio={activeProject.aspect_ratio}
-                    onClipsChange={() => loadProject(projectId!)}
-                  />
-                </div>
-
-                {/* AI Suggestions */}
-                {activeProject.ai_assistance_level !== 'none' && (
-                  <div className="mt-6 p-3 bg-purple-900/10 border border-purple-800/30 rounded-lg">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                      <span className="text-xs font-medium text-purple-300">AI Suggestions</span>
-                    </div>
-                    <div className="space-y-2">
-                      <Button variant="ghost" size="sm" className="h-7 text-xs w-full justify-start text-gray-400 hover:text-gray-200">
-                        <ChevronRight className="w-3 h-3 mr-1" />
-                        Generate scene description
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs w-full justify-start text-gray-400 hover:text-gray-200">
-                        <ChevronRight className="w-3 h-3 mr-1" />
-                        Suggest clip prompts
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <Film className="w-12 h-12 text-gray-700 mb-3" />
-                <h3 className="text-sm font-medium text-gray-400 mb-1">
-                  Select a scene to edit
-                </h3>
-                <p className="text-xs text-gray-500 mb-4 max-w-xs">
-                  Choose a scene from the list to view and edit its clips, or add a new scene to get started.
-                </p>
-                <Button size="sm" className="h-8 text-xs" onClick={handleAddScene}>
-                  <Plus className="w-3 h-3 mr-1.5" />
-                  Add First Scene
-                </Button>
               </div>
             )}
+
+            {/* Clip Detail Panel */}
+            {selectedClip && (
+              <ClipDetailPanel
+                clip={selectedClip}
+                previousClip={previousClip}
+                contentMode={activeProject.content_mode || 'nsfw'}
+                isGenerating={isGeneratingClip}
+                recommendedClipType={recommendedClipType}
+                onUpdateClip={handleUpdateClip}
+                onGenerate={handleGenerateClip}
+                onDelete={handleDeleteClip}
+                onDuplicate={handleDuplicateClip}
+                onSelectMotionPreset={handleSelectMotionPreset}
+                onFrameExtracted={handleFrameExtracted}
+                className="flex-shrink-0"
+              />
+            )}
           </div>
+
+          {/* Library Sidebar */}
+          <ClipLibrary
+            character={activeProject.primary_character}
+            characterCanons={characterCanons}
+            clips={activeSceneClips.filter((c) => c.extracted_frame_url)}
+            onSelectReference={handleSelectReference}
+            onSelectMotionPreset={handleSelectMotionPreset}
+            className="w-64 flex-shrink-0"
+          />
         </div>
       </div>
 
       {/* Delete Scene Confirmation */}
-      <AlertDialog
-        open={!!sceneToDelete}
-        onOpenChange={(open) => !open && setSceneToDelete(null)}
-      >
+      <AlertDialog open={!!sceneToDelete} onOpenChange={(open) => !open && setSceneToDelete(null)}>
         <AlertDialogContent className="max-w-sm bg-gray-950 border-gray-800">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base">Delete Scene</AlertDialogTitle>
             <AlertDialogDescription className="text-xs">
-              Are you sure you want to delete "{sceneToDelete?.title || 'Untitled'}"?
-              This will also delete all clips in this scene.
+              Are you sure you want to delete "{sceneToDelete?.title || 'Untitled'}"? This will also delete all clips
+              in this scene.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="h-8 text-xs">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteScene}
-              className="h-8 text-xs bg-red-600 hover:bg-red-700"
-            >
+            <AlertDialogAction onClick={handleDeleteScene} className="h-8 text-xs bg-red-600 hover:bg-red-700">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

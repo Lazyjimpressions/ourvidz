@@ -1,36 +1,447 @@
 # Storyboard System
 
-**Last Updated:** January 5, 2026
-**Status:** Phase 2 Complete - Clip generation with frame chaining functional
+**Last Updated:** February 25, 2026
+**Status:** V2 Complete - Full clip type system with dynamic model selection and AI assistance
 
 ## Overview
 
-The Storyboard system enables users to create longer-form video content through AI-assisted story planning and frame chaining. It generates individual video clips that maintain character consistency across a sequence, then allows stitching them into final exports.
+The Storyboard V2 system enables users to create 30-60 second videos through AI-assisted story planning and dynamic clip orchestration. It supports multiple clip types (quick, extended, controlled, keyframed), dynamically selects models from the `api_models` table, uses prompt templates from `prompt_templates`, and provides comprehensive AI assistance throughout the workflow.
 
 ### Core Use Cases
 
 1. **Multi-Scene Projects**: Create videos with multiple scenes, each containing multiple clips
-2. **Character Continuity**: Maintain consistent character appearance across all clips via frame chaining
-3. **AI Story Planning**: Generate story beats and scene suggestions based on project description
-4. **Unified Export**: Stitch clips into final video or download individually
+2. **Character Continuity**: Maintain consistent character appearance via frame chaining and identity references
+3. **AI Story Planning**: Generate story beats and scene suggestions on project creation
+4. **Dynamic Model Selection**: Automatic model routing based on clip type and task requirements
+5. **Motion Presets**: Built-in motion reference library for controlled video generation
+6. **Unified Preview + Export**: Sequential preview playback and final video assembly
 
 ---
 
-## Critical Technical Constraint: Frame Chaining
+## Clip Type System
 
-### The Problem
+### Clip Types
 
-WAN 2.1 I2V (Image-to-Video) does NOT support first+last frame interpolation like some other models. This means we cannot specify "start at frame A, end at frame B."
+The V2 system supports 5 clip types, each routing to different models and tasks:
 
-### The Solution: Frame Chaining
+| Clip Type | Duration | Primary Task | Use Case |
+|-----------|----------|--------------|----------|
+| `quick` | 5s | `i2v` | First clips, establishing shots |
+| `extended` | 10s | `extend` | Continuation from previous clip |
+| `controlled` | 5s | `multi` | Uses motion preset + identity reference |
+| `long` | 15s | `i2v` + `extend` | Auto-orchestrated sequences |
+| `keyframed` | 5s | `i2i_multi` → `multi` | Start/end pose defined |
 
-Extract a frame from each completed clip to use as the reference image for the next clip:
+### Task Mapping
+
+```typescript
+// src/types/storyboard.ts
+export const CLIP_TYPE_TASKS: Record<ClipType, string[]> = {
+  quick: ['i2v'],
+  extended: ['extend'],
+  controlled: ['multi'],
+  long: ['i2v', 'extend'],
+  keyframed: ['i2i_multi', 'multi'],
+};
+
+export const CLIP_TYPE_DURATIONS: Record<ClipType, number> = {
+  quick: 5,
+  extended: 10,
+  controlled: 5,
+  long: 15,
+  keyframed: 5,
+};
+```
+
+### Clip Type Selection Flow
+
+1. User creates clip or AI recommends type
+2. `useStoryboardAI.recommendClipType()` suggests based on:
+   - Position in scene (first/middle/last)
+   - Previous clip type
+   - Scene mood
+   - Whether motion preset is selected
+3. `ClipOrchestrationService.getModelForClipType()` resolves model from `api_models`
+
+---
+
+## Dynamic Model Selection
+
+### Never Hardcode Models
+
+All model selection queries the `api_models` table dynamically:
+
+```typescript
+// src/lib/services/ClipOrchestrationService.ts
+static async getModelForClipType(clipType: ClipType): Promise<ApiModel | null> {
+  const tasks = CLIP_TYPE_TASKS[clipType];
+  const primaryTask = tasks[0];
+
+  const { data } = await supabase
+    .from('api_models')
+    .select('*, api_providers!inner(*)')
+    .eq('modality', 'video')
+    .eq('is_active', true)
+    .contains('default_for_tasks', [primaryTask])
+    .order('priority', { ascending: false })
+    .limit(1)
+    .single();
+
+  return data;
+}
+```
+
+### Model Resolution Flow
 
 ```
-Reference Image → Clip 1 → Extract Frame (45-60%) → Clip 2 → Extract Frame → Clip 3...
+User selects clip type
+       ↓
+Query api_models WHERE:
+  - modality = 'video'
+  - is_active = true
+  - default_for_tasks contains [task]
+  - ORDER BY priority DESC
+       ↓
+If no default found:
+  - Query WHERE tasks contains [task]
+  - Select highest priority
+       ↓
+Resolve provider from api_providers.name
+       ↓
+Route to fal-image edge function
 ```
 
-This creates implicit temporal continuity without explicit frame interpolation.
+### Provider Architecture
+
+| Provider | Type | Use Case | NSFW Support |
+|----------|------|----------|--------------|
+| fal.ai LTX 13B | Primary | I2V, extend, multiconditioning | Yes |
+| fal.ai WAN 2.1 I2V | Secondary | Video generation from image | Yes |
+| Local WAN Worker | Alternative | When RunPod healthy | Yes |
+
+---
+
+## Prompt Template Integration
+
+### Template Table Structure
+
+Templates in `prompt_templates` with:
+- `job_type`: 'video'
+- `target_model`: LTX endpoint (i2v, extend, multiconditioning)
+- `use_case`: 'enhancement'
+- `content_mode`: 'nsfw' | 'sfw'
+
+### Template Fetch Pattern
+
+```typescript
+// src/lib/services/ClipOrchestrationService.ts
+static async getPromptTemplate(
+  endpoint: string,
+  contentMode: 'sfw' | 'nsfw'
+): Promise<PromptTemplate | null> {
+  const { data } = await supabase
+    .from('prompt_templates')
+    .select('*')
+    .eq('job_type', 'video')
+    .eq('target_model', endpoint)
+    .eq('use_case', 'enhancement')
+    .eq('content_mode', contentMode)
+    .eq('is_active', true)
+    .single();
+
+  return data;
+}
+```
+
+### Prompt Enhancement Flow
+
+```
+User writes motion prompt
+       ↓
+Fetch template for clip type + content mode
+       ↓
+Call enhance-prompt edge function with:
+  - user_prompt
+  - template.system_prompt
+  - character context (if available)
+       ↓
+Return enhanced prompt (max 1,500 chars)
+       ↓
+Send to video generation
+```
+
+---
+
+## Motion Presets Library
+
+### Built-in Presets
+
+The `motion_presets` table contains 10 built-in presets:
+
+| Category | Presets |
+|----------|---------|
+| breathing | Subtle Breathing, Deep Breathing |
+| turn | Slow Turn Left, Slow Turn Right |
+| walk | Walk Forward, Walk Backward |
+| camera | Camera Orbit, Handheld Sway |
+| expression | Smile Transition |
+| general | Look Around |
+
+### Motion Preset Usage
+
+Motion presets are used with the `controlled` clip type:
+
+```typescript
+// In buildGenerationConfig for controlled clips
+if (clipType === 'controlled' && motionPresetId) {
+  const preset = await getMotionPreset(motionPresetId);
+  config.videos = [{ url: preset.video_url }];
+  config.images = [{ url: referenceImageUrl, type: 'identity' }];
+}
+```
+
+---
+
+## AI Story Planning
+
+### Edge Function: storyboard-ai-assist
+
+Four actions available:
+
+| Action | Purpose | Input |
+|--------|---------|-------|
+| `story_plan` | Generate story structure | projectDescription, targetDuration, contentMode |
+| `suggest_prompts` | Motion prompt suggestions | scene context, previous clip |
+| `recommend_clip_type` | AI clip type recommendation | position, mood, hasMotionPreset |
+| `enhance_prompt` | Prompt enhancement | user prompt, character context |
+
+### Story Planning Integration
+
+```typescript
+// src/pages/Storyboard.tsx - Project creation flow
+const handleCreateProject = async (input: CreateProjectInput) => {
+  const project = await createProject(input);
+
+  if (input.ai_assistance_level === 'full' && input.description?.trim()) {
+    const planResult = await generateStoryPlan({
+      projectDescription: input.description,
+      targetDuration: input.target_duration_seconds || 30,
+      contentMode: input.content_tier === 'sfw' ? 'sfw' : 'nsfw',
+    });
+
+    if (planResult) {
+      const aiStoryPlan = buildAIStoryPlan(planResult);
+      await StoryboardService.updateProject(project.id, {
+        ai_story_plan: aiStoryPlan,
+      });
+
+      // Create scenes from AI breakdown
+      for (const sceneData of planResult.sceneBreakdown) {
+        await StoryboardService.createScene({
+          project_id: project.id,
+          title: sceneData.title,
+          description: sceneData.description,
+          mood: sceneBeats[0]?.mood,
+          target_duration_seconds: sceneData.targetDuration,
+        });
+      }
+    }
+  }
+
+  navigate(`/storyboard/${project.id}`);
+};
+```
+
+### useStoryboardAI Hook
+
+```typescript
+// src/hooks/useStoryboardAI.ts
+export function useStoryboardAI() {
+  return {
+    generateStoryPlan,      // AI story structure generation
+    suggestPrompts,         // Context-aware prompt suggestions
+    recommendClipType,      // AI clip type recommendation
+    enhancePrompt,          // Prompt enhancement
+    buildAIStoryPlan,       // Convert AI response to DB format
+    isGeneratingPlan,       // Loading state
+    isSuggestingPrompts,
+    isEnhancingPrompt,
+  };
+}
+```
+
+---
+
+## V2 System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     STORYBOARD V2 SYSTEM                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐               │
+│  │   Project    │───>│    Scene     │───>│     Clip     │               │
+│  └──────────────┘    └──────────────┘    └─────┬────────┘               │
+│                                                 │                        │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │                      V2 UI COMPONENTS                           │    │
+│  │  ┌───────────┐  ┌───────────┐  ┌──────────────────────────────┐ │    │
+│  │  │SceneStrip │  │ClipCanvas │  │     ClipDetailPanel          │ │    │
+│  │  │(top nav)  │  │(clip row) │  │  - ClipTypeSelector          │ │    │
+│  │  └───────────┘  └───────────┘  │  - MotionLibrary             │ │    │
+│  │  ┌─────────────────────────┐   │  - PromptInput + AI Suggest  │ │    │
+│  │  │ ClipTile (per clip)     │   │  - FrameSelector             │ │    │
+│  │  └─────────────────────────┘   └──────────────────────────────┘ │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                    │                                     │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │               useClipOrchestration Hook                         │    │
+│  │  • Resolves model via ClipOrchestrationService                  │    │
+│  │  • Fetches prompt template                                      │    │
+│  │  • Calls enhance-prompt edge function                           │    │
+│  │  • Executes fal-image with resolved config                      │    │
+│  │  • Polls jobs table for async completion                        │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                                    │                                     │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │               ClipOrchestrationService                          │    │
+│  │  • getModelForClipType() → Queries api_models by task           │    │
+│  │  • getPromptTemplate() → Queries prompt_templates               │    │
+│  │  • buildGenerationConfig() → Clip-type specific config          │    │
+│  │  • enhancePrompt() → Calls enhance-prompt edge function         │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Hook: useClipOrchestration
+
+### Core Functionality (Replaces useClipGeneration)
+
+```typescript
+// src/hooks/useClipOrchestration.ts
+export function useClipOrchestration() {
+  // Generate clip with full orchestration
+  const generateClip = useMutation({
+    mutationFn: async (input: GenerateClipInput) => {
+      // 1. Resolve model for clip type
+      const model = await ClipOrchestrationService.getModelForClipType(
+        input.clipType
+      );
+
+      // 2. Build generation config based on clip type
+      const config = await ClipOrchestrationService.buildGenerationConfig({
+        clipType: input.clipType,
+        referenceImageUrl: input.referenceImageUrl,
+        motionPresetId: input.motionPresetId,
+        endFrameUrl: input.endFrameUrl,
+      });
+
+      // 3. Enhance prompt if enabled
+      let finalPrompt = input.prompt;
+      if (input.enhancePrompt) {
+        finalPrompt = await ClipOrchestrationService.enhancePrompt(
+          input.prompt,
+          input.contentMode
+        );
+      }
+
+      // 4. Create clip record
+      const clip = await StoryboardService.createClip({
+        scene_id: input.sceneId,
+        prompt: finalPrompt,
+        clip_type: input.clipType,
+        api_model_id: model.id,
+        ...
+      });
+
+      // 5. Call fal-image edge function
+      const response = await supabase.functions.invoke('fal-image', {
+        body: {
+          prompt: finalPrompt,
+          apiModelId: model.id,
+          modality: 'video',
+          input: config,
+          metadata: { storyboard_clip_id: clip.id }
+        }
+      });
+
+      return clip;
+    }
+  });
+
+  // Poll jobs table for completion
+  useEffect(() => {
+    activeGenerations.forEach(async (gen) => {
+      if (gen.status === 'generating' && gen.jobId) {
+        const { data: job } = await supabase
+          .from('jobs')
+          .select('status, result_url')
+          .eq('id', gen.jobId)
+          .single();
+
+        if (job?.status === 'completed') {
+          await StoryboardService.updateClip(gen.clipId, {
+            video_url: job.result_url,
+            status: 'completed',
+          });
+        }
+      }
+    });
+  }, [activeGenerations]);
+
+  return {
+    generateClip: generateClip.mutateAsync,
+    isGenerating: generateClip.isPending,
+    activeGenerations,
+    retryClip,
+  };
+}
+```
+
+---
+
+## Generation Config by Clip Type
+
+### Quick Clip (I2V)
+
+```typescript
+config = {
+  image_url: referenceImageUrl,  // Character/scene reference
+};
+```
+
+### Extended Clip (Extend)
+
+```typescript
+config = {
+  video: previousClip.video_url,  // Continue from video
+};
+```
+
+### Controlled Clip (MultiCondition)
+
+```typescript
+config = {
+  images: [{ url: referenceImageUrl, type: 'identity' }],
+  videos: [{ url: motionPreset.video_url }],
+};
+```
+
+### Keyframed Clip
+
+```typescript
+config = {
+  images: [
+    { url: startFrameUrl, position: 0 },
+    { url: endFrameUrl, position: 1 },
+  ],
+};
+```
+
+---
+
+## Frame Chaining
 
 ### Frame Extraction Rules
 
@@ -40,278 +451,24 @@ This creates implicit temporal continuity without explicit frame interpolation.
 | 5-6 seconds   | 45-60%            | Default sweet spot |
 | 8-10 seconds  | 50-65%            | Later extraction for longer clips |
 
-### Why Mid-Point Extraction?
+### Frame Extraction by Clip Type
 
-- **Too Early (0-30%)**: Motion hasn't developed, reference too similar to input
-- **Sweet Spot (40-65%)**: Motion is established, character recognizable, good continuation point
-- **Too Late (70-100%)**: Often blurry, motion artifacts, poor reference quality
+| Clip Type | Frame Extraction Behavior |
+|-----------|--------------------------|
+| quick | Extract at 45-60% for chaining to next clip |
+| extended | No extraction (continues from video) |
+| controlled | Extract for motion identity reference |
+| keyframed | End frame → next clip start |
 
----
-
-## Architecture
-
-### Provider Architecture
-
-| Provider | Type | Use Case | NSFW Support |
-|----------|------|----------|--------------|
-| fal.ai WAN 2.1 I2V | Primary | Video generation from image | Yes |
-| Local WAN Worker | Alternative | When RunPod healthy | Yes |
-| fal.ai Kling O1 | Secondary | Cinematic SFW content | Limited |
-
-### System Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         STORYBOARD SYSTEM                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐              │
-│  │   Project    │───>│    Scene     │───>│     Clip     │              │
-│  │  (1 per)     │    │  (N scenes)  │    │  (N clips)   │              │
-│  └──────────────┘    └──────────────┘    └──────────────┘              │
-│                                                 │                       │
-│                                                 ▼                       │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                      ClipWorkspace.tsx                          │   │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │   │
-│  │  │  Reference  │  │   Prompt    │  │   Model     │             │   │
-│  │  │   Image     │  │   Input     │  │  Selector   │             │   │
-│  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘             │   │
-│  │         └────────────────┼────────────────┘                     │   │
-│  │                          ▼                                      │   │
-│  │                  ┌──────────────┐                               │   │
-│  │                  │   Generate   │                               │   │
-│  │                  │    Button    │                               │   │
-│  │                  └──────┬───────┘                               │   │
-│  └─────────────────────────┼───────────────────────────────────────┘   │
-│                            ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                    useClipGeneration Hook                       │   │
-│  │  • Creates clip record in DB                                    │   │
-│  │  • Calls fal-image edge function                                │   │
-│  │  • Polls job status until complete                              │   │
-│  │  • Updates clip with video_url                                  │   │
-│  └─────────────────────────┬───────────────────────────────────────┘   │
-│                            ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │               fal-image Edge Function                           │   │
-│  │  • Routes to WAN 2.1 I2V                                        │   │
-│  │  • Handles image_url (reference) + prompt                       │   │
-│  │  • Creates job record for async polling                         │   │
-│  │  • Returns job ID or immediate result                           │   │
-│  └─────────────────────────┬───────────────────────────────────────┘   │
-│                            ▼                                            │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                      fal.ai API                                 │   │
-│  │  Model: fal-ai/wan-i2v                                          │   │
-│  │  Input: image_url, prompt, duration, aspect_ratio               │   │
-│  │  Output: video_url                                              │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Database Schema
-
-### Tables
-
-```sql
--- Main project record
-storyboard_projects (
-  id UUID PRIMARY KEY,
-  user_id UUID REFERENCES auth.users,
-  title TEXT,
-  description TEXT,
-  status TEXT DEFAULT 'draft',  -- draft, active, completed, archived
-  aspect_ratio TEXT DEFAULT '16:9',
-  target_duration_seconds INT DEFAULT 30,
-  primary_character_id UUID REFERENCES characters,
-  story_beats JSONB,            -- AI-generated story structure
-  created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ
-)
-
--- Scenes within a project
-storyboard_scenes (
-  id UUID PRIMARY KEY,
-  project_id UUID REFERENCES storyboard_projects,
-  scene_order INT,
-  title TEXT,
-  description TEXT,
-  setting TEXT,
-  mood TEXT,
-  target_duration_seconds INT DEFAULT 5,
-  actual_duration_seconds INT,
-  status TEXT DEFAULT 'draft'
-)
-
--- Video clips within a scene
-storyboard_clips (
-  id UUID PRIMARY KEY,
-  scene_id UUID REFERENCES storyboard_scenes,
-  clip_order INT,
-  prompt TEXT NOT NULL,
-  reference_image_url TEXT,        -- Input image for I2V
-  reference_image_source TEXT,     -- 'uploaded', 'character_portrait', 'extracted_frame'
-  video_url TEXT,                  -- Generated video
-  thumbnail_url TEXT,
-  extracted_frame_url TEXT,        -- Frame for next clip chaining
-  extracted_frame_timestamp_ms INT,
-  duration_seconds NUMERIC,
-  api_model_id UUID REFERENCES api_models,
-  status TEXT DEFAULT 'pending',   -- pending, generating, completed, failed
-  generation_metadata JSONB,
-  created_at TIMESTAMPTZ
-)
-
--- Extracted frames (for advanced frame management)
-storyboard_frames (
-  id UUID PRIMARY KEY,
-  clip_id UUID REFERENCES storyboard_clips,
-  frame_url TEXT,
-  timestamp_ms INT,
-  quality_score NUMERIC,
-  is_chain_frame BOOLEAN DEFAULT false,
-  used_in_clip_id UUID REFERENCES storyboard_clips
-)
-
--- Final video renders
-storyboard_renders (
-  id UUID PRIMARY KEY,
-  project_id UUID REFERENCES storyboard_projects,
-  output_url TEXT,
-  quality_preset TEXT DEFAULT 'high',
-  transition_style TEXT DEFAULT 'cut',
-  status TEXT DEFAULT 'pending',
-  progress_percentage INT DEFAULT 0,
-  error_message TEXT
-)
-```
-
-### Row Level Security
-
-All tables implement RLS policies ensuring users can only access their own data:
-
-```sql
--- Example: storyboard_clips
-CREATE POLICY "Users can view own clips"
-ON storyboard_clips FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM storyboard_scenes s
-    JOIN storyboard_projects p ON s.project_id = p.id
-    WHERE s.id = scene_id AND p.user_id = auth.uid()
-  )
-);
-```
-
----
-
-## Prompting Strategy
-
-### First Clip (Anchor Prompt)
-
-The first clip establishes the visual identity. Use comprehensive description:
+### FrameSelector Component
 
 ```typescript
-const anchorPrompt = generateAnchorPrompt({
-  character: {
-    appearance: "young woman, long dark hair, green eyes",
-    attire: "red dress, gold jewelry",
-  },
-  pose: "standing, looking at camera",
-  environment: "beach at sunset, golden hour lighting",
-  mood: "romantic, intimate",
-  motion: "slow natural movement, hair gently blowing"
-});
-
-// Output:
-// "young woman, long dark hair, green eyes, wearing red dress and gold jewelry,
-//  standing, looking at camera, beach at sunset, golden hour lighting,
-//  romantic intimate mood, slow natural movement, hair gently blowing,
-//  cinematic quality, 4k"
-```
-
-### Chain Clips (Continuation Prompts)
-
-Subsequent clips should NOT re-describe the character. Focus on motion intent:
-
-```typescript
-const chainPrompt = generateChainPrompt({
-  motion: "continuing the motion",
-  change: "turns slightly to the side",
-  environment_shift: "camera slowly pans right"
-});
-
-// Output:
-// "same character and setting, continuing the motion, turns slightly to the side,
-//  camera slowly pans right, smooth continuation"
-```
-
-### Why Not Re-Describe?
-
-Re-describing character in chain prompts causes **identity drift**:
-
-| Approach | Result |
-|----------|--------|
-| Full re-description | Each clip interprets description differently → inconsistent appearance |
-| Motion-only prompt | Model preserves input frame appearance → consistent character |
-
----
-
-## Component Architecture
-
-### ClipWorkspace.tsx
-
-Main generation interface. Key responsibilities:
-
-```typescript
-// State Management
-const [prompt, setPrompt] = useState('');
-const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-const [firstClipReferenceUrl, setFirstClipReferenceUrl] = useState<string | null>(null);
-
-// Reference Image Logic
-const isFirstClip = clips.length === 0;
-const canChain = clips.length > 0 && previousClip?.extracted_frame_url;
-
-// Generate Handler
-const handleGenerate = async () => {
-  let referenceImageUrl: string | undefined;
-  let referenceImageSource: string | undefined;
-
-  if (isFirstClip) {
-    // First clip: use uploaded/selected reference
-    referenceImageUrl = firstClipReferenceUrl;
-    referenceImageSource = firstClipReferenceSource;
-  } else if (canChain) {
-    // Chain clip: use previous clip's extracted frame
-    referenceImageUrl = previousClip.extracted_frame_url;
-    referenceImageSource = 'extracted_frame';
-  }
-
-  await generateClip({
-    sceneId,
-    prompt,
-    referenceImageUrl,
-    referenceImageSource,
-    modelId: selectedModelId
-  });
-};
-```
-
-### FrameSelector.tsx
-
-Visual frame extraction interface:
-
-```typescript
+// src/components/storyboard/FrameSelector.tsx
 interface FrameSelectorProps {
   videoUrl: string;
   duration: number;
-  currentTimestamp?: number;
-  onFrameSelect: (timestampMs: number) => void;
+  initialTimestamp?: number;
+  onFrameSelected: (timestampMs: number, frameUrl: string) => void;
 }
 
 // Shows video with slider and "optimal range" indicator
@@ -319,153 +476,83 @@ interface FrameSelectorProps {
 // Optimal range highlighted based on clip duration
 ```
 
-### ChainIndicator.tsx
-
-Visual chain relationship:
-
-```
-┌─────────┐     ┌─────────┐     ┌─────────┐
-│ Clip 1  │────>│ Clip 2  │────>│ Clip 3  │
-└─────────┘     └─────────┘     └─────────┘
-     │               │               │
-     ▼               ▼               ▼
-  [Frame]        [Frame]        [Frame]
-  52% ────────> Reference     Reference
-```
-
 ---
 
-## Hook: useClipGeneration
+## Database Schema (V2 Extensions)
 
-### Core Functionality
-
-```typescript
-export function useClipGeneration() {
-  // Load video models from api_models table
-  const { data: videoModels } = useQuery({
-    queryKey: ['video-models'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('api_models')
-        .select('id, model_key, display_name, capabilities, api_providers!inner(name)')
-        .eq('modality', 'video')
-        .eq('is_active', true);
-      return data;
-    }
-  });
-
-  // Generate clip mutation
-  const generateMutation = useMutation({
-    mutationFn: async (input: GenerateClipInput) => {
-      // 1. Create clip record
-      const clip = await StoryboardService.createClip({...});
-
-      // 2. Call fal-image edge function
-      const response = await supabase.functions.invoke('fal-image', {
-        body: {
-          prompt: input.prompt,
-          apiModelId: input.modelId,
-          modality: 'video',
-          input: { image_url: input.referenceImageUrl },
-          metadata: { is_wan_i2v: true, storyboard_clip_id: clip.id }
-        }
-      });
-
-      // 3. Poll for completion or return immediate result
-      return clip;
-    }
-  });
-
-  // Job polling (every 3 seconds)
-  useEffect(() => {
-    activeGenerations.forEach(gen => {
-      if (gen.status === 'generating' && gen.jobId) {
-        // Poll job status, update clip when complete
-      }
-    });
-  }, [activeGenerations]);
-
-  return {
-    videoModels,
-    generateClip: generateMutation.mutateAsync,
-    isGenerating: generateMutation.isPending,
-    activeGenerations
-  };
-}
-```
-
----
-
-## Edge Function: fal-image
-
-### Video Generation Flow
-
-```typescript
-// supabase/functions/fal-image/index.ts
-
-// WAN 2.1 I2V specific handling
-if (metadata?.is_wan_i2v) {
-  const falInput = {
-    image_url: input.image_url,      // Reference image (required)
-    prompt: prompt,                   // Motion/scene description
-    num_inference_steps: 25,
-    guidance_scale: 7.0,
-    negative_prompt: "blurry, distorted, low quality",
-    duration: metadata.duration || 5  // seconds
-  };
-
-  const result = await fal.subscribe("fal-ai/wan-i2v", {
-    input: falInput,
-    pollInterval: 3000,
-    timeout: 180000  // 3 minute timeout
-  });
-
-  return { resultUrl: result.video.url, status: 'completed' };
-}
-```
-
----
-
-## Model Routing
-
-### Video Model Selection
-
-```typescript
-// Priority order for video generation
-const videoModelPriority = [
-  {
-    model: 'fal-ai/wan-i2v',
-    provider: 'fal',
-    condition: 'always_available'
-  },
-  {
-    model: 'local-wan',
-    provider: 'runpod',
-    condition: 'health_check_passed'
-  }
-];
-
-// Health check before local routing
-const useLocalWan = () => {
-  const health = useLocalModelHealth();
-  return health.wanWorker?.isHealthy;
-};
-```
-
-### Model Configuration (api_models table)
+### Updated storyboard_clips
 
 ```sql
-SELECT * FROM api_models WHERE modality = 'video' AND is_active = true;
-
--- Returns:
--- id: uuid
--- model_key: 'fal-ai/wan-i2v'
--- display_name: 'WAN 2.1 Image-to-Video'
--- modality: 'video'
--- provider_id: (fal provider uuid)
--- capabilities: { nsfw: true, speed: 'medium', quality: 'high' }
--- input_defaults: { duration: 5, guidance_scale: 7.0 }
+ALTER TABLE storyboard_clips
+ADD COLUMN clip_type TEXT DEFAULT 'quick'
+  CHECK (clip_type IN ('quick', 'extended', 'controlled', 'long', 'keyframed')),
+ADD COLUMN parent_clip_id UUID REFERENCES storyboard_clips(id),
+ADD COLUMN motion_preset_id UUID REFERENCES motion_presets(id),
+ADD COLUMN resolved_model_id UUID REFERENCES api_models(id),
+ADD COLUMN prompt_template_id UUID REFERENCES prompt_templates(id),
+ADD COLUMN enhanced_prompt TEXT,
+ADD COLUMN generation_config JSONB DEFAULT '{}';
 ```
+
+### New Table: motion_presets
+
+```sql
+CREATE TABLE motion_presets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users,  -- NULL for built-in
+  name TEXT NOT NULL,
+  video_url TEXT NOT NULL,
+  thumbnail_url TEXT,
+  duration_seconds NUMERIC,
+  category TEXT DEFAULT 'general',  -- breathing, turn, walk, camera
+  is_builtin BOOLEAN DEFAULT false,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### Updated storyboard_projects
+
+```sql
+ALTER TABLE storyboard_projects
+ADD COLUMN ai_story_plan JSONB,  -- Story beats from AI
+ADD COLUMN content_mode TEXT DEFAULT 'nsfw';
+```
+
+---
+
+## Component Architecture (V2)
+
+### Page Components
+
+- `Storyboard.tsx` - Project list with AI story plan integration
+- `StoryboardEditor.tsx` - V2 editor with scene strip, clip canvas, detail panel
+
+### V2 Storyboard Components (`src/components/storyboard/`)
+
+| Component | Purpose |
+|-----------|---------|
+| `SceneStrip.tsx` | Horizontal scene navigation |
+| `ClipCanvas.tsx` | Drag-and-drop clip strip |
+| `ClipTile.tsx` | Individual clip with status badges |
+| `ClipDetailPanel.tsx` | Bottom panel with type, prompt, frame selector |
+| `ClipTypeSelector.tsx` | Clip type dropdown with AI recommendations |
+| `ClipLibrary.tsx` | Right sidebar with character canons |
+| `MotionLibrary.tsx` | Motion preset browser with video previews |
+| `FrameSelector.tsx` | Visual frame extraction slider |
+| `AssemblyPreview.tsx` | Sequential video playback |
+
+### Hooks
+
+- `useStoryboard.ts` - State management for projects, scenes, clips
+- `useClipOrchestration.ts` - V2 generation orchestration (replaces useClipGeneration)
+- `useStoryboardAI.ts` - AI assistance integration
+
+### Services
+
+- `StoryboardService.ts` - CRUD operations for all storyboard entities
+- `ClipOrchestrationService.ts` - Dynamic model selection, prompt templates, generation config
+- `FrameExtractionService.ts` - Client-side video frame extraction
 
 ---
 
@@ -479,17 +566,7 @@ if (generationFailed) {
   await StoryboardService.updateClip(clipId, { status: 'failed' });
 
   // UI shows retry button
-  setActiveGenerations(prev => {
-    const next = new Map(prev);
-    next.set(clipId, {
-      clipId,
-      status: 'failed',
-      error: errorMessage
-    });
-    return next;
-  });
-
-  // User can retry individually
+  // User can retry individually with same or different model
   // No automatic model fallback (user controls)
 }
 ```
@@ -498,10 +575,10 @@ if (generationFailed) {
 
 ```typescript
 const retryClip = async (clip: StoryboardClip, newModelId?: string) => {
-  // Reuse same prompt and reference
   return generateClip({
     sceneId: clip.scene_id,
     prompt: clip.prompt,
+    clipType: clip.clip_type,
     referenceImageUrl: clip.reference_image_url,
     modelId: newModelId || clip.api_model_id
   });
@@ -518,36 +595,51 @@ const retryClip = async (clip: StoryboardClip, newModelId?: string) => {
 | Frame extraction | < 1 second | Client-side canvas |
 | Final render (30s) | < 10 minutes | Edge function FFmpeg |
 | UI responsiveness | < 100ms | React Query caching |
+| AI story planning | < 10 seconds | OpenRouter/Qwen |
 
 ---
 
-## Future Phases
+## Key Files Reference
 
-### Phase 3: AI Assistance
+### Services
 
-- `storyboard-ai-assist` edge function
-- Story beat generation from project description
-- Scene suggestions based on context
-- Prompt generation for clips
+| File | Purpose |
+|------|---------|
+| `src/lib/services/ClipOrchestrationService.ts` | Dynamic model + template routing |
+| `src/lib/services/StoryboardService.ts` | CRUD operations |
+| `src/lib/services/FrameExtractionService.ts` | Frame extraction |
 
-### Phase 4: Preview + Export
+### Hooks
 
-- Sequential preview playback
-- FFmpeg-based stitching in edge function
-- Transition effects between clips
+| File | Purpose |
+|------|---------|
+| `src/hooks/useClipOrchestration.ts` | V2 generation orchestration |
+| `src/hooks/useStoryboardAI.ts` | AI assistance integration |
+| `src/hooks/useStoryboard.ts` | Project/scene/clip state |
 
-### Phase 5: Roleplay Integration
+### Components
 
-- Import scenes from roleplay conversations
-- Character reference sharing
-- Conversation-to-storyboard flow
+| File | Purpose |
+|------|---------|
+| `src/pages/StoryboardEditor.tsx` | Main editor page |
+| `src/components/storyboard/ClipDetailPanel.tsx` | Clip editing panel |
+| `src/components/storyboard/FrameSelector.tsx` | Frame extraction UI |
+| `src/components/storyboard/AssemblyPreview.tsx` | Video preview |
+
+### Edge Functions
+
+| File | Purpose |
+|------|---------|
+| `supabase/functions/storyboard-ai-assist/index.ts` | AI planning |
+| `supabase/functions/fal-image/index.ts` | Video generation |
+| `supabase/functions/enhance-prompt/index.ts` | Prompt enhancement |
 
 ---
 
 ## Related Documentation
 
-- [DEV_PLAN_STORYBOARD.md](../06-DEVELOPMENT/DEV_PLAN_STORYBOARD.md) - Development plan and status
 - [02-STORYBOARD_PURPOSE.md](../01-PAGES/02-STORYBOARD_PURPOSE.md) - Page purpose overview
 - [STORYBOARD_USER_GUIDE.md](../09-REFERENCE/STORYBOARD_USER_GUIDE.md) - User how-to guide
+- [FRAMECHAINING_GUIDE.md](../09-REFERENCE/FRAMECHAINING_GUIDE.md) - Frame chaining deep dive
 - [FAL_AI.md](../05-APIS/FAL_AI.md) - fal.ai integration details
 - [PROMPTING_SYSTEM.md](./PROMPTING_SYSTEM.md) - Prompt template system

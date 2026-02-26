@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import { StoryboardLayout } from '@/components/StoryboardLayout';
 import { ProjectCard, NewProjectDialog } from '@/components/storyboard';
 import { useStoryboard } from '@/hooks/useStoryboard';
+import { useStoryboardAI } from '@/hooks/useStoryboardAI';
+import { StoryboardService } from '@/lib/services/StoryboardService';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,6 +58,8 @@ const Storyboard = () => {
     deleteProject,
     isCreatingProject,
   } = useStoryboard();
+
+  const { generateStoryPlan, isGeneratingPlan, buildAIStoryPlan } = useStoryboardAI();
 
   // UI State
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
@@ -104,6 +108,49 @@ const Storyboard = () => {
   const handleCreateProject = async (input: CreateProjectInput) => {
     const project = await createProject(input);
     setIsNewProjectOpen(false);
+
+    // If AI assistance is 'full' and there's a description, generate story plan
+    if (input.ai_assistance_level === 'full' && input.description?.trim()) {
+      console.log('🎬 [Storyboard] Generating AI story plan...');
+
+      const planResult = await generateStoryPlan({
+        projectDescription: input.description,
+        targetDuration: input.target_duration_seconds || 30,
+        contentMode: input.content_tier === 'sfw' ? 'sfw' : 'nsfw',
+      });
+
+      if (planResult) {
+        console.log('✅ [Storyboard] Story plan generated:', {
+          beats: planResult.storyBeats.length,
+          scenes: planResult.sceneBreakdown.length,
+        });
+
+        // Build the AI story plan and update the project
+        const aiStoryPlan = buildAIStoryPlan(planResult);
+        await StoryboardService.updateProject(project.id, {
+          ai_story_plan: aiStoryPlan,
+        });
+
+        // Create scenes from the breakdown
+        for (const sceneData of planResult.sceneBreakdown) {
+          // Get beats for this scene
+          const sceneBeats = planResult.storyBeats.filter((_, idx) =>
+            sceneData.beats.includes(idx + 1) // beats are 1-indexed
+          );
+
+          await StoryboardService.createScene({
+            project_id: project.id,
+            title: sceneData.title,
+            description: sceneData.description,
+            mood: sceneBeats[0]?.mood, // Use first beat's mood for scene
+            target_duration_seconds: sceneData.targetDuration,
+          });
+        }
+
+        console.log('✅ [Storyboard] Created', planResult.sceneBreakdown.length, 'scenes from AI plan');
+      }
+    }
+
     // Navigate to the new project editor
     navigate(`/storyboard/${project.id}`);
   };
@@ -330,7 +377,7 @@ const Storyboard = () => {
         open={isNewProjectOpen}
         onOpenChange={setIsNewProjectOpen}
         onSubmit={handleCreateProject}
-        isLoading={isCreatingProject}
+        isLoading={isCreatingProject || isGeneratingPlan}
       />
 
       {/* Delete Confirmation Dialog */}

@@ -1,7 +1,91 @@
 // Storyboard system types
-// Supports frame chaining architecture for WAN 2.1 I2V
+// Supports frame chaining architecture with multiple video models
+// V2: Dynamic model selection, clip types, motion presets
 
 import { Character, UserCharacter } from './roleplay';
+
+// ============================================================================
+// CLIP TYPE SYSTEM (V2)
+// ============================================================================
+
+/**
+ * Clip types determine generation strategy and model selection
+ * - quick: Fast I2V from single keyframe (default)
+ * - extended: Continue from previous clip video
+ * - controlled: Identity + motion reference (MultiCondition)
+ * - long: Auto-orchestrated I2V + extends (15-20s)
+ * - keyframed: Start/end pose defined (i2i_multi → multi)
+ */
+export type ClipType = 'quick' | 'extended' | 'controlled' | 'long' | 'keyframed';
+
+/**
+ * Maps clip types to API model tasks for dynamic model lookup
+ */
+export const CLIP_TYPE_TASKS: Record<ClipType, string[]> = {
+  quick: ['i2v'],
+  extended: ['extend'],
+  controlled: ['multi'],
+  long: ['i2v', 'extend'],
+  keyframed: ['i2i_multi', 'multi'],
+};
+
+/**
+ * Default clip durations by type
+ */
+export const CLIP_TYPE_DURATIONS: Record<ClipType, number> = {
+  quick: 5,
+  extended: 10,
+  controlled: 5,
+  long: 15,
+  keyframed: 5,
+};
+
+// ============================================================================
+// MOTION PRESET TYPES
+// ============================================================================
+
+export type MotionCategory = 'breathing' | 'turn' | 'walk' | 'camera' | 'expression' | 'general';
+
+export interface MotionPreset {
+  id: string;
+  user_id?: string;
+  name: string;
+  description?: string;
+  video_url: string;
+  thumbnail_url?: string;
+  duration_seconds?: number;
+  category: MotionCategory;
+  is_builtin: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================================
+// AI STORY PLAN TYPES
+// ============================================================================
+
+export interface AIStoryBeat {
+  beatNumber: number;
+  description: string;
+  suggestedDuration: number;
+  mood: string;
+  suggestedClipType: ClipType;
+}
+
+export interface AISceneBreakdown {
+  sceneNumber: number;
+  title: string;
+  description: string;
+  beats: number[];
+  targetDuration: number;
+}
+
+export interface AIStoryPlan {
+  storyBeats: AIStoryBeat[];
+  sceneBreakdown: AISceneBreakdown[];
+  generatedAt: string;
+}
 
 // ============================================================================
 // PROJECT TYPES
@@ -40,6 +124,10 @@ export interface StoryboardProject {
   ai_assistance_level: AIAssistanceLevel;
   story_summary?: string;
   story_beats: StoryBeat[];
+
+  // V2: AI story plan from storyboard-ai-assist
+  ai_story_plan?: AIStoryPlan;
+  content_mode: 'sfw' | 'nsfw';
 
   // Character references
   primary_character_id?: string;
@@ -84,6 +172,10 @@ export interface StoryboardScene {
   narrative_context?: string;
   suggested_prompts: string[];
 
+  // V2: AI-generated suggestions and motion style
+  ai_suggestions?: Record<string, unknown>;
+  motion_style?: string;
+
   status: SceneStatus;
   target_duration_seconds: number;
   actual_duration_seconds?: number;
@@ -113,6 +205,16 @@ export interface StoryboardClip {
   job_id?: string;
   api_model_id?: string;
 
+  // V2: Clip type system
+  clip_type: ClipType;
+  parent_clip_id?: string;
+  motion_preset_id?: string;
+  resolved_model_id?: string;
+  prompt_template_id?: string;
+  enhanced_prompt?: string;
+  generation_config?: Record<string, unknown>;
+  end_frame_url?: string;
+
   // Frame chaining
   reference_image_url?: string;
   reference_image_source?: ReferenceImageSource;
@@ -135,6 +237,7 @@ export interface StoryboardClip {
 
   // Populated relations
   frames?: StoryboardFrame[];
+  motion_preset?: MotionPreset;
 }
 
 // ============================================================================
@@ -242,6 +345,9 @@ export interface UpdateProjectInput {
   story_beats?: StoryBeat[];
   primary_character_id?: string;
   secondary_characters?: string[];
+  // V2 fields
+  ai_story_plan?: AIStoryPlan;
+  content_mode?: 'sfw' | 'nsfw';
 }
 
 export interface CreateSceneInput {
@@ -272,6 +378,15 @@ export interface CreateClipInput {
   reference_image_url?: string;
   reference_image_source?: ReferenceImageSource;
   api_model_id?: string;
+  // V2 fields
+  clip_type?: ClipType;
+  parent_clip_id?: string;
+  motion_preset_id?: string;
+  end_frame_url?: string;
+  resolved_model_id?: string;
+  prompt_template_id?: string;
+  enhanced_prompt?: string;
+  generation_config?: Record<string, unknown>;
 }
 
 export interface UpdateClipInput {
@@ -283,6 +398,16 @@ export interface UpdateClipInput {
   extracted_frame_url?: string;
   extraction_percentage?: number;
   extraction_timestamp_ms?: number;
+  clip_order?: number;
+  // V2 fields
+  clip_type?: ClipType;
+  parent_clip_id?: string;
+  motion_preset_id?: string;
+  resolved_model_id?: string;
+  prompt_template_id?: string;
+  enhanced_prompt?: string;
+  generation_config?: Record<string, unknown>;
+  end_frame_url?: string;
 }
 
 export interface CreateRenderInput {

@@ -121,6 +121,9 @@ export class StoryboardService {
     if (input.story_beats !== undefined) updateData.story_beats = input.story_beats;
     if (input.primary_character_id !== undefined) updateData.primary_character_id = input.primary_character_id;
     if (input.secondary_characters !== undefined) updateData.secondary_characters = input.secondary_characters;
+    // V2 fields
+    if (input.ai_story_plan !== undefined) updateData.ai_story_plan = input.ai_story_plan;
+    if (input.content_mode !== undefined) updateData.content_mode = input.content_mode;
 
     const { data, error } = await supabase
       .from('storyboard_projects')
@@ -385,6 +388,15 @@ export class StoryboardService {
         reference_image_url: input.reference_image_url || null,
         reference_image_source: input.reference_image_source || null,
         api_model_id: input.api_model_id || null,
+        // V2 fields
+        clip_type: input.clip_type || 'quick',
+        parent_clip_id: input.parent_clip_id || null,
+        motion_preset_id: input.motion_preset_id || null,
+        end_frame_url: input.end_frame_url || null,
+        resolved_model_id: input.resolved_model_id || null,
+        prompt_template_id: input.prompt_template_id || null,
+        enhanced_prompt: input.enhanced_prompt || null,
+        generation_config: input.generation_config || null,
       })
       .select()
       .single();
@@ -411,6 +423,16 @@ export class StoryboardService {
     if (input.extracted_frame_url !== undefined) updateData.extracted_frame_url = input.extracted_frame_url;
     if (input.extraction_percentage !== undefined) updateData.extraction_percentage = input.extraction_percentage;
     if (input.extraction_timestamp_ms !== undefined) updateData.extraction_timestamp_ms = input.extraction_timestamp_ms;
+    // V2 fields
+    if (input.clip_order !== undefined) updateData.clip_order = input.clip_order;
+    if (input.clip_type !== undefined) updateData.clip_type = input.clip_type;
+    if (input.parent_clip_id !== undefined) updateData.parent_clip_id = input.parent_clip_id;
+    if (input.motion_preset_id !== undefined) updateData.motion_preset_id = input.motion_preset_id;
+    if (input.resolved_model_id !== undefined) updateData.resolved_model_id = input.resolved_model_id;
+    if (input.prompt_template_id !== undefined) updateData.prompt_template_id = input.prompt_template_id;
+    if (input.enhanced_prompt !== undefined) updateData.enhanced_prompt = input.enhanced_prompt;
+    if (input.generation_config !== undefined) updateData.generation_config = input.generation_config;
+    if (input.end_frame_url !== undefined) updateData.end_frame_url = input.end_frame_url;
 
     const { data, error } = await supabase
       .from('storyboard_clips')
@@ -629,6 +651,9 @@ export class StoryboardService {
       metadata: (data.metadata as Record<string, unknown>) || {},
       created_at: data.created_at as string,
       updated_at: data.updated_at as string,
+      // V2 fields
+      ai_story_plan: data.ai_story_plan as StoryboardProject['ai_story_plan'],
+      content_mode: (data.content_mode as StoryboardProject['content_mode']) || 'nsfw',
     };
   }
 
@@ -674,6 +699,15 @@ export class StoryboardService {
       generation_metadata: (data.generation_metadata as Record<string, unknown>) || {},
       created_at: data.created_at as string,
       updated_at: data.updated_at as string,
+      // V2 fields
+      clip_type: (data.clip_type as StoryboardClip['clip_type']) || 'quick',
+      parent_clip_id: data.parent_clip_id as string | undefined,
+      motion_preset_id: data.motion_preset_id as string | undefined,
+      resolved_model_id: data.resolved_model_id as string | undefined,
+      prompt_template_id: data.prompt_template_id as string | undefined,
+      enhanced_prompt: data.enhanced_prompt as string | undefined,
+      generation_config: (data.generation_config as Record<string, unknown>) || undefined,
+      end_frame_url: data.end_frame_url as string | undefined,
     };
   }
 
