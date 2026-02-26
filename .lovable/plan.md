@@ -1,81 +1,68 @@
 
 
-# Fix: Source Video Duration Not Reaching Edge Function
+# Fix: Playground Hardcoded to `fal-image` — Enable Multi-Provider Routing
 
-## Root Cause
+## Problem
 
-The tail-conditioning logic in the edge function is working correctly, BUT it receives `source_video_duration: 0` because the duration probing only runs when a user **uploads a video file from their device**. When a video is selected **from the library/workspace** (the most common extend workflow), no `File` object exists -- only a URL -- so the HTML5 video probe never fires.
+The Playground's `ImageCompareView.tsx` hardcodes `supabase.functions.invoke('fal-image', ...)` at line 198, regardless of which provider the selected model belongs to. When a user picks a Replicate model in the Playground, the request goes to the `fal-image` edge function, which correctly rejects it with `"Model provider must be fal"`.
 
-The edge function log proves this:
-```
-Video extend: duration=0s, totalFrames=0, startFrame=0, maxCond=48
-```
+The main workspace (`useLibraryFirstWorkspace.ts`) already has proper multi-provider routing (lines 1147-1151), but the Playground never adopted that pattern.
 
-With `totalFrames=0`, the tail computation falls through to `startFrame=0`, conditioning from the beginning of the video -- exactly the pre-fix behavior.
+## Fix
 
-## Fix: Probe Duration from URL (Not Just File)
+**File:** `src/components/playground/ImageCompareView.tsx`
 
-### 1. Add URL-based duration probing
-**File:** `src/components/workspace/MobileSimplePromptInput.tsx`
-
-When a video reference is set via URL (from library, workspace, or "Use as Reference"), probe its duration using the same `<video>` element technique but with the URL instead of a blob:
+In the `generateForPanel` function (~line 175), resolve the provider from the model's `api_providers.name` field (already available via `useAllVisualModels`) and route to the correct edge function:
 
 ```typescript
-// Probe duration from URL for videos used as extend references
-const probeVideoDurationFromUrl = async (url: string): Promise<number> => {
-  return new Promise((resolve) => {
-    const vid = document.createElement('video');
-    vid.preload = 'metadata';
-    vid.crossOrigin = 'anonymous';
-    vid.onloadedmetadata = () => {
-      resolve(isFinite(vid.duration) ? vid.duration : 0);
-    };
-    vid.onerror = () => resolve(0);
-    vid.src = url;
-  });
-};
+const model = getModelById(panel.modelId);
+if (!model) return;
+
+// Resolve edge function from provider
+const providerName = (model as any).api_providers?.name || 'fal';
+const edgeFunction = providerName === 'replicate' ? 'replicate-image' : 'fal-image';
 ```
 
-### 2. Call the probe when a library video is set as reference
-**File:** `src/pages/MobileSimplifiedWorkspace.tsx`
+Then at line 198, replace `'fal-image'` with the resolved `edgeFunction`.
 
-In the `handleUseAsReference` callback (~line 130), after setting the reference URL for a video asset, probe its duration:
+For Replicate models, the payload shape differs from fal (Replicate expects `apiModelId` at the top level and dimensions in `input`). We need to branch the payload construction similarly to how `useLibraryFirstWorkspace.ts` does it (lines 1166-1240).
+
+### Payload branching
 
 ```typescript
-case 'single':
-  setReferenceImage(null);
-  setReferenceImageUrl(url);
-  // If this is a video URL, probe its duration for extend tail-conditioning
-  if (url && (asset?.type === 'video' || url.includes('.mp4'))) {
-    probeAndSetDuration(url);
-  }
-  break;
-case 'start':
-  setBeginningRefImage(null);
-  setBeginningRefImageUrl(url);
-  if (url && (asset?.type === 'video' || url.includes('.mp4'))) {
-    probeAndSetDuration(url);
-  }
-  break;
+if (providerName === 'replicate') {
+  requestPayload = {
+    prompt: finalPrompt,
+    apiModelId: panel.modelId,
+    jobType: isVideo ? 'video' : 'image_high',
+    input: { ...input },
+    metadata: { source: 'playground-image-compare' },
+  };
+} else {
+  requestPayload = {
+    prompt: finalPrompt,
+    apiModelId: panel.modelId,
+    job_type: isVideo ? 'video' : 'image_high',
+    input,
+    metadata: { source: 'playground-image-compare' },
+  };
+}
+
+const { data, error } = await supabase.functions.invoke(edgeFunction, {
+  body: requestPayload,
+});
 ```
 
-The `probeAndSetDuration` helper fetches metadata from the signed URL and calls `setSourceVideoDuration`.
-
-### 3. Also probe when the extend model auto-switches from file upload
-**File:** `src/components/workspace/MobileSimplePromptInput.tsx`
-
-The existing file-based probe (lines 290-308) is correct but may fail on some mobile browsers for large files. Add a fallback: if file probe returns 0, try probing from the uploaded signed URL after upload completes (~line 310-320).
+Note: For Replicate, the field name is `jobType` (camelCase) while fal uses `job_type` (snake_case) — matching existing patterns in `useLibraryFirstWorkspace.ts`.
 
 ## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/pages/MobileSimplifiedWorkspace.tsx` | Add `probeAndSetDuration` helper; call it in `handleUseAsReference` for video URLs |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Extract `probeVideoDurationFromUrl` as a shared utility; add fallback URL probe after file upload |
+| `src/components/playground/ImageCompareView.tsx` | Resolve provider from model data; route to correct edge function; branch payload shape for Replicate vs Fal |
 
 ## What This Fixes
 
-- Library videos selected for extend will have their duration probed from the signed URL
-- The edge function will receive the actual duration (e.g., 15s)
-- Tail-conditioning will compute the correct `start_frame_num` (e.g., frame 400 for a 15s video)
-- The model will condition on the last ~1.6s of the source video and generate continuation from the ending
+- Replicate models in the Playground will route to `replicate-image` instead of `fal-image`
+- Fal models continue working as before
+- Future providers (OpenAI, etc.) can be added by extending the routing map
