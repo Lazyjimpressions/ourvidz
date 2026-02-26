@@ -41,10 +41,15 @@ export const PromptDrawer: React.FC<PromptDrawerProps> = ({
   // Collect unique content tags
   const allTags = Array.from(new Set(prompts.flatMap(p => p.tags))).sort();
 
-  // Apply model family filter (client-side since hook may fetch all)
-  let filtered = activeModelFamily
-    ? prompts.filter(p => p.model_family === activeModelFamily)
+  // Apply task type filter
+  let filtered = activeTaskType
+    ? prompts.filter(p => p.task_type === activeTaskType)
     : prompts;
+
+  // Apply model family filter
+  if (activeModelFamily) {
+    filtered = filtered.filter(p => p.model_family === activeModelFamily || !p.model_family);
+  }
 
   // Apply content tag filter
   if (activeTag) {
