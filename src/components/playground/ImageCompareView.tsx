@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Send, RotateCcw, Loader2, AlertCircle } from 'lucide-react';
+import { Send, RotateCcw, Loader2, AlertCircle, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,6 +11,9 @@ import { ReferenceImageSlots, type ReferenceImage } from './ReferenceImageSlots'
 import { AssetTile } from '@/components/shared/AssetTile';
 import { UnifiedLightbox, type LightboxItem } from '@/components/shared/UnifiedLightbox';
 import { QuickRating } from '@/components/QuickRating';
+import { usePlaygroundPrompts } from '@/hooks/usePlaygroundPrompts';
+import { PromptDrawer } from './PromptDrawer';
+import { SavePromptDialog } from './SavePromptDialog';
 
 interface PromptTemplate {
   id: string;
@@ -80,6 +83,9 @@ export const ImageCompareView: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [lightboxPanel, setLightboxPanel] = useState<'a' | 'b' | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+
+  const { prompts: savedPrompts, isLoading: promptsLoading, savePrompt, deletePrompt: deletePlaygroundPrompt } = usePlaygroundPrompts();
 
   // Fetch current user for QuickRating
   useEffect(() => {
@@ -577,32 +583,66 @@ export const ImageCompareView: React.FC = () => {
         {renderPanel(panelB, setPanelB, 'B', 'b', scrollRefB, handlePanelBRefChange)}
       </div>
 
-      {/* Shared prompt input */}
-      <div className="border-t border-border p-3">
-        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex items-end gap-2">
-          <Textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit(e);
-              }
-            }}
-            placeholder={bothNone ? 'Select at least one model...' : 'Enter prompt to send to active panels...'}
-            className="min-h-[40px] max-h-[120px] resize-none text-sm flex-1"
-            disabled={bothNone}
-          />
-          <Button
-            type="submit"
-            disabled={!prompt.trim() || neitherCanSubmit || panelA.isLoading || panelB.isLoading}
-            size="sm"
-            className="h-8 w-8 p-0"
-          >
-            <Send className="h-3 w-3" />
-          </Button>
-        </form>
+      {/* Saved prompts drawer + shared prompt input */}
+      <div className="border-t border-border">
+        <PromptDrawer
+          prompts={savedPrompts}
+          isLoading={promptsLoading}
+          onSelect={(text) => setPrompt(text)}
+          onDelete={deletePlaygroundPrompt}
+        />
+        <div className="p-3 pt-1.5">
+          <form onSubmit={handleSubmit} className="max-w-4xl mx-auto flex items-end gap-2">
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+              placeholder={bothNone ? 'Select at least one model...' : 'Enter prompt to send to active panels...'}
+              className="min-h-[40px] max-h-[120px] resize-none text-sm flex-1"
+              disabled={bothNone}
+            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  disabled={!prompt.trim()}
+                  onClick={() => setSaveDialogOpen(true)}
+                >
+                  <Bookmark className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Save prompt</TooltipContent>
+            </Tooltip>
+            <Button
+              type="submit"
+              disabled={!prompt.trim() || neitherCanSubmit || panelA.isLoading || panelB.isLoading}
+              size="sm"
+              className="h-8 w-8 p-0"
+            >
+              <Send className="h-3 w-3" />
+            </Button>
+          </form>
+        </div>
       </div>
+
+      {/* Save prompt dialog */}
+      <SavePromptDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        promptText={prompt}
+        taskType="t2i"
+        onSave={async (name, tags) => {
+          await savePrompt(name, prompt, tags, 't2i');
+        }}
+      />
 
       {/* Lightbox */}
       {lightboxIndex !== null && lightboxPanel && (

@@ -1503,6 +1503,42 @@ export type Database = {
         }
         Relationships: []
       }
+      playground_prompts: {
+        Row: {
+          created_at: string
+          id: string
+          is_standard: boolean
+          name: string
+          prompt_text: string
+          tags: string[]
+          task_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_standard?: boolean
+          name: string
+          prompt_text: string
+          tags?: string[]
+          task_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_standard?: boolean
+          name?: string
+          prompt_text?: string
+          tags?: string[]
+          task_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           age_verification_date: string | null
