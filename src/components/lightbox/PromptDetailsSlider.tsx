@@ -713,7 +713,7 @@ const PromptScoreSection: React.FC<{ jobId: string }> = ({ jobId }) => {
     const result = await PromptScoringService.triggerVisionScoring(
       jobId,
       signedUrl,
-      !!score?.vision_analysis // force if re-scoring
+      true // always force when user explicitly clicks rescore
     );
 
     if (result.success) {

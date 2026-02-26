@@ -272,18 +272,21 @@ serve(async (req) => {
       }
       scoreId = existingScore.id;
     } else {
-      // ── New score: INSERT ──
+      // ── New score: UPSERT (handles race with QuickRating creating row) ──
       const { data: insertedScore, error: insertError } = await supabase
         .from("prompt_scores")
-        .insert({
-          job_id: jobId,
-          user_id: job.user_id,
-          api_model_id: job.api_model_id || null,
-          original_prompt: originalPrompt,
-          enhanced_prompt: job.enhanced_prompt || null,
-          system_prompt_used: job.template_name || null,
-          ...visionColumns,
-        })
+        .upsert(
+          {
+            job_id: jobId,
+            user_id: job.user_id,
+            api_model_id: job.api_model_id || null,
+            original_prompt: originalPrompt,
+            enhanced_prompt: job.enhanced_prompt || null,
+            system_prompt_used: job.template_name || null,
+            ...visionColumns,
+          },
+          { onConflict: "job_id" }
+        )
         .select("id")
         .single();
 
