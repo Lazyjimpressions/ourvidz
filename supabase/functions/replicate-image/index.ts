@@ -187,6 +187,37 @@ serve(async (req) => {
       );
     }
 
+    // ⚡ Fast path: If polling for prediction status, skip all model resolution
+    if (body.predictionId) {
+      console.log("🔍 Checking status for prediction (fast path):", body.predictionId);
+      const replicateKey = Deno.env.get('REPLICATE_API_TOKEN');
+      if (!replicateKey) {
+        return new Response(
+          JSON.stringify({ error: 'Replicate API key not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+      const rep = new Replicate({ auth: replicateKey });
+      const prediction = await rep.predictions.get(body.predictionId);
+      console.log("📊 Status check response:", { 
+        id: prediction.id, 
+        status: prediction.status,
+        progress: prediction.progress 
+      });
+      // Ensure output URLs are plain strings (not FileOutput objects)
+      let output = prediction.output;
+      if (Array.isArray(output)) {
+        output = output.map((item: any) =>
+          typeof item === 'string' ? item
+            : item?.url ? (typeof item.url === 'function' ? item.url() : item.url)
+            : String(item)
+        );
+      }
+      return new Response(JSON.stringify({ ...prediction, output }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Resolve API model configuration - REQUIRED, no fallbacks
     let apiModel = null;
     
@@ -306,19 +337,7 @@ serve(async (req) => {
 
     const replicate = new Replicate({ auth: replicateApiKey });
 
-    // If checking status
-    if (body.predictionId) {
-      console.log("🔍 Checking status for prediction:", body.predictionId);
-      const prediction = await replicate.predictions.get(body.predictionId);
-      console.log("📊 Status check response:", { 
-        id: prediction.id, 
-        status: prediction.status,
-        progress: prediction.progress 
-      });
-      return new Response(JSON.stringify(prediction), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    // Note: predictionId polling is handled by the fast path above (before model resolution)
 
     // Generate image with model configuration
     if (!body.prompt) {
