@@ -1,125 +1,58 @@
 
+# Fix Playground to Use Existing Job Infrastructure
 
-# Playground Prompt Management for Model Comparison
+## The Core Insight
 
-## The Problem (and Why It's Two Problems That Share a Solution)
+You're right -- the playground is reinventing the wheel. The `fal-image` edge function **already creates** a `jobs` row AND a `workspace_assets` row on every call. It returns the real `jobId` in the response. But `ImageCompareView` uses `data.jobId || crypto.randomUUID()` and treats the result as ephemeral, breaking every downstream system (ratings, details, scoring) that keys off real job/asset records.
 
-You're trying to answer two related but distinct questions:
+The fix is NOT to build playground-specific alternatives. It's to stop ignoring the infrastructure that's already working.
 
-1. **"Is this prompt good?"** -- Prompt effectiveness testing. Does the prompt produce the intended result regardless of model?
-2. **"Is this model good?"** -- Model effectiveness testing. Given a known-good prompt, which model produces better output?
+## What's Actually Broken (and Why)
 
-The Image Compare tab is uniquely positioned to answer BOTH simultaneously: same prompt, two models, side-by-side. But right now, prompts are ephemeral -- typed once, used, then lost. There's no way to reuse a proven prompt or build a library of standard test prompts.
+1. **QuickRating fails silently**: `PromptScoringService.upsertQuickRating` looks up the `jobs` table to get prompt/model info. When `gen.id` is a `crypto.randomUUID()` with no corresponding row, it returns "Job not found" and the rating is lost.
 
-## How This Relates to the Existing Test Architecture
+2. **Generation details modal is empty**: `PromptDetailsSlider` queries `workspace_assets` by ID. Since the playground ignores the real `jobId`, the lightbox passes a fake UUID that matches nothing.
 
-The admin `PromptTestingTab` already has:
-- Hardcoded `TestSeries` arrays (SDXL-specific prompts with artistic/explicit/unrestricted tiers)
-- A `model_test_results` table for storing scores (overall, technical, content, consistency)
-- Generation + scoring workflow with notes
+3. **Model dropdown incomplete**: Only shows `t2i`, `i2i`, `i2v` groups. Missing `t2v`, `extend`, `multi`.
 
-**Similarities:**
-- Both need a curated prompt library
-- Both need scoring/rating of outputs
-- Both compare model performance
+## The Fix: 3 Surgical Changes
 
-**Key Differences:**
-- Admin testing is SDXL/WAN-specific with hardcoded tag-soup prompts (legacy)
-- Playground compare is model-agnostic (Flux, Seedream, any provider)
-- Admin testing runs one model at a time; Playground runs two simultaneously
-- Admin prompts are frozen in code; Playground needs editable, saveable prompts
+### 1. Use the real `jobId` from edge function responses
 
-**Recommendation:** These should NOT be merged. The admin test harness is a legacy SDXL tool. The Playground compare view is the modern, model-agnostic testing surface. But they should share the same storage table for results so scoring data aggregates in one place.
+In `ImageCompareView.tsx`, the `generateForPanel` function already receives `data.jobId` from `fal-image`/`replicate-image`. The edge function creates the job row, workspace asset, everything. Just stop falling back to `crypto.randomUUID()`:
 
-## Proposed UX: "Prompt Drawer" in Image Compare
+```typescript
+// BEFORE (line 296):
+id: data.jobId || crypto.randomUUID(),
 
-Instead of a complex management UI, add a lightweight **collapsible drawer** above the shared prompt input. This keeps the compare view clean while giving power users prompt management.
-
-```text
-+--------------------------------------------------+
-|  Panel A (Model + Results)  |  Panel B (Model + Results)  |
-|                             |                             |
-+--------------------------------------------------+
-| [v] Saved Prompts                          [+ Save] |
-|  +-----------+  +-----------+  +-----------+       |
-|  | Portrait  |  | Landscape |  | Action    |  ...  |
-|  | lighting  |  | wide shot |  | scene     |       |
-|  +-----------+  +-----------+  +-----------+       |
-+--------------------------------------------------+
-| [Prompt input area...]                    [Send]  |
-+--------------------------------------------------+
+// AFTER:
+id: data.jobId,
 ```
 
-### How It Works
+If `data.jobId` is somehow missing, the generation failed and shouldn't be added to the panel. Add a guard for that.
 
-1. **Save a prompt**: User types a prompt, clicks "Save" (bookmark icon). Prompt gets a short name and optional tags (t2i, i2i, flux, anatomy, lighting, etc.)
-2. **Load a prompt**: Click a saved prompt chip to populate the input area. Edit freely before sending.
-3. **Prompt cards**: Small horizontally-scrollable chips showing name + truncated text. Click to load, long-press/right-click to edit or delete.
-4. **No categories or folders**: Tags only. Filter by tag if the list grows. Keep it flat and fast.
+### 2. Pass real job ID to UnifiedLightbox
 
-### Where Prompts Live
+The lightbox already supports `PromptDetailsSlider` via `showPromptDetails` (default `true`). It queries `workspace_assets` using the `assetId` from `LightboxItem.id`. Since the edge function creates the `workspace_assets` row with the same `job_id`, the details will populate automatically once we pass the real `jobId`.
 
-**New table: `playground_prompts`** (not reusing `prompt_templates` -- those are system prompts for enhancement/roleplay, not user test prompts)
+No changes needed to the lightbox itself -- it already works. The only issue was passing fake UUIDs.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| id | uuid | PK |
-| user_id | uuid | Owner (RLS) |
-| name | text | Short label ("Portrait lighting test") |
-| prompt_text | text | The actual prompt |
-| tags | text[] | Filterable tags: t2i, i2i, flux, seedream, anatomy, etc. |
-| task_type | text | t2i, i2i, i2v (to filter by current model type) |
-| is_standard | boolean | Admin-created standard prompts visible to all users |
-| created_at | timestamptz | |
-| updated_at | timestamptz | |
+### 3. Add missing model groups to dropdown
 
-**RLS:** Users see their own prompts + any row where `is_standard = true`.
+Add `t2v`, `extend`, and `multi` groups from `useAllVisualModels()` (already returned, just unused).
 
-This lets admins seed standard benchmark prompts (the 10 test prompts from the Flux audit) while users can save their own.
+## Files to Modify
 
-### Scoring Integration
-
-The `QuickRating` component is already on every tile (from the previous plan). Ratings are per-generation and tied to `jobId`. No additional scoring UI needed -- the existing `QuickRating` + `UnifiedLightbox` with generation details covers it.
-
-For aggregate analysis (which model scores better across N prompts), that's a reporting/admin concern, not a playground UX concern. The data is already being collected via QuickRating.
-
-### Vision Model Assist
-
-The vision model could analyze outputs and auto-suggest scores, but that's a separate feature. The immediate need is just: save, load, and reuse prompts. Vision-assisted scoring can layer on top later without changing the prompt management architecture.
-
-## Technical Plan
-
-### 1. Create `playground_prompts` table
-
-SQL migration to create the table with RLS policies allowing users to manage their own prompts and read standard ones.
-
-### 2. Create `usePlaygroundPrompts` hook
-
-- `usePlaygroundPrompts(taskType?)` -- fetches user's prompts + standard prompts, filtered by task_type if provided
-- `savePrompt(name, text, tags, taskType)` -- insert
-- `updatePrompt(id, updates)` -- update own prompts only
-- `deletePrompt(id)` -- delete own prompts only
-
-### 3. Add Prompt Drawer to ImageCompareView
-
-- Collapsible section between panels and prompt input (collapsed by default)
-- Horizontal scroll of prompt chips
-- "Save" button (bookmark icon) next to the send button
-- Simple inline dialog for naming when saving
-- Tag filter pills when list exceeds ~8 prompts
-- Auto-detect `task_type` from currently selected model (t2i vs i2i vs i2v)
-
-### 4. Seed standard test prompts
-
-Insert ~10 admin-owned standard prompts (`is_standard = true`) covering the benchmark categories from the Flux audit: texture/anatomy, spatial logic, lighting, color accuracy, multi-subject, surgical edits.
-
-### Files to Create/Modify
-
-| File | Action |
+| File | Change |
 |------|--------|
-| SQL migration (via dashboard) | Create `playground_prompts` table + RLS |
-| `src/hooks/usePlaygroundPrompts.ts` | New hook for CRUD |
-| `src/components/playground/PromptDrawer.tsx` | New component -- collapsible prompt chips |
-| `src/components/playground/SavePromptDialog.tsx` | New component -- name + tags input |
-| `src/components/playground/ImageCompareView.tsx` | Add PromptDrawer above prompt input |
+| `src/components/playground/ImageCompareView.tsx` | (1) Guard against missing `jobId` instead of falling back to random UUID. (2) Add `t2v`, `extend`, `multi` to model dropdown. (3) Auto-detect `task_type` for SavePromptDialog from selected model. |
 
+That's it. One file. The ratings, details modal, and scoring all work automatically once the real `jobId` flows through. No new methods, no new components, no playground-specific scoring path.
+
+## What About Replicate Polling?
+
+The Replicate path already returns `data.jobId` from the initial call (the edge function creates the job row before returning). The polling loop just checks status -- the `jobId` is already available. Same fix applies.
+
+## What About the Prompt Drawer task_type?
+
+Currently hardcoded to `'t2i'`. Will update to derive from the active panel's model tasks so saved prompts get the correct tag and the drawer filters appropriately.
