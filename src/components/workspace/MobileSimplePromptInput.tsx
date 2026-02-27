@@ -93,6 +93,21 @@ export interface MobileSimplePromptInputProps {
   onKeyframeStrengthChange?: (index: number, strength: number) => void;
   // Source video duration callback (for tail-conditioning)
   onSourceVideoDuration?: (duration: number) => void;
+  // Video slot isVideo tracking callback
+  onVideoSlotIsVideoChange?: (isVideoFlags: boolean[]) => void;
+  // MultiCondition advanced controls
+  enableDetailPass?: boolean;
+  onEnableDetailPassChange?: (enabled: boolean) => void;
+  multiCrf?: number;
+  onMultiCrfChange?: (crf: number) => void;
+  temporalAdainFactor?: number;
+  onTemporalAdainFactorChange?: (factor: number) => void;
+  toneMapCompressionRatio?: number;
+  onToneMapCompressionRatioChange?: (ratio: number) => void;
+  firstPassSteps?: number;
+  onFirstPassStepsChange?: (steps: number) => void;
+  secondPassSteps?: number;
+  onSecondPassStepsChange?: (steps: number) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -158,6 +173,19 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   keyframeStrengths,
   onKeyframeStrengthChange,
   onSourceVideoDuration,
+  onVideoSlotIsVideoChange,
+  enableDetailPass,
+  onEnableDetailPassChange,
+  multiCrf,
+  onMultiCrfChange,
+  temporalAdainFactor,
+  onTemporalAdainFactorChange,
+  toneMapCompressionRatio,
+  onToneMapCompressionRatioChange,
+  firstPassSteps,
+  onFirstPassStepsChange,
+  secondPassSteps,
+  onSecondPassStepsChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -564,6 +592,13 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   });
   const maxVideoSlots = 5; // always 5
 
+  // Report isVideo flags back to parent for MultiCondition routing
+  React.useEffect(() => {
+    if (currentMode === 'video' && onVideoSlotIsVideoChange) {
+      onVideoSlotIsVideoChange(videoRefSlots.map(s => !!s.isVideo));
+    }
+  }, [currentMode, ref1IsVideo, ref2IsVideo, onVideoSlotIsVideoChange]);
+
   // No-op: video always has 5 fixed slots
   const handleAddSlot = () => {};
 
@@ -894,6 +929,18 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onMotionIntensityChange={onMotionIntensityChange}
         keyframeStrengths={keyframeStrengths}
         onKeyframeStrengthChange={onKeyframeStrengthChange}
+        enableDetailPass={enableDetailPass}
+        onEnableDetailPassChange={onEnableDetailPassChange}
+        multiCrf={multiCrf}
+        onMultiCrfChange={onMultiCrfChange}
+        temporalAdainFactor={temporalAdainFactor}
+        onTemporalAdainFactorChange={onTemporalAdainFactorChange}
+        toneMapCompressionRatio={toneMapCompressionRatio}
+        onToneMapCompressionRatioChange={onToneMapCompressionRatioChange}
+        firstPassSteps={firstPassSteps}
+        onFirstPassStepsChange={onFirstPassStepsChange}
+        secondPassSteps={secondPassSteps}
+        onSecondPassStepsChange={onSecondPassStepsChange}
       />
 
       {/* Image Picker Dialog for library/workspace browsing */}
