@@ -179,26 +179,45 @@ serve(async (req) => {
 
     console.log('🎬 [storyboard-ai-assist] Action:', action);
 
+    // Actions that need OpenRouter: fail fast with a clear message if key is missing
+    const needsOpenRouter = ['story_plan', 'suggest_prompts', 'enhance_prompt'].includes(action);
+    if (needsOpenRouter) {
+      const openRouterKey =
+        Deno.env.get('OpenRouter_Roleplay_API_KEY') ??
+        Deno.env.get('OPENROUTER_API_KEY');
+      if (!openRouterKey) {
+        console.error('❌ OpenRouter API key not configured');
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error:
+              'Storyboard AI is not configured. Add OpenRouter_Roleplay_API_KEY (or OPENROUTER_API_KEY) in Supabase Edge Function secrets.',
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
+    }
+
     // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Resolve AI model for assistance (chat model with reasoning task)
-    const aiModel = await resolveAIModel(supabase);
-    console.log('🤖 Using AI model:', aiModel);
+    // Resolve default roleplay model from api_models (dynamic, no provider filter)
+    const resolvedModel = await resolveAIModel(supabase);
+    console.log('🤖 Using AI model:', resolvedModel.modelKey);
 
     // Route to appropriate handler
     let response: Response;
 
     switch (action) {
       case 'story_plan':
-        response = await handleStoryPlan(requestBody as StoryPlanRequest, aiModel, supabase);
+        response = await handleStoryPlan(requestBody as StoryPlanRequest, resolvedModel, supabase);
         break;
 
       case 'suggest_prompts':
-        response = await handleSuggestPrompts(requestBody as SuggestPromptsRequest, aiModel, supabase);
+        response = await handleSuggestPrompts(requestBody as SuggestPromptsRequest, resolvedModel, supabase);
         break;
 
       case 'recommend_clip_type':
@@ -206,7 +225,7 @@ serve(async (req) => {
         break;
 
       case 'enhance_prompt':
-        response = await handleEnhancePrompt(requestBody as EnhancePromptRequest, aiModel, supabase);
+        response = await handleEnhancePrompt(requestBody as EnhancePromptRequest, resolvedModel, supabase);
         break;
 
       default:
@@ -234,32 +253,46 @@ serve(async (req) => {
 });
 
 // ============================================================================
-// MODEL RESOLUTION
+// MODEL RESOLUTION (dynamic from api_models, never hardcoded by provider)
 // ============================================================================
 
-async function resolveAIModel(supabase: any): Promise<string> {
+/** Resolved default roleplay model and its provider secret for API key */
+interface ResolvedAIModel {
+  modelKey: string;
+  secretName: string | null;
+}
+
+/**
+ * Resolve the default roleplay model from api_models.
+ * Uses default_for_tasks containing 'roleplay'; no provider filter.
+ * Returns model_key and provider secret_name for dynamic API key lookup.
+ */
+async function resolveAIModel(supabase: any): Promise<ResolvedAIModel> {
   try {
-    // Look for a chat model with 'reasoning' or 'enhancement' in default_for_tasks
     const { data } = await supabase
       .from('api_models')
-      .select('model_key, api_providers!inner(name)')
+      .select('model_key, api_providers!inner(secret_name)')
       .eq('modality', 'chat')
       .eq('is_active', true)
-      .eq('api_providers.name', 'openrouter')
-      .or('default_for_tasks.cs.{reasoning},default_for_tasks.cs.{enhancement}')
+      .contains('default_for_tasks', ['roleplay'])
       .order('priority', { ascending: false })
       .limit(1)
       .single();
 
     if (data?.model_key) {
-      return data.model_key;
+      const secretName = (data.api_providers as { secret_name?: string } | null)?.secret_name ?? null;
+      console.log('🤖 Resolved default roleplay model:', data.model_key, 'secret:', secretName || 'default');
+      return { modelKey: data.model_key, secretName };
     }
   } catch (err) {
-    console.warn('⚠️ Failed to resolve AI model from DB:', err);
+    console.warn('⚠️ No default roleplay model in api_models:', err);
   }
 
-  // Fallback to a reliable free model
-  return 'mistralai/mistral-small-3.1-24b-instruct:free';
+  // Fallback when no roleplay default is assigned (use default secret)
+  return {
+    modelKey: 'mistralai/mistral-small-3.1-24b-instruct:free',
+    secretName: 'OpenRouter_Roleplay_API_KEY',
+  };
 }
 
 // ============================================================================
@@ -268,7 +301,7 @@ async function resolveAIModel(supabase: any): Promise<string> {
 
 async function handleStoryPlan(
   request: StoryPlanRequest,
-  aiModel: string,
+  resolved: ResolvedAIModel,
   supabase: any
 ): Promise<Response> {
   const { projectDescription, targetDuration, characterIds, contentMode } = request;
@@ -295,7 +328,12 @@ Generate a story plan with beats and scenes that total approximately ${targetDur
 
   console.log('🎬 Generating story plan for:', projectDescription.substring(0, 50) + '...');
 
-  const result = await callOpenRouter(aiModel, STORY_PLAN_SYSTEM_PROMPT, userPrompt);
+  const result = await callOpenRouter(
+    resolved.modelKey,
+    STORY_PLAN_SYSTEM_PROMPT,
+    userPrompt,
+    resolved.secretName
+  );
 
   if (!result.success) {
     return new Response(
@@ -316,7 +354,7 @@ Generate a story plan with beats and scenes that total approximately ${targetDur
           storyBeats: planData.storyBeats || [],
           sceneBreakdown: planData.sceneBreakdown || [],
           generatedAt: new Date().toISOString(),
-          modelUsed: aiModel,
+          modelUsed: resolved.modelKey,
         } as StoryPlanResponse),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -359,7 +397,7 @@ Generate a story plan with beats and scenes that total approximately ${targetDur
 
 async function handleSuggestPrompts(
   request: SuggestPromptsRequest,
-  aiModel: string,
+  resolved: ResolvedAIModel,
   supabase: any
 ): Promise<Response> {
   const { sceneMood, sceneSetting, previousClipPrompt, clipType, contentMode } = request;
@@ -373,7 +411,12 @@ ${previousClipPrompt ? `- Previous Clip Prompt: "${previousClipPrompt}"` : '- Th
 
 Generate 3 motion prompt suggestions for this context.`;
 
-  const result = await callOpenRouter(aiModel, PROMPT_SUGGESTIONS_SYSTEM_PROMPT, userPrompt);
+  const result = await callOpenRouter(
+    resolved.modelKey,
+    PROMPT_SUGGESTIONS_SYSTEM_PROMPT,
+    userPrompt,
+    resolved.secretName
+  );
 
   if (!result.success) {
     return new Response(
@@ -391,7 +434,7 @@ Generate 3 motion prompt suggestions for this context.`;
         JSON.stringify({
           success: true,
           suggestions: suggestionsData.suggestions || [],
-          modelUsed: aiModel,
+          modelUsed: resolved.modelKey,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -453,7 +496,7 @@ async function handleRecommendClipType(
 
 async function handleEnhancePrompt(
   request: EnhancePromptRequest,
-  aiModel: string,
+  resolved: ResolvedAIModel,
   supabase: any
 ): Promise<Response> {
   const { prompt, clipType, templateId, contentMode } = request;
@@ -480,7 +523,12 @@ Original Prompt: ${prompt}
 
 Enhance this prompt for video generation.`;
 
-  const result = await callOpenRouter(aiModel, systemPrompt, userPrompt);
+  const result = await callOpenRouter(
+    resolved.modelKey,
+    systemPrompt,
+    userPrompt,
+    resolved.secretName
+  );
 
   if (!result.success) {
     return new Response(
@@ -503,24 +551,28 @@ Enhance this prompt for video generation.`;
       success: true,
       enhancedPrompt,
       originalPrompt: prompt,
-      modelUsed: aiModel,
+      modelUsed: resolved.modelKey,
     }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
 
 // ============================================================================
-// OPENROUTER HELPER
+// OPENROUTER HELPER (uses provider secret_name from api_models when provided)
 // ============================================================================
 
 async function callOpenRouter(
   model: string,
   systemPrompt: string,
-  userPrompt: string
+  userPrompt: string,
+  secretName?: string | null
 ): Promise<{ success: boolean; content: string; error?: string }> {
-  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
+  const envKey =
+    (secretName && Deno.env.get(secretName)) ??
+    Deno.env.get('OpenRouter_Roleplay_API_KEY') ??
+    Deno.env.get('OPENROUTER_API_KEY');
 
-  if (!openRouterKey) {
+  if (!envKey) {
     console.error('❌ OpenRouter API key not configured');
     return { success: false, content: '', error: 'OpenRouter API key not configured' };
   }
@@ -529,7 +581,7 @@ async function callOpenRouter(
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openRouterKey}`,
+        'Authorization': `Bearer ${envKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://ulmdmzhcdwfadbvfpckt.supabase.co',
         'X-Title': 'OurVidz Storyboard AI',

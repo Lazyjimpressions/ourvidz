@@ -206,6 +206,8 @@ if (clipType === 'controlled' && motionPresetId) {
 
 ### Edge Function: storyboard-ai-assist
 
+**Model and secrets:** The function uses the **default roleplay model** from `api_models`: the row where `modality = 'chat'`, `is_active = true`, and `default_for_tasks` contains `'roleplay'`, ordered by `priority` descending. The API key is read from the **provider’s `secret_name`** for that model (e.g. `OpenRouter_Roleplay_API_KEY`). No provider name is hardcoded; assignment is fully dynamic via `api_models`. Ensure the secret referenced by your default roleplay model’s provider is set in Edge Function secrets.
+
 Four actions available:
 
 | Action | Purpose | Input |
