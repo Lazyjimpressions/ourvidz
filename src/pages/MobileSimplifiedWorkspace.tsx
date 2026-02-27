@@ -111,6 +111,15 @@ const MobileSimplifiedWorkspace = () => {
   const [referenceImage2Url, setReferenceImage2Url] = useState<string | null>(null);
   // Additional refs (slots 3+) for multi-ref models
   const [additionalRefUrls, setAdditionalRefUrls] = useState<string[]>([]);
+  // Track which video ref slots contain video files (for MultiCondition routing)
+  const [videoSlotIsVideo, setVideoSlotIsVideo] = useState<boolean[]>([false, false, false, false, false]);
+  // MultiCondition advanced video settings
+  const [enableDetailPass, setEnableDetailPass] = useState(false);
+  const [multiCrf, setMultiCrf] = useState(29);
+  const [temporalAdainFactor, setTemporalAdainFactor] = useState(0.5);
+  const [toneMapCompressionRatio, setToneMapCompressionRatio] = useState(0);
+  const [firstPassSteps, setFirstPassSteps] = useState(8);
+  const [secondPassSteps, setSecondPassSteps] = useState(8);
   // Track the job_id for the pose slot (index 2) so we can look up pose_description
   const [poseSlotJobId, setPoseSlotJobId] = useState<string | null>(null);
 
@@ -357,7 +366,15 @@ const MobileSimplifiedWorkspace = () => {
       }
     }
 
-    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc);
+    const advancedParams = mode === 'video' ? {
+      enableDetailPass,
+      constantRateFactor: multiCrf,
+      temporalAdainFactor,
+      toneMapCompressionRatio,
+      firstPassSteps,
+      secondPassSteps,
+    } : undefined;
+    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc, mode === 'video' ? videoSlotIsVideo : undefined, advancedParams);
   };
 
 
@@ -784,13 +801,26 @@ const MobileSimplifiedWorkspace = () => {
             const model = imageModels?.find(m => m.id === selectedModel.id);
             return (model as any)?.capabilities as Record<string, any> || undefined;
           })()}
-          keyframeStrengths={keyframeStrengths}
-          onKeyframeStrengthChange={(index, strength) => {
-            const next = [...keyframeStrengths];
-            next[index] = strength;
-            setKeyframeStrengths(next);
-          }}
-        />
+           keyframeStrengths={keyframeStrengths}
+           onKeyframeStrengthChange={(index, strength) => {
+             const next = [...keyframeStrengths];
+             next[index] = strength;
+             setKeyframeStrengths(next);
+           }}
+           onVideoSlotIsVideoChange={setVideoSlotIsVideo}
+           enableDetailPass={enableDetailPass}
+           onEnableDetailPassChange={setEnableDetailPass}
+           multiCrf={multiCrf}
+           onMultiCrfChange={setMultiCrf}
+           temporalAdainFactor={temporalAdainFactor}
+           onTemporalAdainFactorChange={setTemporalAdainFactor}
+           toneMapCompressionRatio={toneMapCompressionRatio}
+           onToneMapCompressionRatioChange={setToneMapCompressionRatio}
+           firstPassSteps={firstPassSteps}
+           onFirstPassStepsChange={setFirstPassSteps}
+           secondPassSteps={secondPassSteps}
+           onSecondPassStepsChange={setSecondPassSteps}
+         />
 
         {/* Lightbox */}
         {lightboxIndex !== null && (sharedAssets.length || 0) > 0 && (

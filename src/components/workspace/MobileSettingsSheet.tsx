@@ -95,6 +95,20 @@ export interface MobileSettingsSheetProps {
   // Per-keyframe strengths (video multi mode)
   keyframeStrengths?: number[];
   onKeyframeStrengthChange?: (index: number, strength: number) => void;
+  
+  // MultiCondition advanced controls
+  enableDetailPass?: boolean;
+  onEnableDetailPassChange?: (enabled: boolean) => void;
+  multiCrf?: number;
+  onMultiCrfChange?: (crf: number) => void;
+  temporalAdainFactor?: number;
+  onTemporalAdainFactorChange?: (factor: number) => void;
+  toneMapCompressionRatio?: number;
+  onToneMapCompressionRatioChange?: (ratio: number) => void;
+  firstPassSteps?: number;
+  onFirstPassStepsChange?: (steps: number) => void;
+  secondPassSteps?: number;
+  onSecondPassStepsChange?: (steps: number) => void;
 }
 
 const STYLE_PRESETS = [
@@ -324,6 +338,18 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   multiRefActive = false,
   keyframeStrengths,
   onKeyframeStrengthChange,
+  enableDetailPass = false,
+  onEnableDetailPassChange,
+  multiCrf = 29,
+  onMultiCrfChange,
+  temporalAdainFactor = 0.5,
+  onTemporalAdainFactorChange,
+  toneMapCompressionRatio = 0,
+  onToneMapCompressionRatioChange,
+  firstPassSteps = 8,
+  onFirstPassStepsChange,
+  secondPassSteps = 8,
+  onSecondPassStepsChange,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   
@@ -617,6 +643,127 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {/* Advanced Video Controls (MultiCondition only) */}
+          {currentMode === 'video' && multiRefActive && (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" className="w-full justify-between h-8 px-2">
+                  <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Advanced Video
+                  </span>
+                  <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 p-2 rounded-lg border bg-muted/30">
+                {/* Detail Pass toggle */}
+                <div className="flex items-center justify-between">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                          Detail Pass
+                          <span className="text-[7px] px-1 py-0.5 rounded bg-destructive/20 text-destructive font-medium">2× cost</span>
+                          <Info className="h-2.5 w-2.5 opacity-50" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[220px] text-xs">
+                        Enables a second refinement pass for higher quality output. Doubles generation cost.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <Switch
+                    checked={enableDetailPass}
+                    onCheckedChange={onEnableDetailPassChange}
+                    className="scale-75"
+                  />
+                </div>
+
+                {/* CRF slider */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            Compression (CRF)
+                            <Info className="h-2.5 w-2.5 opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          Video compression quality. Lower = better quality, larger file. Default: 29
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <span className="text-[9px] text-muted-foreground font-mono">{multiCrf}</span>
+                  </div>
+                  <Slider size="xs" min={20} max={60} step={1} value={[multiCrf]} onValueChange={([v]) => onMultiCrfChange?.(v)} />
+                </div>
+
+                {/* Temporal AdaIN */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            Temporal AdaIN
+                            <Info className="h-2.5 w-2.5 opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          Controls temporal style normalization. Higher = more temporal consistency between frames.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <span className="text-[9px] text-muted-foreground font-mono">{temporalAdainFactor.toFixed(2)}</span>
+                  </div>
+                  <Slider size="xs" min={0} max={1} step={0.05} value={[temporalAdainFactor]} onValueChange={([v]) => onTemporalAdainFactorChange?.(v)} />
+                </div>
+
+                {/* Tone Map Compression */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            Tone Map
+                            <Info className="h-2.5 w-2.5 opacity-50" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          Tone mapping compression ratio. 0 = no compression, higher values reduce dynamic range.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <span className="text-[9px] text-muted-foreground font-mono">{toneMapCompressionRatio.toFixed(2)}</span>
+                  </div>
+                  <Slider size="xs" min={0} max={1} step={0.05} value={[toneMapCompressionRatio]} onValueChange={([v]) => onToneMapCompressionRatioChange?.(v)} />
+                </div>
+
+                {/* Inference Steps */}
+                {enableDetailPass && (
+                  <div className="space-y-2 pt-1 border-t border-border/50">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-muted-foreground">1st Pass Steps</span>
+                        <span className="text-[9px] text-muted-foreground font-mono">{firstPassSteps}</span>
+                      </div>
+                      <Slider size="xs" min={2} max={20} step={1} value={[firstPassSteps]} onValueChange={([v]) => onFirstPassStepsChange?.(v)} />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-muted-foreground">2nd Pass Steps</span>
+                        <span className="text-[9px] text-muted-foreground font-mono">{secondPassSteps}</span>
+                      </div>
+                      <Slider size="xs" min={2} max={20} step={1} value={[secondPassSteps]} onValueChange={([v]) => onSecondPassStepsChange?.(v)} />
+                    </div>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
           {/* References */}

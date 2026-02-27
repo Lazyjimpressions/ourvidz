@@ -113,7 +113,7 @@ export interface LibraryFirstWorkspaceActions {
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   setReferenceType: (type: 'style' | 'character' | 'composition') => void;
-  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string) => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string, videoSlotIsVideo?: boolean[], multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number }) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -659,7 +659,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     overrideSeed?: number | null,
     additionalImageUrls?: string[],
     slotRoles?: SlotRole[],
-    poseDescription?: string
+    poseDescription?: string,
+    videoSlotIsVideo?: boolean[],
+    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number }
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
       toast({
@@ -1453,37 +1455,64 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // constant_rate_factor: compress input video to match training data
             if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
           } else if (isMultiModel && refImageUrl) {
-            // MultiCondition: build images[] with temporal positions from all ref slots
+            // MultiCondition: build images[] and videos[] with temporal positions from all ref slots
             const { autoSpaceFrames } = await import('@/types/videoSlots');
             // Gather all ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
-            const filledEntries: { url: string; slotIndex: number }[] = [];
-            if (refImageUrl) filledEntries.push({ url: stripToStoragePath(refImageUrl), slotIndex: 0 });
+            const filledEntries: { url: string; slotIndex: number; isVideo: boolean }[] = [];
+            if (refImageUrl) filledEntries.push({ url: stripToStoragePath(refImageUrl), slotIndex: 0, isVideo: videoSlotIsVideo?.[0] || false });
             // additionalImageUrls holds mid-slot refs for multi video mode (slots 1-3)
             if (additionalImageUrls) {
               additionalImageUrls.forEach((url, i) => {
                 if (url && typeof url === 'string' && url.trim() !== '') {
-                  filledEntries.push({ url: stripToStoragePath(url), slotIndex: i + 1 });
+                  filledEntries.push({ url: stripToStoragePath(url), slotIndex: i + 1, isVideo: videoSlotIsVideo?.[i + 1] || false });
                 }
               });
             }
-            if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
+            if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4, isVideo: videoSlotIsVideo?.[4] || false });
             // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
             const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
             const actualNumFrames = (videoDuration || 5) * fps;
             const maxFrame = actualNumFrames - 1; // last valid frame index
             const frames = autoSpaceFrames(filledEntries.length, maxFrame);
-            inputObj.images = filledEntries.map((entry, i) => ({
-              image_url: entry.url,
-              start_frame_num: frames[i],
-              strength: keyframeStrengths[entry.slotIndex] ?? 1,
-            }));
-            // Don't set image_url -- multi uses images[] array
+            
+            // Split entries into images[] and videos[] based on isVideo flag
+            const imageEntries = filledEntries.filter(e => !e.isVideo);
+            const videoEntries = filledEntries.filter(e => e.isVideo);
+            
+            if (imageEntries.length > 0) {
+              const imageFrames = autoSpaceFrames(imageEntries.length, maxFrame);
+              inputObj.images = imageEntries.map((entry, i) => ({
+                image_url: entry.url,
+                start_frame_num: imageFrames[i],
+                strength: keyframeStrengths[entry.slotIndex] ?? 1,
+              }));
+            }
+            
+            if (videoEntries.length > 0) {
+              inputObj.videos = videoEntries.map((entry) => ({
+                url: entry.url,
+                start_frame_num: frames[filledEntries.indexOf(entry)],
+                strength: keyframeStrengths[entry.slotIndex] ?? 1,
+              }));
+            }
+            
+            // Don't set image_url -- multi uses images[]/videos[] arrays
             delete inputObj.image_url;
-            console.log(`🎬 MultiCondition: ${filledEntries.length} temporal images, frames: ${frames.join(', ')}, strengths: ${filledEntries.map(e => keyframeStrengths[e.slotIndex] ?? 1).join(', ')}`);
+            console.log(`🎬 MultiCondition: ${imageEntries.length} images, ${videoEntries.length} videos, frames: ${frames.join(', ')}, strengths: ${filledEntries.map(e => keyframeStrengths[e.slotIndex] ?? 1).join(', ')}`);
           } else if (refImageUrl) {
             inputObj.image_url = stripToStoragePath(refImageUrl); // Standard I2V
           }
-          inputObj.duration = videoDuration || 5; // Edge function converts to num_frames using model's frame_rate
+          inputObj.duration = videoDuration || 5;
+          
+          // MultiCondition advanced params
+          if (multiAdvancedParams) {
+            if (multiAdvancedParams.enableDetailPass) inputObj.enable_detail_pass = true;
+            if (multiAdvancedParams.constantRateFactor !== undefined && multiAdvancedParams.constantRateFactor !== 29) inputObj.constant_rate_factor = multiAdvancedParams.constantRateFactor;
+            if (multiAdvancedParams.temporalAdainFactor !== undefined && multiAdvancedParams.temporalAdainFactor !== 0.5) inputObj.temporal_adain_factor = multiAdvancedParams.temporalAdainFactor;
+            if (multiAdvancedParams.toneMapCompressionRatio !== undefined && multiAdvancedParams.toneMapCompressionRatio !== 0) inputObj.tone_map_compression_ratio = multiAdvancedParams.toneMapCompressionRatio;
+            if (multiAdvancedParams.firstPassSteps !== undefined && multiAdvancedParams.firstPassSteps !== 8) inputObj.first_pass_num_inference_steps = multiAdvancedParams.firstPassSteps;
+            if (multiAdvancedParams.secondPassSteps !== undefined && multiAdvancedParams.secondPassSteps !== 8) inputObj.second_pass_num_inference_steps = multiAdvancedParams.secondPassSteps;
+          }
         }
         
         // CRITICAL DEBUG: Log the payload before sending

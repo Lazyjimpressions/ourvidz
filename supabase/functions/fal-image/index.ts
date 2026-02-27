@@ -499,6 +499,12 @@ async function buildModelInput(
       if (body.input.reverse_video !== undefined) modelInput.reverse_video = body.input.reverse_video;
       if (body.input.constant_rate_factor !== undefined) modelInput.constant_rate_factor = body.input.constant_rate_factor;
 
+      // MultiCondition advanced params
+      if (body.input.enable_detail_pass !== undefined) modelInput.enable_detail_pass = body.input.enable_detail_pass;
+      if (body.input.temporal_adain_factor !== undefined) modelInput.temporal_adain_factor = body.input.temporal_adain_factor;
+      if (body.input.tone_map_compression_ratio !== undefined) modelInput.tone_map_compression_ratio = body.input.tone_map_compression_ratio;
+      if (body.input.first_pass_num_inference_steps !== undefined) modelInput.first_pass_num_inference_steps = body.input.first_pass_num_inference_steps;
+      if (body.input.second_pass_num_inference_steps !== undefined) modelInput.second_pass_num_inference_steps = body.input.second_pass_num_inference_steps;
       // Quality-based resolution
       if (body.quality === 'fast' && !body.input?.resolution) modelInput.resolution = '480p';
       else if (body.quality === 'high' && !body.input?.resolution) modelInput.resolution = modelInput.resolution || '720p';
@@ -513,7 +519,7 @@ async function buildModelInput(
           const imgUrl = img.image_url || img.url;
           const signed = await signIfStoragePath(supabase, imgUrl, 'user-library');
           if (signed) {
-            signedImages.push({ image_url: signed, start_frame_num: img.start_frame_num || 0 });
+            signedImages.push({ image_url: signed, start_frame_num: img.start_frame_num || 0, strength: img.strength ?? 1 });
           }
         }
         if (signedImages.length > 0) {
@@ -530,7 +536,12 @@ async function buildModelInput(
         for (const vid of body.input.videos) {
           const url = typeof vid === 'string' ? vid : vid.url;
           const signed = await signIfStoragePath(supabase, url, 'reference_images');
-          if (signed) signedVideos.push({ url: signed });
+          if (signed) {
+            const videoEntry: Record<string, any> = { url: signed };
+            if (vid.start_frame_num !== undefined) videoEntry.start_frame_num = vid.start_frame_num;
+            if (vid.strength !== undefined) videoEntry.strength = vid.strength;
+            signedVideos.push(videoEntry);
+          }
         }
         if (signedVideos.length > 0) {
           modelInput.videos = signedVideos;
