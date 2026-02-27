@@ -42,7 +42,15 @@ import {
   Sparkles,
   Clock,
   MoreHorizontal,
+  ChevronDown,
+  ChevronRight,
+  BookOpen,
 } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   StoryboardScene,
   StoryboardClip,
@@ -99,6 +107,7 @@ const StoryboardEditor = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [assembly, setAssembly] = useState<ProjectAssembly | null>(null);
   const [isLoadingAssembly, setIsLoadingAssembly] = useState(false);
+  const [storyPlanOpen, setStoryPlanOpen] = useState(true);
 
   // Selected clip for detail panel
   const [selectedClip, setSelectedClip] = useState<StoryboardClip | null>(null);
@@ -138,6 +147,13 @@ const StoryboardEditor = () => {
       setEditedTitle(activeProject.title);
     }
   }, [activeProject?.title]);
+
+  // Auto-select first scene when project has scenes and none selected (e.g. after AI plan)
+  useEffect(() => {
+    if (scenes.length > 0 && !activeScene) {
+      selectScene(scenes[0]);
+    }
+  }, [scenes.length, activeScene?.id, selectScene]);
 
   // Load recommended clip type when clip selected
   useEffect(() => {
@@ -529,6 +545,52 @@ const StoryboardEditor = () => {
             </DropdownMenu>
           </div>
         </div>
+
+        {/* Generated story (AI plan) - show when present so user sees the output */}
+        {activeProject.ai_story_plan &&
+         (activeProject.ai_story_plan.sceneBreakdown?.length > 0 ||
+          activeProject.ai_story_plan.storyBeats?.length > 0) && (
+          <Collapsible open={storyPlanOpen} onOpenChange={setStoryPlanOpen} className="border-b border-gray-800 bg-gray-900/40">
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-gray-300 hover:bg-gray-800/50 hover:text-gray-100"
+              >
+                {storyPlanOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                )}
+                <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                <span>Generated story</span>
+                <span className="text-gray-500">
+                  ({activeProject.ai_story_plan.sceneBreakdown?.length ?? 0} scenes
+                  {activeProject.ai_story_plan.storyBeats?.length
+                    ? `, ${activeProject.ai_story_plan.storyBeats.length} beats`
+                    : ''}
+                  )
+                </span>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="max-h-48 overflow-y-auto px-4 pb-3 pt-0">
+                <div className="space-y-2 text-xs text-gray-400">
+                  {activeProject.ai_story_plan.sceneBreakdown?.map((scene, i) => (
+                    <div key={i} className="rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <div className="font-medium text-gray-300">
+                        Scene {scene.sceneNumber}: {scene.title}
+                      </div>
+                      {scene.description && (
+                        <p className="mt-1 text-gray-500">{scene.description}</p>
+                      )}
+                      <span className="text-gray-600">{scene.targetDuration}s</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
 
         {/* Scene Strip */}
         <SceneStrip

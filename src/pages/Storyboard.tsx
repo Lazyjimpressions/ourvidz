@@ -7,6 +7,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { StoryboardLayout } from '@/components/StoryboardLayout';
 import { ProjectCard, NewProjectDialog } from '@/components/storyboard';
 import { useStoryboard } from '@/hooks/useStoryboard';
@@ -49,6 +50,7 @@ type FilterStatus = 'all' | ProjectStatus;
 
 const Storyboard = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, loading: authLoading } = useAuth();
   const {
     projects,
@@ -148,6 +150,9 @@ const Storyboard = () => {
         }
 
         console.log('✅ [Storyboard] Created', planResult.sceneBreakdown.length, 'scenes from AI plan');
+
+        // Invalidate so the editor loads fresh project + scenes when it mounts
+        queryClient.invalidateQueries({ queryKey: ['storyboard-project', project.id] });
       }
     }
 
