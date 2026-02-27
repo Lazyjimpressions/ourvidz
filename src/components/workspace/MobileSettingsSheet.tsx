@@ -50,6 +50,9 @@ export interface MobileSettingsSheetProps {
   
   // Reference Slots (unified for image & video)
   refSlots?: Array<{ url?: string | null; label: string; role?: string }>;
+  // Motion reference video (separate from image keyframes)
+  motionRefVideoUrl?: string | null;
+  onMotionRefVideoUrlRemove?: () => void;
   onRefSlotAdd?: (index: number) => void;
   onRefSlotRemove?: (index: number) => void;
   onRefSlotDrop?: (index: number, file: File) => void;
@@ -307,6 +310,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   contentType,
   onContentTypeChange,
   refSlots = [],
+  motionRefVideoUrl,
+  onMotionRefVideoUrlRemove,
   onRefSlotAdd,
   onRefSlotRemove,
   onRefSlotDrop,
@@ -880,6 +885,37 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       />
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Motion Reference Video (video mode only, separate from image keyframes) */}
+          {currentMode === 'video' && (
+            <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                Motion / Camera Reference
+              </label>
+              <p className="text-[8px] text-muted-foreground">
+                Optional video to guide movement and camera
+              </p>
+              {motionRefVideoUrl ? (
+                <div className="relative group h-16 w-24 rounded-md overflow-hidden border border-border">
+                  <video src={motionRefVideoUrl} className="absolute inset-0 w-full h-full object-cover" muted />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <span className="text-white text-[10px] font-medium">🎬</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onMotionRefVideoUrlRemove?.()}
+                    className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-2.5 h-2.5 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <div className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center">
+                  <span className="text-[8px] text-muted-foreground/50">No video</span>
                 </div>
               )}
             </div>

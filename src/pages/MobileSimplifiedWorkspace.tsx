@@ -111,8 +111,8 @@ const MobileSimplifiedWorkspace = () => {
   const [referenceImage2Url, setReferenceImage2Url] = useState<string | null>(null);
   // Additional refs (slots 3+) for multi-ref models
   const [additionalRefUrls, setAdditionalRefUrls] = useState<string[]>([]);
-  // Track which video ref slots contain video files (for MultiCondition routing)
-  const [videoSlotIsVideo, setVideoSlotIsVideo] = useState<boolean[]>([false, false, false, false, false]);
+  // Dedicated motion reference video URL (separate from image keyframes)
+  const [motionRefVideoUrl, setMotionRefVideoUrl] = useState<string | null>(null);
   // MultiCondition advanced video settings
   const [enableDetailPass, setEnableDetailPass] = useState(false);
   const [multiCrf, setMultiCrf] = useState(29);
@@ -374,7 +374,7 @@ const MobileSimplifiedWorkspace = () => {
       firstPassSteps,
       secondPassSteps,
     } : undefined;
-    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc, mode === 'video' ? videoSlotIsVideo : undefined, advancedParams);
+    await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc, undefined, advancedParams, motionRefVideoUrl || undefined);
   };
 
 
@@ -807,7 +807,8 @@ const MobileSimplifiedWorkspace = () => {
              next[index] = strength;
              setKeyframeStrengths(next);
            }}
-           onVideoSlotIsVideoChange={setVideoSlotIsVideo}
+           motionRefVideoUrl={motionRefVideoUrl}
+           onMotionRefVideoUrlChange={setMotionRefVideoUrl}
            enableDetailPass={enableDetailPass}
            onEnableDetailPassChange={setEnableDetailPass}
            multiCrf={multiCrf}

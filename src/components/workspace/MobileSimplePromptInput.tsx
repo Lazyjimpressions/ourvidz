@@ -93,8 +93,9 @@ export interface MobileSimplePromptInputProps {
   onKeyframeStrengthChange?: (index: number, strength: number) => void;
   // Source video duration callback (for tail-conditioning)
   onSourceVideoDuration?: (duration: number) => void;
-  // Video slot isVideo tracking callback
-  onVideoSlotIsVideoChange?: (isVideoFlags: boolean[]) => void;
+  // Motion reference video (separate from image keyframes)
+  motionRefVideoUrl?: string | null;
+  onMotionRefVideoUrlChange?: (url: string | null) => void;
   // MultiCondition advanced controls
   enableDetailPass?: boolean;
   onEnableDetailPassChange?: (enabled: boolean) => void;
@@ -173,7 +174,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   keyframeStrengths,
   onKeyframeStrengthChange,
   onSourceVideoDuration,
-  onVideoSlotIsVideoChange,
+  motionRefVideoUrl,
+  onMotionRefVideoUrlChange,
   enableDetailPass,
   onEnableDetailPassChange,
   multiCrf,
@@ -563,8 +565,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   // Compute ref slot URLs for QuickBar
   const ref1Url = currentMode === 'image' ? referenceImageUrl : beginningRefImageUrl;
   const ref2Url = currentMode === 'image' ? referenceImage2Url : endingRefImageUrl;
-  const ref1IsVideo = currentMode === 'video' && !!beginningRefImageUrl && beginningRefImage?.type?.startsWith('video/');
-  const ref2IsVideo = currentMode === 'video' && !!endingRefImageUrl && endingRefImage?.type?.startsWith('video/');
+  const ref1IsVideo = false; // Images only in keyframe slots now
+  const ref2IsVideo = false;
 
   const hasDisplayReference = !!ref1Url;
 
@@ -592,12 +594,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   });
   const maxVideoSlots = 5; // always 5
 
-  // Report isVideo flags back to parent for MultiCondition routing
-  React.useEffect(() => {
-    if (currentMode === 'video' && onVideoSlotIsVideoChange) {
-      onVideoSlotIsVideoChange(videoRefSlots.map(s => !!s.isVideo));
-    }
-  }, [currentMode, ref1IsVideo, ref2IsVideo, onVideoSlotIsVideoChange]);
+  // No longer need to report isVideo flags — motion ref is separate now
 
   // No-op: video always has 5 fixed slots
   const handleAddSlot = () => {};
@@ -793,6 +790,55 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         videoModels={videoModels || []}
         modelsLoading={modelsLoading || videoModelsLoading}
       />
+
+      {/* Motion Reference Video Drop Zone (video mode only) */}
+      {currentMode === 'video' && (
+        <div className="px-3 py-1 flex items-center gap-2">
+          <span className="text-[9px] text-muted-foreground whitespace-nowrap">Motion Ref:</span>
+          {motionRefVideoUrl ? (
+            <div className="relative group h-8 w-12 rounded overflow-hidden border border-border flex-shrink-0">
+              <video src={motionRefVideoUrl} className="w-full h-full object-cover" muted />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                <span className="text-white text-[8px]">🎬</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => onMotionRefVideoUrlChange?.(null)}
+                className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X className="w-2 h-2 text-white" />
+              </button>
+            </div>
+          ) : (
+            <div
+              className="h-8 w-12 rounded border border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 cursor-pointer hover:border-primary/50 transition-colors"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const refData = e.dataTransfer.getData('application/x-ref-image');
+                if (refData) {
+                  try {
+                    const { url } = JSON.parse(refData);
+                    if (url) onMotionRefVideoUrlChange?.(url);
+                  } catch { /* ignore */ }
+                  return;
+                }
+                // File drop — upload video
+                const file = e.dataTransfer.files?.[0];
+                if (file && file.type.startsWith('video/')) {
+                  uploadAndSignReferenceImage(file).then(signedUrl => {
+                    onMotionRefVideoUrlChange?.(signedUrl);
+                  }).catch(() => toast.error('Failed to upload motion video'));
+                }
+              }}
+            >
+              <span className="text-[8px] text-muted-foreground/50">+ Video</span>
+            </div>
+          )}
+          <span className="text-[8px] text-muted-foreground/50 italic">Optional: guides movement</span>
+        </div>
+      )}
       
       {/* Prompt Input + Inline Generate */}
       <form onSubmit={handleSubmit} className="px-3 pb-3">
@@ -927,6 +973,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         videoDurationOptions={videoModelSettings?.settings?.durationOptions || []}
         motionIntensity={motionIntensity}
         onMotionIntensityChange={onMotionIntensityChange}
+        motionRefVideoUrl={motionRefVideoUrl}
+        onMotionRefVideoUrlRemove={() => onMotionRefVideoUrlChange?.(null)}
         keyframeStrengths={keyframeStrengths}
         onKeyframeStrengthChange={onKeyframeStrengthChange}
         enableDetailPass={enableDetailPass}

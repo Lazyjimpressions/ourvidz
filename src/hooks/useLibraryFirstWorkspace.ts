@@ -113,7 +113,7 @@ export interface LibraryFirstWorkspaceActions {
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   setReferenceType: (type: 'style' | 'character' | 'composition') => void;
-  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string, videoSlotIsVideo?: boolean[], multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number }) => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string, videoSlotIsVideo?: boolean[], multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number }, motionRefVideoUrl?: string) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -661,7 +661,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     slotRoles?: SlotRole[],
     poseDescription?: string,
     videoSlotIsVideo?: boolean[],
-    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number }
+    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number },
+    motionRefVideoUrl?: string
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
       toast({
@@ -1455,50 +1456,44 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // constant_rate_factor: compress input video to match training data
             if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
           } else if (isMultiModel && refImageUrl) {
-            // MultiCondition: build images[] and videos[] with temporal positions from all ref slots
+            // MultiCondition: build images[] from image keyframe slots, videos[] from motionRefVideoUrl
             const { autoSpaceFrames } = await import('@/types/videoSlots');
-            // Gather all ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
-            const filledEntries: { url: string; slotIndex: number; isVideo: boolean }[] = [];
-            if (refImageUrl) filledEntries.push({ url: stripToStoragePath(refImageUrl), slotIndex: 0, isVideo: videoSlotIsVideo?.[0] || false });
-            // additionalImageUrls holds mid-slot refs for multi video mode (slots 1-3)
+            // Gather all image ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
+            const filledEntries: { url: string; slotIndex: number }[] = [];
+            if (refImageUrl) filledEntries.push({ url: stripToStoragePath(refImageUrl), slotIndex: 0 });
             if (additionalImageUrls) {
               additionalImageUrls.forEach((url, i) => {
                 if (url && typeof url === 'string' && url.trim() !== '') {
-                  filledEntries.push({ url: stripToStoragePath(url), slotIndex: i + 1, isVideo: videoSlotIsVideo?.[i + 1] || false });
+                  filledEntries.push({ url: stripToStoragePath(url), slotIndex: i + 1 });
                 }
               });
             }
-            if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4, isVideo: videoSlotIsVideo?.[4] || false });
+            if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
             // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
             const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
             const actualNumFrames = (videoDuration || 5) * fps;
             const maxFrame = actualNumFrames - 1; // last valid frame index
-            const frames = autoSpaceFrames(filledEntries.length, maxFrame);
             
-            // Split entries into images[] and videos[] based on isVideo flag
-            const imageEntries = filledEntries.filter(e => !e.isVideo);
-            const videoEntries = filledEntries.filter(e => e.isVideo);
-            
-            if (imageEntries.length > 0) {
-              const imageFrames = autoSpaceFrames(imageEntries.length, maxFrame);
-              inputObj.images = imageEntries.map((entry, i) => ({
+            // All filled entries are images now (no more isVideo splitting)
+            if (filledEntries.length > 0) {
+              const imageFrames = autoSpaceFrames(filledEntries.length, maxFrame);
+              inputObj.images = filledEntries.map((entry, i) => ({
                 image_url: entry.url,
                 start_frame_num: imageFrames[i],
                 strength: keyframeStrengths[entry.slotIndex] ?? 1,
               }));
             }
             
-            if (videoEntries.length > 0) {
-              inputObj.videos = videoEntries.map((entry) => ({
-                url: entry.url,
-                start_frame_num: frames[filledEntries.indexOf(entry)],
-                strength: keyframeStrengths[entry.slotIndex] ?? 1,
-              }));
+            // Separate motion reference video (if provided)
+            if (motionRefVideoUrl) {
+              inputObj.videos = [{
+                url: stripToStoragePath(motionRefVideoUrl),
+              }];
             }
             
             // Don't set image_url -- multi uses images[]/videos[] arrays
             delete inputObj.image_url;
-            console.log(`🎬 MultiCondition: ${imageEntries.length} images, ${videoEntries.length} videos, frames: ${frames.join(', ')}, strengths: ${filledEntries.map(e => keyframeStrengths[e.slotIndex] ?? 1).join(', ')}`);
+            console.log(`🎬 MultiCondition: ${filledEntries.length} images, ${motionRefVideoUrl ? 1 : 0} motion ref video, strengths: ${filledEntries.map(e => keyframeStrengths[e.slotIndex] ?? 1).join(', ')}`);
           } else if (refImageUrl) {
             inputObj.image_url = stripToStoragePath(refImageUrl); // Standard I2V
           }
