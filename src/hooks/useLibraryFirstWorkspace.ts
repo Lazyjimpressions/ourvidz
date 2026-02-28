@@ -1502,12 +1502,24 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           
           // MultiCondition advanced params
           if (multiAdvancedParams) {
-            if (multiAdvancedParams.enableDetailPass) inputObj.enable_detail_pass = true;
             if (multiAdvancedParams.constantRateFactor !== undefined && multiAdvancedParams.constantRateFactor !== 29) inputObj.constant_rate_factor = multiAdvancedParams.constantRateFactor;
             if (multiAdvancedParams.temporalAdainFactor !== undefined && multiAdvancedParams.temporalAdainFactor !== 0.5) inputObj.temporal_adain_factor = multiAdvancedParams.temporalAdainFactor;
             if (multiAdvancedParams.toneMapCompressionRatio !== undefined && multiAdvancedParams.toneMapCompressionRatio !== 0) inputObj.tone_map_compression_ratio = multiAdvancedParams.toneMapCompressionRatio;
-            if (multiAdvancedParams.firstPassSteps !== undefined && multiAdvancedParams.firstPassSteps !== 8) inputObj.first_pass_num_inference_steps = multiAdvancedParams.firstPassSteps;
-            if (multiAdvancedParams.secondPassSteps !== undefined && multiAdvancedParams.secondPassSteps !== 8) inputObj.second_pass_num_inference_steps = multiAdvancedParams.secondPassSteps;
+            
+            // Detail Pass: only send second-pass params when explicitly enabled
+            if (multiAdvancedParams.enableDetailPass) {
+              inputObj.enable_detail_pass = true;
+              inputObj.first_pass_num_inference_steps = multiAdvancedParams.firstPassSteps ?? 8;
+              inputObj.first_pass_skip_final_steps = 1;
+              inputObj.second_pass_num_inference_steps = multiAdvancedParams.secondPassSteps ?? 8;
+              inputObj.second_pass_skip_initial_steps = 5;
+            }
+          }
+          
+          // When multi-conditioning with images, let the model infer aspect ratio from ref image
+          if (inputObj.images?.length > 0) {
+            inputObj.aspect_ratio = 'auto';
+            console.log('🎯 MultiCondition: overriding aspect_ratio to "auto" for ref image adherence');
           }
         }
         
