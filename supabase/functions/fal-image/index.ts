@@ -480,7 +480,11 @@ async function buildModelInput(
       // Duration → num_frames conversion
       const frameRate = modelInput.frame_rate || modelInput.frames_per_second || 16;
       if (body.metadata?.duration) {
-        let numFrames = Math.round(body.metadata.duration * frameRate);
+      let numFrames = Math.round(body.metadata.duration * frameRate);
+        // LTX models require num_frames = 8n + 1
+        if (model.model_key.includes('ltx')) {
+          numFrames = Math.round((numFrames - 1) / 8) * 8 + 1;
+        }
         if (inputSchema?.num_frames) {
           numFrames = Math.max(inputSchema.num_frames.min || 1, Math.min(inputSchema.num_frames.max || 999, numFrames));
         }
