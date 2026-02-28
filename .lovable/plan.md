@@ -1,45 +1,68 @@
 
 
-# Fix: LTX Video 422 Error — Invalid Frame Count
+# Fix: MultiCondition Video Reference — Wrong Field Name (`url` vs `video_url`)
 
 ## Root Cause
 
-The edge function logs reveal:
+The fal.ai OpenAPI schema for `VideoConditioningInput` requires the field **`video_url`** (required). Both the client and edge function are using `url` instead, causing a 422 validation error.
 
 ```text
-🎬 Video: 4s x 30fps = 120 frames
+Client sends:       { url: "storage/path..." }
+Edge function maps: { url: "signed-url..." }
+fal.ai expects:     { video_url: "signed-url...", start_frame_num: 0 }
 ```
 
-LTX models require `num_frames` to be of the form **8n + 1** (e.g., 9, 17, 25, ..., 121, 129, ..., 161). The value **120** is invalid. The model's own default is **121**, confirming this constraint.
+## Changes Required
 
-The duration-to-frames conversion in `fal-image/index.ts` (line 483) does a simple multiply-and-round without aligning to the required pattern:
+### 1. Client: `src/hooks/useLibraryFirstWorkspace.ts` (~line 1489-1491)
 
-```text
-let numFrames = Math.round(body.metadata.duration * frameRate);  // 4 * 30 = 120 (INVALID)
+Change the video reference object to use the correct field name:
+
+```typescript
+// BEFORE (broken)
+inputObj.videos = [{
+  url: stripToStoragePath(motionRefVideoUrl),
+}];
+
+// AFTER (correct)
+inputObj.videos = [{
+  video_url: stripToStoragePath(motionRefVideoUrl),
+  start_frame_num: 0,
+}];
 ```
 
-## Fix
+### 2. Edge function: `supabase/functions/fal-image/index.ts` (~lines 540-548)
 
-In `supabase/functions/fal-image/index.ts`, after computing `numFrames`, snap to the nearest valid `8n + 1` value for LTX models:
+Fix the video conditioning mapper to output the correct field name:
 
-```text
-let numFrames = Math.round(body.metadata.duration * frameRate);
-// LTX models require num_frames = 8n + 1
-if (modelKey.includes('ltx')) {
-  numFrames = Math.round((numFrames - 1) / 8) * 8 + 1;
+```typescript
+// BEFORE (broken)
+const url = typeof vid === 'string' ? vid : vid.url;
+const signed = await signIfStoragePath(supabase, url, 'reference_images');
+if (signed) {
+  const videoEntry: Record<string, any> = { url: signed };
+  ...
 }
-// Then clamp to schema min/max as before
+
+// AFTER (correct)
+const vidUrl = typeof vid === 'string' ? vid : (vid.video_url || vid.url);
+const signed = await signIfStoragePath(supabase, vidUrl, 'reference_images');
+if (signed) {
+  const videoEntry: Record<string, any> = { video_url: signed, start_frame_num: vid.start_frame_num ?? 0 };
+  ...
+}
 ```
 
-This turns 120 into 121, 150 into 153, etc.
+### 3. Also fix: `src/lib/services/ClipOrchestrationService.ts` (if it sends videos)
 
-## File to Modify
+Same pattern -- ensure any `videos[]` entries use `video_url` not `url`.
 
-| File | Change |
-|------|--------|
-| `supabase/functions/fal-image/index.ts` | Add `8n+1` alignment after frame count calculation (around line 483-486) |
+## Why Previous Fixes Failed
+
+Each iteration addressed a symptom (variable scope error, frame count) without checking the actual API contract. The OpenAPI schema clearly defines `VideoConditioningInput` with `video_url` as required -- this was the real blocker all along.
 
 ## Deployment
 
-This is an edge function change -- must be deployed via the Supabase dashboard.
+- Client changes deploy automatically via Lovable
+- Edge function (`fal-image`) must be redeployed via Supabase dashboard
 
