@@ -1018,6 +1018,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         motionRefVideoUrl={motionRefVideoUrl}
         onMotionRefVideoUrlRemove={() => onMotionRefVideoUrlChange?.(null)}
         onMotionRefVideoUrlAdd={() => setMotionPickerOpen(true)}
+        onMotionRefVideoFileDrop={async (file) => {
+          if (!file.type.startsWith('video/')) return;
+          try {
+            const signedUrl = await uploadAndSignReferenceImage(file);
+            onMotionRefVideoUrlChange?.(signedUrl);
+            toast.success('Motion reference video uploaded');
+          } catch {
+            toast.error('Failed to upload motion video');
+          }
+        }}
         keyframeStrengths={keyframeStrengths}
         onKeyframeStrengthChange={onKeyframeStrengthChange}
         enableDetailPass={enableDetailPass}

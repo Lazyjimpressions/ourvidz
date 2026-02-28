@@ -59,6 +59,7 @@ export interface MobileSettingsSheetProps {
   motionRefVideoUrl?: string | null;
   onMotionRefVideoUrlRemove?: () => void;
   onMotionRefVideoUrlAdd?: () => void;
+  onMotionRefVideoFileDrop?: (file: File) => void;
   onRefSlotAdd?: (index: number) => void;
   onRefSlotRemove?: (index: number) => void;
   onRefSlotDrop?: (index: number, file: File) => void;
@@ -319,6 +320,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   motionRefVideoUrl,
   onMotionRefVideoUrlRemove,
   onMotionRefVideoUrlAdd,
+  onMotionRefVideoFileDrop,
   onRefSlotAdd,
   onRefSlotRemove,
   onRefSlotDrop,
@@ -945,14 +947,49 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => onMotionRefVideoUrlAdd?.()}
-                  className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 flex flex-col items-center justify-center hover:border-primary/50 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3 h-3 text-muted-foreground/50 mb-0.5" />
-                  <span className="text-[8px] text-muted-foreground/50">Add Video</span>
-                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 flex flex-col items-center justify-center hover:border-primary/50 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3 text-muted-foreground/50 mb-0.5" />
+                      <span className="text-[8px] text-muted-foreground/50">Add Video</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-36">
+                    <DropdownMenuItem onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'video/mp4,video/webm,video/quicktime';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (file && onMotionRefVideoFileDrop) onMotionRefVideoFileDrop(file);
+                      };
+                      input.click();
+                    }}>
+                      <Upload className="w-3.5 h-3.5 mr-2" />
+                      Upload file
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'video/mp4,video/webm,video/quicktime';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (file && onMotionRefVideoFileDrop) onMotionRefVideoFileDrop(file);
+                      };
+                      input.click();
+                    }}>
+                      <Camera className="w-3.5 h-3.5 mr-2" />
+                      Photo Library
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onMotionRefVideoUrlAdd?.()}>
+                      <Library className="w-3.5 h-3.5 mr-2" />
+                      From Library
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           )}
