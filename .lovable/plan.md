@@ -1,88 +1,94 @@
 
 
-# Separate Image Keyframes from Video Motion Reference
+# Fix: Make Motion Reference Box Interactive
 
-## The Problem
+## Problems
 
-The current UI tries to mix images and videos in the same 5-slot timeline. This causes:
-- The overwrite bug (video stomps on image slot)
-- Conceptual confusion (user doesn't know what each slot "does")
-- Misaligned mental model vs. the actual API
+1. **Settings Sheet "Motion / Camera Reference" is not clickable** -- the empty state (line 917) renders a static `div` with "No video" text and no `onClick`, no upload trigger, nothing. Users see it but can't interact with it.
 
-## What the API Actually Expects
+2. **QuickBar motion ref slot lacks source menu** -- clicking the `+ Video` box only opens a native file picker. There's no dropdown to choose between Photo Library, Library, or File upload like the image keyframe slots have. The "Library" link exists but is a tiny, easy-to-miss underlined text.
 
-The LTX MultiCondition endpoint has **two independent conditioning arrays**:
+3. **Both need the same 3-source pattern** used by image keyframe slots: Photo Library (device camera roll), Library (ImagePickerDialog), and File upload.
 
-```text
-images[]:  Identity/appearance anchors at timeline positions
-           Each entry: { image_url, start_frame_num, strength }
-           
-videos[]:  Motion/camera reference clips
-           Each entry: { url }
-```
+## Solution
 
-These serve fundamentally different creative purposes:
-- **Images** answer: "What should this look like at frame N?"
-- **Videos** answer: "How should this move / what camera work to use?"
+### A. Settings Sheet: Make motion ref slot clickable
 
-They are NOT interchangeable and should NOT share the same slots.
+In `MobileSettingsSheet.tsx`, the empty motion ref state (lines 917-919) needs:
+- An `onClick` handler that triggers an action in the parent
+- New prop: `onMotionRefVideoUrlAdd?: () => void` to let the parent handle the source selection
+- Or simpler: show a small "Add Video" button that calls this prop
 
-## Solution: Add a Dedicated Motion Reference Slot
+Since the Settings Sheet is a display/config surface, the simplest approach is to add an "Add" button that triggers a callback, which `MobileSimplePromptInput` handles by opening the motion video picker.
 
-### UI Changes
+### B. QuickBar: Add source dropdown to motion ref slot
 
-Keep the existing 5-slot image keyframe timeline exactly as-is. Add a **separate "Motion Reference" section** below it (or beside it) with:
+In `MobileSimplePromptInput.tsx`, replace the current bare `onClick` (line 840) + separate "Library" link with a `DropdownMenu` matching the pattern used by image keyframe slots:
 
-- One video drop zone (labeled "Motion / Camera Reference")
-- A brief helper label: "Optional video to guide movement and camera"
-- Accepts video files or video URLs from the library
-- Shows a video thumbnail with play icon when filled
-- Remove button to clear it
+- **Upload file** -- triggers `motionVideoInputRef.current?.click()`
+- **Photo Library** -- triggers a camera roll picker (same as image slots use `handlePhotoForSlot`)
+- **From Library** -- triggers `setMotionPickerOpen(true)`
 
-This is visually distinct from the keyframe timeline, so users understand:
-- **Top row**: Image keyframes controlling appearance at different moments
-- **Below**: Optional motion video controlling how things move
+This gives users the same familiar 3-option source menu for video that they already have for images.
 
-### Data Flow
+### C. Settings Sheet: Wire "Add" action back to prompt input
 
-1. **New state**: Add `motionRefVideoUrl` (string | null) alongside existing ref image state in `MobileSimplifiedWorkspace.tsx`
-2. **Pass down**: Thread it through `MobileSimplePromptInput` as a separate prop, not mixed into the `videoRefSlots` array
-3. **Generation hook**: In `useLibraryFirstWorkspace.ts`, build `images[]` from filled image keyframe slots (as today) and `videos[]` from the motion ref (if set) -- clean separation
-4. **Edge function**: Already handles `images[]` and `videos[]` separately (lines 516-550) -- no changes needed
-
-### Settings Modal
-
-- Show the motion reference video in its own section of the Settings Sheet
-- No strength/frame controls needed for video (the API doesn't support per-video frame positioning in the same way)
-- Keep per-keyframe strength sliders for images only
-
-## What NOT to Do
-
-- Do NOT add a 6th box to the image timeline -- it conflates two different concepts
-- Do NOT make boxes "assignable" between image/video/start/end -- adds complexity without value since the API itself separates these
-- Do NOT change the edge function -- it already handles both arrays correctly
+Add a new prop `onMotionRefVideoUrlAdd` to the Settings Sheet. When the user taps the empty motion ref area in Settings, it calls this prop. In `MobileSimplePromptInput`, the handler opens the motion video source dropdown or directly opens the library picker.
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/pages/MobileSimplifiedWorkspace.tsx` | Add `motionRefVideoUrl` state; pass to prompt input and generation hook |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Add motion reference drop zone below keyframe slots; accept `motionRefVideoUrl` / `onMotionRefChange` props; remove video-in-image-slot logic |
-| `src/hooks/useLibraryFirstWorkspace.ts` | Accept `motionRefVideoUrl` param; build `videos: [{ url }]` from it instead of splitting from image slots; remove `videoSlotIsVideo` param |
-| `src/components/workspace/MobileSettingsSheet.tsx` | Show motion reference preview in its own section; remove isVideo mixing from refSlots |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Replace motion ref `onClick` + "Library" link with a `DropdownMenu` offering Upload / Photo Library / Library options. Add handler for Settings Sheet "add" callback. |
+| `src/components/workspace/MobileSettingsSheet.tsx` | Add `onMotionRefVideoUrlAdd` prop. Make the empty motion ref div clickable with an "Add Video" button that calls this prop. |
 
-## Sequencing
+## Technical Details
 
-1. Add motion reference state and UI drop zone (new section, visually separate)
-2. Wire generation hook to build `videos[]` from the motion ref
-3. Clean up: remove `videoSlotIsVideo` splitting logic from hook and prompt input
-4. Update Settings Sheet to show motion ref separately
+### MobileSimplePromptInput.tsx
 
-## Complexity Assessment
+Replace lines 837-871 (the empty motion ref slot) with:
 
-This **reduces** complexity everywhere:
-- Edge function: no changes needed
-- Hook: simpler (no more isVideo splitting logic)
-- UI: clearer mental model for users
-- Settings: no more mixed media in the same grid
+```text
+<DropdownMenu>
+  <DropdownMenuTrigger asChild>
+    <div className="h-8 w-12 rounded border border-dashed border-muted-foreground/30 
+                    flex items-center justify-center flex-shrink-0 cursor-pointer 
+                    hover:border-primary/50 transition-colors">
+      <span className="text-[8px] text-muted-foreground/50">+ Video</span>
+    </div>
+  </DropdownMenuTrigger>
+  <DropdownMenuContent align="start" className="w-36">
+    <DropdownMenuItem onClick={() => motionVideoInputRef.current?.click()}>
+      <Upload /> Upload file
+    </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => { /* photo library handler */ }}>
+      <Camera /> Photo Library  
+    </DropdownMenuItem>
+    <DropdownMenuItem onClick={() => setMotionPickerOpen(true)}>
+      <Library /> From Library
+    </DropdownMenuItem>
+  </DropdownMenuContent>
+</DropdownMenu>
+```
+
+Remove the separate "Library" text link since it's now in the dropdown.
+
+### MobileSettingsSheet.tsx
+
+Replace the static empty state (lines 917-919) with:
+
+```text
+<button
+  type="button"
+  onClick={() => onMotionRefVideoUrlAdd?.()}
+  className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 
+             flex flex-col items-center justify-center hover:border-primary/50 
+             transition-colors cursor-pointer"
+>
+  <Film className="w-3 h-3 text-muted-foreground/50 mb-0.5" />
+  <span className="text-[8px] text-muted-foreground/50">Add Video</span>
+</button>
+```
+
+Add `onMotionRefVideoUrlAdd` to the props interface and pass it from `MobileSimplePromptInput` (where it opens the motion source dropdown or library picker).
 
