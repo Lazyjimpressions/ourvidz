@@ -215,6 +215,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSlotIndex, setPickerSlotIndex] = useState(0);
   
+  // Motion ref video file input
+  const motionVideoInputRef = useRef<HTMLInputElement>(null);
+  const [motionPickerOpen, setMotionPickerOpen] = useState(false);
+  
   // Map slot index to a library filter tag
   const SLOT_FILTER_TAGS = ['character', 'character', 'position', 'scene', 'clothing'] as const;
   const pickerFilterTag = SLOT_FILTER_TAGS[pickerSlotIndex] || undefined;
@@ -735,6 +739,26 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         className="hidden"
         aria-hidden="true"
       />
+      {/* Hidden file input for motion ref video */}
+      <input
+        ref={motionVideoInputRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (motionVideoInputRef.current) motionVideoInputRef.current.value = '';
+          if (!file || !file.type.startsWith('video/')) return;
+          try {
+            const signedUrl = await uploadAndSignReferenceImage(file);
+            onMotionRefVideoUrlChange?.(signedUrl);
+            toast.success('Motion reference video uploaded');
+          } catch {
+            toast.error('Failed to upload motion video');
+          }
+        }}
+        className="hidden"
+        aria-hidden="true"
+      />
       
       {/* Quick Bar */}
       <MobileQuickBar
@@ -810,31 +834,41 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               </button>
             </div>
           ) : (
-            <div
-              className="h-8 w-12 rounded border border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 cursor-pointer hover:border-primary/50 transition-colors"
-              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                const refData = e.dataTransfer.getData('application/x-ref-image');
-                if (refData) {
-                  try {
-                    const { url } = JSON.parse(refData);
-                    if (url) onMotionRefVideoUrlChange?.(url);
-                  } catch { /* ignore */ }
-                  return;
-                }
-                // File drop — upload video
-                const file = e.dataTransfer.files?.[0];
-                if (file && file.type.startsWith('video/')) {
-                  uploadAndSignReferenceImage(file).then(signedUrl => {
-                    onMotionRefVideoUrlChange?.(signedUrl);
-                  }).catch(() => toast.error('Failed to upload motion video'));
-                }
-              }}
-            >
-              <span className="text-[8px] text-muted-foreground/50">+ Video</span>
-            </div>
+            <>
+              <div
+                className="h-8 w-12 rounded border border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => motionVideoInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const refData = e.dataTransfer.getData('application/x-ref-image');
+                  if (refData) {
+                    try {
+                      const { url } = JSON.parse(refData);
+                      if (url) onMotionRefVideoUrlChange?.(url);
+                    } catch { /* ignore */ }
+                    return;
+                  }
+                  // File drop — upload video
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.type.startsWith('video/')) {
+                    uploadAndSignReferenceImage(file).then(signedUrl => {
+                      onMotionRefVideoUrlChange?.(signedUrl);
+                    }).catch(() => toast.error('Failed to upload motion video'));
+                  }
+                }}
+              >
+                <span className="text-[8px] text-muted-foreground/50">+ Video</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMotionPickerOpen(true)}
+                className="text-[8px] text-muted-foreground/50 hover:text-primary transition-colors underline"
+              >
+                Library
+              </button>
+            </>
           )}
           <span className="text-[8px] text-muted-foreground/50 italic">Optional: guides movement</span>
         </div>
@@ -999,6 +1033,18 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         title={`Select ${SLOT_FILTER_TAGS[pickerSlotIndex]?.[0]?.toUpperCase()}${SLOT_FILTER_TAGS[pickerSlotIndex]?.slice(1) || 'Reference'} Image`}
         source="library"
         filterTag={pickerFilterTag}
+      />
+
+      {/* Motion Reference Video Picker (library/workspace) */}
+      <ImagePickerDialog
+        isOpen={motionPickerOpen}
+        onClose={() => setMotionPickerOpen(false)}
+        onSelect={(url: string) => {
+          onMotionRefVideoUrlChange?.(url);
+          setMotionPickerOpen(false);
+        }}
+        title="Select Motion Reference Video"
+        source="library"
       />
     </div>
   );
