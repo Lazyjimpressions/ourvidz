@@ -1,12 +1,17 @@
-import React, { useMemo, useState } from 'react';
-import { X, Copy, Settings2, ChevronDown, Check, Plus, Lock, Info } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { X, Copy, Settings2, ChevronDown, Check, Plus, Lock, Info, Upload, Camera, Library } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerClose } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -359,7 +364,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onSecondPassStepsChange,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
-  
+  const refFileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingRefSlotIndex, setPendingRefSlotIndex] = useState<number | null>(null);
   // Determine if current model is local (SDXL/WAN) for advanced settings
   const isLocalModel = useMemo(() => {
     return selectedModel?.type === 'sdxl' || 
@@ -810,28 +816,51 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                           </button>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => onRefSlotAdd?.(i)}
-                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const refData = e.dataTransfer.getData('application/x-ref-image');
-                            if (refData) {
-                              try {
-                                const { url: droppedUrl } = JSON.parse(refData);
-                                if (droppedUrl && onRefSlotDropUrl) onRefSlotDropUrl(i, droppedUrl);
-                              } catch { /* ignore */ }
-                              return;
-                            }
-                            const file = e.dataTransfer.files?.[0];
-                            if (file && onRefSlotDrop) onRefSlotDrop(i, file);
-                          }}
-                          className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary/50 transition-colors"
-                        >
-                          <Plus className="w-3 h-3 text-muted-foreground/50" />
-                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const refData = e.dataTransfer.getData('application/x-ref-image');
+                                if (refData) {
+                                  try {
+                                    const { url: droppedUrl } = JSON.parse(refData);
+                                    if (droppedUrl && onRefSlotDropUrl) onRefSlotDropUrl(i, droppedUrl);
+                                  } catch { /* ignore */ }
+                                  return;
+                                }
+                                const file = e.dataTransfer.files?.[0];
+                                if (file && onRefSlotDrop) onRefSlotDrop(i, file);
+                              }}
+                              className="h-12 w-12 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center hover:border-primary/50 transition-colors"
+                            >
+                              <Plus className="w-3 h-3 text-muted-foreground/50" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-36">
+                            <DropdownMenuItem onClick={() => {
+                              setPendingRefSlotIndex(i);
+                              refFileInputRef.current?.click();
+                            }}>
+                              <Upload className="w-3.5 h-3.5 mr-2" />
+                              Upload file
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setPendingRefSlotIndex(i);
+                              refFileInputRef.current?.click();
+                            }}>
+                              <Camera className="w-3.5 h-3.5 mr-2" />
+                              Photo Library
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onRefSlotAdd?.(i)}>
+                              <Library className="w-3.5 h-3.5 mr-2" />
+                              From Library
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       <span className="text-[8px] text-muted-foreground">{slot.label}</span>
                       {/* Per-keyframe strength slider (video mode only) */}
@@ -971,6 +1000,21 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             )}
           </div>
         </div>
+      {/* Hidden file input for ref slot uploads */}
+      <input
+        ref={refFileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && pendingRefSlotIndex !== null && onRefSlotDrop) {
+            onRefSlotDrop(pendingRefSlotIndex, file);
+          }
+          setPendingRefSlotIndex(null);
+          if (refFileInputRef.current) refFileInputRef.current.value = '';
+        }}
+      />
       </DrawerContent>
     </Drawer>
   );
