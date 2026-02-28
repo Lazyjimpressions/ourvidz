@@ -538,11 +538,10 @@ async function buildModelInput(
       if (body.input.videos && Array.isArray(body.input.videos)) {
         const signedVideos = [];
         for (const vid of body.input.videos) {
-          const url = typeof vid === 'string' ? vid : vid.url;
-          const signed = await signIfStoragePath(supabase, url, 'reference_images');
+          const vidUrl = typeof vid === 'string' ? vid : (vid.video_url || vid.url);
+          const signed = await signIfStoragePath(supabase, vidUrl, 'reference_images');
           if (signed) {
-            const videoEntry: Record<string, any> = { url: signed };
-            if (vid.start_frame_num !== undefined) videoEntry.start_frame_num = vid.start_frame_num;
+            const videoEntry: Record<string, any> = { video_url: signed, start_frame_num: vid.start_frame_num ?? 0 };
             if (vid.strength !== undefined) videoEntry.strength = vid.strength;
             signedVideos.push(videoEntry);
           }
