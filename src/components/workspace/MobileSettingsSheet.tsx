@@ -53,6 +53,7 @@ export interface MobileSettingsSheetProps {
   // Motion reference video (separate from image keyframes)
   motionRefVideoUrl?: string | null;
   onMotionRefVideoUrlRemove?: () => void;
+  onMotionRefVideoUrlAdd?: () => void;
   onRefSlotAdd?: (index: number) => void;
   onRefSlotRemove?: (index: number) => void;
   onRefSlotDrop?: (index: number, file: File) => void;
@@ -312,6 +313,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   refSlots = [],
   motionRefVideoUrl,
   onMotionRefVideoUrlRemove,
+  onMotionRefVideoUrlAdd,
   onRefSlotAdd,
   onRefSlotRemove,
   onRefSlotDrop,
@@ -914,9 +916,14 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                   </button>
                 </div>
               ) : (
-                <div className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 flex items-center justify-center">
-                  <span className="text-[8px] text-muted-foreground/50">No video</span>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => onMotionRefVideoUrlAdd?.()}
+                  className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 flex flex-col items-center justify-center hover:border-primary/50 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3 h-3 text-muted-foreground/50 mb-0.5" />
+                  <span className="text-[8px] text-muted-foreground/50">Add Video</span>
+                </button>
               )}
             </div>
           )}
