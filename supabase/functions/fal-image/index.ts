@@ -482,7 +482,7 @@ async function buildModelInput(
       if (body.metadata?.duration) {
       let numFrames = Math.round(body.metadata.duration * frameRate);
         // LTX models require num_frames = 8n + 1
-        if (model.model_key.includes('ltx')) {
+        if (modelKey.includes('ltx')) {
           numFrames = Math.round((numFrames - 1) / 8) * 8 + 1;
         }
         if (inputSchema?.num_frames) {
