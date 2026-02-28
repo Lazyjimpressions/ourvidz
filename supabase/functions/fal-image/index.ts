@@ -508,7 +508,9 @@ async function buildModelInput(
       if (body.input.temporal_adain_factor !== undefined) modelInput.temporal_adain_factor = body.input.temporal_adain_factor;
       if (body.input.tone_map_compression_ratio !== undefined) modelInput.tone_map_compression_ratio = body.input.tone_map_compression_ratio;
       if (body.input.first_pass_num_inference_steps !== undefined) modelInput.first_pass_num_inference_steps = body.input.first_pass_num_inference_steps;
+      if (body.input.first_pass_skip_final_steps !== undefined) modelInput.first_pass_skip_final_steps = body.input.first_pass_skip_final_steps;
       if (body.input.second_pass_num_inference_steps !== undefined) modelInput.second_pass_num_inference_steps = body.input.second_pass_num_inference_steps;
+      if (body.input.second_pass_skip_initial_steps !== undefined) modelInput.second_pass_skip_initial_steps = body.input.second_pass_skip_initial_steps;
       // Quality-based resolution
       if (body.quality === 'fast' && !body.input?.resolution) modelInput.resolution = '480p';
       else if (body.quality === 'high' && !body.input?.resolution) modelInput.resolution = modelInput.resolution || '720p';
