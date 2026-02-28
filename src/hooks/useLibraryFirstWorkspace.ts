@@ -1487,7 +1487,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // Separate motion reference video (if provided)
             if (motionRefVideoUrl) {
               inputObj.videos = [{
-                url: stripToStoragePath(motionRefVideoUrl),
+                video_url: stripToStoragePath(motionRefVideoUrl),
+                start_frame_num: 0,
               }];
             }
             

@@ -643,8 +643,9 @@ export class ClipOrchestrationService {
         if (!generationConfig.videos) {
           generationConfig.videos = [];
         }
-        (generationConfig.videos as Array<{ url: string }>).push({
-          url: preset.video_url,
+        (generationConfig.videos as Array<{ video_url: string; start_frame_num: number }>).push({
+          video_url: preset.video_url,
+          start_frame_num: 0,
         });
         console.log('🎬 [ClipOrchestration] Added motion preset:', preset.name);
       }
