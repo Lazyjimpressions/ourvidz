@@ -2,7 +2,8 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import type { SlotRole } from '@/types/slotRoles';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Loader2, X, Send } from 'lucide-react';
+import { Sparkles, Loader2, X, Send, Upload, Camera, Library } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
 import { supabase } from '@/integrations/supabase/client';
@@ -834,41 +835,48 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               </button>
             </div>
           ) : (
-            <>
-              <div
-                className="h-8 w-12 rounded border border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => motionVideoInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  const refData = e.dataTransfer.getData('application/x-ref-image');
-                  if (refData) {
-                    try {
-                      const { url } = JSON.parse(refData);
-                      if (url) onMotionRefVideoUrlChange?.(url);
-                    } catch { /* ignore */ }
-                    return;
-                  }
-                  // File drop — upload video
-                  const file = e.dataTransfer.files?.[0];
-                  if (file && file.type.startsWith('video/')) {
-                    uploadAndSignReferenceImage(file).then(signedUrl => {
-                      onMotionRefVideoUrlChange?.(signedUrl);
-                    }).catch(() => toast.error('Failed to upload motion video'));
-                  }
-                }}
-              >
-                <span className="text-[8px] text-muted-foreground/50">+ Video</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMotionPickerOpen(true)}
-                className="text-[8px] text-muted-foreground/50 hover:text-primary transition-colors underline"
-              >
-                Library
-              </button>
-            </>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div
+                  className="h-8 w-12 rounded border border-dashed border-muted-foreground/30 flex items-center justify-center flex-shrink-0 cursor-pointer hover:border-primary/50 transition-colors"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const refData = e.dataTransfer.getData('application/x-ref-image');
+                    if (refData) {
+                      try {
+                        const { url } = JSON.parse(refData);
+                        if (url) onMotionRefVideoUrlChange?.(url);
+                      } catch { /* ignore */ }
+                      return;
+                    }
+                    const file = e.dataTransfer.files?.[0];
+                    if (file && file.type.startsWith('video/')) {
+                      uploadAndSignReferenceImage(file).then(signedUrl => {
+                        onMotionRefVideoUrlChange?.(signedUrl);
+                      }).catch(() => toast.error('Failed to upload motion video'));
+                    }
+                  }}
+                >
+                  <span className="text-[8px] text-muted-foreground/50">+ Video</span>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-36">
+                <DropdownMenuItem onClick={() => motionVideoInputRef.current?.click()}>
+                  <Upload className="w-3 h-3 mr-2" /> Upload file
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  // Use the same file input but with video accept
+                  motionVideoInputRef.current?.click();
+                }}>
+                  <Camera className="w-3 h-3 mr-2" /> Photo Library
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setMotionPickerOpen(true)}>
+                  <Library className="w-3 h-3 mr-2" /> From Library
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           <span className="text-[8px] text-muted-foreground/50 italic">Optional: guides movement</span>
         </div>
@@ -1009,6 +1017,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onMotionIntensityChange={onMotionIntensityChange}
         motionRefVideoUrl={motionRefVideoUrl}
         onMotionRefVideoUrlRemove={() => onMotionRefVideoUrlChange?.(null)}
+        onMotionRefVideoUrlAdd={() => setMotionPickerOpen(true)}
         keyframeStrengths={keyframeStrengths}
         onKeyframeStrengthChange={onKeyframeStrengthChange}
         enableDetailPass={enableDetailPass}
