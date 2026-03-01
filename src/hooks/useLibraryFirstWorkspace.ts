@@ -346,6 +346,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                                     capabilities?.supports_i2v === true ||
                                     capabilities?.video?.reference_mode === 'single' ||
                                     !!capabilities?.input_schema?.image_url ||
+                                    !!capabilities?.input_schema?.images ||
                                     !!capabilities?.input_schema?.video;
               
               console.log('🔍 Model I2I support check:', {
