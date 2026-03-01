@@ -1,66 +1,48 @@
 
 
-# Fix: Workspace Lockup + Video Picker in Settings Modal
+# Fix: Video Thumbnails Not Loading in Library Modal
 
-## Problem 1: Screen Locks Up When Selecting LTX Multi Model
+## Problem
 
-**Root Cause**: When the user selects the LTX 13B Multi model, the I2I support check (`useLibraryFirstWorkspace.ts` ~line 344-349) fails to recognize it as a reference-capable model. The check looks for `input_schema?.image_url` (singular), but the multi model only has `input_schema?.images` (plural array). This causes:
+When browsing videos in the `ImagePickerDialog`, thumbnails fail to load because:
 
-1. `modelSupportsI2I = false`
-2. Reference image gets cleared (line 362-368)
-3. Clearing triggers the `referenceImageUrl` sync effects (lines 387-400)
-4. These syncs cascade between `referenceImageUrl` and `beginningRefImageUrl`, creating a rapid state update loop that freezes the UI
+1. Video assets in `user_library` typically have no separate `thumbnail_path` -- it's null
+2. The signing code falls back to `asset.thumbPath || asset.originalPath`, which resolves to the `.mp4` file path
+3. The signed URL is then passed to an `<img>` tag (line 389), which cannot render `.mp4` files
+4. Result: all video thumbnails show as "Failed" or broken
 
-**Fix** (`src/hooks/useLibraryFirstWorkspace.ts`, ~line 344-349):
-Add `input_schema?.images` to the I2I support check:
+## Solution
 
-```typescript
-modelSupportsI2I = capabilities?.supports_i2i === true || 
-                   capabilities?.reference_images === true ||
-                   capabilities?.supports_i2v === true ||
-                   capabilities?.video?.reference_mode === 'single' ||
-                   !!capabilities?.input_schema?.image_url ||
-                   !!capabilities?.input_schema?.images ||   // <-- multi model
-                   !!capabilities?.input_schema?.video;
-```
+Update `ImagePickerDialog.tsx` to render a `<video>` element instead of `<img>` when the asset type is `video`. The `<video>` element with `preload="metadata"` will load just the first frame as a thumbnail preview.
 
-## Problem 2: Can't Load Video from Workspace/Library in Settings Modal
+### File: `src/components/storyboard/ImagePickerDialog.tsx`
 
-**Root Cause**: The `ImagePickerDialog` component hard-filters to images only:
-- Line 90: Workspace assets filtered with `a.assetType === 'image'`
-- Line 105: Library assets filtered with `asset.type === 'image'`
-
-When the motion reference video picker opens from the settings sheet, it uses this same `ImagePickerDialog` with `source="library"` -- but all videos are filtered out, so nothing appears.
-
-**Fix** (`src/components/storyboard/ImagePickerDialog.tsx`):
-
-1. Add an optional `mediaType` prop (`'image' | 'video' | 'all'`, default `'image'`) to the dialog
-2. When `mediaType` includes video, adjust both filters:
-   - Workspace: `a.assetType === 'image' || a.assetType === 'video'`
-   - Library: `asset.type === 'image' || asset.type === 'video'`
-3. Update the dialog title default based on media type
-
-**Fix** (`src/components/workspace/MobileSimplePromptInput.tsx`, ~line 1058):
-Pass `mediaType="video"` to the motion reference video picker:
+**Change 1**: In the asset rendering grid (~line 389-405), detect if the asset is a video and render a `<video>` element instead:
 
 ```tsx
-<ImagePickerDialog
-  isOpen={motionPickerOpen}
-  onClose={() => setMotionPickerOpen(false)}
-  onSelect={(url) => { ... }}
-  title="Select Motion Reference Video"
-  source="library"
-  mediaType="video"
-/>
+{asset.type === 'video' ? (
+  <video
+    src={signedUrl}
+    className="w-full h-full object-cover"
+    preload="metadata"
+    muted
+    playsInline
+    onError={(e) => {
+      // same fallback logic as img
+    }}
+  />
+) : (
+  <img
+    src={signedUrl}
+    alt={asset.title || asset.prompt || 'Image'}
+    className="w-full h-full object-cover"
+    loading="lazy"
+    onError={...}
+  />
+)}
 ```
 
-Also add a "Workspace" source tab option so users can pick from workspace-generated videos too.
+**Change 2**: Add a small video icon overlay in the bottom-left corner for video assets so users can distinguish them from images at a glance. Use the existing `lucide-react` `Play` or `Film` icon.
 
-## Summary of File Changes
-
-| File | Change |
-|------|--------|
-| `src/hooks/useLibraryFirstWorkspace.ts` | Add `images` (plural) to I2I capability check |
-| `src/components/storyboard/ImagePickerDialog.tsx` | Add `mediaType` prop to support video filtering |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Pass `mediaType="video"` to motion picker |
+This approach avoids needing separate thumbnail generation infrastructure -- the browser's native `<video>` element handles extracting the first frame automatically.
 
