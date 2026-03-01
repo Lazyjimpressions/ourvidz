@@ -1064,6 +1064,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         }}
         title="Select Motion Reference Video"
         source="library"
+        mediaType="video"
       />
     </div>
   );

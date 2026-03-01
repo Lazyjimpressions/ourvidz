@@ -42,6 +42,8 @@ interface ImagePickerDialogProps {
   source?: 'workspace' | 'library';
   /** Pre-select a category filter tab (e.g. 'character', 'position') */
   filterTag?: string;
+  /** Filter by media type: 'image' (default), 'video', or 'all' */
+  mediaType?: 'image' | 'video' | 'all';
 }
 
 export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
@@ -51,6 +53,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   title = 'Select Reference Image',
   source = 'library',
   filterTag,
+  mediaType = 'image',
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -87,7 +90,11 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       setWorkspaceLoading(true);
       WorkspaceAssetService.getUserWorkspaceAssets()
         .then(assets => {
-          setWorkspaceAssets(assets.filter(a => a.assetType === 'image'));
+          setWorkspaceAssets(assets.filter(a => {
+            if (mediaType === 'all') return true;
+            if (mediaType === 'video') return a.assetType === 'video';
+            return a.assetType === 'image';
+          }));
         })
         .catch(err => {
           console.error('❌ Failed to load workspace assets:', err);
@@ -102,7 +109,12 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     if (!paginatedData?.pages) return [];
     return paginatedData.pages
       .flatMap(page => page.assets)
-      .filter(asset => asset.type === 'image' && asset.status === 'completed');
+      .filter(asset => {
+        if (asset.status !== 'completed') return false;
+        if (mediaType === 'all') return true;
+        if (mediaType === 'video') return asset.type === 'video';
+        return asset.type === 'image';
+      });
   }, [paginatedData]);
 
   const isLoading = activeSource === 'library' ? libraryLoading : workspaceLoading;
@@ -332,16 +344,16 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
             ) : sharedAssets.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <ImageIcon className="w-10 h-10 text-gray-600 mb-3" />
-                <p className="text-sm text-gray-400">
-                  {searchQuery
-                    ? 'No images match your search'
-                    : activeSource === 'workspace'
-                      ? 'No recent images in your workspace'
-                      : 'No images in your library'}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Generate images in the Workspace to use them here
-                </p>
+                 <p className="text-sm text-gray-400">
+                   {searchQuery
+                     ? `No ${mediaType === 'video' ? 'videos' : 'images'} match your search`
+                     : activeSource === 'workspace'
+                       ? `No recent ${mediaType === 'video' ? 'videos' : 'images'} in your workspace`
+                       : `No ${mediaType === 'video' ? 'videos' : 'images'} in your library`}
+                 </p>
+                 <p className="text-xs text-gray-500 mt-1">
+                   Generate {mediaType === 'video' ? 'videos' : 'images'} in the Workspace to use them here
+                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-4 gap-2">
