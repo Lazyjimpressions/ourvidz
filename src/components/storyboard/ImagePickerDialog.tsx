@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Image as ImageIcon, Library, Loader2, Check, FolderOpen, ImageOff } from 'lucide-react';
+import { Search, Image as ImageIcon, Library, Loader2, Check, FolderOpen, ImageOff, Play } from 'lucide-react';
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
 import { toSharedFromLibrary, toSharedFromWorkspace } from '@/lib/services/AssetMappers';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
@@ -385,6 +385,30 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                         <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
                           <Loader2 className="w-5 h-5 text-gray-500 animate-spin" />
                         </div>
+                      ) : asset.type === 'video' ? (
+                        <>
+                          <video
+                            src={signedUrl}
+                            className="w-full h-full object-cover"
+                            preload="metadata"
+                            muted
+                            playsInline
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent && !parent.querySelector('.img-fallback')) {
+                                const fallback = document.createElement('div');
+                                fallback.className = 'img-fallback absolute inset-0 bg-gray-800 flex flex-col items-center justify-center gap-1';
+                                fallback.innerHTML = '<span class="text-[9px] text-gray-500">Load error</span>';
+                                parent.appendChild(fallback);
+                              }
+                            }}
+                          />
+                          <div className="absolute bottom-1 left-1 bg-black/70 rounded p-0.5">
+                            <Play className="w-3 h-3 text-white fill-white" />
+                          </div>
+                        </>
                       ) : (
                         <img
                           src={signedUrl}
