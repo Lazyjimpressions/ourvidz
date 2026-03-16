@@ -76,9 +76,9 @@ const DraggableImage: React.FC<{
         </div>
       </div>
       <div className="p-1.5">
-        <p className="text-[10px] font-medium text-gray-300 truncate">{label}</p>
+        <p className="text-[10px] font-medium text-foreground/80 truncate">{label}</p>
         {sublabel && (
-          <p className="text-[9px] text-gray-500 truncate">{sublabel}</p>
+          <p className="text-[9px] text-muted-foreground truncate">{sublabel}</p>
         )}
       </div>
     </button>
