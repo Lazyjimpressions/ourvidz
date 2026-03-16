@@ -574,7 +574,7 @@ const StoryboardEditor = () => {
             {/* More menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                <Button variant="outline" size="sm" className="h-8 w-8 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-0">
                   <MoreHorizontal className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
