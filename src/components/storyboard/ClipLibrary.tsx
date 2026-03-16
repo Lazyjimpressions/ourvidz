@@ -569,13 +569,13 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-2">
               {libraryLoading ? (
-                <div className="grid grid-cols-2 gap-1.5">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="aspect-square rounded-lg" />
+                <div className="grid grid-cols-3 gap-1">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="aspect-square rounded" />
                   ))}
                 </div>
               ) : libraryImages.length > 0 ? (
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1">
                   {libraryImages.map((asset) => (
                     <SignedDraggableImage
                       key={asset.id}
