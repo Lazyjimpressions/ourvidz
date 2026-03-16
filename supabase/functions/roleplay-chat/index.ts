@@ -3190,7 +3190,7 @@ const sceneContext = analyzeSceneContent(response);
     const briefCharacterIdentity = `${sceneCharacter.name}, ${characterAppearance}`;
 
     if (sceneStyle === 'both_characters' && userCharacter) {
-      const userAppearance = (userCharacter.appearance_tags || []).slice(0, 5).join(', ');
+      const userAppearance = (userCharacter.appearance_tags || []).slice(0, 3).join(', ');
       const userVisualFallback = buildUserVisualDescriptionForScene(
         userCharacter.gender,
         userCharacter.appearance_tags || []
@@ -3209,7 +3209,7 @@ CHARACTER 1 (Figure 2): ${sceneCharacter.name}, ${characterAppearance}
 
 CHARACTER 2 (Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 
-ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Characters interacting naturally'}`;
+ACTION: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}`;
       console.log('🎭 Both characters I2I: Figure notation');
     } else if (sceneStyle === 'pov') {
       const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
@@ -3219,7 +3219,7 @@ SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}, looking at viewer
 
-ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene naturally'}`;
+ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
       console.log('🎬 POV I2I: Figure notation (setting stripped of character)');
     } else {
       const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
@@ -3229,7 +3229,7 @@ SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}
 
-ACTION: ${sceneContext?.actions?.slice(0, 2).join('. ') || 'Character in scene naturally'}`;
+ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
       console.log('🎬 Character-only I2I: Figure notation (setting stripped of character)');
     }
 
