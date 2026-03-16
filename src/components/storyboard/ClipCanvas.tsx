@@ -114,9 +114,9 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
   const progressPercent = Math.min((totalDuration / targetDuration) * 100, 100);
 
   return (
-    <div className="bg-gray-900/30 border-b border-gray-800">
+    <div className="bg-muted/30 border-b border-border">
       {/* Scene header */}
-      <div className="px-4 py-2 border-b border-gray-800/50 flex items-center justify-between">
+      <div className="px-4 py-2 border-b border-border/50 flex items-center justify-between">
         <div>
           <h3 className="text-sm font-medium text-gray-200">
             {scene.title || 'Untitled Scene'}
