@@ -4,9 +4,10 @@
  * Redesigned project editor with:
  * - SceneStrip for horizontal scene navigation
  * - ClipCanvas with drag-and-drop clip management
- * - ClipLibrary sidebar for reference sources
+ * - ClipLibrary sidebar for reference sources (desktop only, drawer on mobile)
  * - ClipDetailPanel for editing selected clips
  * - AI-assisted workflow throughout
+ * - Mobile-responsive layout
  */
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
@@ -35,6 +36,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
   ArrowLeft,
   Play,
   Download,
@@ -45,6 +52,8 @@ import {
   ChevronDown,
   ChevronRight,
   BookOpen,
+  Library,
+  User,
 } from 'lucide-react';
 import {
   Collapsible,
@@ -69,7 +78,9 @@ import {
 } from '@/components/storyboard';
 import { StoryPlannerSheet } from '@/components/storyboard/StoryPlannerSheet';
 import { AssemblyPreview } from '@/components/storyboard/AssemblyPreview';
+import { CharacterPickerDialog } from '@/components/storyboard/CharacterPickerDialog';
 import { StoryboardService } from '@/lib/services/StoryboardService';
+import { Character } from '@/types/roleplay';
 
 const StoryboardEditor = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -107,7 +118,9 @@ const StoryboardEditor = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [assembly, setAssembly] = useState<ProjectAssembly | null>(null);
   const [isLoadingAssembly, setIsLoadingAssembly] = useState(false);
-  const [storyPlanOpen, setStoryPlanOpen] = useState(true);
+  const [storyPlanOpen, setStoryPlanOpen] = useState(false); // collapsed by default on mobile
+  const [showLibraryDrawer, setShowLibraryDrawer] = useState(false);
+  const [showCharacterPicker, setShowCharacterPicker] = useState(false);
 
   // Selected clip for detail panel
   const [selectedClip, setSelectedClip] = useState<StoryboardClip | null>(null);
@@ -148,7 +161,7 @@ const StoryboardEditor = () => {
     }
   }, [activeProject?.title]);
 
-  // Auto-select first scene when project has scenes and none selected (e.g. after AI plan)
+  // Auto-select first scene when project has scenes and none selected
   useEffect(() => {
     if (scenes.length > 0 && !activeScene) {
       selectScene(scenes[0]);
@@ -239,7 +252,6 @@ const StoryboardEditor = () => {
   const handleUpdateClip = async (updates: Partial<StoryboardClip>) => {
     if (!selectedClip) return;
     await updateClip(selectedClip.id, updates);
-    // Update local state
     setSelectedClip((prev) => (prev ? { ...prev, ...updates } : null));
   };
 
@@ -261,6 +273,12 @@ const StoryboardEditor = () => {
     setSelectedClip(newClip);
   };
 
+  const handleApproveClip = async () => {
+    if (!selectedClip) return;
+    await updateClip(selectedClip.id, { status: 'approved' });
+    setSelectedClip((prev) => (prev ? { ...prev, status: 'approved' } : null));
+  };
+
   const handleGenerateClip = async () => {
     if (!selectedClip || !activeScene || !activeProject) return;
     if (!selectedClip.prompt) {
@@ -270,19 +288,16 @@ const StoryboardEditor = () => {
 
     setIsGeneratingClip(true);
     try {
-      // Update clip status to generating
       await updateClip(selectedClip.id, { status: 'generating' });
 
-      // Import and use ClipOrchestrationService directly
       const { ClipOrchestrationService } = await import('@/lib/services/ClipOrchestrationService');
 
-      // Build generation request from existing clip
       const genRequest = {
         clipId: selectedClip.id,
         clipType: selectedClip.clip_type,
         prompt: selectedClip.prompt,
         referenceImageUrl: selectedClip.reference_image_url,
-        referenceVideoUrl: previousClip?.video_url, // For extended clips
+        referenceVideoUrl: previousClip?.video_url,
         motionPresetId: selectedClip.motion_preset_id,
         endFrameUrl: selectedClip.end_frame_url,
         contentMode: (activeProject.content_mode || 'nsfw') as 'sfw' | 'nsfw',
@@ -297,11 +312,9 @@ const StoryboardEditor = () => {
         hasRefVideo: !!previousClip?.video_url,
       });
 
-      // Execute full generation flow
       const result = await ClipOrchestrationService.generateClip(genRequest);
 
       if (result.success) {
-        // Update clip with generation result
         await updateClip(selectedClip.id, {
           resolved_model_id: result.resolvedModelId,
           prompt_template_id: result.promptTemplateId,
@@ -309,9 +322,7 @@ const StoryboardEditor = () => {
           ...(result.videoUrl ? {
             status: 'completed',
             video_url: result.videoUrl,
-          } : {
-            // Async job - status will be updated via polling
-          }),
+          } : {}),
         });
 
         console.log('🎬 Generation initiated:', {
@@ -320,7 +331,6 @@ const StoryboardEditor = () => {
           videoUrl: result.videoUrl,
         });
       } else {
-        // Generation failed
         await updateClip(selectedClip.id, { status: 'failed' });
         console.error('🎬 Generation failed:', result.error);
       }
@@ -334,12 +344,10 @@ const StoryboardEditor = () => {
 
   const handleReorderClips = async (fromIndex: number, toIndex: number) => {
     if (!activeScene) return;
-    // Reorder logic - update clip_order fields
     const reorderedClips = [...activeSceneClips];
     const [movedClip] = reorderedClips.splice(fromIndex, 1);
     reorderedClips.splice(toIndex, 0, movedClip);
 
-    // Update each clip's order
     for (let i = 0; i < reorderedClips.length; i++) {
       if (reorderedClips[i].clip_order !== i) {
         await updateClip(reorderedClips[i].id, { clip_order: i });
@@ -383,7 +391,6 @@ const StoryboardEditor = () => {
     }
   };
 
-  // Handle frame extraction from completed clip
   const handleFrameExtracted = useCallback(async (frameUrl: string, percentage: number, timestampMs: number) => {
     if (!selectedClip) return;
 
@@ -393,7 +400,6 @@ const StoryboardEditor = () => {
       timestampMs,
     });
 
-    // Update clip with extracted frame
     await updateClip(selectedClip.id, {
       extracted_frame_url: frameUrl,
       extraction_percentage: percentage,
@@ -401,7 +407,6 @@ const StoryboardEditor = () => {
     });
   }, [selectedClip, updateClip]);
 
-  // Handle preview
   const handleOpenPreview = useCallback(async () => {
     if (!projectId) return;
     setShowPreview(true);
@@ -416,7 +421,6 @@ const StoryboardEditor = () => {
     }
   }, [projectId]);
 
-  // Handle applying story plan
   const handleApplyPlan = useCallback(
     async (sceneInputs: CreateSceneInput[]) => {
       for (const input of sceneInputs) {
@@ -427,6 +431,16 @@ const StoryboardEditor = () => {
     [createScene, loadProject, projectId]
   );
 
+  const handleCharacterSelected = async (character: Character) => {
+    if (!activeProject) return;
+    await updateProject(activeProject.id, {
+      primary_character_id: character.id,
+    });
+    // Reload to get the populated character
+    if (projectId) loadProject(projectId);
+    setShowCharacterPicker(false);
+  };
+
   // Calculate total duration
   const totalDuration = scenes.reduce((sum, s) => sum + s.target_duration_seconds, 0);
 
@@ -436,8 +450,8 @@ const StoryboardEditor = () => {
       <StoryboardLayout>
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-gray-500 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">Loading project...</p>
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">Loading project...</p>
           </div>
         </div>
       </StoryboardLayout>
@@ -449,7 +463,7 @@ const StoryboardEditor = () => {
     return (
       <StoryboardLayout>
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
-          <p className="text-sm text-gray-400 mb-4">Project not found</p>
+          <p className="text-sm text-muted-foreground mb-4">Project not found</p>
           <Button variant="outline" onClick={handleBackToList} className="h-8 text-xs">
             <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
             Back to Projects
@@ -459,18 +473,27 @@ const StoryboardEditor = () => {
     );
   }
 
+  const libraryContent = (
+    <ClipLibrary
+      character={activeProject.primary_character}
+      characterCanons={characterCanons}
+      clips={activeSceneClips.filter((c) => c.extracted_frame_url)}
+      onSelectReference={handleSelectReference}
+      onSelectMotionPreset={handleSelectMotionPreset}
+      className="w-full h-full"
+    />
+  );
+
   return (
     <StoryboardLayout>
       <div className="flex flex-col h-[calc(100vh-var(--header-height,64px))]">
-        {/* Project Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            {/* Back button */}
-            <Button variant="ghost" size="sm" onClick={handleBackToList} className="h-8 w-8 p-0">
+        {/* Project Header - responsive */}
+        <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border bg-background/80 backdrop-blur-sm gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Button variant="ghost" size="sm" onClick={handleBackToList} className="h-8 w-8 p-0 flex-shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </Button>
 
-            {/* Title */}
             {isEditingTitle ? (
               <Input
                 value={editedTitle}
@@ -483,12 +506,12 @@ const StoryboardEditor = () => {
                     setIsEditingTitle(false);
                   }
                 }}
-                className="h-8 w-64 text-sm bg-gray-900 border-gray-700"
+                className="h-8 flex-1 min-w-0 text-sm bg-muted border-border"
                 autoFocus
               />
             ) : (
               <h1
-                className="text-sm font-medium text-gray-100 cursor-pointer hover:text-white"
+                className="text-sm font-medium text-foreground cursor-pointer hover:text-foreground/80 truncate"
                 onClick={() => setIsEditingTitle(true)}
                 title="Click to edit"
               >
@@ -496,18 +519,28 @@ const StoryboardEditor = () => {
               </h1>
             )}
 
-            {/* Status badge */}
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 capitalize">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground capitalize hidden sm:inline-block flex-shrink-0">
               {activeProject.status.replace('_', ' ')}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* Duration indicator */}
-            <span className="text-xs text-gray-500 flex items-center gap-1">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Duration - hide on very small screens */}
+            <span className="text-xs text-muted-foreground items-center gap-1 hidden sm:flex">
               <Clock className="w-3 h-3" />
               {totalDuration}s / {activeProject.target_duration_seconds}s
             </span>
+
+            {/* Character button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs gap-1.5 hidden md:flex"
+              onClick={() => setShowCharacterPicker(true)}
+            >
+              <User className="w-3.5 h-3.5" />
+              {activeProject.primary_character?.name || 'Character'}
+            </Button>
 
             {/* AI button */}
             {activeProject.ai_assistance_level !== 'none' && (
@@ -518,14 +551,24 @@ const StoryboardEditor = () => {
                 onClick={() => setShowStoryPlanner(true)}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                AI
+                <span className="hidden sm:inline">AI</span>
               </Button>
             )}
 
-            {/* Preview button */}
+            {/* Library toggle (mobile only) */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0 md:hidden"
+              onClick={() => setShowLibraryDrawer(true)}
+            >
+              <Library className="w-4 h-4" />
+            </Button>
+
+            {/* Preview */}
             <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleOpenPreview}>
               <Play className="w-3.5 h-3.5" />
-              Preview
+              <span className="hidden sm:inline">Preview</span>
             </Button>
 
             {/* More menu */}
@@ -536,6 +579,10 @@ const StoryboardEditor = () => {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem className="md:hidden" onClick={() => setShowCharacterPicker(true)}>
+                  <User className="w-3.5 h-3.5 mr-2" />
+                  {activeProject.primary_character ? `Character: ${activeProject.primary_character.name}` : 'Select Character'}
+                </DropdownMenuItem>
                 <DropdownMenuItem>
                   <Download className="w-3.5 h-3.5 mr-2" />
                   Export clips
@@ -546,15 +593,15 @@ const StoryboardEditor = () => {
           </div>
         </div>
 
-        {/* Generated story (AI plan) - show when present so user sees the output */}
+        {/* Generated story - use Sheet on mobile, Collapsible on desktop */}
         {activeProject.ai_story_plan &&
          (activeProject.ai_story_plan.sceneBreakdown?.length > 0 ||
           activeProject.ai_story_plan.storyBeats?.length > 0) && (
-          <Collapsible open={storyPlanOpen} onOpenChange={setStoryPlanOpen} className="border-b border-gray-800 bg-gray-900/40">
+          <Collapsible open={storyPlanOpen} onOpenChange={setStoryPlanOpen} className="border-b border-border bg-muted/40">
             <CollapsibleTrigger asChild>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-gray-300 hover:bg-gray-800/50 hover:text-gray-100"
+                className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-foreground/70 hover:bg-muted/50 hover:text-foreground"
               >
                 {storyPlanOpen ? (
                   <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -562,28 +609,24 @@ const StoryboardEditor = () => {
                   <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                 )}
                 <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                <span>Generated story</span>
-                <span className="text-gray-500">
-                  ({activeProject.ai_story_plan.sceneBreakdown?.length ?? 0} scenes
-                  {activeProject.ai_story_plan.storyBeats?.length
-                    ? `, ${activeProject.ai_story_plan.storyBeats.length} beats`
-                    : ''}
-                  )
+                <span>Story</span>
+                <span className="text-muted-foreground">
+                  ({activeProject.ai_story_plan.sceneBreakdown?.length ?? 0} scenes)
                 </span>
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="max-h-48 overflow-y-auto px-4 pb-3 pt-0">
-                <div className="space-y-2 text-xs text-gray-400">
+                <div className="space-y-2 text-xs text-muted-foreground">
                   {activeProject.ai_story_plan.sceneBreakdown?.map((scene, i) => (
-                    <div key={i} className="rounded border border-gray-800 bg-gray-900/60 px-3 py-2">
-                      <div className="font-medium text-gray-300">
+                    <div key={i} className="rounded border border-border bg-muted/60 px-3 py-2">
+                      <div className="font-medium text-foreground/80">
                         Scene {scene.sceneNumber}: {scene.title}
                       </div>
                       {scene.description && (
-                        <p className="mt-1 text-gray-500">{scene.description}</p>
+                        <p className="mt-1 text-muted-foreground">{scene.description}</p>
                       )}
-                      <span className="text-gray-600">{scene.targetDuration}s</span>
+                      <span className="text-muted-foreground/60">{scene.targetDuration}s</span>
                     </div>
                   ))}
                 </div>
@@ -598,13 +641,14 @@ const StoryboardEditor = () => {
           activeSceneId={activeScene?.id}
           onSceneSelect={handleSelectScene}
           onAddScene={handleAddScene}
+          onSceneDelete={setSceneToDelete}
           isAddingScene={isAddingScene}
         />
 
         {/* Main Content Area */}
         <div className="flex-1 flex overflow-hidden">
           {/* Main Editor Area */}
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             {/* Clip Canvas */}
             {activeScene ? (
               <ClipCanvas
@@ -618,9 +662,9 @@ const StoryboardEditor = () => {
                 isAddingClip={isAddingClip}
               />
             ) : (
-              <div className="flex-1 flex items-center justify-center bg-gray-900/30 border-b border-gray-800">
+              <div className="flex-1 flex items-center justify-center bg-muted/30 border-b border-border">
                 <div className="text-center">
-                  <p className="text-sm text-gray-400 mb-2">Select a scene to view clips</p>
+                  <p className="text-sm text-muted-foreground mb-2">Select a scene to view clips</p>
                   <Button size="sm" className="h-8 text-xs" onClick={handleAddScene}>
                     Add First Scene
                   </Button>
@@ -640,28 +684,43 @@ const StoryboardEditor = () => {
                 onGenerate={handleGenerateClip}
                 onDelete={handleDeleteClip}
                 onDuplicate={handleDuplicateClip}
+                onApprove={handleApproveClip}
                 onSelectMotionPreset={handleSelectMotionPreset}
                 onFrameExtracted={handleFrameExtracted}
+                onPickReference={() => setShowLibraryDrawer(true)}
                 className="flex-shrink-0"
               />
             )}
           </div>
 
-          {/* Library Sidebar */}
-          <ClipLibrary
-            character={activeProject.primary_character}
-            characterCanons={characterCanons}
-            clips={activeSceneClips.filter((c) => c.extracted_frame_url)}
-            onSelectReference={handleSelectReference}
-            onSelectMotionPreset={handleSelectMotionPreset}
-            className="w-64 flex-shrink-0"
-          />
+          {/* Library Sidebar - desktop only */}
+          <div className="hidden md:block w-64 flex-shrink-0">
+            {libraryContent}
+          </div>
         </div>
       </div>
 
+      {/* Library Drawer - mobile */}
+      <Sheet open={showLibraryDrawer} onOpenChange={setShowLibraryDrawer}>
+        <SheetContent side="right" className="w-[300px] p-0 bg-background">
+          <SheetHeader className="px-4 py-3 border-b border-border">
+            <SheetTitle className="text-sm">Library</SheetTitle>
+          </SheetHeader>
+          {libraryContent}
+        </SheetContent>
+      </Sheet>
+
+      {/* Character Picker */}
+      <CharacterPickerDialog
+        open={showCharacterPicker}
+        onOpenChange={setShowCharacterPicker}
+        selectedCharacterId={activeProject.primary_character_id}
+        onSelect={handleCharacterSelected}
+      />
+
       {/* Delete Scene Confirmation */}
       <AlertDialog open={!!sceneToDelete} onOpenChange={(open) => !open && setSceneToDelete(null)}>
-        <AlertDialogContent className="max-w-sm bg-gray-950 border-gray-800">
+        <AlertDialogContent className="max-w-sm bg-background border-border">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-base">Delete Scene</AlertDialogTitle>
             <AlertDialogDescription className="text-xs">
@@ -671,7 +730,7 @@ const StoryboardEditor = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="h-8 text-xs">Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteScene} className="h-8 text-xs bg-red-600 hover:bg-red-700">
+            <AlertDialogAction onClick={handleDeleteScene} className="h-8 text-xs bg-destructive hover:bg-destructive/90">
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -1,12 +1,9 @@
 /**
  * ClipDetailPanel Component
  *
- * Bottom panel for editing selected clip properties:
- * - Video preview with playback controls
- * - Clip type selector with AI recommendations
- * - Prompt input with AI suggestions
- * - Reference source selector
- * - Generate/Delete actions
+ * Bottom panel for editing selected clip properties.
+ * Mobile-responsive: stacks vertically on small screens.
+ * Includes approve button for completed clips and reference image picker.
  */
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -19,13 +16,6 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Play,
   Pause,
@@ -41,6 +31,8 @@ import {
   Film,
   Scissors,
   Check,
+  CheckCircle,
+  ImagePlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -54,8 +46,10 @@ interface ClipDetailPanelProps {
   onGenerate: () => void;
   onDelete: () => void;
   onDuplicate?: () => void;
+  onApprove?: () => void;
   onSelectMotionPreset: (preset: MotionPreset) => void;
   onFrameExtracted?: (frameUrl: string, percentage: number, timestampMs: number) => Promise<void>;
+  onPickReference?: () => void;
   className?: string;
 }
 
@@ -74,8 +68,10 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
   onGenerate,
   onDelete,
   onDuplicate,
+  onApprove,
   onSelectMotionPreset,
   onFrameExtracted,
+  onPickReference,
   className,
 }) => {
   const { suggestPrompts, isSuggestingPrompts, enhancePrompt, isEnhancingPrompt } = useStoryboardAI();
@@ -92,9 +88,9 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
   const hasExtractedFrame = !!clip.extracted_frame_url;
   const canExtractFrame = hasVideo && onFrameExtracted;
   const canGenerate = clip.prompt?.trim() && clip.reference_image_url;
+  const canApprove = clip.status === 'completed' && onApprove;
   const isClipGenerating = clip.status === 'generating' || isGenerating;
 
-  // Load suggestions on mount
   useEffect(() => {
     loadSuggestions();
   }, [clip.id]);
@@ -168,9 +164,9 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
     if (!clip.reference_image_source) return 'None';
     switch (clip.reference_image_source) {
       case 'character_portrait':
-        return 'Character Portrait';
+        return 'Character';
       case 'extracted_frame':
-        return 'Previous Frame';
+        return 'Prev Frame';
       case 'uploaded':
         return 'Uploaded';
       case 'library':
@@ -181,15 +177,15 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
   };
 
   return (
-    <div className={cn('bg-gray-900/50 border-t border-gray-800', className)}>
+    <div className={cn('bg-muted/50 border-t border-border', className)}>
       {/* Header with toggle */}
       <button
-        className="w-full px-4 py-2 flex items-center justify-between hover:bg-gray-800/30 transition-colors"
+        className="w-full px-4 py-2 flex items-center justify-between hover:bg-muted/30 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-2">
-          <Film className="w-4 h-4 text-gray-400" />
-          <span className="text-sm font-medium text-gray-300">
+          <Film className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground/80">
             Clip {clip.clip_order + 1}
           </span>
           <Badge
@@ -197,6 +193,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
             className={cn(
               'h-5 px-1.5 text-[10px]',
               clip.status === 'completed' && 'bg-green-500/20 text-green-400',
+              clip.status === 'approved' && 'bg-emerald-500/20 text-emerald-400',
               clip.status === 'generating' && 'bg-blue-500/20 text-blue-400',
               clip.status === 'failed' && 'bg-red-500/20 text-red-400'
             )}
@@ -204,19 +201,20 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
             {clip.status}
           </Badge>
         </div>
+        {/* Fixed chevron direction */}
         {isExpanded ? (
-          <ChevronDown className="w-4 h-4 text-gray-500" />
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
         ) : (
-          <ChevronUp className="w-4 h-4 text-gray-500" />
+          <ChevronUp className="w-4 h-4 text-muted-foreground" />
         )}
       </button>
 
-      {/* Content */}
+      {/* Content - responsive grid */}
       {isExpanded && (
-        <div className="px-4 pb-4 grid grid-cols-12 gap-4">
+        <div className="px-3 md:px-4 pb-4 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4">
           {/* Left: Video preview */}
-          <div className="col-span-4">
-            <div className="aspect-video bg-gray-950 rounded-lg overflow-hidden relative">
+          <div className="md:col-span-4">
+            <div className="aspect-video bg-background rounded-lg overflow-hidden relative">
               {hasVideo ? (
                 <>
                   <video
@@ -234,9 +232,9 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                     className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/40 transition-colors"
                   >
                     {isPlaying ? (
-                      <Pause className="w-10 h-10 text-white/80" />
+                      <Pause className="w-8 md:w-10 h-8 md:h-10 text-white/80" />
                     ) : (
-                      <Play className="w-10 h-10 text-white/80" />
+                      <Play className="w-8 md:w-10 h-8 md:h-10 text-white/80" />
                     )}
                   </button>
                 </>
@@ -248,7 +246,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <ImageIcon className="w-8 h-8 text-gray-700" />
+                  <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
                 </div>
               )}
 
@@ -259,15 +257,28 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
               )}
             </div>
 
-            {/* Reference info */}
-            <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-              <span>Reference: {getReferenceLabel()}</span>
-              {clip.duration_seconds && (
-                <span>{clip.duration_seconds.toFixed(1)}s</span>
-              )}
+            {/* Reference info + pick button */}
+            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Ref: {getReferenceLabel()}</span>
+              <div className="flex items-center gap-1.5">
+                {onPickReference && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onPickReference}
+                    className="h-6 px-2 text-[10px]"
+                  >
+                    <ImagePlus className="w-3 h-3 mr-1" />
+                    Pick
+                  </Button>
+                )}
+                {clip.duration_seconds && (
+                  <span>{clip.duration_seconds.toFixed(1)}s</span>
+                )}
+              </div>
             </div>
 
-            {/* Frame extraction section */}
+            {/* Frame extraction */}
             {canExtractFrame && !showFrameSelector && (
               <div className="mt-2">
                 {hasExtractedFrame ? (
@@ -280,7 +291,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                       variant="ghost"
                       size="sm"
                       onClick={() => setShowFrameSelector(true)}
-                      className="h-6 px-2 text-[10px] text-gray-400 hover:text-gray-200"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
                     >
                       Re-extract
                     </Button>
@@ -290,7 +301,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                     variant="outline"
                     size="sm"
                     onClick={() => setShowFrameSelector(true)}
-                    className="w-full h-7 text-xs border-gray-700 hover:border-blue-600"
+                    className="w-full h-7 text-xs border-border hover:border-primary"
                   >
                     <Scissors className="w-3.5 h-3.5 mr-1.5" />
                     Extract Chain Frame
@@ -299,7 +310,6 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
               </div>
             )}
 
-            {/* Frame selector */}
             {showFrameSelector && hasVideo && (
               <div className="mt-2">
                 <FrameSelector
@@ -313,11 +323,11 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
           </div>
 
           {/* Right: Controls */}
-          <div className="col-span-8 space-y-3">
+          <div className="md:col-span-8 space-y-3">
             {/* Type selector row */}
-            <div className="flex items-start gap-3">
-              <div className="flex-1">
-                <Label className="text-xs text-gray-400 mb-1.5 block">Clip Type</Label>
+            <div className="flex items-start gap-3 flex-wrap">
+              <div className="flex-1 min-w-[140px]">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Clip Type</Label>
                 <ClipTypeSelector
                   value={clip.clip_type || 'quick'}
                   onChange={handleClipTypeChange}
@@ -327,15 +337,14 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                 />
               </div>
 
-              {/* Motion preset (for controlled type) */}
               {(clip.clip_type === 'controlled' || clip.motion_preset_id) && (
-                <div className="flex-1">
-                  <Label className="text-xs text-gray-400 mb-1.5 block">Motion Preset</Label>
+                <div className="flex-1 min-w-[140px]">
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Motion Preset</Label>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setShowMotionLibrary(true)}
-                    className="w-full justify-start h-8 text-xs border-gray-700"
+                    className="w-full justify-start h-8 text-xs border-border"
                   >
                     <Sparkles className="w-3.5 h-3.5 mr-2 text-purple-400" />
                     {clip.motion_preset_id ? 'Change Preset' : 'Select Preset'}
@@ -347,7 +356,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
             {/* Prompt input */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs text-gray-400">Motion Prompt</Label>
+                <Label className="text-xs text-muted-foreground">Motion Prompt</Label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -367,7 +376,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                 value={clip.prompt || ''}
                 onChange={(e) => onUpdateClip({ prompt: e.target.value })}
                 placeholder="Describe the motion you want..."
-                className="min-h-[60px] text-sm bg-gray-900 border-gray-700 resize-none"
+                className="min-h-[60px] text-sm bg-muted border-border resize-none"
                 disabled={isClipGenerating}
               />
             </div>
@@ -375,15 +384,15 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
             {/* AI Suggestions */}
             {promptSuggestions.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] text-gray-500">AI:</span>
+                <span className="text-[10px] text-muted-foreground">AI:</span>
                 {promptSuggestions.map((suggestion, i) => (
                   <button
                     key={i}
                     onClick={() => handleUseSuggestion(suggestion)}
                     className={cn(
                       'px-2 py-0.5 rounded-full text-[10px] transition-colors',
-                      'border hover:bg-gray-800',
-                      suggestion.intensity === 'subtle' && 'border-gray-700 text-gray-400',
+                      'border hover:bg-muted',
+                      suggestion.intensity === 'subtle' && 'border-border text-muted-foreground',
                       suggestion.intensity === 'medium' && 'border-blue-800 text-blue-400',
                       suggestion.intensity === 'dynamic' && 'border-purple-800 text-purple-400'
                     )}
@@ -394,13 +403,13 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                   </button>
                 ))}
                 {isSuggestingPrompts && (
-                  <Loader2 className="w-3 h-3 text-gray-500 animate-spin" />
+                  <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
                 )}
               </div>
             )}
 
             {/* Actions */}
-            <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+            <div className="flex items-center justify-between pt-2 border-t border-border flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Button
                   variant="destructive"
@@ -418,36 +427,51 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                     size="sm"
                     onClick={onDuplicate}
                     disabled={isClipGenerating}
-                    className="h-8 text-xs border-gray-700"
+                    className="h-8 text-xs border-border"
                   >
                     <Copy className="w-3.5 h-3.5 mr-1.5" />
-                    Duplicate
+                    <span className="hidden sm:inline">Duplicate</span>
                   </Button>
                 )}
               </div>
 
-              <Button
-                onClick={onGenerate}
-                disabled={!canGenerate || isClipGenerating}
-                className="h-8 text-xs"
-              >
-                {isClipGenerating ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Generating...
-                  </>
-                ) : clip.video_url ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                    Regenerate
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                    Generate
-                  </>
+              <div className="flex items-center gap-2">
+                {/* Approve button for completed clips */}
+                {canApprove && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onApprove}
+                    className="h-8 text-xs border-green-700 text-green-400 hover:bg-green-500/10"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5 mr-1.5" />
+                    Approve
+                  </Button>
                 )}
-              </Button>
+
+                <Button
+                  onClick={onGenerate}
+                  disabled={!canGenerate || isClipGenerating}
+                  className="h-8 text-xs"
+                >
+                  {isClipGenerating ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Generating...
+                    </>
+                  ) : clip.video_url ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                      Regenerate
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                      Generate
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
