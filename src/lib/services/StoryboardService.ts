@@ -433,6 +433,8 @@ export class StoryboardService {
     if (input.enhanced_prompt !== undefined) updateData.enhanced_prompt = input.enhanced_prompt;
     if (input.generation_config !== undefined) updateData.generation_config = input.generation_config;
     if (input.end_frame_url !== undefined) updateData.end_frame_url = input.end_frame_url;
+    if (input.reference_image_url !== undefined) updateData.reference_image_url = input.reference_image_url;
+    if (input.reference_image_source !== undefined) updateData.reference_image_source = input.reference_image_source;
 
     const { data, error } = await supabase
       .from('storyboard_clips')
