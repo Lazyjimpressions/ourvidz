@@ -490,7 +490,7 @@ const StoryboardEditor = () => {
         {/* Project Header - responsive */}
         <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border bg-background/80 backdrop-blur-sm gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Button variant="ghost" size="sm" onClick={handleBackToList} className="h-8 w-8 p-0 flex-shrink-0">
+            <Button variant="ghost" size="sm" onClick={handleBackToList} className="h-8 w-8 md:h-8 md:w-8 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-0 flex-shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </Button>
 
