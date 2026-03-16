@@ -144,7 +144,7 @@ const MotionPresetCard: React.FC<{
           </>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Film className="w-5 h-5 text-gray-600" />
+            <Film className="w-5 h-5 text-muted-foreground/40" />
           </div>
         )}
       </div>
