@@ -489,7 +489,60 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
             </CollapsibleContent>
           </Collapsible>
 
-          {/* My Images section (from user_library) */}
+          {/* Workspace section */}
+          <Collapsible open={workspaceOpen} onOpenChange={setWorkspaceOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-between h-7 px-2 text-xs"
+              >
+                <div className="flex items-center gap-1.5">
+                  <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Workspace</span>
+                  {workspaceAssets.length > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-muted">
+                      {workspaceAssets.length}
+                    </Badge>
+                  )}
+                </div>
+                {workspaceOpen ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              {workspaceLoading ? (
+                <div className="grid grid-cols-3 gap-1">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="aspect-square rounded" />
+                  ))}
+                </div>
+              ) : workspaceAssets.length > 0 ? (
+                <div className="grid grid-cols-3 gap-1">
+                  {workspaceAssets.map((asset) => (
+                    <SignedDraggableImage
+                      key={asset.id}
+                      signedUrl={workspaceSignedUrls[asset.id] || null}
+                      loading={workspaceSigning && !workspaceSignedUrls[asset.id]}
+                      label={asset.originalPrompt?.substring(0, 20) || 'Image'}
+                      onClick={() => {
+                        const url = workspaceSignedUrls[asset.id];
+                        if (url) onSelectReference(url, 'workspace');
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  No workspace images
+                </p>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
           <Collapsible open={libraryOpen} onOpenChange={setLibraryOpen}>
             <CollapsibleTrigger asChild>
               <Button
