@@ -160,8 +160,8 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
               'flex flex-col items-center justify-center gap-2',
               'transition-colors',
               isDroppingImage
-                ? 'border-blue-500 bg-blue-500/10'
-                : 'border-gray-700 hover:border-gray-600'
+                ? 'border-primary bg-primary/10'
+                : 'border-border hover:border-muted-foreground/40'
             )}
             onDragOver={handleDropZoneDragOver}
             onDragLeave={handleDropZoneDragLeave}
