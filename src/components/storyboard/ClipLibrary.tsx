@@ -149,7 +149,7 @@ const MotionPresetCard: React.FC<{
         )}
       </div>
       <div className="p-1.5">
-        <p className="text-[10px] font-medium text-gray-300 truncate">{preset.name}</p>
+        <p className="text-[10px] font-medium text-foreground/80 truncate">{preset.name}</p>
       </div>
     </button>
   );
