@@ -490,7 +490,7 @@ const StoryboardEditor = () => {
         {/* Project Header - responsive */}
         <div className="flex items-center justify-between px-3 md:px-4 py-2 border-b border-border bg-background/80 backdrop-blur-sm gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Button variant="ghost" size="sm" onClick={handleBackToList} className="h-8 w-8 p-0 flex-shrink-0">
+            <Button variant="ghost" size="sm" onClick={handleBackToList} className="h-8 w-8 md:h-8 md:w-8 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-0 flex-shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </Button>
 
@@ -547,7 +547,7 @@ const StoryboardEditor = () => {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-8 min-h-[44px] md:min-h-0 text-xs gap-1.5"
                 onClick={() => setShowStoryPlanner(true)}
               >
                 <Sparkles className="w-3.5 h-3.5" />
@@ -559,14 +559,14 @@ const StoryboardEditor = () => {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 w-8 p-0 md:hidden"
+              className="h-8 w-8 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-0 md:hidden"
               onClick={() => setShowLibraryDrawer(true)}
             >
               <Library className="w-4 h-4" />
             </Button>
 
             {/* Preview */}
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleOpenPreview}>
+            <Button variant="outline" size="sm" className="h-8 min-h-[44px] md:min-h-0 text-xs gap-1.5" onClick={handleOpenPreview}>
               <Play className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Preview</span>
             </Button>
@@ -574,7 +574,7 @@ const StoryboardEditor = () => {
             {/* More menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+                <Button variant="outline" size="sm" className="h-8 w-8 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 p-0">
                   <MoreHorizontal className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -597,27 +597,30 @@ const StoryboardEditor = () => {
         {activeProject.ai_story_plan &&
          (activeProject.ai_story_plan.sceneBreakdown?.length > 0 ||
           activeProject.ai_story_plan.storyBeats?.length > 0) && (
-          <Collapsible open={storyPlanOpen} onOpenChange={setStoryPlanOpen} className="border-b border-border bg-muted/40">
-            <CollapsibleTrigger asChild>
+          <>
+            {/* Mobile: show as button that opens Sheet */}
+            <div className="md:hidden border-b border-border bg-muted/40">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-foreground/70 hover:bg-muted/50 hover:text-foreground"
+                onClick={() => setStoryPlanOpen(true)}
               >
-                {storyPlanOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                )}
                 <BookOpen className="h-3.5 w-3.5 shrink-0" />
                 <span>Story</span>
                 <span className="text-muted-foreground">
                   ({activeProject.ai_story_plan.sceneBreakdown?.length ?? 0} scenes)
                 </span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 ml-auto" />
               </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="max-h-48 overflow-y-auto px-4 pb-3 pt-0">
-                <div className="space-y-2 text-xs text-muted-foreground">
+            </div>
+
+            {/* Mobile: Sheet for story plan */}
+            <Sheet open={storyPlanOpen} onOpenChange={setStoryPlanOpen}>
+              <SheetContent side="bottom" className="max-h-[60vh] bg-background md:hidden">
+                <SheetHeader className="pb-3">
+                  <SheetTitle className="text-sm">Story Plan</SheetTitle>
+                </SheetHeader>
+                <div className="overflow-y-auto space-y-2 text-xs text-muted-foreground pb-safe">
                   {activeProject.ai_story_plan.sceneBreakdown?.map((scene, i) => (
                     <div key={i} className="rounded border border-border bg-muted/60 px-3 py-2">
                       <div className="font-medium text-foreground/80">
@@ -630,9 +633,47 @@ const StoryboardEditor = () => {
                     </div>
                   ))}
                 </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
+              </SheetContent>
+            </Sheet>
+
+            {/* Desktop: inline Collapsible */}
+            <Collapsible open={storyPlanOpen} onOpenChange={setStoryPlanOpen} className="hidden md:block border-b border-border bg-muted/40">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-foreground/70 hover:bg-muted/50 hover:text-foreground"
+                >
+                  {storyPlanOpen ? (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                  <span>Story</span>
+                  <span className="text-muted-foreground">
+                    ({activeProject.ai_story_plan.sceneBreakdown?.length ?? 0} scenes)
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="max-h-48 overflow-y-auto px-4 pb-3 pt-0">
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    {activeProject.ai_story_plan.sceneBreakdown?.map((scene, i) => (
+                      <div key={i} className="rounded border border-border bg-muted/60 px-3 py-2">
+                        <div className="font-medium text-foreground/80">
+                          Scene {scene.sceneNumber}: {scene.title}
+                        </div>
+                        {scene.description && (
+                          <p className="mt-1 text-muted-foreground">{scene.description}</p>
+                        )}
+                        <span className="text-muted-foreground/60">{scene.targetDuration}s</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </>
         )}
 
         {/* Scene Strip */}
@@ -702,7 +743,7 @@ const StoryboardEditor = () => {
 
       {/* Library Drawer - mobile */}
       <Sheet open={showLibraryDrawer} onOpenChange={setShowLibraryDrawer}>
-        <SheetContent side="right" className="w-[300px] p-0 bg-background">
+        <SheetContent side="right" className="w-full sm:w-[300px] p-0 bg-background">
           <SheetHeader className="px-4 py-3 border-b border-border">
             <SheetTitle className="text-sm">Library</SheetTitle>
           </SheetHeader>

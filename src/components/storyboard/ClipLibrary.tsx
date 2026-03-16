@@ -52,8 +52,8 @@ const DraggableImage: React.FC<{
 }> = ({ imageUrl, label, sublabel, onDragStart, onClick }) => {
   return (
     <button
-      className="group relative rounded-lg overflow-hidden border border-gray-800 hover:border-gray-600
-                 transition-all cursor-grab active:cursor-grabbing bg-gray-900/50"
+      className="group relative rounded-lg overflow-hidden border border-border hover:border-muted-foreground/40
+                 transition-all cursor-grab active:cursor-grabbing bg-muted/50"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('text/uri-list', imageUrl);
@@ -63,7 +63,7 @@ const DraggableImage: React.FC<{
       }}
       onClick={onClick}
     >
-      <div className="aspect-square bg-gray-950 relative">
+      <div className="aspect-square bg-background relative">
         <img
           src={imageUrl}
           alt={label}
@@ -76,9 +76,9 @@ const DraggableImage: React.FC<{
         </div>
       </div>
       <div className="p-1.5">
-        <p className="text-[10px] font-medium text-gray-300 truncate">{label}</p>
+        <p className="text-[10px] font-medium text-foreground/80 truncate">{label}</p>
         {sublabel && (
-          <p className="text-[9px] text-gray-500 truncate">{sublabel}</p>
+          <p className="text-[9px] text-muted-foreground truncate">{sublabel}</p>
         )}
       </div>
     </button>
@@ -106,8 +106,8 @@ const MotionPresetCard: React.FC<{
 
   return (
     <button
-      className="group relative rounded-lg overflow-hidden border border-gray-800 hover:border-gray-600
-                 transition-all bg-gray-900/50"
+      className="group relative rounded-lg overflow-hidden border border-border hover:border-muted-foreground/40
+                 transition-all bg-muted/50"
       onClick={onSelect}
       onMouseLeave={() => {
         if (videoRef.current && isPlaying) {
@@ -116,7 +116,7 @@ const MotionPresetCard: React.FC<{
         }
       }}
     >
-      <div className="aspect-video bg-gray-950 relative">
+      <div className="aspect-video bg-background relative">
         {preset.video_url ? (
           <>
             <video
@@ -144,12 +144,12 @@ const MotionPresetCard: React.FC<{
           </>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Film className="w-5 h-5 text-gray-600" />
+            <Film className="w-5 h-5 text-muted-foreground/40" />
           </div>
         )}
       </div>
       <div className="p-1.5">
-        <p className="text-[10px] font-medium text-gray-300 truncate">{preset.name}</p>
+        <p className="text-[10px] font-medium text-foreground/80 truncate">{preset.name}</p>
       </div>
     </button>
   );
@@ -180,9 +180,9 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
   };
 
   return (
-    <div className={cn('bg-gray-900/50 border-l border-gray-800 flex flex-col', className)}>
-      <div className="px-3 py-2 border-b border-gray-800">
-        <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+    <div className={cn('bg-muted/50 border-l border-border flex flex-col', className)}>
+      <div className="px-3 py-2 border-b border-border">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Library
         </h3>
       </div>
@@ -237,7 +237,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                     ))}
                 </div>
               ) : (
-                <p className="text-xs text-gray-500 text-center py-4">
+                <p className="text-xs text-muted-foreground text-center py-4">
                   No character selected
                 </p>
               )}
@@ -256,7 +256,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                   <Image className="w-3.5 h-3.5 text-green-400" />
                   <span>Clip Frames</span>
                   {clipsWithFrames.length > 0 && (
-                    <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-gray-800">
+                    <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-muted">
                       {clipsWithFrames.length}
                     </Badge>
                   )}
@@ -283,7 +283,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-gray-500 text-center py-4">
+                <p className="text-xs text-muted-foreground text-center py-4">
                   No frames extracted yet
                 </p>
               )}
@@ -301,7 +301,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                   <span>Motion Presets</span>
-                  <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-gray-800">
+                  <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-muted">
                     {motionPresets.length}
                   </Badge>
                 </div>
@@ -332,14 +332,14 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="w-full h-6 text-[10px] text-gray-500"
+                      className="w-full h-6 text-[10px] text-muted-foreground"
                     >
                       View all {motionPresets.length} presets
                     </Button>
                   )}
                 </div>
               ) : (
-                <p className="text-xs text-gray-500 text-center py-4">
+                <p className="text-xs text-muted-foreground text-center py-4">
                   No motion presets
                 </p>
               )}

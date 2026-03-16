@@ -114,15 +114,15 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
   const progressPercent = Math.min((totalDuration / targetDuration) * 100, 100);
 
   return (
-    <div className="bg-gray-900/30 border-b border-gray-800">
+    <div className="bg-muted/30 border-b border-border">
       {/* Scene header */}
-      <div className="px-4 py-2 border-b border-gray-800/50 flex items-center justify-between">
+      <div className="px-4 py-2 border-b border-border/50 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-gray-200">
+          <h3 className="text-sm font-medium text-foreground/90">
             {scene.title || 'Untitled Scene'}
           </h3>
           {scene.description && (
-            <p className="text-xs text-gray-500 mt-0.5 max-w-md truncate">
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-md truncate">
               {scene.description}
             </p>
           )}
@@ -130,11 +130,11 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
 
         {/* Duration progress */}
         <div className="flex items-center gap-3">
-          <div className="text-xs text-gray-400">
+          <div className="text-xs text-muted-foreground">
             <span className="font-medium">{totalDuration.toFixed(1)}s</span>
-            <span className="text-gray-600"> / {targetDuration}s</span>
+            <span className="text-muted-foreground/50"> / {targetDuration}s</span>
           </div>
-          <div className="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+          <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all',
@@ -149,7 +149,7 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
       {/* Clips strip */}
       <div
         ref={scrollRef}
-        className="flex items-center gap-1 p-4 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
+        className="flex items-center gap-1 p-4 overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent"
         onDragEnd={handleDragEnd}
       >
         {clips.length === 0 ? (
@@ -160,24 +160,24 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
               'flex flex-col items-center justify-center gap-2',
               'transition-colors',
               isDroppingImage
-                ? 'border-blue-500 bg-blue-500/10'
-                : 'border-gray-700 hover:border-gray-600'
+                ? 'border-primary bg-primary/10'
+                : 'border-border hover:border-muted-foreground/40'
             )}
             onDragOver={handleDropZoneDragOver}
             onDragLeave={handleDropZoneDragLeave}
             onDrop={handleDropZoneDrop}
           >
-            <div className="flex items-center gap-2 text-gray-500">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <ImageIcon className="w-5 h-5" />
               <span className="text-sm">Drop an image to start</span>
             </div>
-            <span className="text-xs text-gray-600">or</span>
+            <span className="text-xs text-muted-foreground/50">or</span>
             <Button
               variant="outline"
               size="sm"
               onClick={onAddClip}
               disabled={isAddingClip}
-              className="border-gray-700 hover:border-gray-600"
+              className="border-border hover:border-muted-foreground/40"
             >
               {isAddingClip ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -217,8 +217,8 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
                 'flex flex-col items-center justify-center gap-1',
                 'transition-colors cursor-pointer',
                 isDroppingImage
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-gray-700 hover:border-gray-600'
+                  ? 'border-primary bg-primary/10'
+                  : 'border-border hover:border-muted-foreground/40'
               )}
               onClick={onAddClip}
               onDragOver={handleDropZoneDragOver}
@@ -226,12 +226,12 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
               onDrop={handleDropZoneDrop}
             >
               {isAddingClip ? (
-                <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
               ) : (
                 <>
-                  <Plus className="w-5 h-5 text-gray-500" />
-                  <span className="text-[10px] text-gray-500">Add Clip</span>
-                  <span className="text-[8px] text-gray-600">or drop image</span>
+                  <Plus className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">Add Clip</span>
+                  <span className="text-[8px] text-muted-foreground/50">or drop image</span>
                 </>
               )}
             </div>
