@@ -180,9 +180,9 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
   };
 
   return (
-    <div className={cn('bg-gray-900/50 border-l border-gray-800 flex flex-col', className)}>
-      <div className="px-3 py-2 border-b border-gray-800">
-        <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+    <div className={cn('bg-muted/50 border-l border-border flex flex-col', className)}>
+      <div className="px-3 py-2 border-b border-border">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Library
         </h3>
       </div>
