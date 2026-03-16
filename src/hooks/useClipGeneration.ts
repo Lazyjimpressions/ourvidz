@@ -28,7 +28,7 @@ export interface GenerateClipInput {
   sceneId: string;
   prompt: string;
   referenceImageUrl?: string;
-  referenceImageSource?: 'extracted_frame' | 'uploaded' | 'generated' | 'character_portrait' | 'library';
+  referenceImageSource?: 'extracted_frame' | 'uploaded' | 'generated' | 'character_portrait' | 'library' | 'workspace';
   modelId: string;
   aspectRatio?: '16:9' | '9:16' | '1:1';
   duration?: number; // seconds
