@@ -118,11 +118,11 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
       {/* Scene header */}
       <div className="px-4 py-2 border-b border-border/50 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-gray-200">
+          <h3 className="text-sm font-medium text-foreground/90">
             {scene.title || 'Untitled Scene'}
           </h3>
           {scene.description && (
-            <p className="text-xs text-gray-500 mt-0.5 max-w-md truncate">
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-md truncate">
               {scene.description}
             </p>
           )}
