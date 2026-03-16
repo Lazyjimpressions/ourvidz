@@ -332,7 +332,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="w-full h-6 text-[10px] text-gray-500"
+                      className="w-full h-6 text-[10px] text-muted-foreground"
                     >
                       View all {motionPresets.length} presets
                     </Button>
