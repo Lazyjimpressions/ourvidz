@@ -50,7 +50,7 @@ export interface GenerateClipV2Input {
   prompt: string;
   clipType: ClipType;
   referenceImageUrl?: string;
-  referenceImageSource?: 'extracted_frame' | 'uploaded' | 'character_portrait' | 'library';
+  referenceImageSource?: 'extracted_frame' | 'uploaded' | 'character_portrait' | 'library' | 'workspace';
   referenceVideoUrl?: string;
   motionPresetId?: string;
   endFrameUrl?: string;
