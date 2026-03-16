@@ -21,6 +21,7 @@
         "./src/*"
       ]
     },
+    "types": ["node"],
     "skipLibCheck": true,
     "strict": false,
     "target": "ES2020",
