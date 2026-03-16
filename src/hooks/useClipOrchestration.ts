@@ -277,9 +277,10 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
             enhanced_prompt: result.enhancedPrompt,
           });
         } else {
-          // Async job - will be updated via webhook
+          // Async job - store job_id for polling/webhook lookup
           await StoryboardService.updateClip(clip.id, {
             enhanced_prompt: result.enhancedPrompt,
+            job_id: result.jobId, // Store job reference for webhook resolution
           });
         }
       } else {
@@ -400,6 +401,82 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
     }, 5000); // Poll every 5 seconds
 
     return () => clearInterval(interval);
+  }, [orchestrations, queryClient, toast]);
+
+  // ============================================================================
+  // DATABASE RECOVERY POLLING
+  // Poll for clips stuck in "generating" status (handles page refresh recovery)
+  // ============================================================================
+
+  useEffect(() => {
+    const recoveryInterval = setInterval(async () => {
+      try {
+        // Find clips with status='generating' and job_id set (not tracked in local state)
+        const { data: generatingClips, error } = await supabase
+          .from('storyboard_clips')
+          .select('id, job_id, clip_type')
+          .eq('status', 'generating')
+          .not('job_id', 'is', null);
+
+        if (error || !generatingClips || generatingClips.length === 0) return;
+
+        // Filter out clips already tracked in orchestrations
+        const untracked = generatingClips.filter(
+          (c) => !orchestrations.has(c.id)
+        );
+
+        if (untracked.length === 0) return;
+
+        console.log('🎬 [useClipOrchestration] Recovery polling:', untracked.length, 'clips');
+
+        for (const clip of untracked) {
+          // Check job status
+          const { data: job } = await supabase
+            .from('jobs')
+            .select('id, status, metadata, error_message')
+            .eq('id', clip.job_id)
+            .single();
+
+          if (!job) continue;
+
+          if (job.status === 'completed') {
+            const meta = job.metadata as Record<string, any> | null;
+            const videoUrl = meta?.result_url ||
+              meta?.fal_response?.video?.url ||
+              meta?.original_fal_url;
+
+            if (videoUrl) {
+              await StoryboardService.updateClip(clip.id, {
+                status: 'completed',
+                video_url: videoUrl,
+                duration_seconds: meta?.fal_response?.video?.duration ||
+                  CLIP_TYPE_DURATIONS[clip.clip_type as ClipType],
+              });
+
+              queryClient.invalidateQueries({ queryKey: ['storyboard-clips'] });
+
+              toast({
+                title: 'Clip ready',
+                description: 'Video generation completed',
+              });
+            }
+          } else if (job.status === 'failed') {
+            await StoryboardService.updateClip(clip.id, { status: 'failed' });
+            queryClient.invalidateQueries({ queryKey: ['storyboard-clips'] });
+
+            toast({
+              title: 'Generation failed',
+              description: job.error_message || 'Video generation failed',
+              variant: 'destructive',
+            });
+          }
+        }
+      } catch (err) {
+        console.error('🎬 [useClipOrchestration] Recovery polling error:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(recoveryInterval);
   }, [orchestrations, queryClient, toast]);
 
   // ============================================================================

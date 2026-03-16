@@ -17,6 +17,7 @@ import { useStoryboard } from '@/hooks/useStoryboard';
 import { useStoryboardAI } from '@/hooks/useStoryboardAI';
 import { useClipOrchestration } from '@/hooks/useClipOrchestration';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -163,6 +164,36 @@ const StoryboardEditor = () => {
     }
   }, [activeProject?.title]);
 
+  // Load character canons when project has a primary character
+  useEffect(() => {
+    const loadCanons = async () => {
+      if (!activeProject?.primary_character_id) {
+        setCharacterCanons([]);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from('character_canon')
+          .select('*')
+          .eq('character_id', activeProject.primary_character_id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Failed to load character canons:', error);
+          return;
+        }
+
+        setCharacterCanons((data || []) as CharacterCanon[]);
+        console.log('🎭 Loaded character canons:', data?.length || 0);
+      } catch (err) {
+        console.error('Error loading canons:', err);
+      }
+    };
+
+    loadCanons();
+  }, [activeProject?.primary_character_id]);
+
   // Auto-select first scene when project has scenes and none selected
   useEffect(() => {
     if (scenes.length > 0 && !activeScene) {
@@ -283,7 +314,8 @@ const StoryboardEditor = () => {
 
   const handleGenerateClip = async () => {
     if (!selectedClip || !activeScene || !activeProject) return;
-    if (!selectedClip.prompt) {
+    if (!selectedClip.prompt?.trim()) {
+      toast.error('Please enter a motion prompt before generating');
       console.error('🎬 Clip has no prompt');
       return;
     }
@@ -299,12 +331,14 @@ const StoryboardEditor = () => {
         clipType: selectedClip.clip_type,
         prompt: selectedClip.prompt,
         referenceImageUrl: selectedClip.reference_image_url,
+        referenceImageSource: selectedClip.reference_image_source, // Phase 8.1: For chain detection
         referenceVideoUrl: previousClip?.video_url,
         motionPresetId: selectedClip.motion_preset_id,
         endFrameUrl: selectedClip.end_frame_url,
         contentMode: (activeProject.content_mode || 'nsfw') as 'sfw' | 'nsfw',
         aspectRatio: (activeProject.aspect_ratio || '16:9') as '16:9' | '9:16' | '1:1',
         durationSeconds: selectedClip.duration_seconds,
+        sceneId: activeScene.id, // Phase 8.1: For character injection
       };
 
       console.log('🎬 Starting clip generation:', {

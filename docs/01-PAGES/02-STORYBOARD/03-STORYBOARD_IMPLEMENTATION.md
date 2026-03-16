@@ -71,6 +71,7 @@ This E2E test validates Phase 8 implementation using actual database character.
 ### Test Storyline (30s, 6 clips)
 
 **Scene 1: Arrival** (10s)
+
 - setting: `sandy beach, sunset`
 - mood: `playful, excited`
 - characters: `['d39a539c-8c01-4be5-859c-7811d7560642']`
@@ -81,6 +82,7 @@ This E2E test validates Phase 8 implementation using actual database character.
 | 1.2 | quick | "stops and looks at horizon" | "same character continuing motion, stops and looks at horizon" |
 
 **Scene 2: Playing** (15s)
+
 - setting: `shallow waves, golden hour`
 
 | Clip | Reference Source | Expected |
@@ -143,6 +145,7 @@ This E2E test validates Phase 8 implementation using actual database character.
 **Key Finding: No database changes needed!**
 
 Characters are already linkable via:
+
 1. `storyboard_scenes.characters` → array of character IDs at scene level
 2. `storyboard_projects.primary_character_id` → main character at project level
 

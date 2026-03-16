@@ -754,8 +754,9 @@ export class ClipOrchestrationService {
       }
 
       // Check if async (job) or sync (immediate result)
-      if (data.job_id) {
-        return { jobId: data.job_id };
+      // fal-image returns camelCase: jobId, resultUrl, status
+      if (data.jobId) {
+        return { jobId: data.jobId };
       } else if (data.resultUrl || data.video?.url) {
         return { videoUrl: data.resultUrl || data.video?.url };
       }

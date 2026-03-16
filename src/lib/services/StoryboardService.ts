@@ -15,6 +15,7 @@ import {
   ProjectAssembly,
   AssemblyClip,
 } from '@/types/storyboard';
+import { Character } from '@/types/roleplay';
 
 /**
  * StoryboardService - Handles all storyboard CRUD operations
@@ -44,15 +45,19 @@ export class StoryboardService {
 
   /**
    * Get a single project by ID with optional relations
+   * Phase 8.1: Now joins characters table to get primary_character
    */
   static async getProject(projectId: string, includeScenes = false): Promise<StoryboardProject | null> {
-    let query = supabase
+    const { data, error } = await supabase
       .from('storyboard_projects')
-      .select('*')
+      .select(`
+        *,
+        primary_character:characters!primary_character_id(
+          id, name, gender, appearance_tags, clothing_tags, reference_image_url
+        )
+      `)
       .eq('id', projectId)
       .single();
-
-    const { data, error } = await query;
 
     if (error) {
       if (error.code === 'PGRST116') return null; // Not found
@@ -656,6 +661,15 @@ export class StoryboardService {
       // V2 fields
       ai_story_plan: data.ai_story_plan as StoryboardProject['ai_story_plan'],
       content_mode: (data.content_mode as StoryboardProject['content_mode']) || 'nsfw',
+      // Phase 8.1: Extract joined character if present
+      primary_character: data.primary_character ? {
+        id: (data.primary_character as Record<string, unknown>).id as string,
+        name: (data.primary_character as Record<string, unknown>).name as string,
+        gender: (data.primary_character as Record<string, unknown>).gender as string,
+        appearance_tags: ((data.primary_character as Record<string, unknown>).appearance_tags as string[]) || [],
+        clothing_tags: ((data.primary_character as Record<string, unknown>).clothing_tags as string[]) || [],
+        reference_image_url: (data.primary_character as Record<string, unknown>).reference_image_url as string,
+      } as Character : undefined,
     };
   }
 

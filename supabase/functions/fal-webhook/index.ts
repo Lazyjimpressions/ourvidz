@@ -75,6 +75,15 @@ serve(async (req) => {
         completed_at: new Date().toISOString(),
       }).eq("id", job.id);
 
+      // Also update storyboard_clips if this was a storyboard generation
+      const storyboardClipId = job.metadata?.storyboard_clip_id;
+      if (storyboardClipId) {
+        await supabase.from("storyboard_clips").update({
+          status: "failed",
+        }).eq("id", storyboardClipId);
+        console.log("🎬 Storyboard clip marked as failed:", storyboardClipId);
+      }
+
       return new Response(JSON.stringify({ ok: true, job_id: job.id, status: "failed" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -104,6 +113,15 @@ serve(async (req) => {
         status: "failed",
         error_message: "No result URL in fal.ai webhook payload",
       }).eq("id", job.id);
+
+      // Also update storyboard_clips if this was a storyboard generation
+      const storyboardClipId = job.metadata?.storyboard_clip_id;
+      if (storyboardClipId) {
+        await supabase.from("storyboard_clips").update({
+          status: "failed",
+        }).eq("id", storyboardClipId);
+      }
+
       return new Response(JSON.stringify({ ok: true, job_id: job.id, status: "failed" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -119,6 +137,15 @@ serve(async (req) => {
         status: "failed",
         error_message: `Failed to download result: ${downloadResponse.status}`,
       }).eq("id", job.id);
+
+      // Also update storyboard_clips if this was a storyboard generation
+      const storyboardClipId = job.metadata?.storyboard_clip_id;
+      if (storyboardClipId) {
+        await supabase.from("storyboard_clips").update({
+          status: "failed",
+        }).eq("id", storyboardClipId);
+      }
+
       return new Response(JSON.stringify({ ok: true, job_id: job.id, status: "failed" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -140,6 +167,15 @@ serve(async (req) => {
         status: "failed",
         error_message: `Storage upload failed: ${uploadError.message}`,
       }).eq("id", job.id);
+
+      // Also update storyboard_clips if this was a storyboard generation
+      const storyboardClipId = job.metadata?.storyboard_clip_id;
+      if (storyboardClipId) {
+        await supabase.from("storyboard_clips").update({
+          status: "failed",
+        }).eq("id", storyboardClipId);
+      }
+
       return new Response(JSON.stringify({ ok: true, job_id: job.id, status: "failed" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -236,6 +272,36 @@ serve(async (req) => {
     }).eq("id", job.id);
 
     console.log("✅ Job completed via webhook:", job.id);
+
+    // ── 9b. Update storyboard_clips if this was a storyboard generation ──
+    const storyboardClipId = job.metadata?.storyboard_clip_id;
+    if (storyboardClipId && resultType === "video") {
+      console.log("🎬 Updating storyboard clip:", storyboardClipId);
+
+      // Generate signed URL for the video
+      const { data: signedData } = await supabase.storage
+        .from("workspace-temp")
+        .createSignedUrl(storagePath, 7 * 24 * 60 * 60); // 7 days
+
+      const videoUrl = signedData?.signedUrl || `workspace-temp/${storagePath}`;
+      const videoDuration = result.video?.duration || result.duration || 5;
+
+      const { error: clipUpdateError } = await supabase
+        .from("storyboard_clips")
+        .update({
+          status: "completed",
+          video_url: videoUrl,
+          duration_seconds: videoDuration,
+          thumbnail_url: thumbnailPath ? `workspace-temp/${thumbnailPath}` : null,
+        })
+        .eq("id", storyboardClipId);
+
+      if (clipUpdateError) {
+        console.error("❌ Failed to update storyboard clip:", clipUpdateError);
+      } else {
+        console.log("✅ Storyboard clip updated:", storyboardClipId);
+      }
+    }
 
     // ── 10. Trigger prompt scoring (fire-and-forget) ──
     // Only for images, scoring analyzes output quality against original prompt

@@ -320,9 +320,9 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
     character?.reference_image_url || null
   );
 
-  // Canon images that need signing
+  // Canon images that need signing (includes position/pose types from Character Studio)
   const canonImages = useMemo(() =>
-    characterCanons.filter(c => c.output_type === 'image').map(c => ({
+    characterCanons.filter(c => ['image', 'position', 'pose'].includes(c.output_type)).map(c => ({
       id: c.id,
       path: c.output_url,
     })),
@@ -420,9 +420,9 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                     />
                   )}
 
-                  {/* Canon outputs - signed */}
+                  {/* Canon outputs - signed (includes position/pose types) */}
                   {characterCanons
-                    .filter((canon) => canon.output_type === 'image')
+                    .filter((canon) => ['image', 'position', 'pose'].includes(canon.output_type))
                     .map((canon) => (
                       <SignedDraggableImage
                         key={canon.id}
