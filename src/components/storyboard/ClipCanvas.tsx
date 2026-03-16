@@ -177,7 +177,7 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
               size="sm"
               onClick={onAddClip}
               disabled={isAddingClip}
-              className="border-gray-700 hover:border-gray-600"
+              className="border-border hover:border-muted-foreground/40"
             >
               {isAddingClip ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
