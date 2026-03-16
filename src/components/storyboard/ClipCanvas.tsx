@@ -130,11 +130,11 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
 
         {/* Duration progress */}
         <div className="flex items-center gap-3">
-          <div className="text-xs text-gray-400">
+          <div className="text-xs text-muted-foreground">
             <span className="font-medium">{totalDuration.toFixed(1)}s</span>
-            <span className="text-gray-600"> / {targetDuration}s</span>
+            <span className="text-muted-foreground/50"> / {targetDuration}s</span>
           </div>
-          <div className="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+          <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all',
