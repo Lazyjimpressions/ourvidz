@@ -116,7 +116,7 @@ const MotionPresetCard: React.FC<{
         }
       }}
     >
-      <div className="aspect-video bg-gray-950 relative">
+      <div className="aspect-video bg-background relative">
         {preset.video_url ? (
           <>
             <video
