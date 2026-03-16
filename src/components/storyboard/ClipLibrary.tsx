@@ -301,7 +301,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                   <span>Motion Presets</span>
-                  <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-gray-800">
+                  <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-muted">
                     {motionPresets.length}
                   </Badge>
                 </div>
