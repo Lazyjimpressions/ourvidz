@@ -304,6 +304,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
 
   const [characterOpen, setCharacterOpen] = useState(true);
   const [framesOpen, setFramesOpen] = useState(true);
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [motionOpen, setMotionOpen] = useState(false);
 
@@ -328,6 +329,31 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
   );
   const { urls: canonSignedUrls, loading: canonLoading } = useBatchSignedUrls(
     canonImages, 'user-library', canonImages.length > 0
+  );
+
+  // --- Workspace images ---
+  const [workspaceAssets, setWorkspaceAssets] = useState<UnifiedWorkspaceAsset[]>([]);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+
+  useEffect(() => {
+    setWorkspaceLoading(true);
+    WorkspaceAssetService.getUserWorkspaceAssets()
+      .then(assets => {
+        setWorkspaceAssets(assets.filter(a => a.assetType === 'image').slice(0, 20));
+      })
+      .catch(err => {
+        console.error('❌ Failed to load workspace assets:', err);
+        setWorkspaceAssets([]);
+      })
+      .finally(() => setWorkspaceLoading(false));
+  }, []);
+
+  const workspacePaths = useMemo(() =>
+    workspaceAssets.map(a => ({ id: a.id, path: a.tempStoragePath || '' })),
+    [workspaceAssets]
+  );
+  const { urls: workspaceSignedUrls, loading: workspaceSigning } = useBatchSignedUrls(
+    workspacePaths, 'workspace-temp', workspacePaths.length > 0
   );
 
   // --- Library images ---
