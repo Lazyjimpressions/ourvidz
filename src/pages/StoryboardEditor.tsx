@@ -79,8 +79,10 @@ import {
 import { StoryPlannerSheet } from '@/components/storyboard/StoryPlannerSheet';
 import { AssemblyPreview } from '@/components/storyboard/AssemblyPreview';
 import { CharacterPickerDialog } from '@/components/storyboard/CharacterPickerDialog';
+import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
 import { StoryboardService } from '@/lib/services/StoryboardService';
 import { Character } from '@/types/roleplay';
+import { toast } from 'sonner';
 
 const StoryboardEditor = () => {
   const { projectId } = useParams<{ projectId: string }>();
