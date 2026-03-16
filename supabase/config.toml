@@ -340,3 +340,6 @@ verify_jwt = false
 
 [functions.describe-image]
 verify_jwt = false
+
+[functions.storyboard-ai-assist]
+verify_jwt = false
