@@ -44,7 +44,7 @@ interface ClipLibraryProps {
   character?: Character;
   characterCanons?: CharacterCanon[];
   clips?: StoryboardClip[];
-  onSelectReference: (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library') => void;
+  onSelectReference: (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library' | 'workspace') => void;
   onSelectMotionPreset: (preset: MotionPreset) => void;
   className?: string;
 }
