@@ -702,7 +702,7 @@ const StoryboardEditor = () => {
 
       {/* Library Drawer - mobile */}
       <Sheet open={showLibraryDrawer} onOpenChange={setShowLibraryDrawer}>
-        <SheetContent side="right" className="w-[300px] p-0 bg-background">
+        <SheetContent side="right" className="w-full sm:w-[300px] p-0 bg-background">
           <SheetHeader className="px-4 py-3 border-b border-border">
             <SheetTitle className="text-sm">Library</SheetTitle>
           </SheetHeader>
