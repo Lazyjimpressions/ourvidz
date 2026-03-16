@@ -167,11 +167,11 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
             onDragLeave={handleDropZoneDragLeave}
             onDrop={handleDropZoneDrop}
           >
-            <div className="flex items-center gap-2 text-gray-500">
+            <div className="flex items-center gap-2 text-muted-foreground">
               <ImageIcon className="w-5 h-5" />
               <span className="text-sm">Drop an image to start</span>
             </div>
-            <span className="text-xs text-gray-600">or</span>
+            <span className="text-xs text-muted-foreground/50">or</span>
             <Button
               variant="outline"
               size="sm"
