@@ -37,7 +37,7 @@ export default function CharacterStudioV3() {
     canonImages, isCanonUploading, uploadCanon, deleteCanon, updateCanonTags, setCanonPrimary,
     saveCanonFromUrl, assignCanonPoseKey,
     canonPosePresets, generateCanonPosition, generatingPoseKey,
-    updateCanonPresetPrompt
+    updateCanonPresetPrompt, updatePortraitTags
   } = studio;
 
   // Prevent auto-save retry loop after failure
@@ -238,6 +238,7 @@ export default function CharacterStudioV3() {
     onCanonDelete: deleteCanon,
     onCanonSetPrimary: setCanonPrimary,
     onCanonUpdateTags: updateCanonTags,
+    onUpdatePortraitTags: updatePortraitTags,
     onSaveAsPosition: (imageUrl: string) => saveCanonFromUrl(imageUrl, 'pose', ['role:position'], undefined, undefined),
     onAssignCanonPoseKey: assignCanonPoseKey,
     canonPosePresets,

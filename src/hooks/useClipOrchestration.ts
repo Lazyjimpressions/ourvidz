@@ -188,21 +188,23 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
         return next;
       });
 
-      // 3. Prepare generation request
+      // 3. Prepare generation request (Phase 8.1: include sceneId for character injection)
       const genRequest: ClipGenerationRequest = {
         clipId: clip.id,
         clipType: input.clipType,
         prompt: input.prompt,
         referenceImageUrl: input.referenceImageUrl,
+        referenceImageSource: input.referenceImageSource,
         referenceVideoUrl: input.referenceVideoUrl,
         motionPresetId: input.motionPresetId,
         endFrameUrl: input.endFrameUrl,
         contentMode: input.contentMode || projectContentMode,
         aspectRatio: input.aspectRatio || '16:9',
         durationSeconds: input.durationSeconds || CLIP_TYPE_DURATIONS[input.clipType],
+        sceneId: input.sceneId, // Phase 8.1: For character injection
       };
 
-      // 4. Prepare generation (resolve model, template, config)
+      // 4. Prepare generation (resolve model, template, config, character injection)
       const prepared = await ClipOrchestrationService.prepareClipGeneration(genRequest);
 
       if (!prepared) {
@@ -217,6 +219,12 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
           return next;
         });
         throw new Error('No model available for this clip type');
+      }
+
+      // Phase 8.1: Log character injection for debugging
+      if (prepared.characterName) {
+        console.log('🎭 [useClipOrchestration] Character injected:', prepared.characterName);
+        console.log('🎭 [useClipOrchestration] Injected prompt:', prepared.injectedPrompt);
       }
 
       // 5. Update orchestration state with resolved info

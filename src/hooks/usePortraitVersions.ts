@@ -13,6 +13,7 @@ export interface CharacterPortrait {
   generation_metadata: Json;
   is_primary: boolean;
   sort_order: number;
+  tags: string[];
   created_at: string;
   updated_at: string;
   /** Runtime-only: signed URL for display */
@@ -182,14 +183,14 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
         id,
         sort_order: index
       }));
-      
+
       for (const update of updates) {
         await supabase
           .from('character_portraits')
           .update({ sort_order: update.sort_order })
           .eq('id', update.id);
       }
-      
+
       // Update local state
       setPortraits(prev => {
         const sorted = [...prev].sort((a, b) => {
@@ -206,6 +207,33 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
         description: "Failed to reorder portraits",
         variant: "destructive"
       });
+    }
+  }, [toast]);
+
+  // Update portrait tags
+  const updatePortraitTags = useCallback(async (portraitId: string, tags: string[]) => {
+    try {
+      const { error: updateError } = await supabase
+        .from('character_portraits')
+        .update({ tags })
+        .eq('id', portraitId);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setPortraits(prev => prev.map(p =>
+        p.id === portraitId ? { ...p, tags } : p
+      ));
+
+      return true;
+    } catch (err) {
+      console.error('Error updating portrait tags:', err);
+      toast({
+        title: "Error",
+        description: "Failed to update tags",
+        variant: "destructive"
+      });
+      return false;
     }
   }, [toast]);
 
@@ -256,6 +284,7 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     setPrimaryPortrait,
     deletePortrait,
     addPortrait,
-    reorderPortraits
+    reorderPortraits,
+    updatePortraitTags
   };
 }

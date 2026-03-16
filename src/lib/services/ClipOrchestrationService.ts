@@ -47,12 +47,14 @@ export interface ClipGenerationRequest {
   clipType: ClipType;
   prompt: string;
   referenceImageUrl?: string;
+  referenceImageSource?: string; // 'extracted_frame' | 'character_portrait' | 'uploaded' | etc.
   referenceVideoUrl?: string;
   motionPresetId?: string;
   endFrameUrl?: string;
   contentMode: 'sfw' | 'nsfw';
   aspectRatio: '16:9' | '9:16' | '1:1';
   durationSeconds?: number;
+  sceneId?: string; // For character injection (Phase 8.1)
 }
 
 /**
@@ -230,6 +232,149 @@ export class ClipOrchestrationService {
     }
 
     return data.map(this.mapToResolvedModel);
+  }
+
+  // ============================================================================
+  // CHARACTER RESOLUTION (Phase 8.1)
+  // ============================================================================
+
+  /**
+   * Character appearance data for prompt injection
+   */
+  static CharacterAppearance: {
+    name: string;
+    gender: string;
+    appearance_tags: string[];
+    clothing_tags: string[];
+  };
+
+  /**
+   * Get character IDs from scene, with fallback to project primary_character_id
+   */
+  static async getSceneCharacters(sceneId: string): Promise<string[]> {
+    console.log('🎬 [ClipOrchestration] Getting characters for scene:', sceneId);
+
+    const { data: scene, error } = await supabase
+      .from('storyboard_scenes')
+      .select('characters, project_id')
+      .eq('id', sceneId)
+      .single();
+
+    if (error || !scene) {
+      console.log('🎬 [ClipOrchestration] Scene not found:', sceneId);
+      return [];
+    }
+
+    // Check if scene has characters assigned
+    const sceneCharacters = scene.characters as string[] | null;
+    if (sceneCharacters && sceneCharacters.length > 0) {
+      console.log('🎬 [ClipOrchestration] Found scene characters:', sceneCharacters);
+      return sceneCharacters;
+    }
+
+    // Fallback to project primary_character_id
+    const { data: project } = await supabase
+      .from('storyboard_projects')
+      .select('primary_character_id')
+      .eq('id', scene.project_id)
+      .single();
+
+    if (project?.primary_character_id) {
+      console.log('🎬 [ClipOrchestration] Using project primary character:', project.primary_character_id);
+      return [project.primary_character_id];
+    }
+
+    console.log('🎬 [ClipOrchestration] No characters found for scene');
+    return [];
+  }
+
+  /**
+   * Get character appearance data for prompt injection
+   */
+  static async getCharacterAppearance(characterId: string): Promise<{
+    name: string;
+    gender: string;
+    appearance_tags: string[];
+    clothing_tags: string[];
+  } | null> {
+    console.log('🎬 [ClipOrchestration] Getting character appearance:', characterId);
+
+    const { data, error } = await supabase
+      .from('characters')
+      .select('name, gender, appearance_tags, clothing_tags')
+      .eq('id', characterId)
+      .single();
+
+    if (error || !data) {
+      console.log('🎬 [ClipOrchestration] Character not found:', characterId);
+      return null;
+    }
+
+    console.log('🎬 [ClipOrchestration] Character appearance:', {
+      name: data.name,
+      gender: data.gender,
+      appearance_tags: data.appearance_tags?.length || 0,
+      clothing_tags: data.clothing_tags?.length || 0,
+    });
+
+    return {
+      name: data.name,
+      gender: data.gender || 'unspecified',
+      appearance_tags: data.appearance_tags || [],
+      clothing_tags: data.clothing_tags || [],
+    };
+  }
+
+  /**
+   * Build prompt with character appearance injection
+   *
+   * For anchor clips (first clip or new reference): Inject full appearance
+   * For chained clips (from extracted frame): Use continuation pattern
+   */
+  static buildPromptWithCharacter(
+    userPrompt: string,
+    character: { gender: string; appearance_tags: string[]; clothing_tags: string[] } | null,
+    isChainedClip: boolean
+  ): string {
+    // For chained clips, use continuation pattern to preserve identity
+    if (isChainedClip) {
+      console.log('🎬 [ClipOrchestration] Using chain continuation prompt');
+      return `same character continuing motion, ${userPrompt}`;
+    }
+
+    // If no character, return raw prompt
+    if (!character) {
+      console.log('🎬 [ClipOrchestration] No character data, using raw prompt');
+      return userPrompt;
+    }
+
+    // Build gender token
+    const genderToken = character.gender === 'female' ? 'woman' :
+                        character.gender === 'male' ? 'man' : 'person';
+
+    // Build appearance string
+    const appearance = character.appearance_tags.length > 0
+      ? character.appearance_tags.join(', ')
+      : '';
+
+    // Build clothing string
+    const clothing = character.clothing_tags.length > 0
+      ? `, wearing ${character.clothing_tags.join(', ')}`
+      : '';
+
+    // Construct injected prompt
+    const injectedPrompt = appearance
+      ? `${genderToken}, ${appearance}${clothing}, ${userPrompt}`
+      : `${genderToken}${clothing}, ${userPrompt}`;
+
+    console.log('🎬 [ClipOrchestration] Injected character prompt:', {
+      genderToken,
+      appearanceCount: character.appearance_tags.length,
+      clothingCount: character.clothing_tags.length,
+      finalLength: injectedPrompt.length,
+    });
+
+    return injectedPrompt;
   }
 
   // ============================================================================
@@ -451,12 +596,14 @@ export class ClipOrchestrationService {
 
   /**
    * Prepare a clip for generation
-   * Resolves model, fetches template, returns generation config
+   * Resolves model, fetches template, injects character data, returns generation config
    */
   static async prepareClipGeneration(request: ClipGenerationRequest): Promise<{
     model: ResolvedModel;
     template: VideoPromptTemplate | null;
     generationConfig: Record<string, unknown>;
+    injectedPrompt: string;
+    characterName?: string;
   } | null> {
     // 1. Resolve model for clip type
     const model = await this.getModelForClipType(request.clipType);
@@ -469,17 +616,35 @@ export class ClipOrchestrationService {
     const primaryTask = CLIP_TYPE_TASKS[request.clipType][0];
     const template = await this.getPromptTemplate(primaryTask, request.contentMode);
 
-    // 3. Build generation config based on clip type
-    const generationConfig = this.buildGenerationConfig(request, model);
+    // 3. Inject character data into prompt (Phase 8.1)
+    let injectedPrompt = request.prompt;
+    let characterName: string | undefined;
+
+    if (request.sceneId) {
+      const characterIds = await this.getSceneCharacters(request.sceneId);
+      if (characterIds.length > 0) {
+        const character = await this.getCharacterAppearance(characterIds[0]);
+        if (character) {
+          characterName = character.name;
+          const isChainedClip = request.referenceImageSource === 'extracted_frame';
+          injectedPrompt = this.buildPromptWithCharacter(request.prompt, character, isChainedClip);
+        }
+      }
+    }
+
+    // 4. Build generation config with injected prompt
+    const modifiedRequest = { ...request, prompt: injectedPrompt };
+    const generationConfig = this.buildGenerationConfig(modifiedRequest, model);
 
     console.log('🎬 [ClipOrchestration] Prepared generation:', {
       clipType: request.clipType,
       model: model.display_name,
       template: template?.template_name,
-      config: generationConfig,
+      characterInjected: characterName || 'none',
+      promptLength: injectedPrompt.length,
     });
 
-    return { model, template, generationConfig };
+    return { model, template, generationConfig, injectedPrompt, characterName };
   }
 
   /**
@@ -606,7 +771,7 @@ export class ClipOrchestrationService {
    * Full generation flow for a clip
    */
   static async generateClip(request: ClipGenerationRequest): Promise<ClipGenerationResult> {
-    // 1. Prepare generation
+    // 1. Prepare generation (includes character injection)
     const prepared = await this.prepareClipGeneration(request);
     if (!prepared) {
       return {
@@ -617,12 +782,12 @@ export class ClipOrchestrationService {
       };
     }
 
-    const { model, template, generationConfig } = prepared;
+    const { model, template, generationConfig, injectedPrompt, characterName } = prepared;
 
-    // 2. Enhance prompt via edge function
+    // 2. Enhance prompt via edge function (Phase 8.1: use injected prompt)
     // The enhance-prompt function handles template lookup internally
     const enhancement = await this.enhancePrompt(
-      request.prompt,
+      injectedPrompt, // Use injected prompt (with character tags) instead of raw prompt
       request.clipType,
       request.contentMode,
       model.id
@@ -633,6 +798,7 @@ export class ClipOrchestrationService {
       enhanced: enhancement.success,
       strategy: enhancement.strategy,
       templateUsed: enhancement.templateName || template?.template_name,
+      characterInjected: characterName || 'none',
     });
 
     // 3. Resolve motion preset URL if needed (for controlled/multi clips)

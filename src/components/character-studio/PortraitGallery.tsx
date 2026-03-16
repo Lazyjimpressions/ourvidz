@@ -20,6 +20,7 @@ import {
   X,
   Crosshair,
   ExternalLink,
+  Tag,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -28,7 +29,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { CharacterPortrait } from '@/hooks/usePortraitVersions';
@@ -37,6 +44,10 @@ import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightb
 import { useSignedUrl } from '@/hooks/useSignedUrl';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { useToast } from '@/hooks/use-toast';
+
+// ─── Constants ───
+
+const COMMON_TAGS = ['front', 'side', 'rear', '3/4', 'full-body', 'half-body', 'close-up', 'casual', 'formal', 'action', 'seated', 'standing'];
 
 // ─── Sub-components ───
 
@@ -78,6 +89,7 @@ interface PortraitGalleryProps {
   onCopyPrompt?: (prompt: string) => void;
   onSaveAsPosition?: (imageUrl: string) => void;
   onSendToWorkspace?: (imageUrl: string) => void;
+  onUpdateTags?: (portraitId: string, tags: string[]) => void;
   characterAppearanceTags?: string[];
 }
 
@@ -96,12 +108,16 @@ export function PortraitGallery({
   onCopyPrompt,
   onSaveAsPosition,
   onSendToWorkspace,
+  onUpdateTags,
   characterAppearanceTags = [],
 }: PortraitGalleryProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedPortraits, setSelectedPortraits] = useState<Set<string>>(new Set());
+  const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
+  const [tagInput, setTagInput] = useState('');
+  const { toast } = useToast();
 
   const handleDownload = async (portrait: CharacterPortrait) => {
     try {
@@ -146,6 +162,29 @@ export function PortraitGallery({
       setLightboxIndex(index);
       setLightboxOpen(true);
     }
+  };
+
+  // Tag management handlers
+  const handleToggleTag = (portraitId: string, tag: string, currentTags: string[]) => {
+    if (!onUpdateTags) return;
+    const newTags = currentTags.includes(tag)
+      ? currentTags.filter(t => t !== tag)
+      : [...currentTags, tag];
+    onUpdateTags(portraitId, newTags);
+  };
+
+  const handleAddCustomTag = (portraitId: string, currentTags: string[]) => {
+    if (!onUpdateTags || !tagInput.trim()) return;
+    const newTag = tagInput.trim().toLowerCase();
+    if (!currentTags.includes(newTag)) {
+      onUpdateTags(portraitId, [...currentTags, newTag]);
+    }
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (portraitId: string, tag: string, currentTags: string[]) => {
+    if (!onUpdateTags) return;
+    onUpdateTags(portraitId, currentTags.filter(t => t !== tag));
   };
 
   // Convert portraits to LightboxItem[]
@@ -297,12 +336,68 @@ export function PortraitGallery({
                             <ExternalLink className="w-4 h-4 mr-2" />Send to Workspace
                           </DropdownMenuItem>
                         )}
+                        {onUpdateTags && (
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setEditingTagsId(portrait.id); }}>
+                            <Tag className="w-4 h-4 mr-2" />Edit Tags
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(portrait.id); }}>
                           <Trash2 className="w-4 h-4 mr-2" />Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+
+                    {/* Tag Edit Popover */}
+                    {onUpdateTags && (
+                      <Popover open={editingTagsId === portrait.id} onOpenChange={(open) => { if (!open) setEditingTagsId(null); }}>
+                        <PopoverTrigger asChild>
+                          <span className="hidden" />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-64 p-3 space-y-3" align="end" onClick={(e) => e.stopPropagation()}>
+                          <div className="text-xs font-medium text-muted-foreground">Common Tags</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {COMMON_TAGS.map(tag => (
+                              <Badge
+                                key={tag}
+                                variant={(portrait.tags || []).includes(tag) ? 'default' : 'outline'}
+                                className="cursor-pointer text-xs"
+                                onClick={() => handleToggleTag(portrait.id, tag, portrait.tags || [])}
+                              >
+                                {tag}
+                              </Badge>
+                            ))}
+                          </div>
+                          <div className="flex gap-1.5">
+                            <Input
+                              value={tagInput}
+                              onChange={(e) => setTagInput(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && handleAddCustomTag(portrait.id, portrait.tags || [])}
+                              placeholder="Custom tag..."
+                              className="h-7 text-xs"
+                            />
+                            <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => handleAddCustomTag(portrait.id, portrait.tags || [])}>
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          {(portrait.tags || []).length > 0 && (
+                            <div className="space-y-1.5">
+                              <div className="text-xs font-medium text-muted-foreground">Applied Tags</div>
+                              <div className="flex flex-wrap gap-1">
+                                {(portrait.tags || []).map(tag => (
+                                  <Badge key={tag} variant="secondary" className="text-xs gap-1 pr-1">
+                                    {tag}
+                                    <button onClick={() => handleRemoveTag(portrait.id, tag, portrait.tags || [])} className="hover:text-destructive">
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                 )}
               </SignedPortraitTile>

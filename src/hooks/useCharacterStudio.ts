@@ -115,7 +115,8 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     setPrimaryPortrait,
     deletePortrait,
     addPortrait,
-    fetchPortraits
+    fetchPortraits,
+    updatePortraitTags
   } = usePortraitVersions({ 
     characterId: savedCharacterId, 
     enabled: !!savedCharacterId 
@@ -816,7 +817,8 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     deletePortrait,
     addPortrait,
     fetchPortraits,
-    
+    updatePortraitTags,
+
     // Scenes
     scenes,
     loadScenes,

@@ -60,6 +60,7 @@ interface StudioWorkspaceProps {
   onCanonSetPrimary?: (id: string) => void;
   onCanonUpdateTags?: (id: string, tags: string[]) => void;
   onSaveAsPosition?: (imageUrl: string) => void;
+  onUpdatePortraitTags?: (portraitId: string, tags: string[]) => void;
   onAssignCanonPoseKey?: (canonId: string, poseKey: string) => void;
   // Canon position generation
   canonPosePresets?: Record<string, CanonPosePreset>;
@@ -80,7 +81,7 @@ export function StudioWorkspace({
   onEnhancePrompt, onCopyPrompt, characterData, mobileMode, scenesOnly, positionsOnly,
   referenceStrength,
   canonImages, isCanonUploading, onCanonUpload, onCanonDelete, onCanonSetPrimary, onCanonUpdateTags,
-  onSaveAsPosition, onAssignCanonPoseKey,
+  onSaveAsPosition, onUpdatePortraitTags, onAssignCanonPoseKey,
   canonPosePresets, onGeneratePosition, generatingPoseKey, hasReferenceImage,
   onUpdatePresetPrompt,
 }: StudioWorkspaceProps) {
@@ -162,6 +163,7 @@ export function StudioWorkspace({
               onCopyPrompt={onCopyPrompt}
               onSaveAsPosition={onSaveAsPosition}
               onSendToWorkspace={handleSendToWorkspace}
+              onUpdateTags={onUpdatePortraitTags}
               characterAppearanceTags={characterAppearanceTags}
             />
           </div>

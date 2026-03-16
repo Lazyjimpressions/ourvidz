@@ -8,6 +8,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { StoryboardClip, ClipType, MotionPreset, ReferenceImageSource } from '@/types/storyboard';
+import { supabase } from '@/integrations/supabase/client';
 import { ClipTypeSelector } from './ClipTypeSelector';
 import { MotionLibrary } from './MotionLibrary';
 import { FrameSelector } from './FrameSelector';
@@ -33,6 +34,7 @@ import {
   Check,
   CheckCircle,
   ImagePlus,
+  User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -82,6 +84,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
   const [showFrameSelector, setShowFrameSelector] = useState(false);
   const [isExtractingFrame, setIsExtractingFrame] = useState(false);
   const [promptSuggestions, setPromptSuggestions] = useState<PromptSuggestionChip[]>([]);
+  const [characterName, setCharacterName] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const hasVideo = (clip.status === 'completed' || clip.status === 'approved') && clip.video_url;
@@ -96,6 +99,58 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
   useEffect(() => {
     loadSuggestions();
   }, [clip.id]);
+
+  // Phase 8.1: Load character name for badge display
+  useEffect(() => {
+    const loadCharacter = async () => {
+      if (!clip.scene_id) return;
+
+      try {
+        // First get characters from scene
+        const { data: scene } = await supabase
+          .from('storyboard_scenes')
+          .select('characters, project_id')
+          .eq('id', clip.scene_id)
+          .single();
+
+        if (!scene) {
+          setCharacterName(null);
+          return;
+        }
+
+        const sceneCharacters = scene.characters as string[] | null;
+        let characterId: string | null = null;
+
+        if (sceneCharacters && sceneCharacters.length > 0) {
+          characterId = sceneCharacters[0];
+        } else if (scene.project_id) {
+          // Fallback to project primary character
+          const { data: project } = await supabase
+            .from('storyboard_projects')
+            .select('primary_character_id')
+            .eq('id', scene.project_id)
+            .single();
+          characterId = project?.primary_character_id || null;
+        }
+
+        if (characterId) {
+          const { data: character } = await supabase
+            .from('characters')
+            .select('name')
+            .eq('id', characterId)
+            .single();
+          setCharacterName(character?.name || null);
+        } else {
+          setCharacterName(null);
+        }
+      } catch (err) {
+        console.error('Failed to load character for badge:', err);
+        setCharacterName(null);
+      }
+    };
+
+    loadCharacter();
+  }, [clip.scene_id]);
 
   const loadSuggestions = async () => {
     const result = await suggestPrompts({
@@ -194,6 +249,13 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
           >
             {clip.status}
           </Badge>
+          {/* Phase 8.1: Character badge */}
+          {characterName && (
+            <Badge variant="outline" className="h-5 px-1.5 text-[10px] gap-1 border-purple-500/40 text-purple-400">
+              <User className="w-3 h-3" />
+              {characterName}
+            </Badge>
+          )}
         </div>
         {isExpanded ? (
           <ChevronDown className="w-4 h-4 text-muted-foreground" />

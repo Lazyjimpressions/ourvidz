@@ -140,10 +140,12 @@ Following industry best practices for professional video editing interfaces:
 ### Storyboard Components (`src/components/storyboard/`)
 
 **Core Components:**
+
 - `ProjectCard.tsx` - Compact project card for grid display
 - `NewProjectDialog.tsx` - Project creation dialog
 
 **V2 Clip Components:**
+
 - `SceneStrip.tsx` - Horizontal scene navigation
 - `ClipCanvas.tsx` - Drag-and-drop clip strip
 - `ClipTile.tsx` - Individual clip with status badges
@@ -153,12 +155,14 @@ Following industry best practices for professional video editing interfaces:
 - `MotionLibrary.tsx` - Motion preset browser with video previews
 
 **Generation Components:**
+
 - `ClipCard.tsx` - Video clip display with status indicators
 - `ClipWorkspace.tsx` - Main clip generation area with prompt input
 - `FrameSelector.tsx` - Visual frame extraction slider
 - `ChainIndicator.tsx` - Frame chain relationship visualization
 
 **Preview Components:**
+
 - `AssemblyPreview.tsx` - Sequential video playback with scene markers
 
 ### Hooks
@@ -180,23 +184,74 @@ Following industry best practices for professional video editing interfaces:
 
 ---
 
+## Clip Type System
+
+Storyboard uses 5 clip types that map to different video generation tasks:
+
+| Type | Primary Task | Model Requirement | Use Case |
+|------|--------------|-------------------|----------|
+| `quick` | i2v | Image-to-video | Single reference → 5s video |
+| `extended` | extend | Video extension | Continue previous clip |
+| `controlled` | multi | MultiCondition | Temporal keyframe control |
+| `long` | i2v + extend | Orchestrated | Auto-split for >8s videos |
+| `keyframed` | i2i_multi, multi | Multi-reference | Start/end pose interpolation |
+
+Clip types are defined in `src/types/storyboard.ts` (`CLIP_TYPE_TASKS` constant).
+
+---
+
 ## Model Routing Strategy
 
-### Video Generation Models
+### Table-Driven Configuration
 
-| Model | Provider | Use Case | NSFW Support |
-|-------|----------|----------|--------------|
-| WAN 2.1 I2V | fal.ai | Primary - erotic scenes | Yes |
-| Kling O1 | fal.ai | Secondary - cinematic | Limited |
-| Local WAN | RunPod | When healthy | Yes |
+Video models are configured via the `api_models` table with multi-task support:
 
-### Routing Logic
+```sql
+-- Example: Get default I2V model
+SELECT m.*, p.name as provider_name
+FROM api_models m
+JOIN api_providers p ON m.provider_id = p.id
+WHERE m.modality = 'video'
+  AND m.is_active = true
+  AND 'i2v' = ANY(m.default_for_tasks)
+ORDER BY m.priority DESC
+LIMIT 1;
+```
 
-1. Check local WAN worker health via `system_config.workerHealthCache`
-2. If healthy and user prefers local: use local
-3. If unhealthy or user prefers API: use fal.ai WAN 2.1 I2V
-4. For cinematic/SFW content: optionally use Kling O1
-5. Always provide fallback chain
+### Task Types
+
+| Task | Description | Example Models |
+|------|-------------|----------------|
+| `t2v` | Text-to-video | LTX T2V |
+| `i2v` | Image-to-video | WAN 2.1 I2V, LTX I2V |
+| `extend` | Video extension | LTX Extend |
+| `multi` | MultiCondition (keyframes) | LTX MultiCondition |
+| `i2i_multi` | Multi-reference edit | Seedream v4.5 Edit |
+
+### Routing Flow
+
+1. `ClipOrchestrationService.getModelForClipType()` maps clip type → primary task
+2. Query `api_models` with `default_for_tasks` containing the task
+3. Fallback: any active model supporting the task
+4. Route to `fal-image` edge function with resolved model ID
+
+### Async Video Processing
+
+Models with `endpoint_path = 'fal-webhook'` use async submission:
+
+- Submit to `queue.fal.run` with webhook URL
+- `fal-webhook` edge function receives callback
+- Job status tracked via `jobs` table polling
+
+### Provider Configuration
+
+| Provider | Edge Function | Capabilities |
+|----------|---------------|--------------|
+| fal.ai | `fal-image` | Video (I2V, extend, multi), Images |
+| Replicate | `replicate-image` | Images only |
+| Local | `chat_worker` | Chat (not video) |
+
+**Note:** Video generation currently routes exclusively through fal.ai. No provider fallback is implemented yet.
 
 ---
 
@@ -253,6 +308,98 @@ Generate Clips for Each Scene → Export
 
 ---
 
+## Character Studio Integration
+
+Character Studio provides the foundation for character-consistent video generation.
+
+### Canon Pose System
+
+Characters have fixed pose slots stored in `character_canon` table:
+
+| Pose Key | Tags | Use Case |
+|----------|------|----------|
+| `front_neutral` | front, standing | Dialogue, establishing |
+| `side_left` | side | Profile shots |
+| `side_right` | side | Profile shots |
+| `rear` | rear, standing | Walking away |
+| `three_quarter` | 3/4 | Dynamic angles |
+| `bust` | close-up, bust | Emotional moments |
+
+### Role Tagging
+
+Canon images use role tags for semantic filtering:
+
+- `role:position` - Body pose/composition
+- `role:clothing` - Outfit/wardrobe reference
+- `role:character` - Character identity reference
+- `role:scene` - Background/environment
+
+### Reference Flow for Clips
+
+```
+Character Canon (pose slot) → First Clip Reference
+     ↓
+Generate Clip (I2V)
+     ↓
+Extract Chain Frame (45-60%)
+     ↓
+Next Clip Reference → Generate → Extract → ...
+```
+
+### Integration Points
+
+1. **First Clip**: Select character canon image as reference
+2. **Pose Matching**: Map scene intent to pose tag (action → `standing`, dialogue → `front`)
+3. **Clothing Persistence**: Apply `role:clothing` tags to maintain outfit consistency
+4. **Prompt Injection**: Character's `appearance_tags` auto-injected into generation prompts
+
+### Current Limitations
+
+- Clips don't have `character_id` binding (reference images are independent)
+- No automatic appearance tag injection into clip prompts
+- Pose selection is manual per-clip
+- No character consistency validation across clips
+
+---
+
+## Known Workflow Gaps
+
+These gaps prevent production of consistent longer-form videos:
+
+### A. Character Consistency
+
+| Gap | Impact | Priority |
+|-----|--------|----------|
+| No `character_id` on clips | Identity drift over 5+ clips | HIGH |
+| Manual reference selection | User error, inconsistency | HIGH |
+| No appearance tag injection | Prompts lack character details | MEDIUM |
+
+### B. Frame Chaining
+
+| Gap | Impact | Priority |
+|-----|--------|----------|
+| No chain validation | Accidental discontinuity | HIGH |
+| Manual frame extraction | Workflow friction | MEDIUM |
+| No batch operations | Slow for multi-clip scenes | LOW |
+
+### C. Sequence Planning
+
+| Gap | Impact | Priority |
+|-----|--------|----------|
+| Story plan not linked to clips | Context lost during generation | MEDIUM |
+| No previous clip context in AI | Isolated prompt enhancement | MEDIUM |
+| No scene-to-clip mapping | Manual scene breakdown | LOW |
+
+### D. Long-Form Generation
+
+| Gap | Impact | Priority |
+|-----|--------|----------|
+| `long` clip type not orchestrated | Max ~8s per clip | HIGH |
+| No multi-step generation | Can't auto-extend | HIGH |
+| Single provider (fal.ai) | No fallback | MEDIUM |
+
+---
+
 ## Implementation Phases
 
 ### Phase 1: Foundation ✅ COMPLETE
@@ -294,7 +441,7 @@ Generate Clips for Each Scene → Export
 - [x] AI clip type recommendations
 - [x] Prompt enhancement integration
 
-### Phase 4: Generation Flows ✅ COMPLETE
+### Phase 4: Generation Flows ✅ COMPLETE (with caveats)
 
 - [x] ClipOrchestrationService with dynamic model selection
 - [x] Clip type system (quick, extended, controlled, keyframed)
@@ -303,6 +450,12 @@ Generate Clips for Each Scene → Export
 - [x] AssemblyPreview component (client-side playback of clips in sequence)
 - [x] FrameSelector integration in ClipDetailPanel
 - [x] Job polling via jobs table for async completion
+
+**Caveats:**
+
+- `long` clip type defined but multi-step orchestration NOT implemented
+- No provider fallback if fal.ai unavailable
+- Polling-only job tracking (webhook exists but not integrated)
 
 ### Phase 5: Roleplay Integration 🔲 PENDING
 
@@ -323,6 +476,56 @@ Generate Clips for Each Scene → Export
 - [ ] Handle longer videos (beyond edge function timeout)
 - [ ] Advanced transitions and effects
 - [ ] Parallel render processing
+
+### Phase 8: Character-Storyboard Integration 🔲 NEXT
+
+Priority phase addressing character consistency gaps.
+
+**8.1 Character Binding**
+
+- [ ] Add `character_ids` jsonb array to storyboard_clips table
+- [ ] Character selector in ClipDetailPanel
+- [ ] Auto-inject appearance_tags into generation prompts
+
+**8.2 Canon Reference Flow**
+
+- [ ] Canon image picker for first clip reference
+- [ ] Smart pose matching (scene type → pose tag)
+- [ ] Preserve clothing tags across clips
+
+**8.3 Sequence Awareness**
+
+- [ ] Add `sequence_id` to group related clips
+- [ ] Pass previous 2 clips' context to AI enhancement
+- [ ] Store story_beat_id linking clips to AI plan
+
+### Phase 9: Automated Chain Management 🔲 FUTURE
+
+**9.1 Auto Frame Extraction**
+
+- [ ] Extract chain frame on clip completion
+- [ ] Store at optimal percentage per duration
+- [ ] Auto-populate next clip's reference
+
+**9.2 Chain Validation**
+
+- [ ] Visual indicator for broken chains
+- [ ] Warning before generating unchained clip
+- [ ] Batch chain fill for sequences
+
+### Phase 10: Long-Form Orchestration 🔲 FUTURE
+
+**10.1 Multi-Step Generation**
+
+- [ ] Implement actual `long` clip orchestration
+- [ ] I2V (5s) → extend (target - 5s) sequencing
+- [ ] Intelligent split points
+
+**10.2 Provider Fallback**
+
+- [ ] Health check integration for video models
+- [ ] Fallback routing if fal.ai down
+- [ ] Webhook-based job tracking
 
 ---
 
@@ -356,13 +559,16 @@ Generate Clips for Each Scene → Export
 
 ### Hooks
 
-- [useStoryboard.ts](../../src/hooks/useStoryboard.ts)
-- [useClipGeneration.ts](../../src/hooks/useClipGeneration.ts)
+- [useStoryboard.ts](../../src/hooks/useStoryboard.ts) - Project/scene/clip state management
+- [useClipOrchestration.ts](../../src/hooks/useClipOrchestration.ts) - V2 clip generation with model resolution
+- [useStoryboardAI.ts](../../src/hooks/useStoryboardAI.ts) - AI story planning, prompt suggestions
+- [useClipGeneration.ts](../../src/hooks/useClipGeneration.ts) - Legacy (deprecated)
 
 ### Services
 
-- [StoryboardService.ts](../../src/lib/services/StoryboardService.ts)
-- [FrameExtractionService.ts](../../src/lib/services/FrameExtractionService.ts)
+- [StoryboardService.ts](../../src/lib/services/StoryboardService.ts) - CRUD operations
+- [ClipOrchestrationService.ts](../../src/lib/services/ClipOrchestrationService.ts) - Model selection, generation config
+- [FrameExtractionService.ts](../../src/lib/services/FrameExtractionService.ts) - Client-side frame extraction
 
 ### Utilities
 
