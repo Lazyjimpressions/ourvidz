@@ -177,6 +177,17 @@ serve(async (req) => {
     const providerName: string = apiModel.api_providers.name;
     console.log('✅ Using model:', apiModel.display_name, '| Provider:', providerName, '| I2I:', isI2I);
 
+    // ── Model-specific prompt style (allows different models to use different notation) ──
+    const capabilities = apiModel.capabilities as Record<string, any> || {};
+    const promptStyle = capabilities.prompt_style || {};
+    const subjectTokens = promptStyle.subject_tokens || {
+      male: '1boy',
+      female: '1girl',
+      neutral: '1person'
+    };
+    const qualityPrefix: string[] = promptStyle.quality_prefix || ['masterpiece', 'best quality', 'photorealistic'];
+    const qualitySuffix: string[] = promptStyle.quality_suffix || ['studio photography', 'professional lighting', 'sharp focus', 'detailed face'];
+
     // Get API key from provider's secret_name
     const apiKey = Deno.env.get(apiModel.api_providers.secret_name);
     if (!apiKey) {
@@ -245,9 +256,10 @@ serve(async (req) => {
       promptParts.push(canonPromptOverride);
     } else if (isI2I) {
       // === I2I (Directing Mode) ===
-      if (gender === 'male') promptParts.push('1boy');
-      else if (gender === 'female') promptParts.push('1girl');
-      else promptParts.push('1person');
+      const genderToken = gender === 'male' ? subjectTokens.male
+        : gender === 'female' ? subjectTokens.female
+        : subjectTokens.neutral;
+      promptParts.push(genderToken);
 
       if (character.appearance_tags?.length) {
         promptParts.push(...character.appearance_tags.slice(0, 8));
@@ -266,14 +278,14 @@ serve(async (req) => {
 
     } else {
       // === T2I (Exploration Mode) ===
-      promptParts.push('masterpiece', 'best quality', 'photorealistic');
+      promptParts.push(...qualityPrefix);
 
       if (gender === 'male') {
-        promptParts.push('1boy', 'handsome man', 'portrait');
+        promptParts.push(subjectTokens.male, 'portrait');
       } else if (gender === 'female') {
-        promptParts.push('1girl', 'beautiful woman', 'portrait');
+        promptParts.push(subjectTokens.female, 'portrait');
       } else {
-        promptParts.push('1person', 'portrait');
+        promptParts.push(subjectTokens.neutral, 'portrait');
       }
 
       if (presets?.pose) promptParts.push(presets.pose);
@@ -291,7 +303,7 @@ serve(async (req) => {
         console.log('📝 T2I promptOverride:', cleanedOverride.substring(0, 50) + '...');
       }
 
-      promptParts.push('studio photography', 'professional lighting', 'sharp focus', 'detailed face');
+      promptParts.push(...qualitySuffix);
     }
 
     const prompt = promptParts.join(', ');
@@ -378,7 +390,6 @@ serve(async (req) => {
     }
 
     // ── Provider-specific input building ──
-    const capabilities = apiModel.capabilities as Record<string, any> || {};
     const inputSchema = capabilities.input_schema || {};
     const modelMaxImages = inputSchema?.num_images?.max || 1;
     const requestedImages = Math.min(Math.max(1, numImages || 1), 4, modelMaxImages);
