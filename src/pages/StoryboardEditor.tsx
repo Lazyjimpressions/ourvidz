@@ -79,8 +79,10 @@ import {
 import { StoryPlannerSheet } from '@/components/storyboard/StoryPlannerSheet';
 import { AssemblyPreview } from '@/components/storyboard/AssemblyPreview';
 import { CharacterPickerDialog } from '@/components/storyboard/CharacterPickerDialog';
+import { ImagePickerDialog } from '@/components/storyboard/ImagePickerDialog';
 import { StoryboardService } from '@/lib/services/StoryboardService';
 import { Character } from '@/types/roleplay';
+import { toast } from 'sonner';
 
 const StoryboardEditor = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -373,13 +375,16 @@ const StoryboardEditor = () => {
     }
   };
 
-  const handleSelectReference = (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library') => {
-    if (selectedClip) {
-      handleUpdateClip({
-        reference_image_url: imageUrl,
-        reference_image_source: source,
-      });
+  const handleSelectReference = (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library' | 'workspace') => {
+    if (!selectedClip) {
+      toast.info('Select a clip first, then pick a reference image');
+      return;
     }
+    handleUpdateClip({
+      reference_image_url: imageUrl,
+      reference_image_source: source,
+    });
+    setShowLibraryDrawer(false);
   };
 
   const handleSelectMotionPreset = (preset: MotionPreset) => {
@@ -741,15 +746,14 @@ const StoryboardEditor = () => {
         </div>
       </div>
 
-      {/* Library Drawer - mobile */}
-      <Sheet open={showLibraryDrawer} onOpenChange={setShowLibraryDrawer}>
-        <SheetContent side="right" className="w-full sm:w-[300px] p-0 bg-background">
-          <SheetHeader className="px-4 py-3 border-b border-border">
-            <SheetTitle className="text-sm">Library</SheetTitle>
-          </SheetHeader>
-          {libraryContent}
-        </SheetContent>
-      </Sheet>
+      {/* Library/Workspace Image Picker - mobile */}
+      <ImagePickerDialog
+        isOpen={showLibraryDrawer}
+        onClose={() => setShowLibraryDrawer(false)}
+        onSelect={(imageUrl, source) => handleSelectReference(imageUrl, source)}
+        title="Select Reference Image"
+        source="workspace"
+      />
 
       {/* Character Picker */}
       <CharacterPickerDialog

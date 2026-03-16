@@ -14,6 +14,7 @@ import { CharacterCanon } from '@/types/character-hub-v2';
 import { StoryboardClip, MotionPreset } from '@/types/storyboard';
 import { useClipOrchestration } from '@/hooks/useClipOrchestration';
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
+import { WorkspaceAssetService, type UnifiedWorkspaceAsset } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,7 @@ import {
   Library,
   ImageOff,
   Loader2,
+  FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -44,7 +46,7 @@ interface ClipLibraryProps {
   character?: Character;
   characterCanons?: CharacterCanon[];
   clips?: StoryboardClip[];
-  onSelectReference: (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library') => void;
+  onSelectReference: (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library' | 'workspace') => void;
   onSelectMotionPreset: (preset: MotionPreset) => void;
   className?: string;
 }
@@ -303,6 +305,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
 
   const [characterOpen, setCharacterOpen] = useState(true);
   const [framesOpen, setFramesOpen] = useState(true);
+  const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [motionOpen, setMotionOpen] = useState(false);
 
@@ -327,6 +330,31 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
   );
   const { urls: canonSignedUrls, loading: canonLoading } = useBatchSignedUrls(
     canonImages, 'user-library', canonImages.length > 0
+  );
+
+  // --- Workspace images ---
+  const [workspaceAssets, setWorkspaceAssets] = useState<UnifiedWorkspaceAsset[]>([]);
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+
+  useEffect(() => {
+    setWorkspaceLoading(true);
+    WorkspaceAssetService.getUserWorkspaceAssets()
+      .then(assets => {
+        setWorkspaceAssets(assets.filter(a => a.assetType === 'image').slice(0, 20));
+      })
+      .catch(err => {
+        console.error('❌ Failed to load workspace assets:', err);
+        setWorkspaceAssets([]);
+      })
+      .finally(() => setWorkspaceLoading(false));
+  }, []);
+
+  const workspacePaths = useMemo(() =>
+    workspaceAssets.map(a => ({ id: a.id, path: a.tempStoragePath || '' })),
+    [workspaceAssets]
+  );
+  const { urls: workspaceSignedUrls, loading: workspaceSigning } = useBatchSignedUrls(
+    workspacePaths, 'workspace-temp', workspacePaths.length > 0
   );
 
   // --- Library images ---
@@ -462,7 +490,60 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
             </CollapsibleContent>
           </Collapsible>
 
-          {/* My Images section (from user_library) */}
+          {/* Workspace section */}
+          <Collapsible open={workspaceOpen} onOpenChange={setWorkspaceOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-between h-7 px-2 text-xs"
+              >
+                <div className="flex items-center gap-1.5">
+                  <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Workspace</span>
+                  {workspaceAssets.length > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-muted">
+                      {workspaceAssets.length}
+                    </Badge>
+                  )}
+                </div>
+                {workspaceOpen ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              {workspaceLoading ? (
+                <div className="grid grid-cols-3 gap-1">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="aspect-square rounded" />
+                  ))}
+                </div>
+              ) : workspaceAssets.length > 0 ? (
+                <div className="grid grid-cols-3 gap-1">
+                  {workspaceAssets.map((asset) => (
+                    <SignedDraggableImage
+                      key={asset.id}
+                      signedUrl={workspaceSignedUrls[asset.id] || null}
+                      loading={workspaceSigning && !workspaceSignedUrls[asset.id]}
+                      label={asset.originalPrompt?.substring(0, 20) || 'Image'}
+                      onClick={() => {
+                        const url = workspaceSignedUrls[asset.id];
+                        if (url) onSelectReference(url, 'workspace');
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  No workspace images
+                </p>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
           <Collapsible open={libraryOpen} onOpenChange={setLibraryOpen}>
             <CollapsibleTrigger asChild>
               <Button
@@ -488,13 +569,13 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-2">
               {libraryLoading ? (
-                <div className="grid grid-cols-2 gap-1.5">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <Skeleton key={i} className="aspect-square rounded-lg" />
+                <div className="grid grid-cols-3 gap-1">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="aspect-square rounded" />
                   ))}
                 </div>
               ) : libraryImages.length > 0 ? (
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-3 gap-1">
                   {libraryImages.map((asset) => (
                     <SignedDraggableImage
                       key={asset.id}
