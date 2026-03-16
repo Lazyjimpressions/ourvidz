@@ -38,6 +38,7 @@ import {
   Library,
   ImageOff,
   Loader2,
+  FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
