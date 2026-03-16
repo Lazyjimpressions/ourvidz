@@ -87,7 +87,9 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
   const hasVideo = (clip.status === 'completed' || clip.status === 'approved') && clip.video_url;
   const hasExtractedFrame = !!clip.extracted_frame_url;
   const canExtractFrame = hasVideo && onFrameExtracted;
-  const canGenerate = clip.prompt?.trim() && clip.reference_image_url;
+  const hasPrompt = !!clip.prompt?.trim();
+  const hasReference = !!clip.reference_image_url;
+  const canGenerate = hasPrompt; // Reference is recommended but not required
   const canApprove = clip.status === 'completed' && onApprove;
   const isClipGenerating = clip.status === 'generating' || isGenerating;
 
