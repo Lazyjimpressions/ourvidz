@@ -23,3 +23,4 @@ export { ClipCanvas } from './ClipCanvas';
 export { MotionLibrary } from './MotionLibrary';
 export { ClipLibrary } from './ClipLibrary';
 export { ClipDetailPanel } from './ClipDetailPanel';
+export { CharacterPickerDialog } from './CharacterPickerDialog';
