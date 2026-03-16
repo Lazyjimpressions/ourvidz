@@ -3233,6 +3233,16 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
       console.log('🎬 Character-only I2I: Figure notation (setting stripped of character)');
     }
 
+    // ✅ PHASE 5 EXPLICIT I2I CLOTHING FIX
+    // For Seedream/Flux, if there are scene context overrides for clothing, explicitly instruct the model
+    // to change clothes but keep facial consistency.
+    const hasSceneClothingDirective = !!(sceneContext?.clothing || sceneClothingOverrides || sceneDefaultClothing);
+    const isUsingI2I = !!(sceneCharacter.reference_image_url || sceneCharacter.image_url) || !!(userCharacter?.reference_image_url || userCharacter?.image_url);
+
+    if (hasSceneClothingDirective && isUsingI2I) {
+      enhancedScenePrompt += '\n\n[I2I INSTRUCTION: Retain character face perfectly from the reference images, but change clothing to match the description.]';
+    }
+
     console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
     
     // Prompt length governed by prompt_templates.token_limit (upstream LLM generation)
@@ -3809,6 +3819,7 @@ interface SceneContext {
     referenceImage?: string;
   }>;
   setting: string;
+  clothing?: string;
   mood: string;
   actions: string[];
   isNSFW: boolean;
