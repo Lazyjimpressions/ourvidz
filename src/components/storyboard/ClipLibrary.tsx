@@ -14,6 +14,7 @@ import { CharacterCanon } from '@/types/character-hub-v2';
 import { StoryboardClip, MotionPreset } from '@/types/storyboard';
 import { useClipOrchestration } from '@/hooks/useClipOrchestration';
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
+import { WorkspaceAssetService, type UnifiedWorkspaceAsset } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
