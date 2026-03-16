@@ -63,7 +63,7 @@ const DraggableImage: React.FC<{
       }}
       onClick={onClick}
     >
-      <div className="aspect-square bg-gray-950 relative">
+      <div className="aspect-square bg-background relative">
         <img
           src={imageUrl}
           alt={label}
