@@ -149,7 +149,7 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
       {/* Clips strip */}
       <div
         ref={scrollRef}
-        className="flex items-center gap-1 p-4 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent"
+        className="flex items-center gap-1 p-4 overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent"
         onDragEnd={handleDragEnd}
       >
         {clips.length === 0 ? (
