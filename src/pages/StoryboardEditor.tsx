@@ -547,7 +547,7 @@ const StoryboardEditor = () => {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs gap-1.5"
+                className="h-8 min-h-[44px] md:min-h-0 text-xs gap-1.5"
                 onClick={() => setShowStoryPlanner(true)}
               >
                 <Sparkles className="w-3.5 h-3.5" />
