@@ -375,13 +375,16 @@ const StoryboardEditor = () => {
     }
   };
 
-  const handleSelectReference = (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library') => {
-    if (selectedClip) {
-      handleUpdateClip({
-        reference_image_url: imageUrl,
-        reference_image_source: source,
-      });
+  const handleSelectReference = (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library' | 'workspace') => {
+    if (!selectedClip) {
+      toast.info('Select a clip first, then pick a reference image');
+      return;
     }
+    handleUpdateClip({
+      reference_image_url: imageUrl,
+      reference_image_source: source,
+    });
+    setShowLibraryDrawer(false);
   };
 
   const handleSelectMotionPreset = (preset: MotionPreset) => {
