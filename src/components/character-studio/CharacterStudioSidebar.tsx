@@ -111,6 +111,7 @@ export function CharacterStudioSidebar({
   const [selectedPresetKey, setSelectedPresetKey] = useState<string | undefined>(undefined);
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState<SuggestionType | null>(null);
   const [newAppearanceTag, setNewAppearanceTag] = useState('');
+  const [newClothingTag, setNewClothingTag] = useState('');
   const [isUploadingRef, setIsUploadingRef] = useState(false);
   
   // Get roleplay models for AI suggestions
@@ -167,6 +168,24 @@ export function CharacterStudioSidebar({
     if (e.key === 'Enter') {
       e.preventDefault();
       handleAddAppearanceTag();
+    }
+  };
+
+  // Add clothing tag handler
+  const handleAddClothingTag = () => {
+    const tag = newClothingTag.trim();
+    if (tag && !character.clothing_tags.includes(tag)) {
+      onUpdateCharacter({
+        clothing_tags: [...character.clothing_tags, tag]
+      });
+      setNewClothingTag('');
+    }
+  };
+
+  const handleClothingTagKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddClothingTag();
     }
   };
 
@@ -504,9 +523,9 @@ export function CharacterStudioSidebar({
               {character.appearance_tags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {character.appearance_tags.map((tag, index) => (
-                    <Badge 
-                      key={index} 
-                      variant="secondary" 
+                    <Badge
+                      key={index}
+                      variant="secondary"
                       className="text-xs cursor-pointer hover:bg-destructive/20"
                       onClick={() => {
                         const newTags = character.appearance_tags.filter((_, i) => i !== index);
@@ -518,6 +537,47 @@ export function CharacterStudioSidebar({
                   ))}
                 </div>
               )}
+
+              {/* Clothing Tags */}
+              <div className="space-y-2 pt-2">
+                <Label className="text-xs font-medium text-muted-foreground">Clothing Tags</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Add clothing tag..."
+                    value={newClothingTag}
+                    onChange={(e) => setNewClothingTag(e.target.value)}
+                    onKeyDown={handleClothingTagKeyPress}
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddClothingTag}
+                    className="h-8 px-2"
+                    disabled={!newClothingTag.trim()}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                {character.clothing_tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {character.clothing_tags.map((tag, index) => (
+                      <Badge
+                        key={index}
+                        variant="outline"
+                        className="text-xs cursor-pointer hover:bg-destructive/20"
+                        onClick={() => {
+                          const newTags = character.clothing_tags.filter((_, i) => i !== index);
+                          onUpdateCharacter({ clothing_tags: newTags });
+                        }}
+                      >
+                        {tag} ×
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Reference Image - Image Match Mode indicator */}
               {character.reference_image_url && (
