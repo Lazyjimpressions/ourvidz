@@ -237,7 +237,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                     ))}
                 </div>
               ) : (
-                <p className="text-xs text-gray-500 text-center py-4">
+                <p className="text-xs text-muted-foreground text-center py-4">
                   No character selected
                 </p>
               )}
