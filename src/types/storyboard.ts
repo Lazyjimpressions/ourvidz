@@ -408,6 +408,8 @@ export interface UpdateClipInput {
   enhanced_prompt?: string;
   generation_config?: Record<string, unknown>;
   end_frame_url?: string;
+  reference_image_url?: string;
+  reference_image_source?: ReferenceImageSource;
 }
 
 export interface CreateRenderInput {
