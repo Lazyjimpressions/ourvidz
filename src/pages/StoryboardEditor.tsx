@@ -566,7 +566,7 @@ const StoryboardEditor = () => {
             </Button>
 
             {/* Preview */}
-            <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={handleOpenPreview}>
+            <Button variant="outline" size="sm" className="h-8 min-h-[44px] md:min-h-0 text-xs gap-1.5" onClick={handleOpenPreview}>
               <Play className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Preview</span>
             </Button>
