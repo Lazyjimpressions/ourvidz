@@ -209,12 +209,138 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
         )}
       </button>
 
-      {/* Content - responsive grid */}
+      {/* Content - responsive grid; on mobile controls come first for reachability */}
       {isExpanded && (
         <>
-          <div className="px-3 md:px-4 pb-3 md:pb-4 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 max-h-[45vh] md:max-h-none overflow-y-auto">
-            {/* Left: Video preview */}
-            <div className="md:col-span-4">
+          <div className="px-3 md:px-4 pb-3 md:pb-4 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 max-h-[60vh] md:max-h-none overflow-y-auto">
+            {/* Mobile: Controls first (prompt, type, suggestions) */}
+            <div className="md:hidden space-y-3">
+              {/* Empty clip guidance */}
+              {!clip.prompt?.trim() && (
+                <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/40 p-3 text-xs text-muted-foreground space-y-1.5">
+                  <p className="font-medium text-foreground/70">Getting started:</p>
+                  <ol className="list-decimal list-inside space-y-0.5">
+                    <li>Pick a <strong>reference image</strong> (tap the preview below)</li>
+                    <li>Write or select a <strong>motion prompt</strong></li>
+                    <li>Hit <strong>Generate</strong> to create the clip</li>
+                  </ol>
+                </div>
+              )}
+
+              {/* Prompt input */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className="text-xs text-muted-foreground">Motion Prompt</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleEnhancePrompt}
+                    disabled={!clip.prompt?.trim() || isEnhancingPrompt}
+                    className="h-6 px-2 text-[10px] text-purple-400 hover:text-purple-300"
+                  >
+                    {isEnhancingPrompt ? (
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    ) : (
+                      <Wand2 className="w-3 h-3 mr-1" />
+                    )}
+                    Enhance
+                  </Button>
+                </div>
+                <Textarea
+                  value={clip.prompt || ''}
+                  onChange={(e) => onUpdateClip({ prompt: e.target.value })}
+                  placeholder="Describe the motion you want..."
+                  className="min-h-[60px] text-sm bg-muted border-border resize-none"
+                  disabled={isClipGenerating}
+                />
+              </div>
+
+              {/* AI Suggestions */}
+              {promptSuggestions.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground">AI:</span>
+                  {promptSuggestions.map((suggestion, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleUseSuggestion(suggestion)}
+                      className={cn(
+                        'px-2 py-0.5 rounded-full text-[10px] transition-colors',
+                        'border hover:bg-muted',
+                        suggestion.intensity === 'subtle' && 'border-border text-muted-foreground',
+                        suggestion.intensity === 'medium' && 'border-blue-800 text-blue-400',
+                        suggestion.intensity === 'dynamic' && 'border-purple-800 text-purple-400'
+                      )}
+                    >
+                      {suggestion.prompt.length > 30
+                        ? suggestion.prompt.slice(0, 30) + '...'
+                        : suggestion.prompt}
+                    </button>
+                  ))}
+                  {isSuggestingPrompts && (
+                    <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />
+                  )}
+                </div>
+              )}
+
+              {/* Type selector row */}
+              <div className="flex items-start gap-3 flex-wrap">
+                <div className="flex-1 min-w-[140px]">
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Clip Type</Label>
+                  <ClipTypeSelector
+                    value={clip.clip_type || 'quick'}
+                    onChange={handleClipTypeChange}
+                    recommended={recommendedClipType}
+                    disabled={isClipGenerating}
+                    compact
+                  />
+                </div>
+
+                {(clip.clip_type === 'controlled' || clip.motion_preset_id) && (
+                  <div className="flex-1 min-w-[140px]">
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Motion Preset</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowMotionLibrary(true)}
+                      className="w-full justify-start h-8 text-xs border-border"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 mr-2 text-purple-400" />
+                      {clip.motion_preset_id ? 'Change Preset' : 'Select Preset'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Compact reference preview + pick */}
+              <div className="flex items-center gap-2">
+                <div className="w-16 h-10 rounded bg-background overflow-hidden flex-shrink-0 border border-border">
+                  {clip.reference_image_url ? (
+                    <img src={clip.reference_image_url} alt="Ref" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-4 h-4 text-muted-foreground/30" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground">Ref: {getReferenceLabel()}</span>
+                  {onPickReference && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onPickReference}
+                      className="h-6 px-2 text-[10px] border-dashed border-muted-foreground/40"
+                    >
+                      <ImagePlus className="w-3 h-3 mr-1" />
+                      {clip.reference_image_url ? 'Change' : 'Pick Image'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop: Video preview (left column) */}
+            <div className="hidden md:block md:col-span-4">
               <div className="aspect-video bg-background rounded-lg overflow-hidden relative">
                 {hasVideo ? (
                   <>
@@ -233,9 +359,9 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
                       className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/40 transition-colors"
                     >
                       {isPlaying ? (
-                        <Pause className="w-8 md:w-10 h-8 md:h-10 text-white/80" />
+                        <Pause className="w-10 h-10 text-white/80" />
                       ) : (
-                        <Play className="w-8 md:w-10 h-8 md:h-10 text-white/80" />
+                        <Play className="w-10 h-10 text-white/80" />
                       )}
                     </button>
                   </>
@@ -334,8 +460,8 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
               )}
             </div>
 
-            {/* Right: Controls */}
-            <div className="md:col-span-8 space-y-3">
+            {/* Desktop: Controls (right column) */}
+            <div className="hidden md:block md:col-span-8 space-y-3">
               {/* Empty clip guidance */}
               {!clip.prompt?.trim() && !clip.reference_image_url && (
                 <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/40 p-3 text-xs text-muted-foreground space-y-1.5">
