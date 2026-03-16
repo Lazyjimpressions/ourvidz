@@ -211,7 +211,7 @@ export const ClipDetailPanel: React.FC<ClipDetailPanelProps> = ({
 
       {/* Content - responsive grid */}
       {isExpanded && (
-        <div className="px-3 md:px-4 pb-4 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4">
+        <div className="px-3 md:px-4 pb-4 flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-4 max-h-[60vh] md:max-h-none overflow-y-auto">
           {/* Left: Video preview */}
           <div className="md:col-span-4">
             <div className="aspect-video bg-background rounded-lg overflow-hidden relative">

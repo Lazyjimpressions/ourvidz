@@ -226,12 +226,12 @@ export const ClipCanvas: React.FC<ClipCanvasProps> = ({
               onDrop={handleDropZoneDrop}
             >
               {isAddingClip ? (
-                <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
+              <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
               ) : (
                 <>
-                  <Plus className="w-5 h-5 text-gray-500" />
-                  <span className="text-[10px] text-gray-500">Add Clip</span>
-                  <span className="text-[8px] text-gray-600">or drop image</span>
+                  <Plus className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">Add Clip</span>
+                  <span className="text-[8px] text-muted-foreground/50">or drop image</span>
                 </>
               )}
             </div>

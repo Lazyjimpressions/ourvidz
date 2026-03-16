@@ -597,27 +597,30 @@ const StoryboardEditor = () => {
         {activeProject.ai_story_plan &&
          (activeProject.ai_story_plan.sceneBreakdown?.length > 0 ||
           activeProject.ai_story_plan.storyBeats?.length > 0) && (
-          <Collapsible open={storyPlanOpen} onOpenChange={setStoryPlanOpen} className="border-b border-border bg-muted/40">
-            <CollapsibleTrigger asChild>
+          <>
+            {/* Mobile: show as button that opens Sheet */}
+            <div className="md:hidden border-b border-border bg-muted/40">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-foreground/70 hover:bg-muted/50 hover:text-foreground"
+                onClick={() => setStoryPlanOpen(true)}
               >
-                {storyPlanOpen ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                )}
                 <BookOpen className="h-3.5 w-3.5 shrink-0" />
                 <span>Story</span>
                 <span className="text-muted-foreground">
                   ({activeProject.ai_story_plan.sceneBreakdown?.length ?? 0} scenes)
                 </span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 ml-auto" />
               </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="max-h-48 overflow-y-auto px-4 pb-3 pt-0">
-                <div className="space-y-2 text-xs text-muted-foreground">
+            </div>
+
+            {/* Mobile: Sheet for story plan */}
+            <Sheet open={storyPlanOpen} onOpenChange={setStoryPlanOpen}>
+              <SheetContent side="bottom" className="max-h-[60vh] bg-background md:hidden">
+                <SheetHeader className="pb-3">
+                  <SheetTitle className="text-sm">Story Plan</SheetTitle>
+                </SheetHeader>
+                <div className="overflow-y-auto space-y-2 text-xs text-muted-foreground pb-safe">
                   {activeProject.ai_story_plan.sceneBreakdown?.map((scene, i) => (
                     <div key={i} className="rounded border border-border bg-muted/60 px-3 py-2">
                       <div className="font-medium text-foreground/80">
@@ -630,9 +633,47 @@ const StoryboardEditor = () => {
                     </div>
                   ))}
                 </div>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
+              </SheetContent>
+            </Sheet>
+
+            {/* Desktop: inline Collapsible */}
+            <Collapsible open={storyPlanOpen} onOpenChange={setStoryPlanOpen} className="hidden md:block border-b border-border bg-muted/40">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-4 py-2 text-left text-xs font-medium text-foreground/70 hover:bg-muted/50 hover:text-foreground"
+                >
+                  {storyPlanOpen ? (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                  <span>Story</span>
+                  <span className="text-muted-foreground">
+                    ({activeProject.ai_story_plan.sceneBreakdown?.length ?? 0} scenes)
+                  </span>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="max-h-48 overflow-y-auto px-4 pb-3 pt-0">
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    {activeProject.ai_story_plan.sceneBreakdown?.map((scene, i) => (
+                      <div key={i} className="rounded border border-border bg-muted/60 px-3 py-2">
+                        <div className="font-medium text-foreground/80">
+                          Scene {scene.sceneNumber}: {scene.title}
+                        </div>
+                        {scene.description && (
+                          <p className="mt-1 text-muted-foreground">{scene.description}</p>
+                        )}
+                        <span className="text-muted-foreground/60">{scene.targetDuration}s</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </>
         )}
 
         {/* Scene Strip */}
