@@ -305,6 +305,15 @@ serve(async (req) => {
     });
 
     // Create job record
+    // Map model_family to valid model_type (constraint: sdxl, wan, rv51, flux, replicate-sdxl, replicate-sdxl-i2i)
+    const modelFamily = (apiModel.model_family || '').toLowerCase();
+    let validModelType = 'flux'; // Default for fal provider
+    if (['sdxl', 'wan', 'rv51', 'flux'].includes(modelFamily)) {
+      validModelType = modelFamily;
+    } else if (providerName === 'replicate') {
+      validModelType = isI2I ? 'replicate-sdxl-i2i' : 'replicate-sdxl';
+    }
+
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .insert({
@@ -314,7 +323,7 @@ serve(async (req) => {
         status: 'queued',
         quality: 'high',
         api_model_id: apiModel.id,
-        model_type: apiModel.model_family?.toLowerCase() || providerName,
+        model_type: validModelType,
         format: 'image',
         metadata: {
           type: 'character_portrait',
