@@ -157,8 +157,8 @@ export class MemoryManager {
     this.cleanupOldSessionData(5 * 60 * 1000); // 5 minutes
 
     // Force garbage collection if available
-    if (window.gc) {
-      window.gc();
+    if ((window as any).gc) {
+      (window as any).gc();
     }
   }
 
