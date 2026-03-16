@@ -52,8 +52,8 @@ const DraggableImage: React.FC<{
 }> = ({ imageUrl, label, sublabel, onDragStart, onClick }) => {
   return (
     <button
-      className="group relative rounded-lg overflow-hidden border border-gray-800 hover:border-gray-600
-                 transition-all cursor-grab active:cursor-grabbing bg-gray-900/50"
+      className="group relative rounded-lg overflow-hidden border border-border hover:border-muted-foreground/40
+                 transition-all cursor-grab active:cursor-grabbing bg-muted/50"
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData('text/uri-list', imageUrl);
