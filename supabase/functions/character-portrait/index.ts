@@ -377,50 +377,68 @@ serve(async (req) => {
     let modelInput: Record<string, any> = {};
 
     if (providerName === 'fal') {
-      // ── Fal input ──
+      // ── Fal input (fully dynamic - no hardcoded params) ──
+      // Start with prompt + model's input_defaults (contains model-specific sizing, aspect_ratio, etc.)
       modelInput = {
         prompt,
         ...(apiModel.input_defaults || {}),
-        image_size: 'portrait_4_3',
-        enable_safety_checker: effectiveContentRating !== 'nsfw',
       };
 
-      if (requestedImages > 1 && modelMaxImages > 1) {
+      // Only add enable_safety_checker if model supports it (check schema)
+      if (inputSchema.enable_safety_checker) {
+        modelInput.enable_safety_checker = effectiveContentRating !== 'nsfw';
+      }
+
+      // Batch generation: only if model supports num_images
+      if (requestedImages > 1 && modelMaxImages > 1 && inputSchema.num_images) {
         modelInput.num_images = requestedImages;
         console.log(`📸 Batch generation: ${requestedImages} images (model max: ${modelMaxImages})`);
       }
 
       if (isI2I && signedReferenceUrl) {
         const effectiveRefStrength = canonReferenceStrength ?? (typeof referenceStrength === 'number' ? referenceStrength : 0.75);
-        const promptStrength = Math.round((1 - effectiveRefStrength) * 100) / 100;
-        modelInput.prompt_strength = promptStrength;
-        console.log(`🎛️ Reference strength: ${effectiveRefStrength} → prompt_strength: ${promptStrength}`);
+        const strengthValue = Math.round((1 - effectiveRefStrength) * 100) / 100;
 
+        // Set strength param based on what model supports (prompt_strength OR strength)
+        if (inputSchema.prompt_strength) {
+          modelInput.prompt_strength = strengthValue;
+          console.log(`🎛️ Reference strength: ${effectiveRefStrength} → prompt_strength: ${strengthValue}`);
+        } else if (inputSchema.strength) {
+          modelInput.strength = strengthValue;
+          console.log(`🎛️ Reference strength: ${effectiveRefStrength} → strength: ${strengthValue}`);
+        }
+
+        // Determine image param format from schema (image_urls array OR image_url string)
         const requiresArray = capabilities.requires_image_urls_array === true;
         if (requiresArray || inputSchema?.image_urls) {
           modelInput.image_urls = [signedReferenceUrl];
-        } else {
+          console.log(`✅ I2I: Using image_urls (array format)`);
+        } else if (inputSchema?.image_url) {
           modelInput.image_url = signedReferenceUrl;
+          console.log(`✅ I2I: Using image_url (string format)`);
+        } else {
+          // Fallback: try image_url for backward compatibility
+          modelInput.image_url = signedReferenceUrl;
+          console.log(`⚠️ I2I: No schema info, defaulting to image_url`);
         }
       }
 
     } else if (providerName === 'replicate') {
-      // ── Replicate input ──
+      // ── Replicate input (fully dynamic - no hardcoded params) ──
+      // Start with prompt + model's input_defaults (contains model-specific sizing)
       modelInput = {
         prompt,
-        width: 768,
-        height: 1024,
         ...(apiModel.input_defaults || {}),
-        prompt: prompt, // Ensure prompt overrides input_defaults
       };
 
-      if (requestedImages > 1) {
+      // Batch generation: only if model supports num_outputs
+      if (requestedImages > 1 && inputSchema.num_outputs) {
         modelInput.num_outputs = requestedImages;
         console.log(`📸 Batch generation: ${requestedImages} images`);
       }
 
-      // Replicate models are generally uncensored; some support disable_safety_checker
-      if (effectiveContentRating === 'nsfw') {
+      // Only add disable_safety_checker if model supports it (check schema)
+      if (inputSchema.disable_safety_checker && effectiveContentRating === 'nsfw') {
         modelInput.disable_safety_checker = true;
       }
 
