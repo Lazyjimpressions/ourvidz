@@ -256,7 +256,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                   <Image className="w-3.5 h-3.5 text-green-400" />
                   <span>Clip Frames</span>
                   {clipsWithFrames.length > 0 && (
-                    <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-gray-800">
+                    <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-muted">
                       {clipsWithFrames.length}
                     </Badge>
                   )}
