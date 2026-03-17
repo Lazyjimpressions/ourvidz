@@ -1726,8 +1726,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_default_clothing: (selectedScene as any)?.default_clothing || null,
           scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           // NOTE: Template selection is handled server-side based on model_provider
-          selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
-          scene_style: sceneStyle, // ✅ Scene style for user representation
+           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Multi-reference: user character reference for both_characters scenes
           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
