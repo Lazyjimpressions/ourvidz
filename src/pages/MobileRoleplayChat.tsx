@@ -1923,8 +1923,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_default_clothing: (selectedScene as any)?.default_clothing || null,
           scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
-          selected_image_model: validImageModel,
-          scene_style: sceneStyle,
+           selected_image_model: validImageModel,
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle,
           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           consistency_settings: consistencySettings,
           scene_continuity_enabled: sceneContinuityEnabled,
