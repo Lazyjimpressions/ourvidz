@@ -1548,9 +1548,10 @@ const MobileRoleplayChat: React.FC = () => {
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           // NOTE: Template selection is handled server-side based on model_provider
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
-          selected_image_model: validImageModel,
-          // ✅ Scene style for user representation in images
-          scene_style: sceneStyle,
+           selected_image_model: validImageModel,
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           // ✅ Scene style for user representation in images
+           scene_style: sceneStyle,
           // ✅ Multi-reference: user character reference for both_characters scenes
           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
