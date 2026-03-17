@@ -119,6 +119,7 @@ export default function CharacterStudioV2() {
         generation_metadata: {},
         is_primary: portraits.length === 0, // Make primary if first portrait
         sort_order: portraits.length,
+        tags: [],
       });
       toast({
         title: 'Pinned to Canon',

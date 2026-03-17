@@ -962,6 +962,7 @@ const MobileRoleplayChat: React.FC = () => {
             user_role: userRole || null,
             user_character_id: effectiveUserCharacterId || null,
             selected_image_model: effectiveImageModel,
+            selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
             // Scene style for user representation in images
             scene_style: effectiveSceneStyle,
             // ✅ Multi-reference: user character reference for both_characters scenes
@@ -1547,9 +1548,10 @@ const MobileRoleplayChat: React.FC = () => {
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           // NOTE: Template selection is handled server-side based on model_provider
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
-          selected_image_model: validImageModel,
-          // ✅ Scene style for user representation in images
-          scene_style: sceneStyle,
+           selected_image_model: validImageModel,
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           // ✅ Scene style for user representation in images
+           scene_style: sceneStyle,
           // ✅ Multi-reference: user character reference for both_characters scenes
           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
@@ -1724,8 +1726,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_default_clothing: (selectedScene as any)?.default_clothing || null,
           scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           // NOTE: Template selection is handled server-side based on model_provider
-          selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
-          scene_style: sceneStyle, // ✅ Scene style for user representation
+           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Multi-reference: user character reference for both_characters scenes
           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
@@ -1920,8 +1923,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_default_clothing: (selectedScene as any)?.default_clothing || null,
           scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
-          selected_image_model: validImageModel,
-          scene_style: sceneStyle,
+           selected_image_model: validImageModel,
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle,
           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           consistency_settings: consistencySettings,
           scene_continuity_enabled: sceneContinuityEnabled,
@@ -2048,11 +2052,12 @@ const MobileRoleplayChat: React.FC = () => {
           content_tier: contentTier,
           scene_generation: true,
           user_id: user.id,
-          selected_image_model: getValidImageModel(),
-          scene_style: sceneStyle,
-          // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
-          consistency_settings: effectiveConsistencySettings,
+           selected_image_model: getValidImageModel(),
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle,
+           // ✅ Multi-reference: user character reference for both_characters scenes
+           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
+           consistency_settings: effectiveConsistencySettings,
           // Scene regeneration/modification fields
           scene_prompt_override: editedPrompt,
           // Only include current_scene_image_url for I2I mode (signed if needed)
@@ -2184,8 +2189,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           scene_preview_image_url: signedScenePreviewUrl || null, // ✅ First-scene I2I from template image
           user_id: user.id,
-          selected_image_model: getValidImageModel(),
-          scene_style: sceneStyle, // ✅ Scene style for user representation
+           selected_image_model: getValidImageModel(),
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle, // ✅ Scene style for user representation
           // ✅ Multi-reference: user character reference for both_characters scenes
           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
           // ✅ Pass consistency settings from UI
@@ -2334,15 +2340,16 @@ const MobileRoleplayChat: React.FC = () => {
           scene_default_clothing: (selectedScene as any)?.default_clothing || null,
           scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           user_id: user.id,
-          selected_image_model: getValidImageModel(),
-          scene_style: sceneStyle, // ✅ Scene style for user representation
-          // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
-          // ✅ Pass consistency settings from UI
-          consistency_settings: consistencySettings,
-          // NOTE: Template selection is handled server-side based on model_provider
-          // 🔄 Scene continuity (fresh conversation - no previous scene)
-          scene_continuity_enabled: sceneContinuityEnabled,
+           selected_image_model: getValidImageModel(),
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle, // ✅ Scene style for user representation
+           // ✅ Multi-reference: user character reference for both_characters scenes
+           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
+           // ✅ Pass consistency settings from UI
+           consistency_settings: consistencySettings,
+           // NOTE: Template selection is handled server-side based on model_provider
+           // 🔄 Scene continuity (fresh conversation - no previous scene)
+           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: null,
           previous_scene_image_url: null
         }

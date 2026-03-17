@@ -665,6 +665,8 @@ export class StoryboardService {
       primary_character: data.primary_character ? {
         id: (data.primary_character as Record<string, unknown>).id as string,
         name: (data.primary_character as Record<string, unknown>).name as string,
+        description: (data.primary_character as Record<string, unknown>).description as string || '',
+        image_url: (data.primary_character as Record<string, unknown>).image_url as string || '',
         gender: (data.primary_character as Record<string, unknown>).gender as string,
         appearance_tags: ((data.primary_character as Record<string, unknown>).appearance_tags as string[]) || [],
         clothing_tags: ((data.primary_character as Record<string, unknown>).clothing_tags as string[]) || [],
