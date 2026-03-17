@@ -2052,11 +2052,12 @@ const MobileRoleplayChat: React.FC = () => {
           content_tier: contentTier,
           scene_generation: true,
           user_id: user.id,
-          selected_image_model: getValidImageModel(),
-          scene_style: sceneStyle,
-          // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
-          consistency_settings: effectiveConsistencySettings,
+           selected_image_model: getValidImageModel(),
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle,
+           // ✅ Multi-reference: user character reference for both_characters scenes
+           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
+           consistency_settings: effectiveConsistencySettings,
           // Scene regeneration/modification fields
           scene_prompt_override: editedPrompt,
           // Only include current_scene_image_url for I2I mode (signed if needed)
