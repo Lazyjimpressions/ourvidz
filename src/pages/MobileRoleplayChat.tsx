@@ -962,6 +962,7 @@ const MobileRoleplayChat: React.FC = () => {
             user_role: userRole || null,
             user_character_id: effectiveUserCharacterId || null,
             selected_image_model: effectiveImageModel,
+            selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
             // Scene style for user representation in images
             scene_style: effectiveSceneStyle,
             // ✅ Multi-reference: user character reference for both_characters scenes
