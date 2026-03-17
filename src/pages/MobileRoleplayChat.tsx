@@ -2339,15 +2339,16 @@ const MobileRoleplayChat: React.FC = () => {
           scene_default_clothing: (selectedScene as any)?.default_clothing || null,
           scene_clothing_overrides: (selectedScene as any)?.character_clothing_overrides || null,
           user_id: user.id,
-          selected_image_model: getValidImageModel(),
-          scene_style: sceneStyle, // ✅ Scene style for user representation
-          // ✅ Multi-reference: user character reference for both_characters scenes
-          user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
-          // ✅ Pass consistency settings from UI
-          consistency_settings: consistencySettings,
-          // NOTE: Template selection is handled server-side based on model_provider
-          // 🔄 Scene continuity (fresh conversation - no previous scene)
-          scene_continuity_enabled: sceneContinuityEnabled,
+           selected_image_model: getValidImageModel(),
+           selected_i2i_model: selectedI2IModel !== 'auto' ? selectedI2IModel : undefined,
+           scene_style: sceneStyle, // ✅ Scene style for user representation
+           // ✅ Multi-reference: user character reference for both_characters scenes
+           user_character_reference_url: selectedUserCharacter?.reference_image_url || selectedUserCharacter?.image_url || null,
+           // ✅ Pass consistency settings from UI
+           consistency_settings: consistencySettings,
+           // NOTE: Template selection is handled server-side based on model_provider
+           // 🔄 Scene continuity (fresh conversation - no previous scene)
+           scene_continuity_enabled: sceneContinuityEnabled,
           previous_scene_id: null,
           previous_scene_image_url: null
         }

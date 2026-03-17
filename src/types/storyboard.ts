@@ -399,6 +399,7 @@ export interface UpdateClipInput {
   extraction_percentage?: number;
   extraction_timestamp_ms?: number;
   clip_order?: number;
+  job_id?: string;
   // V2 fields
   clip_type?: ClipType;
   parent_clip_id?: string;
