@@ -506,6 +506,7 @@ export type Database = {
           is_primary: boolean | null
           prompt: string | null
           sort_order: number | null
+          tags: string[] | null
           thumbnail_url: string | null
           updated_at: string | null
         }
@@ -519,6 +520,7 @@ export type Database = {
           is_primary?: boolean | null
           prompt?: string | null
           sort_order?: number | null
+          tags?: string[] | null
           thumbnail_url?: string | null
           updated_at?: string | null
         }
@@ -532,6 +534,7 @@ export type Database = {
           is_primary?: boolean | null
           prompt?: string | null
           sort_order?: number | null
+          tags?: string[] | null
           thumbnail_url?: string | null
           updated_at?: string | null
         }
