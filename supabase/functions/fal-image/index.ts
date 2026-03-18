@@ -596,12 +596,37 @@ async function buildModelInput(
         }
       }
 
-      // ── MultiCondition aspect_ratio override (MUST run after images[] populated) ──
-      // When images[] are present, force aspect_ratio=auto so model matches source dimensions
+      // ── MultiCondition defensive sanitization (MUST run after images[]/videos[] populated) ──
       if (modelInput.images && Array.isArray(modelInput.images) && modelInput.images.length > 0) {
+        // 1. Force aspect_ratio=auto so model matches source dimensions
         const prevAR = modelInput.aspect_ratio;
         modelInput.aspect_ratio = 'auto';
         console.log(`🎯 MultiCondition: forcing aspect_ratio=auto (was "${prevAR}")`);
+
+        // 2. Sanitize all start_frame_num values to valid multiples of 8
+        const numFrames = modelInput.num_frames || 121;
+        const maxValidFrame = numFrames - 1; // e.g. 120 for 121 frames
+        for (const img of modelInput.images) {
+          const orig = img.start_frame_num;
+          // Snap to nearest multiple of 8, clamp to [0, maxValidFrame]
+          const snapped = Math.min(Math.max(0, Math.round(orig / 8) * 8), maxValidFrame);
+          if (snapped !== orig) {
+            img.start_frame_num = snapped;
+            console.log(`🔧 Frame sanitize: images[] start_frame_num ${orig} → ${snapped}`);
+          }
+        }
+
+        // 3. Sanitize videos[] start_frame_num as well
+        if (modelInput.videos && Array.isArray(modelInput.videos)) {
+          for (const vid of modelInput.videos) {
+            const orig = vid.start_frame_num;
+            const snapped = Math.min(Math.max(0, Math.round(orig / 8) * 8), maxValidFrame);
+            if (snapped !== orig) {
+              vid.start_frame_num = snapped;
+              console.log(`🔧 Frame sanitize: videos[] start_frame_num ${orig} → ${snapped}`);
+            }
+          }
+        }
       }
 
       // I2V reference image (non-extend, non-multi)
