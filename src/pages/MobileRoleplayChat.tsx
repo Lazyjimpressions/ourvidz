@@ -1643,6 +1643,7 @@ const MobileRoleplayChat: React.FC = () => {
         });
 
         setMessages(prev => [...prev, characterMessage]);
+        setNewMessageIds(prev => new Set(prev).add(characterMessage.id));
 
         // Start job polling if scene generation was initiated
         if (newJobId) {
