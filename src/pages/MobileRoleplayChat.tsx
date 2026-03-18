@@ -2536,7 +2536,7 @@ const MobileRoleplayChat: React.FC = () => {
             <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
             <div className="text-foreground text-lg">Loading character...</div>
             {kickoffError && (
-              <div className="text-red-400 text-sm max-w-md">
+              <div className="text-destructive text-sm max-w-md">
                 <p>Error: {kickoffError}</p>
                 <Button 
                   onClick={handleRetryKickoff}
