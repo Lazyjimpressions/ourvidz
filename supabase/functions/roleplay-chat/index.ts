@@ -2890,10 +2890,11 @@ const sceneContext = analyzeSceneContent(response);
     } else if (sceneContext?.actions?.length > 0) {
       // ⚡ EFFICIENCY: Skip narrative LLM call when actions are already extracted (~7s saved)
       // ✅ FIX: Prefer authoritative location sources over weak pattern matching
-      // Priority: 1) currentLocation (from conversation DB), 2) sceneTemplatePrompt (scene template),
-      //           3) sceneContextParam (UI scene_context), 4) pattern-matched setting (fallback)
+      // Priority: 1) currentLocation (from conversation DB, updated by scene trigger),
+      //           2) sceneTemplatePrompt (scene template's scene_prompt from scenes table),
+      //           3) pattern-matched setting from AI response (weakest, often wrong)
       const patternSetting = sceneContext.setting || 'the scene';
-      const authoritativeSetting = currentLocation || sceneTemplatePrompt || sceneContextParam || null;
+      const authoritativeSetting = currentLocation || (sceneTemplatePrompt && !isFirstScene ? sceneTemplatePrompt : null);
       const setting = authoritativeSetting || patternSetting;
       const mood = sceneContext.mood || 'engaging';
       const visuals = sceneContext.visualElements?.slice(0, 3).join(', ') || '';
@@ -2901,7 +2902,7 @@ const sceneContext = analyzeSceneContent(response);
       scenePrompt = `${setting}. ${visuals ? `Visual details: ${visuals}.` : ''} The mood is ${mood}.`;
       sceneTemplateName = 'Direct action extraction (no narrative LLM)';
       console.log('⚡ EFFICIENCY: Skipped narrative LLM call, using extracted actions directly:', scenePrompt.substring(0, 150));
-      console.log('🎯 Setting source:', authoritativeSetting ? 'authoritative (location/template/context)' : 'pattern-matched fallback');
+      console.log('🎯 Setting source:', authoritativeSetting ? `authoritative: "${authoritativeSetting.substring(0, 80)}..."` : `pattern-matched fallback: "${patternSetting}"`);
     } else {
       // Generate AI-powered scene narrative using OpenRouter (fallback when no actions extracted)
       console.log('🎬 Generating scene narrative for character:', sceneCharacter.name);
