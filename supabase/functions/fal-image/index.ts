@@ -537,8 +537,19 @@ async function buildModelInput(
       if (body.quality === 'fast' && !body.input?.resolution) modelInput.resolution = '480p';
       else if (body.quality === 'high' && !body.input?.resolution) modelInput.resolution = modelInput.resolution || '720p';
 
-      // Aspect ratio from metadata
-      if (body.metadata?.aspectRatio) modelInput.aspect_ratio = body.metadata.aspectRatio;
+      // Aspect ratio from metadata — but NOT when MultiCondition images[] are present
+      // (images[] needs aspect_ratio: "auto" so the model matches source image dimensions)
+      if (body.metadata?.aspectRatio) {
+        if (modelInput.images && Array.isArray(modelInput.images) && modelInput.images.length > 0) {
+          modelInput.aspect_ratio = 'auto';
+          console.log(`🎯 MultiCondition: forcing aspect_ratio=auto (ignoring metadata ${body.metadata.aspectRatio})`);
+        } else if (body.input?.aspect_ratio === 'auto') {
+          modelInput.aspect_ratio = 'auto';
+          console.log(`🎯 Client requested aspect_ratio=auto, preserving it`);
+        } else {
+          modelInput.aspect_ratio = body.metadata.aspectRatio;
+        }
+      }
 
       // MultiCondition: images[] array with temporal frame positions
       if (body.input.images && Array.isArray(body.input.images)) {

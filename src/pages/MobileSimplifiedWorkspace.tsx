@@ -458,14 +458,16 @@ const MobileSimplifiedWorkspace = () => {
   }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, navigate, location.pathname, location.search]);
 
   // Auto-populate prompt with character swap hints when both image + motion video refs are loaded
+  // Only augment if user has already typed a scene description — never augment an empty prompt
   useEffect(() => {
     if (!referenceImageUrl || !motionRefVideoUrl) return;
+    if (!prompt.trim()) return; // Don't augment empty prompts — user needs to describe the scene first
     // Only augment if user hasn't already included these hints
     const hasAppearanceHint = /same appearance|input image|reference image|character from/i.test(prompt);
     const hasMotionHint = /matching (movement|choreography|motion)|reference video|same movement/i.test(prompt);
     if (!hasAppearanceHint || !hasMotionHint) {
       let augmented = prompt.trimEnd();
-      if (augmented && !augmented.endsWith('.') && !augmented.endsWith(',')) augmented += '.';
+      if (!augmented.endsWith('.') && !augmented.endsWith(',')) augmented += '.';
       if (!hasAppearanceHint) augmented += ' Same appearance as the input image';
       if (!hasMotionHint) augmented += ', matching choreography of reference video';
       setPrompt(augmented.trim());

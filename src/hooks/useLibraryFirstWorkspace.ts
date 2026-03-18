@@ -1491,6 +1491,18 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 video_url: stripToStoragePath(motionRefVideoUrl),
                 start_frame_num: 0,
               }];
+              
+              // Identity-lock: when only 1 image keyframe + motion video, duplicate image to last frame
+              // This anchors character identity at both start AND end, reducing drift toward source-video subject
+              if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
+                const lastFrame = Math.max(0, (maxFrame || 120) - 1);
+                inputObj.images.push({
+                  image_url: inputObj.images[0].image_url,
+                  start_frame_num: lastFrame,
+                  strength: inputObj.images[0].strength ?? 1,
+                });
+                console.log(`🔒 Identity-lock: duplicated image anchor to frame ${lastFrame} for stronger character retention`);
+              }
             }
             
             // Don't set image_url -- multi uses images[]/videos[] arrays

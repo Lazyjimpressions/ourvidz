@@ -1,47 +1,42 @@
 
-Updated diagnosis from your latest logs:
+# Video Character Swap — Fix: Conditioning Quality
 
-1) The pipeline is now technically correct (no transport/signing issue):
-- `images[]` has a valid signed portrait URL
-- `videos[]` has a valid signed motion URL
-- MultiCondition model is selected and runs successfully
+## Problem
+Character swap was technically working (images[] + videos[] reaching fal.ai correctly) but output didn't retain character identity because:
+1. `aspect_ratio` was overwritten from `"auto"` to `"1:1"` by metadata in edge function
+2. Single image anchor drifted toward motion-video subject over time
+3. Hint-only prompts ("Same appearance...") gave model no scene intent
 
-2) The failure is now conditioning quality, not request validity.
-Your logged fal payload shows two key adherence weaknesses:
-- `aspect_ratio` is still sent as `1:1` (not `auto`) even with `images[]`
-- Prompt is only control hints (“Same appearance… matching choreography…”) with no scene/subject intent
+## Changes Made
 
-3) What should happen:
-With this setup, output should keep the reference person’s identity (face/hair/look) while borrowing movement/camera timing from the motion video. It won’t be pixel-identical, but it should be clearly the same character.
+### 1. ✅ Edge function: aspect_ratio guard (`fal-image/index.ts`)
+- When `images[]` is present (MultiCondition), force `aspect_ratio: "auto"` regardless of metadata
+- Prevents metadata `aspectRatio` from overwriting the client's explicit `"auto"` setting
+- Added logging for verification
 
-Implementation plan (targeted fixes):
+### 2. ✅ Identity-lock: end-frame duplication (`useLibraryFirstWorkspace.ts`)
+- When exactly 1 image keyframe + motion video, auto-duplicates the portrait to the last frame
+- Only triggers when end-keyframe slot is empty (manual end-ref takes priority)
+- Anchors character identity at both start AND end, reducing drift
 
-1. Preserve MultiCondition aspect-ratio behavior (highest impact)
-- File: `supabase/functions/fal-image/index.ts`
-- Change precedence so metadata `aspectRatio` does NOT overwrite multi-conditioning `images[]` runs.
-- If `images[]` is present for LTX MultiCondition, force/preserve `aspect_ratio: "auto"` in final model input.
-- Add explicit log of effective aspect ratio (`aspect_ratio_effective`) for verification.
+### 3. ✅ Prompt guard: no empty/hint-only submissions (`MobileSimplifiedWorkspace.tsx`)
+- `useEffect` augmentation now skips empty prompts — user must type scene description first
+- Hints only append once user has written something meaningful
 
-2. Add identity-lock fallback when only one image anchor is provided
-- File: `src/hooks/useLibraryFirstWorkspace.ts`
-- In multi mode with motion video + exactly one image keyframe, auto-add a second anchor of the same image at the last frame.
-- Keep manual end-keyframe behavior higher priority (only auto-duplicate when end slot is empty).
-- Result: stronger identity retention across full clip, less drift toward source-video subject.
+### 4. ✅ Submit validation: hint-only detection (`MobileSimplePromptInput.tsx`)
+- Detects character-swap mode (image ref + motion video)
+- Blocks generation if prompt is only boilerplate hints with no scene intent
+- Shows clear error: "Describe the scene — hints alone aren't enough"
 
-3. Tighten prompt UX so hints are visible but not “hint-only”
-- File: `src/pages/MobileSimplifiedWorkspace.tsx`
-- Keep visible prompt augmentation (as requested), but block generation when prompt is only boilerplate hints.
-- Require at least minimal scene intent (e.g., “woman dancing in studio at night”) before submit.
-- Keep hints editable in the box so user controls direction.
-
-4. Add guardrails at submit layer
-- File: `src/components/workspace/MobileSimplePromptInput.tsx`
-- Detect character-swap state (image keyframe + motion video) and show a clear validation message if prompt is empty/hint-only.
-- This prevents low-signal generations that look unrelated.
-
-5. Verification plan
-- Re-run same case and confirm in `api_usage_logs.request_payload`:
-  - `aspect_ratio: "auto"`
-  - `images` has 2 entries (start + end fallback) when only one portrait supplied
-  - prompt contains user scene intent + optional hints
-- Validate output identity consistency across start/middle/end frames, not just frame 1.
+## Expected Payload After Fix
+```json
+{
+  "aspect_ratio": "auto",
+  "images": [
+    { "image_url": "...", "start_frame_num": 0, "strength": 1 },
+    { "image_url": "...", "start_frame_num": 119, "strength": 1 }
+  ],
+  "videos": [{ "video_url": "...", "start_frame_num": 0 }],
+  "prompt": "woman dancing in studio. Same appearance as the input image, matching choreography of reference video"
+}
+```

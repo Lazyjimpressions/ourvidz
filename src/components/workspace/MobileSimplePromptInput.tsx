@@ -551,6 +551,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       return;
     }
     
+    // Character swap guard: detect hint-only prompts with no actual scene description
+    const isCharSwapMode = hasReference && !!motionRefVideoUrl;
+    if (isCharSwapMode) {
+      const hintOnlyPattern = /^[\s.,]*(?:same appearance as the input image|matching choreography of reference video|[,.\s])*$/i;
+      if (hintOnlyPattern.test(prompt.trim())) {
+        toast.error('Describe the scene (e.g. "woman dancing in a studio") — hints alone aren\'t enough');
+        return;
+      }
+    }
+    
     toast.success('Starting generation...', { duration: 2000 });
 
     onGenerate(prompt.trim(), { 
