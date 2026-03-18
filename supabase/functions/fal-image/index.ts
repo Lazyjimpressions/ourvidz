@@ -488,7 +488,7 @@ async function buildModelInput(
 
         modelInput.video = {
           video_url: videoUrl,
-          start_frame_num: startFrameNum,
+          start_frame_number: startFrameNum,
           max_num_frames: maxCondFrames,
           limit_num_frames: true,
           conditioning_type: "rgb",
