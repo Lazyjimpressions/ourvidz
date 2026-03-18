@@ -464,35 +464,39 @@ async function buildModelInput(
           ? (body.input.video as any).video_url || (body.input.video as any).url
           : body.input.video;
 
-        videoUrl = await signIfStoragePath(supabase, videoUrl, 'reference_images');
+        // Most client payloads send raw workspace/user-library paths without bucket prefix
+        videoUrl = await signIfStoragePath(supabase, videoUrl, 'workspace-temp');
 
-        if (videoUrl && typeof videoUrl === 'string' && (videoUrl.startsWith('http') || videoUrl.startsWith('data:'))) {
-          // Build full VideoConditioningInput with tail-conditioning
-          const fps = modelInput.frame_rate || 30;
-          const maxCondFrames = 48; // ~1.6s conditioning window
-          const sourceDuration = body.input.source_video_duration || 0;
-          const totalFrames = sourceDuration > 0 ? Math.round(sourceDuration * fps) : 0;
-
-          let startFrameNum = 0;
-          if (totalFrames > maxCondFrames) {
-            // Tail-conditioning: start from near the end, aligned to multiple of 8
-            startFrameNum = Math.floor((totalFrames - maxCondFrames) / 8) * 8;
-          }
-
-          modelInput.video = {
-            video_url: videoUrl,
-            start_frame_num: startFrameNum,
-            max_num_frames: maxCondFrames,
-            limit_num_frames: true,
-            conditioning_type: "rgb",
-            strength: 1,
-          };
-          delete modelInput.image_url;
-          delete modelInput.image;
-          console.log(`🎬 Video extend: duration=${sourceDuration}s, totalFrames=${totalFrames}, startFrame=${startFrameNum}, maxCond=${maxCondFrames}`);
-        } else {
-          console.warn('⚠️ Video input could not resolve to valid URL');
+        if (!videoUrl || typeof videoUrl !== 'string' || (!videoUrl.startsWith('http://') && !videoUrl.startsWith('https://') && !videoUrl.startsWith('data:'))) {
+          throw new Response(JSON.stringify({
+            error: 'Invalid video reference URL',
+            details: 'input.video must resolve to an absolute HTTP/HTTPS URL before calling fal.ai'
+          }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
+
+        // Build full VideoConditioningInput with tail-conditioning
+        const fps = modelInput.frame_rate || 30;
+        const maxCondFrames = 48; // ~1.6s conditioning window
+        const sourceDuration = body.input.source_video_duration || 0;
+        const totalFrames = sourceDuration > 0 ? Math.round(sourceDuration * fps) : 0;
+
+        let startFrameNum = 0;
+        if (totalFrames > maxCondFrames) {
+          // Tail-conditioning: start from near the end, aligned to multiple of 8
+          startFrameNum = Math.floor((totalFrames - maxCondFrames) / 8) * 8;
+        }
+
+        modelInput.video = {
+          video_url: videoUrl,
+          start_frame_num: startFrameNum,
+          max_num_frames: maxCondFrames,
+          limit_num_frames: true,
+          conditioning_type: "rgb",
+          strength: 1,
+        };
+        delete modelInput.image_url;
+        delete modelInput.image;
+        console.log(`🎬 Video extend: duration=${sourceDuration}s, totalFrames=${totalFrames}, startFrame=${startFrameNum}, maxCond=${maxCondFrames}`);
       }
 
       // Duration → num_frames conversion
@@ -559,13 +563,25 @@ async function buildModelInput(
         const signedVideos = [];
         for (const vid of body.input.videos) {
           const vidUrl = typeof vid === 'string' ? vid : (vid.video_url || vid.url);
-          const signed = await signIfStoragePath(supabase, vidUrl, 'reference_images');
-          if (signed) {
-            const videoEntry: Record<string, any> = { video_url: signed, start_frame_num: vid.start_frame_num ?? 0 };
-            if (vid.strength !== undefined) videoEntry.strength = vid.strength;
+          const signed = await signIfStoragePath(supabase, vidUrl, 'workspace-temp');
+
+          if (signed && (signed.startsWith('http://') || signed.startsWith('https://') || signed.startsWith('data:'))) {
+            const startFrameNum = typeof vid === 'object' ? (vid.start_frame_num ?? 0) : 0;
+            const videoEntry: Record<string, any> = { video_url: signed, start_frame_num: startFrameNum };
+            if (typeof vid === 'object' && vid.strength !== undefined) videoEntry.strength = vid.strength;
             signedVideos.push(videoEntry);
+          } else {
+            console.warn('⚠️ Skipping invalid video conditioning URL:', vidUrl?.substring?.(0, 80) || vidUrl);
           }
         }
+
+        if (body.input.videos.length > 0 && signedVideos.length === 0) {
+          throw new Response(JSON.stringify({
+            error: 'Invalid videos[] input',
+            details: 'All video references failed URL signing; provide workspace-temp/user-library paths or valid absolute URLs'
+          }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+
         if (signedVideos.length > 0) {
           modelInput.videos = signedVideos;
           console.log(`✅ MultiCondition: ${signedVideos.length} video refs set`);
