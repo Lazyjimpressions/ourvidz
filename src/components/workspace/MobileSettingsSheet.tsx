@@ -930,7 +930,9 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                 Motion / Camera Reference
               </label>
               <p className="text-[8px] text-muted-foreground">
-                Optional video to guide movement and camera
+                {motionRefVideoUrl && refSlots?.some(s => s.url) 
+                  ? '✨ Character swap mode — appearance from image, motion from video'
+                  : 'Optional video to guide movement and camera'}
               </p>
               {motionRefVideoUrl ? (
                 <div className="relative group h-16 w-24 rounded-md overflow-hidden border border-border">

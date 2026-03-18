@@ -68,9 +68,11 @@ const FAL_PRICING: Record<string, number> = {
   'fal-ai/ltx-video/v0.9.7': 0.20,
   'fal-ai/ltx-video/v0.9.7/i2v': 0.20,
   'fal-ai/ltx-video/v0.9.7/extend': 0.25,
+  'fal-ai/ltx-video-13b-distilled/multiconditioning': 0.20,
   'ltx-video/v0.9.7': 0.20,
   'ltx-video/v0.9.7/i2v': 0.20,
   'ltx-video/v0.9.7/extend': 0.25,
+  'ltx-video-13b-distilled/multiconditioning': 0.20,
   // Defaults
   'default_image': 0.03,
   'default_video': 0.25
