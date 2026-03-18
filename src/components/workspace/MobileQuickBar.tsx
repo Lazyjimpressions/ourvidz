@@ -44,6 +44,8 @@ export interface MobileQuickBarProps {
   onRemoveRef: (index: number) => void;
   onDropRef: (index: number, file: File) => void;
   onDropRefUrl?: (index: number, url: string) => void;
+  onRefAddFromLibrary?: (index: number) => void;
+  onRefAddFromFile?: (index: number) => void;
   onAddSlot: () => void;
   
   // Fixed image slots (used in image mode)
@@ -417,6 +419,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onRemoveRef,
   onDropRef,
   onDropRefUrl,
+  onRefAddFromLibrary,
+  onRefAddFromFile,
   onAddSlot,
   fixedSlots = [],
   onFixedSlotAdd,
@@ -496,6 +500,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
                 onRemove={() => onRemoveRef(i)}
                 onDrop={(file) => onDropRef(i, file)}
                 onDropUrl={onDropRefUrl ? (url) => onDropRefUrl(i, url) : undefined}
+                onAddFromLibrary={onRefAddFromLibrary ? () => onRefAddFromLibrary(i) : undefined}
+                onAddFromFile={onRefAddFromFile ? () => onRefAddFromFile(i) : undefined}
                 label={slot.label || `Ref ${i + 1}`}
                 disabled={disabled}
                 showLabel

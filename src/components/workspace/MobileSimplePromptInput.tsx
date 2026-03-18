@@ -604,12 +604,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   // No-op: video always has 5 fixed slots
   const handleAddSlot = () => {};
 
-  // Open library picker for a slot (image mode)
+  // Open library picker for a slot
   const handleLibraryForSlot = (index: number) => {
-    if (currentMode === 'image') {
-      setPickerSlotIndex(index);
-      setPickerOpen(true);
-    }
+    setPickerSlotIndex(index);
+    setPickerOpen(true);
   };
 
   // Open native file picker for a slot (no capture)
@@ -773,6 +771,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onRemoveRef={handleRemoveSlot}
         onDropRef={handleDropSlot}
         onDropRefUrl={handleDropSlotUrl}
+        onRefAddFromLibrary={(index) => handleLibraryForSlot(index)}
+        onRefAddFromFile={(index) => handleFileUploadForSlot(index)}
         onAddSlot={handleAddSlot}
         selectedModelTasks={selectedModelTasks}
         fixedSlots={fixedSlots}
