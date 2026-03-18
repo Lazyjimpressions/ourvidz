@@ -1484,43 +1484,59 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 strength: keyframeStrengths[entry.slotIndex] ?? 1,
               }));
             }
-            
+
             // Separate motion reference video (if provided) — reject placeholder paths
-            if (motionRefVideoUrl && !motionRefVideoUrl.includes('placeholder')) {
-              // Character-swap mode: use pose conditioning to extract motion without copying RGB appearance
-              const isCharSwap = inputObj.images && inputObj.images.length > 0;
+            const hasMotionVideo = !!(motionRefVideoUrl && !motionRefVideoUrl.includes('placeholder'));
+            const isCharSwap = hasMotionVideo && !!(inputObj.images && inputObj.images.length > 0);
+
+            // Normalize character-swap image anchors when UI defaults are still all 1.0
+            // This prevents source-video appearance bleed and keeps identity lock stable.
+            if (isCharSwap && inputObj.images && inputObj.images.length > 0) {
+              const allStrengthsAreDefault = inputObj.images.every((img: { strength?: number }) => (img.strength ?? 1) >= 0.99);
+              const uniqueImageUrls = new Set(inputObj.images.map((img: { image_url: string }) => img.image_url));
+
+              // If every slot points to the same image, force canonical start/mid/end anchors.
+              if (uniqueImageUrls.size === 1) {
+                const canonicalUrl = inputObj.images[0].image_url;
+                const midFrame = Math.round(maxFrame / 2 / 8) * 8;
+                inputObj.images = [
+                  { image_url: canonicalUrl, start_frame_number: 0, strength: 0.85 },
+                  { image_url: canonicalUrl, start_frame_number: midFrame, strength: 0.5 },
+                  { image_url: canonicalUrl, start_frame_number: maxFrame, strength: 0.4 },
+                ];
+                console.log(`🔒 Character-swap: normalized duplicate anchors to [0(s=0.85), ${midFrame}(s=0.5), ${maxFrame}(s=0.4)]`);
+              } else if (allStrengthsAreDefault) {
+                const sorted = [...inputObj.images].sort(
+                  (a: { start_frame_number: number }, b: { start_frame_number: number }) => a.start_frame_number - b.start_frame_number
+                );
+                inputObj.images = sorted.map((img: { image_url: string; start_frame_number: number }, index: number) => {
+                  const isFirst = index === 0;
+                  const isLast = index === sorted.length - 1;
+                  return {
+                    image_url: img.image_url,
+                    start_frame_number: isFirst ? 0 : isLast ? maxFrame : img.start_frame_number,
+                    strength: isFirst ? 0.85 : isLast ? 0.4 : 0.5,
+                  };
+                });
+                console.log('🔒 Character-swap: auto-tuned temporal image strengths to [start=0.85, mids=0.5, end=0.4]');
+              }
+            }
+
+            if (hasMotionVideo) {
+              const videoStrength = isCharSwap ? 0.55 : 1;
               inputObj.videos = [{
                 video_url: stripToStoragePath(motionRefVideoUrl),
                 start_frame_number: 0,
-                strength: isCharSwap ? 0.7 : 1,
+                strength: videoStrength,
               }];
               if (isCharSwap) {
-                console.log('🎭 Character-swap: video strength=0.7 (per fal.ai best practices)');
-              }
-              
-              // Identity-lock: when only 1 image keyframe + motion video, add mid + end anchors
-              // maxFrame is already 8n (from getLastValidFrame = 8n+1 - 1), so no extra snapping needed
-              if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
-                const midFrame = Math.round(maxFrame / 2 / 8) * 8; // snap to nearest 8
-                // Per fal.ai best practices: start=0.85 (establish identity), mid=0.5 (allow motion), end=0.4 (guide landing)
-                inputObj.images[0].strength = 0.85;
-                inputObj.images.push({
-                  image_url: inputObj.images[0].image_url,
-                  start_frame_number: midFrame,
-                  strength: 0.5,
-                });
-                inputObj.images.push({
-                  image_url: inputObj.images[0].image_url,
-                  start_frame_number: maxFrame, // e.g. 120 for 121-frame clip
-                  strength: 0.4,
-                });
-                console.log(`🔒 Identity-lock: 3 anchors at frames [0(s=0.85), ${midFrame}(s=0.5), ${maxFrame}(s=0.4)] per fal.ai best practices`);
+                console.log(`🎭 Character-swap: video strength=${videoStrength} to reduce source-video appearance bleed`);
               }
             }
-            
+
             // Don't set image_url -- multi uses images[]/videos[] arrays
             delete inputObj.image_url;
-            console.log(`🎬 MultiCondition: ${filledEntries.length} images, ${motionRefVideoUrl ? 1 : 0} motion ref video, strengths: ${filledEntries.map(e => keyframeStrengths[e.slotIndex] ?? 1).join(', ')}`);
+            console.log(`🎬 MultiCondition: ${filledEntries.length} images, ${hasMotionVideo ? 1 : 0} motion ref video`);
           } else if (refImageUrl) {
             inputObj.image_url = stripToStoragePath(refImageUrl); // Standard I2V
           }
