@@ -2889,13 +2889,19 @@ const sceneContext = analyzeSceneContent(response);
       console.log('✅ Using template scene prompt (first scene) with character visual description:', scenePrompt.substring(0, 150) + '...');
     } else if (sceneContext?.actions?.length > 0) {
       // ⚡ EFFICIENCY: Skip narrative LLM call when actions are already extracted (~7s saved)
-      const setting = sceneContext.setting || 'the scene';
+      // ✅ FIX: Prefer authoritative location sources over weak pattern matching
+      // Priority: 1) currentLocation (from conversation DB), 2) sceneTemplatePrompt (scene template),
+      //           3) sceneContextParam (UI scene_context), 4) pattern-matched setting (fallback)
+      const patternSetting = sceneContext.setting || 'the scene';
+      const authoritativeSetting = currentLocation || sceneTemplatePrompt || sceneContextParam || null;
+      const setting = authoritativeSetting || patternSetting;
       const mood = sceneContext.mood || 'engaging';
       const visuals = sceneContext.visualElements?.slice(0, 3).join(', ') || '';
       // SETTING only -- actions go into the ACTION block of Figure template
       scenePrompt = `${setting}. ${visuals ? `Visual details: ${visuals}.` : ''} The mood is ${mood}.`;
       sceneTemplateName = 'Direct action extraction (no narrative LLM)';
       console.log('⚡ EFFICIENCY: Skipped narrative LLM call, using extracted actions directly:', scenePrompt.substring(0, 150));
+      console.log('🎯 Setting source:', authoritativeSetting ? 'authoritative (location/template/context)' : 'pattern-matched fallback');
     } else {
       // Generate AI-powered scene narrative using OpenRouter (fallback when no actions extracted)
       console.log('🎬 Generating scene narrative for character:', sceneCharacter.name);
