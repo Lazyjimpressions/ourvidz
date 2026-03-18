@@ -846,8 +846,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                     const refData = e.dataTransfer.getData('application/x-ref-image');
                     if (refData) {
                       try {
-                        const { url } = JSON.parse(refData);
-                        if (url) onMotionRefVideoUrlChange?.(url);
+                        const { url, originalPath } = JSON.parse(refData);
+                        const videoUrl = originalPath || url;
+                        if (videoUrl && !videoUrl.includes('placeholder')) onMotionRefVideoUrlChange?.(videoUrl);
                       } catch { /* ignore */ }
                       return;
                     }
