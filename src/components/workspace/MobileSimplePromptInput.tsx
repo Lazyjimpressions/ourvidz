@@ -964,8 +964,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       {currentMode === 'video' && motionRefVideoUrl && (beginningRefImageUrl || referenceImageUrl) && (
         <div className="mx-3 mb-2 px-2.5 py-1.5 rounded-md bg-accent/30 border border-accent/50 text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-foreground">🎭 Character Swap Active</span>
-          <span>• Pose mode</span>
-          <span>• Identity anchors: start/mid/end</span>
+          <span>• Anchors: F0(0.85) / mid(0.5) / end(0.4)</span>
+          <span>• Video strength: 0.7</span>
         </div>
       )}
       

@@ -1502,17 +1502,19 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               // maxFrame is already 8n (from getLastValidFrame = 8n+1 - 1), so no extra snapping needed
               if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
                 const midFrame = Math.round(maxFrame / 2 / 8) * 8; // snap to nearest 8
+                // Per fal.ai best practices: start=0.85 (establish identity), mid=0.5 (allow motion), end=0.4 (guide landing)
+                inputObj.images[0].strength = 0.85;
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
-                  start_frame_num: midFrame,
-                  strength: inputObj.images[0].strength ?? 1,
+                  start_frame_number: midFrame,
+                  strength: 0.5,
                 });
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
-                  start_frame_num: maxFrame, // e.g. 120 for 121-frame clip
-                  strength: inputObj.images[0].strength ?? 1,
+                  start_frame_number: maxFrame, // e.g. 120 for 121-frame clip
+                  strength: 0.4,
                 });
-                console.log(`🔒 Identity-lock: 3 anchors at frames [0, ${midFrame}, ${maxFrame}] for stronger character retention`);
+                console.log(`🔒 Identity-lock: 3 anchors at frames [0(s=0.85), ${midFrame}(s=0.5), ${maxFrame}(s=0.4)] per fal.ai best practices`);
               }
             }
             
