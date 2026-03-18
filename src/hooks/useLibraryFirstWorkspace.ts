@@ -1525,7 +1525,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             if (hasMotionVideo) {
               const videoStrength = isCharSwap ? 0.55 : 1;
               inputObj.videos = [{
-                video_url: stripToStoragePath(motionRefVideoUrl),
+                video_url: stripToStoragePath(motionRefVideoUrl as string),
                 start_frame_number: 0,
                 strength: videoStrength,
               }];
