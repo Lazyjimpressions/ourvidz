@@ -1487,20 +1487,37 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             
             // Separate motion reference video (if provided) — reject placeholder paths
             if (motionRefVideoUrl && !motionRefVideoUrl.includes('placeholder')) {
+              // Character-swap mode: use pose conditioning to extract motion without copying RGB appearance
+              const isCharSwap = inputObj.images && inputObj.images.length > 0;
               inputObj.videos = [{
                 video_url: stripToStoragePath(motionRefVideoUrl),
                 start_frame_num: 0,
+                ...(isCharSwap ? {
+                  conditioning_type: 'pose',
+                  preprocess: true,
+                  strength: 0.8,
+                  limit_num_frames: true,
+                } : {}),
               }];
+              if (isCharSwap) {
+                console.log('🎭 Character-swap: pose conditioning enabled (strength=0.8, preprocess=true)');
+              }
               
-              // Identity-lock: when only 1 image keyframe + motion video, duplicate image to last frame
+              // Identity-lock: when only 1 image keyframe + motion video, add mid + end anchors
               // maxFrame is already 8n (from getLastValidFrame = 8n+1 - 1), so no extra snapping needed
               if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
+                const midFrame = Math.round(maxFrame / 2 / 8) * 8; // snap to nearest 8
+                inputObj.images.push({
+                  image_url: inputObj.images[0].image_url,
+                  start_frame_num: midFrame,
+                  strength: inputObj.images[0].strength ?? 1,
+                });
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
                   start_frame_num: maxFrame, // e.g. 120 for 121-frame clip
                   strength: inputObj.images[0].strength ?? 1,
                 });
-                console.log(`🔒 Identity-lock: duplicated image anchor to frame ${maxFrame} for stronger character retention`);
+                console.log(`🔒 Identity-lock: 3 anchors at frames [0, ${midFrame}, ${maxFrame}] for stronger character retention`);
               }
             }
             

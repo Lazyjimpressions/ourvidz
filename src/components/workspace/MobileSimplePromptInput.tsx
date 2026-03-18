@@ -959,6 +959,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           </div>
         </div>
       </form>
+
+      {/* Character Swap Preflight Indicator */}
+      {currentMode === 'video' && motionRefVideoUrl && (beginningRefImageUrl || referenceImageUrl) && (
+        <div className="mx-3 mb-2 px-2.5 py-1.5 rounded-md bg-accent/30 border border-accent/50 text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
+          <span className="font-semibold text-foreground">🎭 Character Swap Active</span>
+          <span>• Pose mode</span>
+          <span>• Identity anchors: start/mid/end</span>
+        </div>
+      )}
       
       {/* Settings Bottom Sheet */}
       <MobileSettingsSheet
