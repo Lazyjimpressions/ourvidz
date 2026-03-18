@@ -47,6 +47,7 @@ interface ClipLibraryProps {
   characterCanons?: CharacterCanon[];
   clips?: StoryboardClip[];
   onSelectReference: (imageUrl: string, source: 'character_portrait' | 'extracted_frame' | 'library' | 'workspace') => void;
+  onSelectVideoClip?: (videoUrl: string, clipId: string) => void;
   onSelectMotionPreset: (preset: MotionPreset) => void;
   className?: string;
 }
@@ -222,6 +223,92 @@ const SignedDraggableImage: React.FC<{
   );
 };
 
+// Draggable video clip card with URL signing
+const DraggableVideoClip: React.FC<{
+  clip: StoryboardClip;
+  onClick?: () => void;
+}> = ({ clip, onClick }) => {
+  const [isHovering, setIsHovering] = useState(false);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  // Sign the video URL if needed
+  const { url: signedVideoUrl, loading: videoLoading } = useSignedImageUrl(clip.video_url);
+  const { url: signedThumbnailUrl } = useSignedImageUrl(clip.thumbnail_url);
+
+  useEffect(() => {
+    if (videoRef.current && signedVideoUrl) {
+      if (isHovering) {
+        videoRef.current.play().catch(() => {});
+      } else {
+        videoRef.current.pause();
+        videoRef.current.currentTime = 0;
+      }
+    }
+  }, [isHovering, signedVideoUrl]);
+
+  if (videoLoading) {
+    return <Skeleton className="aspect-video rounded-lg" />;
+  }
+
+  if (!signedVideoUrl) {
+    return (
+      <div className="aspect-video rounded-lg bg-muted/50 border border-border flex items-center justify-center">
+        <ImageOff className="w-4 h-4 text-muted-foreground/40" />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className="group relative rounded-lg overflow-hidden border border-border hover:border-green-500/40
+                 transition-all cursor-grab active:cursor-grabbing bg-muted/50"
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/uri-list', signedVideoUrl);
+        e.dataTransfer.setData('text/plain', signedVideoUrl);
+        e.dataTransfer.setData('application/x-video-url', signedVideoUrl);
+        e.dataTransfer.setData('application/x-clip-id', clip.id);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+      onClick={onClick}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
+    >
+      <div className="aspect-video bg-background relative">
+        <video
+          ref={videoRef}
+          src={signedVideoUrl}
+          className="w-full h-full object-cover"
+          muted
+          loop
+          playsInline
+          poster={signedThumbnailUrl || undefined}
+        />
+        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
+          <div className="flex items-center gap-1">
+            <Play className="w-4 h-4 text-white/0 group-hover:text-white/80 transition-colors" />
+            <GripVertical className="w-4 h-4 text-white/0 group-hover:text-white/80 transition-colors" />
+          </div>
+        </div>
+        {/* Video badge */}
+        <div className="absolute top-1 right-1 px-1 py-0.5 rounded bg-green-500/80 text-[8px] font-medium text-white">
+          VIDEO
+        </div>
+      </div>
+      <div className="p-1.5">
+        <p className="text-[10px] font-medium text-foreground/80 truncate">
+          Clip {clip.clip_order + 1}
+        </p>
+        {clip.duration_seconds && (
+          <p className="text-[9px] text-muted-foreground">
+            {clip.duration_seconds.toFixed(1)}s
+          </p>
+        )}
+      </div>
+    </button>
+  );
+};
+
 // Motion preset preview card
 const MotionPresetCard: React.FC<{
   preset: MotionPreset;
@@ -297,6 +384,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
   characterCanons = [],
   clips = [],
   onSelectReference,
+  onSelectVideoClip,
   onSelectMotionPreset,
   className,
 }) => {
@@ -305,12 +393,18 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
 
   const [characterOpen, setCharacterOpen] = useState(true);
   const [framesOpen, setFramesOpen] = useState(true);
+  const [videoClipsOpen, setVideoClipsOpen] = useState(true);
   const [workspaceOpen, setWorkspaceOpen] = useState(true);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const [motionOpen, setMotionOpen] = useState(false);
 
   // Get clips with extracted frames
   const clipsWithFrames = clips.filter((c) => c.extracted_frame_url);
+
+  // Get clips with completed videos (for motion slot)
+  const clipsWithVideos = clips.filter(
+    (c) => c.video_url && (c.status === 'completed' || c.status === 'approved')
+  );
 
   // Get a subset of motion presets (first 6)
   const presetPreview = motionPresets.slice(0, 6);
@@ -485,6 +579,54 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
               ) : (
                 <p className="text-xs text-muted-foreground text-center py-4">
                   No frames extracted yet
+                </p>
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
+          {/* Video Clips section (for motion reference) */}
+          <Collapsible open={videoClipsOpen} onOpenChange={setVideoClipsOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-between h-7 px-2 text-xs"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Film className="w-3.5 h-3.5 text-green-400" />
+                  <span>Video Clips</span>
+                  {clipsWithVideos.length > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-[9px] bg-green-500/20 text-green-400">
+                      {clipsWithVideos.length}
+                    </Badge>
+                  )}
+                </div>
+                {videoClipsOpen ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2">
+              {clipsWithVideos.length > 0 ? (
+                <div className="space-y-1.5">
+                  <p className="text-[9px] text-muted-foreground px-1">
+                    Drag to Motion slot for style reference
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {clipsWithVideos.map((clip) => (
+                      <DraggableVideoClip
+                        key={clip.id}
+                        clip={clip}
+                        onClick={() => onSelectVideoClip?.(clip.video_url!, clip.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  No completed video clips yet
                 </p>
               )}
             </CollapsibleContent>

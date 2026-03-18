@@ -68,6 +68,8 @@ import {
   ProjectAssembly,
   ClipType,
   MotionPreset,
+  ReferenceSlot,
+  ReferenceRole,
 } from '@/types/storyboard';
 import { CharacterCanon } from '@/types/character-hub-v2';
 import {
@@ -129,6 +131,10 @@ const StoryboardEditor = () => {
   const [selectedClip, setSelectedClip] = useState<StoryboardClip | null>(null);
   const [recommendedClipType, setRecommendedClipType] = useState<ClipType | undefined>();
   const [isGeneratingClip, setIsGeneratingClip] = useState(false);
+
+  // Phase 8.2: Multi-conditioning references for selected clip
+  const [clipReferences, setClipReferences] = useState<ReferenceSlot[]>([]);
+  const [activeRefSlot, setActiveRefSlot] = useState<ReferenceRole | null>(null);
 
   // Character canons (would come from character hub)
   const [characterCanons, setCharacterCanons] = useState<CharacterCanon[]>([]);
@@ -219,6 +225,29 @@ const StoryboardEditor = () => {
       });
     }
   }, [selectedClip?.id, activeScene?.id, previousClip?.id, activeSceneClips.length]);
+
+  // Phase 8.2: Sync references when selected clip changes
+  useEffect(() => {
+    if (selectedClip) {
+      // Load references from clip's generation_config or references field
+      const savedRefs = selectedClip.references ||
+        (selectedClip.generation_config as { references?: ReferenceSlot[] })?.references ||
+        [];
+      setClipReferences(savedRefs);
+
+      // If clip has legacy reference_image_url but no references, create identity slot
+      if (savedRefs.length === 0 && selectedClip.reference_image_url) {
+        setClipReferences([{
+          url: selectedClip.reference_image_url,
+          role: 'identity',
+          source: selectedClip.reference_image_source,
+        }]);
+      }
+    } else {
+      setClipReferences([]);
+    }
+    setActiveRefSlot(null);
+  }, [selectedClip?.id]);
 
   // Handlers
   const handleBackToList = () => {
@@ -339,6 +368,7 @@ const StoryboardEditor = () => {
         aspectRatio: (activeProject.aspect_ratio || '16:9') as '16:9' | '9:16' | '1:1',
         durationSeconds: selectedClip.duration_seconds,
         sceneId: activeScene.id, // Phase 8.1: For character injection
+        references: clipReferences.length > 0 ? clipReferences : undefined, // Phase 8.2: Multi-conditioning
       };
 
       console.log('🎬 Starting clip generation:', {
@@ -346,6 +376,7 @@ const StoryboardEditor = () => {
         clipType: selectedClip.clip_type,
         hasRefImage: !!selectedClip.reference_image_url,
         hasRefVideo: !!previousClip?.video_url,
+        multiCondRefs: clipReferences.length, // Phase 8.2: Log multi-ref count
       });
 
       const result = await ClipOrchestrationService.generateClip(genRequest);
@@ -355,11 +386,18 @@ const StoryboardEditor = () => {
           resolved_model_id: result.resolvedModelId,
           prompt_template_id: result.promptTemplateId,
           enhanced_prompt: result.enhancedPrompt,
+          job_id: result.jobId, // Store job ID for recovery
           ...(result.videoUrl ? {
             status: 'completed',
             video_url: result.videoUrl,
           } : {}),
         });
+
+        if (result.jobId) {
+          toast.success('Video generation started', {
+            description: 'This may take a few minutes. The video will appear when ready.',
+          });
+        }
 
         console.log('🎬 Generation initiated:', {
           success: true,
@@ -368,10 +406,17 @@ const StoryboardEditor = () => {
         });
       } else {
         await updateClip(selectedClip.id, { status: 'failed' });
+        toast.error('Generation failed', {
+          description: result.error || 'Unknown error occurred',
+        });
         console.error('🎬 Generation failed:', result.error);
       }
     } catch (error) {
       console.error('🎬 Generation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error('Generation error', {
+        description: errorMessage,
+      });
       await updateClip(selectedClip.id, { status: 'failed' });
     } finally {
       setIsGeneratingClip(false);
@@ -414,12 +459,67 @@ const StoryboardEditor = () => {
       toast.info('Select a clip first, then pick a reference image');
       return;
     }
+
+    // Phase 8.2: If picking for a specific slot, add to references array
+    if (activeRefSlot) {
+      const newRef: ReferenceSlot = {
+        url: imageUrl,
+        role: activeRefSlot,
+        source,
+        strength: 1.0,
+      };
+
+      // Replace existing ref with same role or add new
+      const updated = clipReferences.filter(r => r.role !== activeRefSlot);
+      updated.push(newRef);
+      setClipReferences(updated);
+
+      // Also update clip's generation_config with references
+      handleUpdateClip({
+        generation_config: {
+          ...(selectedClip.generation_config as Record<string, unknown> || {}),
+          references: updated,
+        },
+        // Keep legacy field in sync with identity slot
+        reference_image_url: activeRefSlot === 'identity' ? imageUrl : selectedClip.reference_image_url,
+        reference_image_source: activeRefSlot === 'identity' ? source : selectedClip.reference_image_source,
+      });
+
+      setActiveRefSlot(null);
+      setShowLibraryDrawer(false);
+      return;
+    }
+
+    // Legacy: just update single reference
     handleUpdateClip({
       reference_image_url: imageUrl,
       reference_image_source: source,
     });
     setShowLibraryDrawer(false);
   };
+
+  // Phase 8.2: Update all references
+  const handleUpdateReferences = useCallback((refs: ReferenceSlot[]) => {
+    setClipReferences(refs);
+    if (selectedClip) {
+      // Find identity ref for legacy field sync
+      const identityRef = refs.find(r => r.role === 'identity');
+      handleUpdateClip({
+        generation_config: {
+          ...(selectedClip.generation_config as Record<string, unknown> || {}),
+          references: refs,
+        },
+        reference_image_url: identityRef?.url || selectedClip.reference_image_url,
+        reference_image_source: identityRef?.source || selectedClip.reference_image_source,
+      });
+    }
+  }, [selectedClip]);
+
+  // Phase 8.2: Open picker for specific slot
+  const handlePickReferenceForSlot = useCallback((role: ReferenceRole) => {
+    setActiveRefSlot(role);
+    setShowLibraryDrawer(true);
+  }, []);
 
   const handleSelectMotionPreset = (preset: MotionPreset) => {
     if (selectedClip) {
@@ -480,6 +580,62 @@ const StoryboardEditor = () => {
     setShowCharacterPicker(false);
   };
 
+  // Phase 8.2: Handle video clip selection for motion reference
+  const handleSelectVideoClip = useCallback((videoUrl: string, _clipId: string) => {
+    if (!selectedClip) {
+      toast.info('Select a clip first, then pick a video reference');
+      return;
+    }
+
+    // If picking for motion slot specifically, add as motion reference
+    if (activeRefSlot === 'motion') {
+      const newRef: ReferenceSlot = {
+        url: videoUrl,
+        role: 'motion',
+        source: 'extracted_frame', // Closest source type
+        strength: 1.0,
+      };
+
+      const updated = clipReferences.filter(r => r.role !== 'motion');
+      updated.push(newRef);
+      setClipReferences(updated);
+
+      handleUpdateClip({
+        generation_config: {
+          ...(selectedClip.generation_config as Record<string, unknown> || {}),
+          references: updated,
+        },
+      });
+
+      setActiveRefSlot(null);
+      setShowLibraryDrawer(false);
+      console.log('🎬 Added video as motion reference:', videoUrl.substring(0, 60) + '...');
+      return;
+    }
+
+    // Default: add as motion reference
+    const newRef: ReferenceSlot = {
+      url: videoUrl,
+      role: 'motion',
+      source: 'extracted_frame',
+      strength: 1.0,
+    };
+
+    const updated = clipReferences.filter(r => r.role !== 'motion');
+    updated.push(newRef);
+    setClipReferences(updated);
+
+    handleUpdateClip({
+      generation_config: {
+        ...(selectedClip.generation_config as Record<string, unknown> || {}),
+        references: updated,
+      },
+    });
+
+    setShowLibraryDrawer(false);
+    console.log('🎬 Added video as motion reference:', videoUrl.substring(0, 60) + '...');
+  }, [selectedClip, activeRefSlot, clipReferences, handleUpdateClip]);
+
   // Calculate total duration
   const totalDuration = scenes.reduce((sum, s) => sum + s.target_duration_seconds, 0);
 
@@ -516,8 +672,9 @@ const StoryboardEditor = () => {
     <ClipLibrary
       character={activeProject.primary_character}
       characterCanons={characterCanons}
-      clips={activeSceneClips.filter((c) => c.extracted_frame_url)}
+      clips={activeSceneClips} // Pass all clips for both frames and videos
       onSelectReference={handleSelectReference}
+      onSelectVideoClip={handleSelectVideoClip}
       onSelectMotionPreset={handleSelectMotionPreset}
       className="w-full h-full"
     />
@@ -768,6 +925,10 @@ const StoryboardEditor = () => {
                 onSelectMotionPreset={handleSelectMotionPreset}
                 onFrameExtracted={handleFrameExtracted}
                 onPickReference={() => setShowLibraryDrawer(true)}
+                // Phase 8.2: Multi-conditioning
+                references={clipReferences}
+                onUpdateReferences={handleUpdateReferences}
+                onPickReferenceForSlot={handlePickReferenceForSlot}
                 className="flex-shrink-0"
               />
             )}

@@ -5,6 +5,9 @@ import {
   CLIP_TYPE_DURATIONS,
   MotionPreset,
   StoryboardClip,
+  ReferenceSlot,
+  ReferenceRole,
+  MultiConditionConfig,
 } from '@/types/storyboard';
 
 /**
@@ -55,6 +58,8 @@ export interface ClipGenerationRequest {
   aspectRatio: '16:9' | '9:16' | '1:1';
   durationSeconds?: number;
   sceneId?: string; // For character injection (Phase 8.1)
+  // Phase 8.2: Multi-conditioning references
+  references?: ReferenceSlot[];
 }
 
 /**
@@ -378,6 +383,130 @@ export class ClipOrchestrationService {
   }
 
   // ============================================================================
+  // MULTI-CONDITIONING (Phase 8.2)
+  // ============================================================================
+
+  /**
+   * Build multi-condition config from reference slots
+   *
+   * Maps reference roles to temporal positions in the video:
+   * - identity: frame 0 (establishes character appearance)
+   * - motion: video reference for camera/action style
+   * - endframe: final frame position (enables keyframe transitions)
+   * - scene: 25% position (environment/background anchor)
+   */
+  static buildMultiConditionConfig(
+    references: ReferenceSlot[],
+    durationSeconds: number,
+    frameRate: number = 24
+  ): MultiConditionConfig {
+    const images: Array<{ image_url: string; start_frame_num: number; strength: number }> = [];
+    const videos: Array<{ video_url: string; start_frame_num: number }> = [];
+
+    const totalFrames = Math.round(durationSeconds * frameRate);
+    // LTX constraint: frame positions must be multiples of 8
+    const endFrameNum = Math.floor((totalFrames - 1) / 8) * 8;
+
+    console.log('🎬 [ClipOrchestration] Building multi-condition config:', {
+      refCount: references.length,
+      durationSeconds,
+      frameRate,
+      totalFrames,
+      endFrameNum,
+    });
+
+    for (const ref of references) {
+      switch (ref.role) {
+        case 'identity':
+          // Identity at frame 0 - establishes character appearance
+          images.push({
+            image_url: ref.url,
+            start_frame_num: 0,
+            strength: ref.strength ?? 1,
+          });
+          console.log('🎬 [MultiCondition] Identity ref at frame 0');
+          break;
+
+        case 'motion':
+          // Motion reference as video for camera/action style
+          videos.push({
+            video_url: ref.url,
+            start_frame_num: 0,
+          });
+          console.log('🎬 [MultiCondition] Motion ref (video)');
+          break;
+
+        case 'endframe':
+          // End frame at final position for keyframe transitions
+          images.push({
+            image_url: ref.url,
+            start_frame_num: endFrameNum,
+            strength: ref.strength ?? 1,
+          });
+          console.log('🎬 [MultiCondition] End frame at frame', endFrameNum);
+          break;
+
+        case 'scene': {
+          // Scene reference at 25% for environment continuity
+          const midFrame = Math.floor(totalFrames * 0.25 / 8) * 8;
+          images.push({
+            image_url: ref.url,
+            start_frame_num: midFrame,
+            strength: ref.strength ?? 0.5, // Lower strength for scene
+          });
+          console.log('🎬 [MultiCondition] Scene ref at frame', midFrame);
+          break;
+        }
+      }
+    }
+
+    const result: MultiConditionConfig = {};
+    if (images.length > 0) result.images = images;
+    if (videos.length > 0) result.videos = videos;
+
+    console.log('🎬 [MultiCondition] Config built:', {
+      imageCount: images.length,
+      videoCount: videos.length,
+    });
+
+    return result;
+  }
+
+  /**
+   * Determine optimal clip type based on filled reference slots
+   *
+   * | Identity | Motion | End Frame | → Clip Type |
+   * |----------|--------|-----------|-------------|
+   * | ✓        | -      | -         | quick (i2v) |
+   * | ✓        | ✓      | -         | controlled (multi) |
+   * | ✓        | -      | ✓         | keyframed (multi) |
+   * | ✓        | ✓      | ✓         | keyframed (multi) |
+   */
+  static getClipTypeFromReferences(references: ReferenceSlot[]): ClipType {
+    const hasIdentity = references.some(r => r.role === 'identity');
+    const hasMotion = references.some(r => r.role === 'motion');
+    const hasEndFrame = references.some(r => r.role === 'endframe');
+
+    // No identity = can't determine type, default to quick
+    if (!hasIdentity) {
+      return 'quick';
+    }
+
+    // Has end frame = keyframed mode
+    if (hasEndFrame) {
+      return 'keyframed';
+    }
+
+    // Has motion = controlled mode
+    if (hasMotion) {
+      return 'controlled';
+    }
+
+    // Identity only = quick i2v
+    return 'quick';
+  }
+
+  // ============================================================================
   // PROMPT TEMPLATE RESOLUTION
   // ============================================================================
 
@@ -597,6 +726,10 @@ export class ClipOrchestrationService {
   /**
    * Prepare a clip for generation
    * Resolves model, fetches template, injects character data, returns generation config
+   *
+   * Phase 8.2: When references[] is provided:
+   * - Auto-detects optimal clip type from reference roles
+   * - Routes to multi-conditioning model when multiple refs present
    */
   static async prepareClipGeneration(request: ClipGenerationRequest): Promise<{
     model: ResolvedModel;
@@ -604,16 +737,30 @@ export class ClipOrchestrationService {
     generationConfig: Record<string, unknown>;
     injectedPrompt: string;
     characterName?: string;
+    actualClipType: ClipType;
   } | null> {
-    // 1. Resolve model for clip type
-    const model = await this.getModelForClipType(request.clipType);
+    // Phase 8.2: Auto-detect clip type from references if provided
+    let effectiveClipType = request.clipType;
+    if (request.references && request.references.length > 0) {
+      const detectedType = this.getClipTypeFromReferences(request.references);
+      console.log('🎬 [ClipOrchestration] Multi-ref mode:', {
+        requestedType: request.clipType,
+        detectedType,
+        refCount: request.references.length,
+        roles: request.references.map(r => r.role),
+      });
+      effectiveClipType = detectedType;
+    }
+
+    // 1. Resolve model for clip type (use effective type)
+    const model = await this.getModelForClipType(effectiveClipType);
     if (!model) {
       console.error('🎬 [ClipOrchestration] Cannot prepare generation - no model found');
       return null;
     }
 
-    // 2. Get prompt template
-    const primaryTask = CLIP_TYPE_TASKS[request.clipType][0];
+    // 2. Get prompt template (use effective type for correct template)
+    const primaryTask = CLIP_TYPE_TASKS[effectiveClipType][0];
     const template = await this.getPromptTemplate(primaryTask, request.contentMode);
 
     // 3. Inject character data into prompt (Phase 8.1)
@@ -632,23 +779,39 @@ export class ClipOrchestrationService {
       }
     }
 
-    // 4. Build generation config with injected prompt
-    const modifiedRequest = { ...request, prompt: injectedPrompt };
+    // 4. Build generation config with injected prompt and effective clip type
+    const modifiedRequest = {
+      ...request,
+      prompt: injectedPrompt,
+      clipType: effectiveClipType,
+    };
     const generationConfig = this.buildGenerationConfig(modifiedRequest, model);
 
     console.log('🎬 [ClipOrchestration] Prepared generation:', {
-      clipType: request.clipType,
+      requestedClipType: request.clipType,
+      actualClipType: effectiveClipType,
       model: model.display_name,
       template: template?.template_name,
       characterInjected: characterName || 'none',
       promptLength: injectedPrompt.length,
+      hasMultiRefs: (request.references?.length || 0) > 1,
     });
 
-    return { model, template, generationConfig, injectedPrompt, characterName };
+    return {
+      model,
+      template,
+      generationConfig,
+      injectedPrompt,
+      characterName,
+      actualClipType: effectiveClipType,
+    };
   }
 
   /**
    * Build generation config based on clip type and model
+   *
+   * Phase 8.2: When references[] array is provided, uses multi-conditioning
+   * with temporal frame positioning instead of legacy single-reference fields.
    */
   private static buildGenerationConfig(
     request: ClipGenerationRequest,
@@ -656,6 +819,7 @@ export class ClipOrchestrationService {
   ): Record<string, unknown> {
     const defaults = model.input_defaults || {};
     const duration = request.durationSeconds || CLIP_TYPE_DURATIONS[request.clipType];
+    const frameRate = (defaults as Record<string, number>).frame_rate || 24;
 
     const config: Record<string, unknown> = {
       ...defaults,
@@ -664,6 +828,29 @@ export class ClipOrchestrationService {
       clip_type: request.clipType, // Track clip type for metadata
     };
 
+    // Phase 8.2: Multi-conditioning via references array
+    if (request.references && request.references.length > 0) {
+      console.log('🎬 [ClipOrchestration] Using multi-conditioning mode');
+      const multiConfig = this.buildMultiConditionConfig(request.references, duration, frameRate);
+
+      if (multiConfig.images && multiConfig.images.length > 0) {
+        config.images = multiConfig.images;
+      }
+      if (multiConfig.videos && multiConfig.videos.length > 0) {
+        config.videos = multiConfig.videos;
+      }
+
+      // Log the multi-conditioning setup
+      console.log('🎬 [ClipOrchestration] Multi-condition config:', {
+        imageCount: multiConfig.images?.length || 0,
+        videoCount: multiConfig.videos?.length || 0,
+        clipType: request.clipType,
+      });
+
+      return config;
+    }
+
+    // Legacy single-reference handling (backwards compatibility)
     switch (request.clipType) {
       case 'quick':
         // I2V: Single reference image → video
@@ -706,7 +893,6 @@ export class ClipOrchestrationService {
         }
         if (request.endFrameUrl) {
           // End frame at final position (based on duration and frame rate)
-          const frameRate = (defaults as Record<string, number>).frame_rate || 16;
           const endFrameNum = Math.round(duration * frameRate) - 1;
           (config.images as Array<{ image_url: string; start_frame_number: number }>).push(
             { image_url: request.endFrameUrl, start_frame_number: endFrameNum }
@@ -770,9 +956,11 @@ export class ClipOrchestrationService {
 
   /**
    * Full generation flow for a clip
+   *
+   * Phase 8.2: Handles multi-conditioning with auto clip type detection
    */
   static async generateClip(request: ClipGenerationRequest): Promise<ClipGenerationResult> {
-    // 1. Prepare generation (includes character injection)
+    // 1. Prepare generation (includes character injection + clip type detection)
     const prepared = await this.prepareClipGeneration(request);
     if (!prepared) {
       return {
@@ -783,13 +971,13 @@ export class ClipOrchestrationService {
       };
     }
 
-    const { model, template, generationConfig, injectedPrompt, characterName } = prepared;
+    const { model, template, generationConfig, injectedPrompt, characterName, actualClipType } = prepared;
 
     // 2. Enhance prompt via edge function (Phase 8.1: use injected prompt)
-    // The enhance-prompt function handles template lookup internally
+    // Use actualClipType (may differ from request.clipType if multi-refs detected)
     const enhancement = await this.enhancePrompt(
-      injectedPrompt, // Use injected prompt (with character tags) instead of raw prompt
-      request.clipType,
+      injectedPrompt,
+      actualClipType, // Use actual clip type determined by references
       request.contentMode,
       model.id
     );
@@ -800,9 +988,11 @@ export class ClipOrchestrationService {
       strategy: enhancement.strategy,
       templateUsed: enhancement.templateName || template?.template_name,
       characterInjected: characterName || 'none',
+      actualClipType,
     });
 
     // 3. Resolve motion preset URL if needed (for controlled/multi clips)
+    // Note: With Phase 8.2, motion references may come from references[] array instead
     if (request.motionPresetId) {
       const preset = await this.getMotionPreset(request.motionPresetId);
       if (preset) {

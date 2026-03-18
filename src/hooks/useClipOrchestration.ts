@@ -18,6 +18,7 @@ import {
   CLIP_TYPE_TASKS,
   CLIP_TYPE_DURATIONS,
   MotionPreset,
+  ReferenceSlot,
 } from '@/types/storyboard';
 import { StoryboardService } from '@/lib/services/StoryboardService';
 import {
@@ -58,6 +59,8 @@ export interface GenerateClipV2Input {
   durationSeconds?: number;
   contentMode?: 'sfw' | 'nsfw';
   parentClipId?: string;
+  // Phase 8.2: Multi-conditioning references
+  references?: ReferenceSlot[];
 }
 
 // ============================================================================
@@ -164,6 +167,7 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
       console.log('🎬 [useClipOrchestration] Starting generation:', input.clipType);
 
       // 1. Create clip record
+      // Phase 8.2: Store references in generation_config for now (jsonb column)
       const clipInput: CreateClipInput = {
         scene_id: input.sceneId,
         prompt: input.prompt,
@@ -173,6 +177,7 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
         parent_clip_id: input.parentClipId,
         motion_preset_id: input.motionPresetId,
         end_frame_url: input.endFrameUrl,
+        references: input.references, // Phase 8.2: Multi-conditioning
       };
 
       const clip = await StoryboardService.createClip(clipInput);
@@ -188,7 +193,9 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
         return next;
       });
 
-      // 3. Prepare generation request (Phase 8.1: include sceneId for character injection)
+      // 3. Prepare generation request
+      // Phase 8.1: include sceneId for character injection
+      // Phase 8.2: include references for multi-conditioning
       const genRequest: ClipGenerationRequest = {
         clipId: clip.id,
         clipType: input.clipType,
@@ -202,7 +209,16 @@ export function useClipOrchestration(projectContentMode: 'sfw' | 'nsfw' = 'nsfw'
         aspectRatio: input.aspectRatio || '16:9',
         durationSeconds: input.durationSeconds || CLIP_TYPE_DURATIONS[input.clipType],
         sceneId: input.sceneId, // Phase 8.1: For character injection
+        references: input.references, // Phase 8.2: Multi-conditioning
       };
+
+      // Phase 8.2: Log multi-conditioning usage
+      if (input.references && input.references.length > 0) {
+        console.log('🎬 [useClipOrchestration] Multi-conditioning:', {
+          refCount: input.references.length,
+          roles: input.references.map(r => r.role),
+        });
+      }
 
       // 4. Prepare generation (resolve model, template, config, character injection)
       const prepared = await ClipOrchestrationService.prepareClipGeneration(genRequest);

@@ -195,6 +195,45 @@ export interface StoryboardScene {
 export type ClipStatus = 'pending' | 'generating' | 'completed' | 'failed' | 'approved';
 export type ReferenceImageSource = 'extracted_frame' | 'uploaded' | 'generated' | 'character_portrait' | 'library' | 'workspace';
 
+// ============================================================================
+// MULTI-CONDITIONING REFERENCE TYPES (Phase 8.2)
+// ============================================================================
+
+/**
+ * Reference role for multi-conditioning
+ * - identity: Character portrait at frame 0 (maintains appearance)
+ * - motion: Video reference for camera/action style
+ * - endframe: Target pose at final frame (enables keyframing)
+ * - scene: Environment/background reference (mid-video anchor)
+ */
+export type ReferenceRole = 'identity' | 'motion' | 'endframe' | 'scene';
+
+/**
+ * A single reference slot for multi-conditioning video generation
+ */
+export interface ReferenceSlot {
+  url: string;
+  role: ReferenceRole;
+  strength?: number;  // 0.0-1.0, default 1.0
+  source?: ReferenceImageSource;  // Where the reference came from
+}
+
+/**
+ * Configuration for multi-conditioning generation
+ * Used by ClipOrchestrationService.buildMultiConditionConfig()
+ */
+export interface MultiConditionConfig {
+  images?: Array<{
+    image_url: string;
+    start_frame_num: number;
+    strength: number;
+  }>;
+  videos?: Array<{
+    video_url: string;
+    start_frame_num: number;
+  }>;
+}
+
 export interface StoryboardClip {
   id: string;
   scene_id: string;
@@ -215,9 +254,12 @@ export interface StoryboardClip {
   generation_config?: Record<string, unknown>;
   end_frame_url?: string;
 
-  // Frame chaining
+  // Frame chaining (legacy single reference)
   reference_image_url?: string;
   reference_image_source?: ReferenceImageSource;
+
+  // V3: Multi-conditioning references (Phase 8.2)
+  references?: ReferenceSlot[];
 
   // Output
   video_url?: string;
@@ -387,6 +429,8 @@ export interface CreateClipInput {
   prompt_template_id?: string;
   enhanced_prompt?: string;
   generation_config?: Record<string, unknown>;
+  // V3: Multi-conditioning references (Phase 8.2)
+  references?: ReferenceSlot[];
 }
 
 export interface UpdateClipInput {
@@ -411,6 +455,9 @@ export interface UpdateClipInput {
   end_frame_url?: string;
   reference_image_url?: string;
   reference_image_source?: ReferenceImageSource;
+  job_id?: string;
+  // V3: Multi-conditioning references (Phase 8.2)
+  references?: ReferenceSlot[];
 }
 
 export interface CreateRenderInput {
