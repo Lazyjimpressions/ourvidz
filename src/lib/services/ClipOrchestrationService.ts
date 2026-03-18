@@ -683,7 +683,7 @@ export class ClipOrchestrationService {
         // and optionally input.videos for motion reference
         if (request.referenceImageUrl) {
           config.images = [
-            { image_url: request.referenceImageUrl, start_frame_num: 0 },
+            { image_url: request.referenceImageUrl, start_frame_number: 0 },
           ];
         }
         // Motion video will be resolved and added by generateClip
