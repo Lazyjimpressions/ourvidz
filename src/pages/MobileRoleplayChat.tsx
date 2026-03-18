@@ -84,6 +84,10 @@ const MobileRoleplayChat: React.FC = () => {
   const [activeScenario, setActiveScenario] = useState<ScenarioSessionPayload | null>(null);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
+  // UX polish: track new message IDs for typewriter, splash state
+  const [newMessageIds, setNewMessageIds] = useState<Set<string>>(new Set());
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashDismissed, setSplashDismissed] = useState(false);
   
   // Load models from database - includes defaultModel for reliable fallbacks
   const {
