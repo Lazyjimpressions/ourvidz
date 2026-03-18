@@ -1,53 +1,42 @@
 
-# Video Character Swap via Existing Workspace — IMPLEMENTED
+# Video Character Swap — Fix: Conditioning Quality
 
-## Summary
-
-Character swap is supported natively through the existing Video Multi Mode workflow. No new UI panels needed. Two gaps were closed:
+## Problem
+Character swap was technically working (images[] + videos[] reaching fal.ai correctly) but output didn't retain character identity because:
+1. `aspect_ratio` was overwritten from `"auto"` to `"1:1"` by metadata in edge function
+2. Single image anchor drifted toward motion-video subject over time
+3. Hint-only prompts ("Same appearance...") gave model no scene intent
 
 ## Changes Made
 
-### 1. ✅ `reference_images` bucket increased to 200MB
-- Migration: `UPDATE storage.buckets SET file_size_limit = 209715200 WHERE name = 'reference_images'`
-- Supports HD dance/source video uploads
+### 1. ✅ Edge function: aspect_ratio guard (`fal-image/index.ts`)
+- When `images[]` is present (MultiCondition), force `aspect_ratio: "auto"` regardless of metadata
+- Prevents metadata `aspectRatio` from overwriting the client's explicit `"auto"` setting
+- Added logging for verification
 
-### 2. ✅ LTX MultiCondition pricing added to `fal-image`
-- Added `'fal-ai/ltx-video-13b-distilled/multiconditioning': 0.20` to `FAL_PRICING` map
-- Ensures accurate cost tracking
+### 2. ✅ Identity-lock: end-frame duplication (`useLibraryFirstWorkspace.ts`)
+- When exactly 1 image keyframe + motion video, auto-duplicates the portrait to the last frame
+- Only triggers when end-keyframe slot is empty (manual end-ref takes priority)
+- Anchors character identity at both start AND end, reducing drift
 
-### 3. ✅ Character swap hint in `MobileSettingsSheet`
-- When both a motion reference video AND an image keyframe are loaded, shows:
-  "✨ Character swap mode — appearance from image, motion from video"
+### 3. ✅ Prompt guard: no empty/hint-only submissions (`MobileSimplifiedWorkspace.tsx`)
+- `useEffect` augmentation now skips empty prompts — user must type scene description first
+- Hints only append once user has written something meaningful
 
-### 4. ✅ Library "Videos" tab added
-- 4th tab in `UpdatedOptimizedLibrary.tsx` filtering by `asset.type === 'video'`
-- Grid changed from `grid-cols-3` to `grid-cols-4` to accommodate
-- Users can now browse saved videos separately for reuse as motion references
+### 4. ✅ Submit validation: hint-only detection (`MobileSimplePromptInput.tsx`)
+- Detects character-swap mode (image ref + motion video)
+- Blocks generation if prompt is only boilerplate hints with no scene intent
+- Shows clear error: "Describe the scene — hints alone aren't enough"
 
-### 5. ✅ Video thumbnail generation improved
-- `SharedGrid.tsx` now generates video thumbnails eagerly on mount
-- Previously required visibility intersection before triggering
-- Videos show thumbnails faster instead of blank tiles
-
-## User Workflow: Character Swap
-
-1. Switch to **Video mode** in workspace
-2. Load character portrait into **Start keyframe slot** (appearance anchor)
-3. Load dance/source video into **Motion Reference** drop zone
-4. Write a prompt describing the scene
-5. Hit **Generate** — LTX MultiCondition auto-selected via smart model switching
-6. Save result to Library → appears in **Videos** tab for reuse
-
-## User Workflow: Loading Source Videos
-
-1. Upload video via Motion Reference "Upload file" or drag-drop into workspace
-2. After generation, save the result to Library via the Save button on the tile
-3. Browse saved videos in Library → **Videos** tab
-4. Use `ImagePickerDialog` with `mediaType="video"` to select from library later
-
-## Files Modified
-- `supabase/functions/fal-image/index.ts` — Added pricing entries
-- `src/components/workspace/MobileSettingsSheet.tsx` — Added contextual swap hint
-- `src/components/library/UpdatedOptimizedLibrary.tsx` — Added Videos tab
-- `src/components/shared/SharedGrid.tsx` — Eager video thumbnail generation
-- DB: `reference_images` bucket file_size_limit → 200MB
+## Expected Payload After Fix
+```json
+{
+  "aspect_ratio": "auto",
+  "images": [
+    { "image_url": "...", "start_frame_num": 0, "strength": 1 },
+    { "image_url": "...", "start_frame_num": 119, "strength": 1 }
+  ],
+  "videos": [{ "video_url": "...", "start_frame_num": 0 }],
+  "prompt": "woman dancing in studio. Same appearance as the input image, matching choreography of reference video"
+}
+```
