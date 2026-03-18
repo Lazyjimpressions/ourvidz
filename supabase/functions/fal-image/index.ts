@@ -96,7 +96,16 @@ async function signIfStoragePath(
   if (url.startsWith('data:')) return url;
   if (url.trim() === '') return null;
 
-  const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+  const knownBuckets = [
+    'user-library',
+    'workspace-temp',
+    'reference_images',
+    'sdxl_image_high',
+    'sdxl_image_fast',
+    'video_high',
+    'image_high',
+    'videos'
+  ];
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 
   // If this is an already-signed Supabase storage URL, re-sign it server-side
@@ -123,17 +132,24 @@ async function signIfStoragePath(
   if (url.startsWith('http')) return url;
 
   const parts = url.split('/');
-  const bucket = knownBuckets.includes(parts[0]) ? parts[0] : defaultBucket;
-  const path = knownBuckets.includes(parts[0]) ? parts.slice(1).join('/') : url;
+  const hasExplicitBucket = knownBuckets.includes(parts[0]);
+  const path = hasExplicitBucket ? parts.slice(1).join('/') : url;
 
-  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-  if (!error && data?.signedUrl) {
-    const signed = data.signedUrl.startsWith('/') ? `${SUPABASE_URL}/storage/v1${data.signedUrl}` : data.signedUrl;
-    console.log(`🔏 Signed URL for bucket "${bucket}": ${path.substring(0, 40)}...`);
-    return signed;
+  const candidateBuckets = hasExplicitBucket
+    ? [parts[0]]
+    : Array.from(new Set([defaultBucket, 'workspace-temp', 'user-library', 'reference_images', ...knownBuckets]));
+
+  for (const bucket of candidateBuckets) {
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+    if (!error && data?.signedUrl) {
+      const signed = data.signedUrl.startsWith('/') ? `${SUPABASE_URL}/storage/v1${data.signedUrl}` : data.signedUrl;
+      console.log(`🔏 Signed URL for bucket "${bucket}": ${path.substring(0, 40)}...`);
+      return signed;
+    }
   }
-  console.warn(`⚠️ Failed to sign URL for bucket "${bucket}":`, error?.message);
-  return url; // Return original — might already be signed or external
+
+  console.warn(`⚠️ Failed to sign URL for all candidate buckets: ${path.substring(0, 60)}...`);
+  return url; // Preserve previous behavior for upstream validation
 }
 
 function calculateFalCost(modelKey: string, modality: string): number {
