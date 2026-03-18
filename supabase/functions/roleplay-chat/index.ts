@@ -3804,13 +3804,15 @@ const SCENE_DETECTION_PATTERNS = {
   roleplayActions: [/\*[^*]+\*/g, /\([^)]+\)/g],
   movement: ['moves', 'walks', 'sits', 'stands', 'leans', 'approaches', 'steps', 'turns', 'reaches', 'bends', 'kneels', 'balances'],
   physicalInteractions: ['touches', 'kisses', 'embraces', 'holds', 'caresses', 'grabs', 'pulls', 'pushes', 'strokes', 'rubs'],
-  // ✅ FIX: Expanded environmental keywords to catch more locations
+  // ✅ FIX: Removed ultra-generic patterns ('in the', 'at the', 'on the', 'water') that match nearly
+  // every AI response and produce useless settings like "at the" or "water". Only specific locations now.
   environmental: [
-    'in the', 'at the', 'on the', 'inside', 'within',
     'bedroom', 'kitchen', 'bathroom', 'shower', 'locker room', 'locker', 'changing room',
     'hotel', 'car', 'office', 'cafe', 'beach', 'forest', 'rooftop', 'balcony',
-    'steamy', 'misty', 'tiled', 'wet', 'water', 'streaming', 'dripping',
-    'gym', 'spa', 'sauna', 'pool', 'jacuzzi', 'bath', 'tub'
+    'hot tub', 'jacuzzi', 'bathtub', 'swimming pool',
+    'gym', 'spa', 'sauna', 'pool', 'bath', 'tub',
+    'living room', 'couch', 'sofa', 'hallway', 'garden', 'patio', 'terrace',
+    'club', 'bar', 'restaurant', 'park', 'alley', 'street', 'library', 'classroom', 'dorm'
   ],
   visual: ['wearing', 'dressed', 'naked', 'nude', 'clothing', 'outfit', 'lingerie', 'shirt', 'pants', 'dress', 'skirt', 'wet', 'dripping', 'clinging'],
   emotional: ['passionate', 'intimate', 'romantic', 'seductive', 'sensual', 'aroused', 'excited', 'nervous', 'confident', 'playful', 'sultry', 'forbidden'],
