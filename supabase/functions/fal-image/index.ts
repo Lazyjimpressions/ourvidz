@@ -576,8 +576,15 @@ async function buildModelInput(
           if (signed && (signed.startsWith('http://') || signed.startsWith('https://') || signed.startsWith('data:'))) {
             const startFrameNum = typeof vid === 'object' ? (vid.start_frame_num ?? 0) : 0;
             const videoEntry: Record<string, any> = { video_url: signed, start_frame_num: startFrameNum };
-            if (typeof vid === 'object' && vid.strength !== undefined) videoEntry.strength = vid.strength;
+            if (typeof vid === 'object') {
+              if (vid.strength !== undefined) videoEntry.strength = vid.strength;
+              if (vid.conditioning_type && ['rgb', 'pose'].includes(vid.conditioning_type)) videoEntry.conditioning_type = vid.conditioning_type;
+              if (vid.preprocess !== undefined) videoEntry.preprocess = !!vid.preprocess;
+              if (vid.limit_num_frames !== undefined) videoEntry.limit_num_frames = !!vid.limit_num_frames;
+              if (vid.max_num_frames !== undefined) videoEntry.max_num_frames = Math.max(1, Math.min(vid.max_num_frames, 257));
+            }
             signedVideos.push(videoEntry);
+            console.log(`✅ Video conditioning: type=${videoEntry.conditioning_type || 'default'}, preprocess=${videoEntry.preprocess ?? 'default'}, strength=${videoEntry.strength ?? 'default'}`);
           } else {
             console.warn('⚠️ Skipping invalid video conditioning URL:', vidUrl?.substring?.(0, 80) || vidUrl);
           }
