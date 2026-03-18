@@ -2590,7 +2590,16 @@ const MobileRoleplayChat: React.FC = () => {
               : undefined
           }}
         >
-          {messages.map((message) => (
+          {messages.map((message, index) => {
+            const prevMessage = index > 0 ? messages[index - 1] : null;
+            const sameSenderAsPrev = prevMessage?.sender === message.sender;
+            // Show timestamp if >5 min gap or first message
+            const timeDiff = prevMessage 
+              ? new Date(message.timestamp).getTime() - new Date(prevMessage.timestamp).getTime()
+              : Infinity;
+            const showTimestamp = timeDiff > 5 * 60 * 1000 || index === 0;
+            
+            return (
               <ChatMessage
                 key={message.id}
                 message={message}
@@ -2604,14 +2613,29 @@ const MobileRoleplayChat: React.FC = () => {
                 consistencySettings={consistencySettings}
                 onSceneRegenerate={handleSceneRegenerate}
                 contentMode="nsfw"
+                isNew={newMessageIds.has(message.id)}
+                showAvatar={!sameSenderAsPrev || showTimestamp}
+                showHeader={!sameSenderAsPrev || showTimestamp}
+                showTimestamp={showTimestamp}
               />
-          ))}
+            );
+          })}
+          
+          {/* Quick reply suggestions after last AI message */}
+          {!isLoading && messages.length > 0 && messages[messages.length - 1]?.sender === 'character' && (
+            <QuickReplies
+              suggestions={[]}
+              onSelect={(reply) => handleSendMessage(reply)}
+              disabled={isLoading}
+              className="px-2"
+            />
+          )}
           
           {isLoading && (
-            <div className="flex items-center gap-2 text-gray-400">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            <div className="flex items-center gap-2 text-muted-foreground px-2">
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               <span className="text-sm">{character?.name} is thinking...</span>
             </div>
           )}
@@ -2634,6 +2658,7 @@ const MobileRoleplayChat: React.FC = () => {
                 onGenerateScene={handleGenerateScene}
                 isLoading={isLoading}
                 isMobile={isMobile}
+                characterName={character?.name}
               />
             </div>
           </div>
@@ -2643,6 +2668,9 @@ const MobileRoleplayChat: React.FC = () => {
               onSend={handleSendMessage}
               onGenerateScene={handleGenerateScene}
               isLoading={isLoading}
+              isMobile={isMobile}
+              characterName={character?.name}
+            />
               isMobile={isMobile}
             />
           </div>
