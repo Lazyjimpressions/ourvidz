@@ -419,6 +419,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
   onRemoveRef,
   onDropRef,
   onDropRefUrl,
+  onRefAddFromLibrary,
+  onRefAddFromFile,
   onAddSlot,
   fixedSlots = [],
   onFixedSlotAdd,
