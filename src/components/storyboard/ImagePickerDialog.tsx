@@ -78,8 +78,21 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     setActiveCategory((filterTag as CategoryFilter) || 'all');
   }, [filterTag]);
 
-  // Library data
-  const { data: paginatedData, isLoading: libraryLoading } = useLibraryAssets();
+  // Library data — fetch all pages automatically when dialog is open
+  const {
+    data: paginatedData,
+    isLoading: libraryLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useLibraryAssets();
+
+  // Auto-fetch all remaining pages when dialog opens
+  useEffect(() => {
+    if (isOpen && activeSource === 'library' && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [isOpen, activeSource, hasNextPage, isFetchingNextPage, fetchNextPage, paginatedData]);
 
   // Workspace data
   const [workspaceAssets, setWorkspaceAssets] = useState<any[]>([]);
