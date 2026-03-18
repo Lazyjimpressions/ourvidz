@@ -3727,6 +3727,7 @@ COMPOSITION RULES:
             reference_strength: i2iStrength,
             seed_locked: seedLocked,
             prompt_length: enhancedScenePrompt.length,
+            prompt_sent_to_fal: sanitizedPrompt,
             apiModelId: modelConfig.id
           }, null, 2));
 
