@@ -327,14 +327,13 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     }
   }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely, failedToLoad]);
 
-  // Generate video thumbnail when visible
+  // Generate video thumbnail eagerly on mount (no visibility gate) for faster display
   useEffect(() => {
     if (
       asset.type === 'video' && 
       !asset.thumbUrl && 
       !generatedVideoThumbnail && 
       !isGeneratingThumbnail && 
-      isVisible &&
       asset.originalPath &&
       !failedVideoThumb
     ) {
@@ -362,7 +361,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       
       return () => clearTimeout(timeout);
     }
-  }, [asset.type, asset.thumbUrl, asset.id, asset.originalPath, generatedVideoThumbnail, isGeneratingThumbnail, isVisible, signOriginalSafely, generateVideoThumbnail, failedVideoThumb]);
+  }, [asset.type, asset.thumbUrl, asset.id, asset.originalPath, generatedVideoThumbnail, isGeneratingThumbnail, signOriginalSafely, generateVideoThumbnail, failedVideoThumb]);
 
   // Sign video URL on hover for autoplay (desktop only, lazy)
   const handleCardMouseEnter = useCallback(() => {
