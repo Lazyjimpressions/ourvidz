@@ -2286,7 +2286,7 @@ async function updateMemoryData(
  */
 function sanitizePromptForFalAI(prompt: string): string {
   let sanitized = prompt;
-  
+
   // Remove or replace problematic age descriptors
   // These combined with suggestive language trigger violations
   const agePatterns = [
@@ -2295,11 +2295,11 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(innocent but forever curious)\b/gi, replacement: 'curious and engaging' },
     { pattern: /\b(innocent but)\b/gi, replacement: '' },
   ];
-  
+
   agePatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
+
   // Replace suggestive language with neutral alternatives
   const suggestivePatterns = [
     { pattern: /\b(shy smile dances on her lips)\b/gi, replacement: 'gentle smile' },
@@ -2312,7 +2312,7 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(dances on)\b/gi, replacement: 'appears on' },
     { pattern: /\b(racing with)\b/gi, replacement: 'showing' },
   ];
-  
+
   // ✅ FIX: Replace animation-triggering phrases that cause characters to appear animated
   const animationPatterns = [
     { pattern: /\b(playful dance of)\b/gi, replacement: 'playful exchange of' },
@@ -2329,33 +2329,39 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(inviting a)\b/gi, replacement: 'suggesting a' },
     { pattern: /\b(inviting)\b/gi, replacement: 'suggesting' },
   ];
-  
+
   animationPatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
+
   suggestivePatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
+
   // Remove overly descriptive emotional/physical states that could be flagged
   const emotionalPatterns = [
     { pattern: /\b(mix of excitement and anticipation)\b/gi, replacement: 'engaged expression' },
     { pattern: /\b(excitement and anticipation)\b/gi, replacement: 'engagement' },
     { pattern: /\b(anticipation)\b/gi, replacement: 'interest' },
   ];
-  
+
   emotionalPatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
-  // Clean up multiple spaces and normalize
-  sanitized = sanitized.replace(/\s+/g, ' ').trim();
-  
+
+  // Preserve Figure block structure (line breaks) while normalizing whitespace inside lines
+  sanitized = sanitized
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
   // Remove redundant phrases
   sanitized = sanitized.replace(/\b(young adult adult)\b/gi, 'young adult');
   sanitized = sanitized.replace(/\b(adult adult)\b/gi, 'adult');
-  
+
   return sanitized;
 }
 
