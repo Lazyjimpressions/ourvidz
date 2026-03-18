@@ -1470,10 +1470,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               });
             }
             if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
-            // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
+            // Compute maxFrame using LTX 8n+1 constraint so identity-lock lands on valid frame
             const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
-            const actualNumFrames = (videoDuration || 5) * fps;
-            const maxFrame = actualNumFrames - 1; // last valid frame index
+            const { getLastValidFrame } = await import('@/lib/utils/characterSwapPrompt');
+            const maxFrame = getLastValidFrame(videoDuration || 5, fps); // e.g. 120 for ~4s@30fps
             
             // All filled entries are images now (no more isVideo splitting)
             if (filledEntries.length > 0) {
@@ -1493,15 +1493,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               }];
               
               // Identity-lock: when only 1 image keyframe + motion video, duplicate image to last frame
-              // This anchors character identity at both start AND end, reducing drift toward source-video subject
+              // maxFrame is already 8n (from getLastValidFrame = 8n+1 - 1), so no extra snapping needed
               if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
-                const lastFrame = Math.floor((maxFrame || 120) / 8) * 8;
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
-                  start_frame_num: lastFrame,
+                  start_frame_num: maxFrame, // e.g. 120 for 121-frame clip
                   strength: inputObj.images[0].strength ?? 1,
                 });
-                console.log(`🔒 Identity-lock: duplicated image anchor to frame ${lastFrame} for stronger character retention`);
+                console.log(`🔒 Identity-lock: duplicated image anchor to frame ${maxFrame} for stronger character retention`);
               }
             }
             
@@ -1534,18 +1533,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             inputObj.aspect_ratio = 'auto';
             console.log('🎯 MultiCondition: overriding aspect_ratio to "auto" for ref image adherence');
             
-            // Character swap prompt augmentation at generation time
-            // Append appearance/motion hints if not already present in the prompt
+            // Character swap prompt augmentation at generation time (final safety net)
+            // Uses shared utility with strict canonical detection
             if (motionRefVideoUrl && inputObj.images && inputObj.images.length > 0) {
-              const hasAppearanceHint = /same appearance|input image|reference image|character from/i.test(finalPrompt);
-              const hasMotionHint = /matching (movement|choreography|motion)|reference video|same movement/i.test(finalPrompt);
-              if (!hasAppearanceHint || !hasMotionHint) {
-                let augmented = finalPrompt.trimEnd();
-                if (augmented && !augmented.endsWith('.') && !augmented.endsWith(',')) augmented += '.';
-                if (!hasAppearanceHint) augmented += ' Same appearance as the input image';
-                if (!hasMotionHint) augmented += ', matching choreography of reference video';
-                finalPrompt = augmented.trim();
-                console.log('🎭 Character swap: Augmented prompt at generation time with appearance/motion hints');
+              const { augmentCharacterSwapPrompt } = await import('@/lib/utils/characterSwapPrompt');
+              const augmented = augmentCharacterSwapPrompt(finalPrompt);
+              if (augmented !== finalPrompt) {
+                finalPrompt = augmented;
+                console.log('🎭 Character swap: Augmented prompt with canonical hints (generation-time safety net)');
               }
             }
           }

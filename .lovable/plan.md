@@ -1,78 +1,51 @@
 
-Audit summary from your latest run (root causes, based on code + job logs):
+# Video Character Swap — Holistic Fix v2
 
-1) Prompt visibility regression is real:
-- `MobileSimplifiedWorkspace.tsx` explicitly removed UI-time hint injection (“append at generation time only”), so the textarea no longer shows the auto-instructions.
+## Root Causes Identified
 
-2) Prompt adherence logic is too loose:
-- In `useLibraryFirstWorkspace.ts`, appearance-hint detection treats generic text like “reference image” as sufficient, so it often skips the canonical identity phrase (“Same appearance as the input image”).
-- Your logged prompt confirms this: motion hint present, canonical appearance hint missing.
+1. **Prompt visibility regression**: UI-time hint injection was removed, so textarea never showed augmented prompt
+2. **Loose appearance-hint detection**: Generic regex (`/reference image/`) skipped canonical phrase
+3. **Frame math mismatch**: `duration*fps-1` → 119 → snapped to 112, but LTX 8n+1 needs frame 120
+4. **Incomplete char-swap detection**: `MobileSimplePromptInput` checked image-mode refs only, missed `beginningRefImageUrl`
 
-3) Identity-lock frame math is still wrong for LTX constraints:
-- Current anchor uses `maxFrame = duration * fps - 1`, then snaps down to multiple-of-8.
-- For duration=4, fps=30 → `119`, snapped to `112`, which matches your payload.
-- But provider uses `num_frames = 8n+1` (121), so last valid anchor should be `120`. This mismatch weakens end-of-clip identity lock.
+## Changes Made (v2)
 
-4) Guardrails are incomplete in video mode:
-- `MobileSimplePromptInput` uses `referenceImage/referenceImageUrl` for char-swap checks, but video mode primarily uses `beginningRefImageUrl`.
-- This can miss validation/augmentation in some flows.
+### A) ✅ Shared utility: `src/lib/utils/characterSwapPrompt.ts`
+- `augmentCharacterSwapPrompt()` — idempotent canonical phrase enforcement (strict regex)
+- `hasSceneIntent()` — detects hint-only prompts
+- `computeLtxNumFrames()` / `getLastValidFrame()` — correct 8n+1 math
+- `snapFrameToMultipleOf8()` — clamp + snap helper
 
-Implementation plan (holistic hardening):
+### B) ✅ UI prompt visibility: `MobileSimplifiedWorkspace.tsx`
+- Restored `useEffect` that visibly augments prompt when char-swap conditions met
+- Only triggers when user has written scene content (no empty-prompt pollution)
+- Auto-routes model to `multi` when motion video + keyframe image detected
 
-A) Unify character-swap prompt logic in one shared utility
-- Create a reusable helper (e.g. `src/lib/utils/characterSwapPrompt.ts`) that:
-  - Enforces canonical phrases idempotently:
-    - “Same appearance as the input image”
-    - “matching choreography of reference video”
-  - Separately checks for scene intent (not hint-only).
-- Use strict canonical detection (not broad `reference image` keyword matching).
+### C) ✅ Deterministic submit: `MobileSimplePromptInput.tsx`
+- Detects char-swap using BOTH `referenceImageUrl` AND `beginningRefImageUrl`
+- Augments prompt via shared utility before `onGenerate()` call
+- Updates UI (`onPromptChange`) so textarea matches sent payload
 
-B) Restore visible prompt augmentation (without empty-prompt pollution)
-- In `MobileSimplifiedWorkspace.tsx`, reintroduce UI augmentation when:
-  - video mode + start image exists + motion video exists + prompt is non-empty.
-- Update textarea value so user sees exactly what will be sent.
-- Keep empty prompt untouched.
+### D) ✅ Generation hook safety net: `useLibraryFirstWorkspace.ts`
+- Replaced loose regex with shared `augmentCharacterSwapPrompt()` utility
+- Fixed frame math: uses `getLastValidFrame()` → 120 for 121-frame clip
+- Identity-lock anchor now lands on correct frame (multiple of 8)
 
-C) Make submit path deterministic
-- In `MobileSimplePromptInput.tsx` `handleSubmit`:
-  - Detect char-swap using video refs (`beginningRefImageUrl` + `motionRefVideoUrl`), not just image-mode refs.
-  - Compute augmented prompt via shared utility.
-  - Call `onPromptChange(augmented)` before `onGenerate(augmented)` so UI and sent payload match.
-  - Keep/strengthen hint-only blocking.
+### E) ✅ Edge function defensive sanitization: `fal-image/index.ts`
+- Snaps ALL `images[].start_frame_num` to nearest multiple of 8
+- Clamps to [0, maxValidFrame] range
+- Same sanitization for `videos[].start_frame_num`
+- Logs all adjustments for debugging
 
-D) Keep backend-facing safety net in generation hook
-- In `useLibraryFirstWorkspace.ts`, run the same shared augmentation utility right before payload creation (final guard), so no UI race can bypass it.
-
-E) Fix frame math to match LTX 8n+1 behavior
-- In `useLibraryFirstWorkspace.ts`, replace `duration*fps-1` anchor logic with:
-  - compute `num_frames` using same snapping as edge (`8n+1`)
-  - set `maxFrame = num_frames - 1`
-  - identity-lock duplicate anchor at `maxFrame` (for your case: 120).
-- Ensure all auto-generated `start_frame_num` values are snapped/clamped safely.
-
-F) Add edge-function defensive sanitization
-- In `supabase/functions/fal-image/index.ts`, before provider call:
-  - sanitize `images[].start_frame_num` to valid range and multiple-of-8.
-  - log adjustments.
-- This prevents another paid run failing from malformed frame indices if client logic regresses.
-
-G) Auto-route model correctly for char-swap
-- In `MobileSimplifiedWorkspace.tsx`, when motion video is present + at least one keyframe image, auto-switch to `multi` task model if user has not manually overridden.
-- On motion-ref removal, revert to appropriate `i2v/t2v` default.
-
-Verification checklist (before more credit-heavy iteration):
-
-1) Single controlled run, then query `jobs.metadata.input_used`:
-- `model_key = fal-ai/ltx-video-13b-distilled/multiconditioning`
-- `aspect_ratio = auto`
-- `images` includes start + end anchor at `0` and `120` (for 121 frames)
-- `videos[0].start_frame_num = 0`
-- prompt contains both canonical phrases + user scene text
-
-2) UI check:
-- Textarea visibly shows augmented prompt before submit.
-
-3) Output check:
-- Validate identity at start/middle/end frames (not just first frame).
-
-This sequence addresses both failures you called out: “prompt not showing” and “character not adhering,” while adding hard backend safeguards to reduce costly retries.
+## Expected Payload After Fix
+```json
+{
+  "aspect_ratio": "auto",
+  "images": [
+    { "image_url": "...", "start_frame_num": 0, "strength": 1 },
+    { "image_url": "...", "start_frame_num": 120, "strength": 1 }
+  ],
+  "videos": [{ "video_url": "...", "start_frame_num": 0 }],
+  "prompt": "woman dancing in studio. Same appearance as the input image, matching choreography of reference video"
+}
+```

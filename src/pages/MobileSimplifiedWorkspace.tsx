@@ -457,8 +457,33 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, navigate, location.pathname, location.search]);
 
-  // Character swap prompt hints are now appended at generation time in useLibraryFirstWorkspace
-  // (not via useEffect) to ensure they always apply regardless of when user types their prompt
+  // Character swap: visibly augment prompt when conditions are met
+  // (video mode + start image + motion video + non-empty prompt)
+  useEffect(() => {
+    const hasStartImage = !!beginningRefImageUrl;
+    const hasMotion = !!motionRefVideoUrl;
+    if (mode !== 'video' || !hasStartImage || !hasMotion) return;
+    if (!prompt || !prompt.trim()) return; // Don't pollute empty prompts
+    
+    // Lazy import to avoid circular deps
+    import('@/lib/utils/characterSwapPrompt').then(({ augmentCharacterSwapPrompt, hasSceneIntent }) => {
+      // Only augment if user has written actual scene content
+      if (!hasSceneIntent(prompt)) return;
+      const augmented = augmentCharacterSwapPrompt(prompt);
+      if (augmented !== prompt) {
+        setPrompt(augmented);
+        console.log('🎭 UI: Visible prompt augmentation applied for character swap');
+      }
+    });
+  }, [beginningRefImageUrl, motionRefVideoUrl, mode]); // Intentionally NOT watching prompt to avoid loops
+
+  // Auto-route model to 'multi' when motion video is set with at least one keyframe image
+  useEffect(() => {
+    if (!motionRefVideoUrl) return;
+    if (beginningRefImageUrl && mode === 'video') {
+      applySmartDefault('multi');
+    }
+  }, [motionRefVideoUrl, beginningRefImageUrl, mode, applySmartDefault]);
 
   const mappedAssets = useMemo(() => {
     return workspaceAssets.map(toSharedFromWorkspace);
