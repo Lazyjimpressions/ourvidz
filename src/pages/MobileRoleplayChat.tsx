@@ -19,6 +19,8 @@ import {
 import { MobileChatInput } from '@/components/roleplay/MobileChatInput';
 import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet';
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
+import { QuickReplies } from '@/components/roleplay/QuickReplies';
+import { CharacterSplash } from '@/components/roleplay/CharacterSplash';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { MobileChatHeader } from '@/components/roleplay/MobileChatHeader';
@@ -82,6 +84,10 @@ const MobileRoleplayChat: React.FC = () => {
   const [activeScenario, setActiveScenario] = useState<ScenarioSessionPayload | null>(null);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
+  // UX polish: track new message IDs for typewriter, splash state
+  const [newMessageIds, setNewMessageIds] = useState<Set<string>>(new Set());
+  const [showSplash, setShowSplash] = useState(false);
+  const [splashDismissed, setSplashDismissed] = useState(false);
   
   // Load models from database - includes defaultModel for reliable fallbacks
   const {
@@ -538,6 +544,11 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Check if this is a fresh scene start
       const forceNewConversation = locationState?.forceNewConversation || shouldStartFresh;
+      
+      // Show splash for fresh conversations
+      if (forceNewConversation && !splashDismissed) {
+        setShowSplash(true);
+      }
 
       // ✅ FIX: userCharacterId from navigation state is now handled in settings initialization
       // with proper priority: navigationState → localStorage → profileDefault (lines 208-244)
@@ -1637,6 +1648,7 @@ const MobileRoleplayChat: React.FC = () => {
         });
 
         setMessages(prev => [...prev, characterMessage]);
+        setNewMessageIds(prev => new Set(prev).add(characterMessage.id));
 
         // Start job polling if scene generation was initiated
         if (newJobId) {
@@ -2521,10 +2533,10 @@ const MobileRoleplayChat: React.FC = () => {
       <OurVidzDashboardLayout>
         <div className="flex items-center justify-center min-h-screen bg-background">
           <div className="text-center space-y-4">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <div className="text-white text-lg">Loading character...</div>
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="text-foreground text-lg">Loading character...</div>
             {kickoffError && (
-              <div className="text-red-400 text-sm max-w-md">
+              <div className="text-destructive text-sm max-w-md">
                 <p>Error: {kickoffError}</p>
                 <Button 
                   onClick={handleRetryKickoff}
@@ -2543,6 +2555,18 @@ const MobileRoleplayChat: React.FC = () => {
 
   return (
     <OurVidzDashboardLayout>
+      {/* Character Splash on new conversation */}
+      {showSplash && !splashDismissed && character && (
+        <CharacterSplash
+          characterName={character.name}
+          characterImage={signedCharacterImage || character.image_url || '/placeholder.svg'}
+          tagline={(character as any).tagline || character.description?.slice(0, 80)}
+          onComplete={() => {
+            setSplashDismissed(true);
+            setShowSplash(false);
+          }}
+        />
+      )}
       <div className={cn(
         "flex flex-col bg-background",
         isMobile ? "h-screen w-full" : "h-screen"
@@ -2583,7 +2607,16 @@ const MobileRoleplayChat: React.FC = () => {
               : undefined
           }}
         >
-          {messages.map((message) => (
+          {messages.map((message, index) => {
+            const prevMessage = index > 0 ? messages[index - 1] : null;
+            const sameSenderAsPrev = prevMessage?.sender === message.sender;
+            // Show timestamp if >5 min gap or first message
+            const timeDiff = prevMessage 
+              ? new Date(message.timestamp).getTime() - new Date(prevMessage.timestamp).getTime()
+              : Infinity;
+            const showTimestamp = timeDiff > 5 * 60 * 1000 || index === 0;
+            
+            return (
               <ChatMessage
                 key={message.id}
                 message={message}
@@ -2597,14 +2630,29 @@ const MobileRoleplayChat: React.FC = () => {
                 consistencySettings={consistencySettings}
                 onSceneRegenerate={handleSceneRegenerate}
                 contentMode="nsfw"
+                isNew={newMessageIds.has(message.id)}
+                showAvatar={!sameSenderAsPrev || showTimestamp}
+                showHeader={!sameSenderAsPrev || showTimestamp}
+                showTimestamp={showTimestamp}
               />
-          ))}
+            );
+          })}
+          
+          {/* Quick reply suggestions after last AI message */}
+          {!isLoading && messages.length > 0 && messages[messages.length - 1]?.sender === 'character' && (
+            <QuickReplies
+              suggestions={[]}
+              onSelect={(reply) => handleSendMessage(reply)}
+              disabled={isLoading}
+              className="px-2"
+            />
+          )}
           
           {isLoading && (
-            <div className="flex items-center gap-2 text-gray-400">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+            <div className="flex items-center gap-2 text-muted-foreground px-2">
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               <span className="text-sm">{character?.name} is thinking...</span>
             </div>
           )}
@@ -2627,6 +2675,7 @@ const MobileRoleplayChat: React.FC = () => {
                 onGenerateScene={handleGenerateScene}
                 isLoading={isLoading}
                 isMobile={isMobile}
+                characterName={character?.name}
               />
             </div>
           </div>
@@ -2637,6 +2686,7 @@ const MobileRoleplayChat: React.FC = () => {
               onGenerateScene={handleGenerateScene}
               isLoading={isLoading}
               isMobile={isMobile}
+              characterName={character?.name}
             />
           </div>
         )}
