@@ -2550,6 +2550,18 @@ const MobileRoleplayChat: React.FC = () => {
 
   return (
     <OurVidzDashboardLayout>
+      {/* Character Splash on new conversation */}
+      {showSplash && !splashDismissed && character && (
+        <CharacterSplash
+          characterName={character.name}
+          characterImage={signedCharacterImage || character.image_url || '/placeholder.svg'}
+          tagline={(character as any).tagline || character.description?.slice(0, 80)}
+          onComplete={() => {
+            setSplashDismissed(true);
+            setShowSplash(false);
+          }}
+        />
+      )}
       <div className={cn(
         "flex flex-col bg-background",
         isMobile ? "h-screen w-full" : "h-screen"
