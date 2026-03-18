@@ -1,39 +1,59 @@
 
-# Video Character Replacement via LTX 13B MultiCondition — IMPLEMENTED
 
-## Summary
+# Updated Plan: Video Character Swap via Existing Workspace
 
-Character swap is supported natively through the existing Video Multi Mode workflow — no new UI panels needed.
+## Revised Approach
 
-## Changes Made
+No new panels, modes, or edge functions. The existing Video Multi Mode workflow already supports character swap (character image in keyframe slot + dance video in Motion Reference). The user uploads source videos through the standard workspace upload flow (ref slots / motion ref box), generates results, and saves them.
 
-### 1. ✅ `reference_images` bucket increased to 200MB
-- Migration: `UPDATE storage.buckets SET file_size_limit = 209715200 WHERE name = 'reference_images'`
-- Supports HD dance/source video uploads
+Two real gaps need fixing:
 
-### 2. ✅ LTX MultiCondition pricing added to `fal-image`
-- Added `'fal-ai/ltx-video-13b-distilled/multiconditioning': 0.20` and normalized variant to `FAL_PRICING` map
-- Ensures accurate cost tracking instead of falling back to `default_video`
+## Gap 1: Video Thumbnails Show Blank Until Hover
 
-### 3. ✅ Character swap hint in `MobileSettingsSheet`
-- When both a motion reference video AND an image keyframe are loaded, the Motion Reference section shows:
-  "✨ Character swap mode — appearance from image, motion from video"
-- Otherwise shows default: "Optional video to guide movement and camera"
+**Current state**: `SharedGridCard` already generates client-side video thumbnails via canvas capture (lines 250-296 of `SharedGrid.tsx`). However, this only triggers when the tile becomes visible AND `asset.originalPath` exists AND no `thumbUrl` is set. The thumbnail generation requires signing the video URL first, which is lazy and can fail silently.
 
-### 4. ✅ LTX MultiCondition model verified in `api_models`
-- `id: 0fae432e-d8a1-4d71-a4a2-0276394d2ca8`
-- `tasks: ['multi']`, `default_for_tasks: ['multi']`, `is_active: true`, `is_default: true`
-- Already fully wired through `fal-image` edge function
+**The real issue**: For user-uploaded source videos (not generated), there may be no `thumbUrl` from the webhook pipeline. The client-side fallback works but has a noticeable delay.
 
-## How Users Perform Character Swap
+**Fix**: The existing client-side thumbnail generation is correct. The improvement needed is to ensure the `AssetTile` shows the video fallback icon with a "loading thumbnail" spinner state more prominently, and to eagerly trigger thumbnail generation for workspace video assets rather than waiting for visibility + hover. This is minor -- the infrastructure exists.
 
-1. Switch to **Video mode** in workspace
-2. Load character portrait into **Start keyframe slot** (appearance anchor)
-3. Load dance/source video into **Motion Reference** drop zone
-4. Write a prompt (e.g., "A woman dancing energetically, same appearance as the input image, matching choreography of reference video")
-5. Hit **Generate** — LTX MultiCondition auto-selected via smart model switching
+**File**: `src/components/shared/SharedGrid.tsx` -- Make video thumbnail generation trigger earlier (on mount rather than lazy visibility for workspace assets).
 
-## Files Modified
-- `supabase/functions/fal-image/index.ts` — Added pricing entries
-- `src/components/workspace/MobileSettingsSheet.tsx` — Added contextual swap hint
-- DB: `reference_images` bucket file_size_limit → 200MB
+## Gap 2: Library Needs a "Videos" Tab
+
+**Current state**: `UpdatedOptimizedLibrary.tsx` has 3 tabs: All, Characters, Scenes. Filtering uses `content_category` and `tags` metadata. Videos are mixed into "All" with no dedicated tab.
+
+**Fix**: Add a 4th tab "Videos" that filters by `asset.type === 'video'`.
+
+**File**: `src/components/library/UpdatedOptimizedLibrary.tsx`
+- Change tab type from `'all' | 'characters' | 'scenes'` to include `'videos'`
+- Change `grid-cols-3` to `grid-cols-4`
+- Add `TabsTrigger value="videos">Videos</TabsTrigger>`
+- Add filter block:
+  ```typescript
+  if (activeTab === 'videos') {
+    return allAssets.filter(asset => asset.type === 'video');
+  }
+  ```
+
+## Existing Functionality That Already Works
+
+1. **Save to Library**: `workspace-actions` edge function's `save_to_library` action already handles videos -- copies from `workspace-temp` to `user-library`, handles video thumbnails with fallback to job reference image (lines 96-200).
+
+2. **SharedGrid Save button**: The Save button on workspace tiles (`onSaveToLibrary`) is already shown for ALL workspace assets regardless of type (line 479 of SharedGrid.tsx).
+
+3. **ImagePickerDialog**: Already supports `mediaType="video"` prop for filtering video assets from the library, used by the Motion Reference picker.
+
+4. **Drag and drop**: Works for both images and videos across workspace tiles and ref slots.
+
+5. **Upload flow**: `MobileSimplePromptInput.tsx` already handles video file uploads through the ref slot file input (lines 293-376), including size validation, duration probing, and uploading to `reference_images` bucket.
+
+## Implementation Summary
+
+| Step | File | Change |
+|------|------|--------|
+| 1 | `src/components/library/UpdatedOptimizedLibrary.tsx` | Add "Videos" tab (4th tab), filter by `asset.type === 'video'` |
+| 2 | `src/components/shared/SharedGrid.tsx` | Improve video thumbnail generation timing -- trigger earlier for workspace video assets |
+| 3 | `.lovable/plan.md` | Update plan to reflect simplified approach |
+
+Total: ~15 minutes. Two small, focused changes.
+
