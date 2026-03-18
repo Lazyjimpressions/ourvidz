@@ -1,51 +1,72 @@
 
-# Video Character Swap — Holistic Fix v2
+Goal: make character-swap actually transfer identity (not just replay motion-video appearance), while keeping choreography and avoiding more paid trial-and-error.
 
-## Root Causes Identified
+What I found from your latest run:
+1) Your payload is now structurally correct (multi model, images[0/120], videos[0], prompt hints present).
+2) The latest job is genuinely new (not a stale UI card), but only one run was executed in this cycle.
+3) The likely failure is conditioning behavior, not payload validity:
+   - `videos[]` defaults to `conditioning_type="rgb"`, `preprocess=false`, `strength=1`, full-frame conditioning.
+   - That strongly preserves source video appearance, which can overpower image identity anchors.
+4) Critical implementation gap: edge mapping currently strips most `VideoConditioningInput` fields, so we cannot tune conditioning even if frontend sends them.
 
-1. **Prompt visibility regression**: UI-time hint injection was removed, so textarea never showed augmented prompt
-2. **Loose appearance-hint detection**: Generic regex (`/reference image/`) skipped canonical phrase
-3. **Frame math mismatch**: `duration*fps-1` → 119 → snapped to 112, but LTX 8n+1 needs frame 120
-4. **Incomplete char-swap detection**: `MobileSimplePromptInput` checked image-mode refs only, missed `beginningRefImageUrl`
+Implementation plan:
 
-## Changes Made (v2)
+1) Add explicit “character-swap motion mode” in payload construction (frontend hook)
+- File: `src/hooks/useLibraryFirstWorkspace.ts`
+- In multi-conditioning branch (images + motion video), send:
+  - `conditioning_type: "pose"`
+  - `preprocess: true`
+  - `strength` tuned (e.g. 0.7–0.9 default)
+  - `limit_num_frames: true`
+  - `max_num_frames` capped (so motion guides choreography without copying all RGB identity info)
+- Keep current behavior (`rgb`) for non-character-swap flows.
 
-### A) ✅ Shared utility: `src/lib/utils/characterSwapPrompt.ts`
-- `augmentCharacterSwapPrompt()` — idempotent canonical phrase enforcement (strict regex)
-- `hasSceneIntent()` — detects hint-only prompts
-- `computeLtxNumFrames()` / `getLastValidFrame()` — correct 8n+1 math
-- `snapFrameToMultipleOf8()` — clamp + snap helper
+2) Preserve and validate advanced video conditioning fields in edge function
+- File: `supabase/functions/fal-image/index.ts`
+- In `videos[]` mapping, pass through supported OpenAPI fields:
+  - `conditioning_type`, `preprocess`, `strength`, `limit_num_frames`, `max_num_frames`, `resample_fps`, `target_fps`, `reverse_video`
+- Add safe clamps/defaults and enum checks.
+- Keep existing start-frame sanitization (multiple-of-8).
 
-### B) ✅ UI prompt visibility: `MobileSimplifiedWorkspace.tsx`
-- Restored `useEffect` that visibly augments prompt when char-swap conditions met
-- Only triggers when user has written scene content (no empty-prompt pollution)
-- Auto-routes model to `multi` when motion video + keyframe image detected
+3) Strengthen identity-lock beyond only start/end duplicates
+- File: `src/hooks/useLibraryFirstWorkspace.ts`
+- When only one image keyframe + motion video:
+  - auto-add a middle identity anchor (e.g. F60 for 121 frames), not just F120
+  - resulting anchors: start/mid/end
+- This reduces mid-clip drift and improves persistent identity.
 
-### C) ✅ Deterministic submit: `MobileSimplePromptInput.tsx`
-- Detects char-swap using BOTH `referenceImageUrl` AND `beginningRefImageUrl`
-- Augments prompt via shared utility before `onGenerate()` call
-- Updates UI (`onPromptChange`) so textarea matches sent payload
+4) Ensure every run is unique unless seed is intentionally locked
+- File: `src/hooks/useLibraryFirstWorkspace.ts`
+- For char-swap runs, if seed is not lock-controlled, inject a random seed explicitly.
+- Log/track seed in request metadata so repeated outputs can be diagnosed deterministically.
 
-### D) ✅ Generation hook safety net: `useLibraryFirstWorkspace.ts`
-- Replaced loose regex with shared `augmentCharacterSwapPrompt()` utility
-- Fixed frame math: uses `getLastValidFrame()` → 120 for 121-frame clip
-- Identity-lock anchor now lands on correct frame (multiple of 8)
+5) Improve UX confidence before spend
+- Files: `MobileSimplePromptInput.tsx` + `MobileSimplifiedWorkspace.tsx`
+- Add a compact “Character Swap Active” preflight summary near submit:
+  - model = multi
+  - motion mode = pose
+  - identity anchors = [0, mid, end]
+  - seed = random/locked
+- This gives immediate confirmation that the expensive request is configured correctly.
 
-### E) ✅ Edge function defensive sanitization: `fal-image/index.ts`
-- Snaps ALL `images[].start_frame_num` to nearest multiple of 8
-- Clamps to [0, maxValidFrame] range
-- Same sanitization for `videos[].start_frame_num`
-- Logs all adjustments for debugging
+6) Add targeted observability for fast debugging
+- Files: `supabase/functions/fal-image/index.ts` and optionally job metadata
+- Log final `videos[]` conditioning fields (not just URL/start frame).
+- Log frame anchor list actually sent to fal.
 
-## Expected Payload After Fix
-```json
-{
-  "aspect_ratio": "auto",
-  "images": [
-    { "image_url": "...", "start_frame_num": 0, "strength": 1 },
-    { "image_url": "...", "start_frame_num": 120, "strength": 1 }
-  ],
-  "videos": [{ "video_url": "...", "start_frame_num": 0 }],
-  "prompt": "woman dancing in studio. Same appearance as the input image, matching choreography of reference video"
-}
-```
+Technical details (important):
+- OpenAPI for `VideoConditioningInput` supports exactly the controls we need (`conditioning_type`, `preprocess`, `strength`, frame limits). We should use them for character swap.
+- Current default (`rgb`, full strength, full video) is ideal for preserving source video look, but not ideal for identity replacement.
+- Your current frame math (120 for 121 frames) is now correct; this issue is now conditioning dominance, not frame validity.
+
+Verification checklist (single paid run):
+1) Inspect latest `jobs.metadata.input_used`:
+   - `videos[0].conditioning_type = "pose"`
+   - `videos[0].preprocess = true`
+   - `videos[0].limit_num_frames = true`
+   - `images` include start/mid/end anchors on valid multiples of 8
+   - random `seed` present (unless locked)
+2) Confirm output URL changes between two runs with different random seeds.
+3) Visual acceptance:
+   - choreography follows motion ref
+   - character identity matches start image through mid and end frames.
