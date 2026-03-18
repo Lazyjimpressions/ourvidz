@@ -1,32 +1,41 @@
 
-# Video Character Swap — Fix: Conditioning Quality
+# Video Character Swap — Holistic Fix v2
 
-## Problem
-Character swap was technically working (images[] + videos[] reaching fal.ai correctly) but output didn't retain character identity because:
-1. `aspect_ratio` was overwritten from `"auto"` to `"1:1"` by metadata in edge function
-2. Single image anchor drifted toward motion-video subject over time
-3. Hint-only prompts ("Same appearance...") gave model no scene intent
+## Root Causes Identified
 
-## Changes Made
+1. **Prompt visibility regression**: UI-time hint injection was removed, so textarea never showed augmented prompt
+2. **Loose appearance-hint detection**: Generic regex (`/reference image/`) skipped canonical phrase
+3. **Frame math mismatch**: `duration*fps-1` → 119 → snapped to 112, but LTX 8n+1 needs frame 120
+4. **Incomplete char-swap detection**: `MobileSimplePromptInput` checked image-mode refs only, missed `beginningRefImageUrl`
 
-### 1. ✅ Edge function: aspect_ratio guard (`fal-image/index.ts`)
-- When `images[]` is present (MultiCondition), force `aspect_ratio: "auto"` regardless of metadata
-- Prevents metadata `aspectRatio` from overwriting the client's explicit `"auto"` setting
-- Added logging for verification
+## Changes Made (v2)
 
-### 2. ✅ Identity-lock: end-frame duplication (`useLibraryFirstWorkspace.ts`)
-- When exactly 1 image keyframe + motion video, auto-duplicates the portrait to the last frame
-- Only triggers when end-keyframe slot is empty (manual end-ref takes priority)
-- Anchors character identity at both start AND end, reducing drift
+### A) ✅ Shared utility: `src/lib/utils/characterSwapPrompt.ts`
+- `augmentCharacterSwapPrompt()` — idempotent canonical phrase enforcement (strict regex)
+- `hasSceneIntent()` — detects hint-only prompts
+- `computeLtxNumFrames()` / `getLastValidFrame()` — correct 8n+1 math
+- `snapFrameToMultipleOf8()` — clamp + snap helper
 
-### 3. ✅ Prompt guard: no empty/hint-only submissions (`MobileSimplifiedWorkspace.tsx`)
-- `useEffect` augmentation now skips empty prompts — user must type scene description first
-- Hints only append once user has written something meaningful
+### B) ✅ UI prompt visibility: `MobileSimplifiedWorkspace.tsx`
+- Restored `useEffect` that visibly augments prompt when char-swap conditions met
+- Only triggers when user has written scene content (no empty-prompt pollution)
+- Auto-routes model to `multi` when motion video + keyframe image detected
 
-### 4. ✅ Submit validation: hint-only detection (`MobileSimplePromptInput.tsx`)
-- Detects character-swap mode (image ref + motion video)
-- Blocks generation if prompt is only boilerplate hints with no scene intent
-- Shows clear error: "Describe the scene — hints alone aren't enough"
+### C) ✅ Deterministic submit: `MobileSimplePromptInput.tsx`
+- Detects char-swap using BOTH `referenceImageUrl` AND `beginningRefImageUrl`
+- Augments prompt via shared utility before `onGenerate()` call
+- Updates UI (`onPromptChange`) so textarea matches sent payload
+
+### D) ✅ Generation hook safety net: `useLibraryFirstWorkspace.ts`
+- Replaced loose regex with shared `augmentCharacterSwapPrompt()` utility
+- Fixed frame math: uses `getLastValidFrame()` → 120 for 121-frame clip
+- Identity-lock anchor now lands on correct frame (multiple of 8)
+
+### E) ✅ Edge function defensive sanitization: `fal-image/index.ts`
+- Snaps ALL `images[].start_frame_num` to nearest multiple of 8
+- Clamps to [0, maxValidFrame] range
+- Same sanitization for `videos[].start_frame_num`
+- Logs all adjustments for debugging
 
 ## Expected Payload After Fix
 ```json
@@ -34,7 +43,7 @@ Character swap was technically working (images[] + videos[] reaching fal.ai corr
   "aspect_ratio": "auto",
   "images": [
     { "image_url": "...", "start_frame_num": 0, "strength": 1 },
-    { "image_url": "...", "start_frame_num": 119, "strength": 1 }
+    { "image_url": "...", "start_frame_num": 120, "strength": 1 }
   ],
   "videos": [{ "video_url": "...", "start_frame_num": 0 }],
   "prompt": "woman dancing in studio. Same appearance as the input image, matching choreography of reference video"
