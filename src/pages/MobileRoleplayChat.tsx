@@ -2533,8 +2533,8 @@ const MobileRoleplayChat: React.FC = () => {
       <OurVidzDashboardLayout>
         <div className="flex items-center justify-center min-h-screen bg-background">
           <div className="text-center space-y-4">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <div className="text-white text-lg">Loading character...</div>
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="text-foreground text-lg">Loading character...</div>
             {kickoffError && (
               <div className="text-red-400 text-sm max-w-md">
                 <p>Error: {kickoffError}</p>
