@@ -720,9 +720,9 @@ async function buildModelInput(
     has_image_urls: !!modelInput.image_urls,
     has_video: !!modelInput.video,
     images_count: modelInput.images?.length || 0,
-    images_frames: modelInput.images?.map((i: any) => `F${i.start_frame_num}(s=${i.strength})`).join(', ') || 'none',
+    images_frames: modelInput.images?.map((i: any) => `F${i.start_frame_number}(s=${i.strength})`).join(', ') || 'none',
     videos_count: modelInput.videos?.length || 0,
-    videos_conditioning: modelInput.videos?.map((v: any) => `${v.conditioning_type || 'rgb'}(s=${v.strength ?? 1},pre=${v.preprocess ?? false})`).join(', ') || 'none',
+    videos_detail: modelInput.videos?.map((v: any) => `F${v.start_frame_number}(s=${v.strength ?? 1})`).join(', ') || 'none',
   });
 
   return { modelInput, generationMode };
