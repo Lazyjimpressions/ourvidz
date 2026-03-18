@@ -2286,7 +2286,7 @@ async function updateMemoryData(
  */
 function sanitizePromptForFalAI(prompt: string): string {
   let sanitized = prompt;
-  
+
   // Remove or replace problematic age descriptors
   // These combined with suggestive language trigger violations
   const agePatterns = [
@@ -2295,11 +2295,11 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(innocent but forever curious)\b/gi, replacement: 'curious and engaging' },
     { pattern: /\b(innocent but)\b/gi, replacement: '' },
   ];
-  
+
   agePatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
+
   // Replace suggestive language with neutral alternatives
   const suggestivePatterns = [
     { pattern: /\b(shy smile dances on her lips)\b/gi, replacement: 'gentle smile' },
@@ -2312,7 +2312,7 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(dances on)\b/gi, replacement: 'appears on' },
     { pattern: /\b(racing with)\b/gi, replacement: 'showing' },
   ];
-  
+
   // ✅ FIX: Replace animation-triggering phrases that cause characters to appear animated
   const animationPatterns = [
     { pattern: /\b(playful dance of)\b/gi, replacement: 'playful exchange of' },
@@ -2329,33 +2329,39 @@ function sanitizePromptForFalAI(prompt: string): string {
     { pattern: /\b(inviting a)\b/gi, replacement: 'suggesting a' },
     { pattern: /\b(inviting)\b/gi, replacement: 'suggesting' },
   ];
-  
+
   animationPatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
+
   suggestivePatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
+
   // Remove overly descriptive emotional/physical states that could be flagged
   const emotionalPatterns = [
     { pattern: /\b(mix of excitement and anticipation)\b/gi, replacement: 'engaged expression' },
     { pattern: /\b(excitement and anticipation)\b/gi, replacement: 'engagement' },
     { pattern: /\b(anticipation)\b/gi, replacement: 'interest' },
   ];
-  
+
   emotionalPatterns.forEach(({ pattern, replacement }) => {
     sanitized = sanitized.replace(pattern, replacement);
   });
-  
-  // Clean up multiple spaces and normalize
-  sanitized = sanitized.replace(/\s+/g, ' ').trim();
-  
+
+  // Preserve Figure block structure (line breaks) while normalizing whitespace inside lines
+  sanitized = sanitized
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
   // Remove redundant phrases
   sanitized = sanitized.replace(/\b(young adult adult)\b/gi, 'young adult');
   sanitized = sanitized.replace(/\b(adult adult)\b/gi, 'adult');
-  
+
   return sanitized;
 }
 
@@ -3196,6 +3202,20 @@ const sceneContext = analyzeSceneContent(response);
       : physicalAppearance;
     const briefCharacterIdentity = `${sceneCharacter.name}, ${characterAppearance}`;
 
+    const normalizedAction = (sceneContext?.actions?.[0] || 'Character in scene naturally')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const escapedUserName = userCharacter?.name
+      ? userCharacter.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      : '';
+    const actionMentionsUserName = escapedUserName
+      ? new RegExp(`\\b${escapedUserName}\\b`, 'i').test(normalizedAction)
+      : false;
+    const actionImpliesUserPartner = /\b(you|your|yours)\b/i.test(normalizedAction) || actionMentionsUserName;
+    const characterOnlyPartnerRule = actionImpliesUserPartner
+      ? 'If ACTION implies interaction with the user, include exactly one adult male partner.'
+      : 'Do not introduce additional people unless ACTION explicitly requires it.';
+
     if (sceneStyle === 'both_characters' && userCharacter) {
       const userAppearance = (userCharacter.appearance_tags || []).slice(0, 3).join(', ');
       const userVisualFallback = buildUserVisualDescriptionForScene(
@@ -3216,7 +3236,13 @@ CHARACTER 1 (Figure 2): ${sceneCharacter.name}, ${characterAppearance}
 
 CHARACTER 2 (Figure 3): ${userCharacter.name}, ${userAppearanceFinal}
 
-ACTION: ${sceneContext?.actions?.[0] || 'Characters interacting naturally'}`;
+ACTION: ${normalizedAction}
+
+COMPOSITION RULES:
+- Exactly two people in frame: Character 1 and Character 2.
+- No extra people, no duplicates, no mirrored/reflected clones.
+- Keep both identities distinct and anatomically correct.
+- Do not add background bystanders.`;
       console.log('🎭 Both characters I2I: Figure notation');
     } else if (sceneStyle === 'pov') {
       const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
@@ -3226,7 +3252,13 @@ SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}, looking at viewer
 
-ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
+ACTION: ${normalizedAction}
+
+COMPOSITION RULES:
+- First-person camera from the user's viewpoint.
+- Keep exactly one instance of Figure 2.
+- Do not render duplicate men, extra foreground shoulders/heads, or additional bystanders.
+- If hands/arms are visible, they belong to one person only.`;
       console.log('🎬 POV I2I: Figure notation (setting stripped of character)');
     } else {
       const settingOnly = stripCharacterFromScenePrompt(scenePrompt, sceneCharacter.name);
@@ -3236,7 +3268,13 @@ SETTING (Figure 1): ${settingOnly}
 
 CHARACTER (Figure 2): ${briefCharacterIdentity}
 
-ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
+ACTION: ${normalizedAction}
+
+COMPOSITION RULES:
+- Keep exactly one instance of the character from Figure 2.
+- ${characterOnlyPartnerRule}
+- Never add duplicate men, mirrored/reflected clones, or background bystanders.
+- Maximum two people total in frame.`;
       console.log('🎬 Character-only I2I: Figure notation (setting stripped of character)');
     }
 
@@ -3248,6 +3286,10 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
 
     if (hasSceneClothingDirective && isUsingI2I) {
       enhancedScenePrompt += '\n\n[I2I INSTRUCTION: Retain character face perfectly from the reference images, but change clothing to match the description.]';
+    }
+
+    if (useI2IIteration && effectiveReferenceImageUrl) {
+      enhancedScenePrompt += '\n\n[CONTINUITY RULES: Preserve environment continuity from Figure 1, but update pose, blocking, and camera composition to match ACTION. Do not repeat the exact previous framing. Keep subject count strict with no extra people.]';
     }
 
     console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
@@ -3685,6 +3727,7 @@ ACTION: ${sceneContext?.actions?.[0] || 'Character in scene naturally'}`;
             reference_strength: i2iStrength,
             seed_locked: seedLocked,
             prompt_length: enhancedScenePrompt.length,
+            prompt_sent_to_fal: sanitizedPrompt,
             apiModelId: modelConfig.id
           }, null, 2));
 
