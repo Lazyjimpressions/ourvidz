@@ -1,48 +1,96 @@
 
 
-# Fix: Video Thumbnails Not Loading in Library Modal
+# Competitive UX Improvements vs Candy.ai
 
-## Problem
+After reviewing the current roleplay system, here are the key areas where Candy.ai outperforms us and a concrete plan to close the gap. Organized by impact.
 
-When browsing videos in the `ImagePickerDialog`, thumbnails fail to load because:
+---
 
-1. Video assets in `user_library` typically have no separate `thumbnail_path` -- it's null
-2. The signing code falls back to `asset.thumbPath || asset.originalPath`, which resolves to the `.mp4` file path
-3. The signed URL is then passed to an `<img>` tag (line 389), which cannot render `.mp4` files
-4. Result: all video thumbnails show as "Failed" or broken
+## 1. Typing Animation & Message Reveal
 
-## Solution
+**Problem**: AI messages appear instantly as a full block of text. Candy.ai streams text character-by-character, creating an intimate "they're typing to me" feeling.
 
-Update `ImagePickerDialog.tsx` to render a `<video>` element instead of `<img>` when the asset type is `video`. The `<video>` element with `preload="metadata"` will load just the first frame as a thumbnail preview.
+**Fix**: Add a typewriter effect to `ChatMessage.tsx` for AI messages. Animate text reveal at ~30-50 chars/second with a blinking cursor. Skip animation for historical messages (only animate new ones).
 
-### File: `src/components/storyboard/ImagePickerDialog.tsx`
+---
 
-**Change 1**: In the asset rendering grid (~line 389-405), detect if the asset is a video and render a `<video>` element instead:
+## 2. Immersive Chat Layout (Remove Visual Clutter)
 
-```tsx
-{asset.type === 'video' ? (
-  <video
-    src={signedUrl}
-    className="w-full h-full object-cover"
-    preload="metadata"
-    muted
-    playsInline
-    onError={(e) => {
-      // same fallback logic as img
-    }}
-  />
-) : (
-  <img
-    src={signedUrl}
-    alt={asset.title || asset.prompt || 'Image'}
-    className="w-full h-full object-cover"
-    loading="lazy"
-    onError={...}
-  />
-)}
-```
+**Problem**: The chat uses traditional messaging app styling (colored bubbles, avatars on every message, timestamps on every line). Candy.ai uses a cleaner, more immersive novel-like layout.
 
-**Change 2**: Add a small video icon overlay in the bottom-left corner for video assets so users can distinguish them from images at a glance. Use the existing `lucide-react` `Play` or `Film` icon.
+**Fix in `ChatMessage.tsx`**:
+- Remove per-message avatars for consecutive same-sender messages (group messages)
+- Make AI message bubbles more subtle (less harsh gradient, softer borders)
+- Show timestamps only on hover or between time gaps (>5 min)
+- Add italic formatting for *action text* (text between asterisks) to distinguish narration from dialogue
 
-This approach avoids needing separate thumbnail generation infrastructure -- the browser's native `<video>` element handles extracting the first frame automatically.
+---
+
+## 3. Character Portrait Always Visible
+
+**Problem**: Character image is only in the header as a tiny avatar. Candy.ai keeps a prominent character portrait visible during chat, reinforcing the companion's presence.
+
+**Fix**: On desktop, add a persistent side panel (right rail, ~200px) showing the character's portrait, name, mood indicator, and quick stats. On mobile, make the header avatar larger and tappable to show a full portrait overlay.
+
+---
+
+## 4. Scene Images Inline & Polished
+
+**Problem**: Scene images render in a heavy `Card` with error states, debug panels, and action buttons visible. Feels technical, not immersive.
+
+**Fix in `ChatMessage.tsx`**:
+- Render scene images edge-to-edge within the chat flow (no card wrapper)
+- Add a subtle fade-in animation on load
+- Hide all action buttons (download, edit, debug) behind a long-press/tap overlay
+- Add a soft vignette/gradient overlay at the bottom of images for visual polish
+
+---
+
+## 5. Quick Reply Suggestions
+
+**Problem**: Users face a blank input field with no guidance. Candy.ai provides contextual reply chips ("Tell me more", "Kiss her", action prompts).
+
+**Fix**: After each AI message, render 2-3 contextual quick-reply chips above the input. Generate these server-side as part of the `roleplay-chat` response (add a `suggested_replies` field to the edge function response). Fallback to static presets if not available.
+
+---
+
+## 6. Richer Input Bar
+
+**Problem**: Single-line `Input` with a send button. No personality.
+
+**Fix in `MobileChatInput.tsx`**:
+- Switch from `Input` to `Textarea` with auto-grow (like iMessage)
+- Add action chips row above input: camera icon (request scene), dice icon (random action), bookmark (save moment)
+- Subtle character name in placeholder: "Message Luna..."
+
+---
+
+## 7. Onboarding & First Message Polish
+
+**Problem**: Chat starts with raw text dump of `first_message`. No ceremony.
+
+**Fix**: When a conversation starts, show:
+- Full-screen character splash (portrait + name + tagline) for 1.5s with fade transition
+- Then animate the first message with typewriter effect
+- Show 2-3 starter reply suggestions
+
+---
+
+## Implementation Priority (Ordered by UX Impact)
+
+| Phase | Items | Effort |
+|-------|-------|--------|
+| **Phase 1** | Typewriter animation, action text italics, grouped messages | ~2-3 hours |
+| **Phase 2** | Quick reply suggestions, richer input bar | ~3-4 hours |
+| **Phase 3** | Immersive scene images, character portrait panel | ~3-4 hours |
+| **Phase 4** | First-message splash, timestamp cleanup | ~2 hours |
+
+### Files to modify:
+- `src/components/roleplay/ChatMessage.tsx` — typewriter, grouping, scene image polish, action text
+- `src/components/roleplay/MobileChatInput.tsx` — textarea upgrade, action chips, dynamic placeholder
+- `src/pages/MobileRoleplayChat.tsx` — quick replies state, character portrait panel, splash screen
+- `supabase/functions/roleplay-chat/index.ts` — add `suggested_replies` to response
+- New: `src/components/roleplay/TypewriterText.tsx` — reusable typewriter component
+- New: `src/components/roleplay/QuickReplies.tsx` — contextual reply chips
+- New: `src/components/roleplay/CharacterSplash.tsx` — first-message splash overlay
 
