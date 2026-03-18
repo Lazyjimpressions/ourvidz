@@ -251,7 +251,7 @@ serve(async (req) => {
       try {
         const replicateApiToken = Deno.env.get('REPLICATE_API_TOKEN');
         if (replicateApiToken) {
-          const replicate = new Replicate({ token: replicateApiToken });
+          const replicate = new Replicate({ auth: replicateApiToken });
           const actualPrediction = await replicate.predictions.get(predictionId);
           
           console.log('🔍 VALIDATION: Fetched actual Replicate prediction:', {
