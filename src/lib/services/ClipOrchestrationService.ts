@@ -683,7 +683,7 @@ export class ClipOrchestrationService {
         // and optionally input.videos for motion reference
         if (request.referenceImageUrl) {
           config.images = [
-            { image_url: request.referenceImageUrl, start_frame_num: 0 },
+            { image_url: request.referenceImageUrl, start_frame_number: 0 },
           ];
         }
         // Motion video will be resolved and added by generateClip
@@ -700,16 +700,16 @@ export class ClipOrchestrationService {
         // Uses images array with temporal positions
         config.images = [];
         if (request.referenceImageUrl) {
-          (config.images as Array<{ image_url: string; start_frame_num: number }>).push(
-            { image_url: request.referenceImageUrl, start_frame_num: 0 }
+          (config.images as Array<{ image_url: string; start_frame_number: number }>).push(
+            { image_url: request.referenceImageUrl, start_frame_number: 0 }
           );
         }
         if (request.endFrameUrl) {
           // End frame at final position (based on duration and frame rate)
           const frameRate = (defaults as Record<string, number>).frame_rate || 16;
           const endFrameNum = Math.round(duration * frameRate) - 1;
-          (config.images as Array<{ image_url: string; start_frame_num: number }>).push(
-            { image_url: request.endFrameUrl, start_frame_num: endFrameNum }
+          (config.images as Array<{ image_url: string; start_frame_number: number }>).push(
+            { image_url: request.endFrameUrl, start_frame_number: endFrameNum }
           );
         }
         break;
@@ -810,9 +810,9 @@ export class ClipOrchestrationService {
         if (!generationConfig.videos) {
           generationConfig.videos = [];
         }
-        (generationConfig.videos as Array<{ video_url: string; start_frame_num: number }>).push({
+        (generationConfig.videos as Array<{ video_url: string; start_frame_number: number }>).push({
           video_url: preset.video_url,
-          start_frame_num: 0,
+          start_frame_number: 0,
         });
         console.log('🎬 [ClipOrchestration] Added motion preset:', preset.name);
       }

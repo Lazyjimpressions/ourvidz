@@ -1480,7 +1480,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               const imageFrames = autoSpaceFrames(filledEntries.length, maxFrame);
               inputObj.images = filledEntries.map((entry, i) => ({
                 image_url: entry.url,
-                start_frame_num: imageFrames[i],
+                start_frame_number: imageFrames[i],
                 strength: keyframeStrengths[entry.slotIndex] ?? 1,
               }));
             }
@@ -1491,33 +1491,30 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               const isCharSwap = inputObj.images && inputObj.images.length > 0;
               inputObj.videos = [{
                 video_url: stripToStoragePath(motionRefVideoUrl),
-                start_frame_num: 0,
-                ...(isCharSwap ? {
-                  conditioning_type: 'pose',
-                  preprocess: true,
-                  strength: 0.8,
-                  limit_num_frames: true,
-                } : {}),
+                start_frame_number: 0,
+                strength: isCharSwap ? 0.7 : 1,
               }];
               if (isCharSwap) {
-                console.log('🎭 Character-swap: pose conditioning enabled (strength=0.8, preprocess=true)');
+                console.log('🎭 Character-swap: video strength=0.7 (per fal.ai best practices)');
               }
               
               // Identity-lock: when only 1 image keyframe + motion video, add mid + end anchors
               // maxFrame is already 8n (from getLastValidFrame = 8n+1 - 1), so no extra snapping needed
               if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
                 const midFrame = Math.round(maxFrame / 2 / 8) * 8; // snap to nearest 8
+                // Per fal.ai best practices: start=0.85 (establish identity), mid=0.5 (allow motion), end=0.4 (guide landing)
+                inputObj.images[0].strength = 0.85;
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
-                  start_frame_num: midFrame,
-                  strength: inputObj.images[0].strength ?? 1,
+                  start_frame_number: midFrame,
+                  strength: 0.5,
                 });
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
-                  start_frame_num: maxFrame, // e.g. 120 for 121-frame clip
-                  strength: inputObj.images[0].strength ?? 1,
+                  start_frame_number: maxFrame, // e.g. 120 for 121-frame clip
+                  strength: 0.4,
                 });
-                console.log(`🔒 Identity-lock: 3 anchors at frames [0, ${midFrame}, ${maxFrame}] for stronger character retention`);
+                console.log(`🔒 Identity-lock: 3 anchors at frames [0(s=0.85), ${midFrame}(s=0.5), ${maxFrame}(s=0.4)] per fal.ai best practices`);
               }
             }
             
