@@ -1,37 +1,39 @@
 
+# Video Character Replacement via LTX 13B MultiCondition — IMPLEMENTED
 
-# Competitive UX Improvements vs Candy.ai — Implementation Complete
+## Summary
 
-## Implemented (All 4 Phases)
+Character swap is supported natively through the existing Video Multi Mode workflow — no new UI panels needed.
 
-### Phase 1: Message Polish
-- **TypewriterText**: `src/components/roleplay/TypewriterText.tsx` — Character-by-character reveal at ~45 chars/sec with blinking cursor. Skipped for historical messages.
-- **Action text italics**: `*text between asterisks*` renders as italic for narration vs dialogue distinction.
-- **Message grouping**: Consecutive same-sender messages collapse avatars/headers. Timestamps only shown with >5 min gap.
-- **Softer AI bubbles**: Switched from `bg-gray-800` to `bg-card` with `border-border/50` for less harsh appearance.
+## Changes Made
 
-### Phase 2: Quick Replies & Input
-- **QuickReplies**: `src/components/roleplay/QuickReplies.tsx` — 3 contextual chips shown after last AI message. Falls back to defaults ("Tell me more...", "What happens next?", "Come closer...").
-- **Auto-grow textarea**: `MobileChatInput.tsx` upgraded from `<Input>` to `<textarea>` with auto-resize (max 5 rows). Rounded pill shape.
-- **Dynamic placeholder**: Shows "Message Luna..." using character name.
-- **Action chips**: Camera/Scene button row above input for quick scene generation.
+### 1. ✅ `reference_images` bucket increased to 200MB
+- Migration: `UPDATE storage.buckets SET file_size_limit = 209715200 WHERE name = 'reference_images'`
+- Supports HD dance/source video uploads
 
-### Phase 3: Scene Images
-- **Edge-to-edge**: Removed `Card` wrapper, images render directly with `rounded-xl`.
-- **Fade-in animation**: Scene images animate in with `opacity` + `scale` transition on load.
-- **Vignette overlay**: Subtle `bg-gradient-to-t from-black/20` at bottom of scene images.
-- **Hidden actions**: Download/Edit/Share buttons only appear on hover/tap overlay.
+### 2. ✅ LTX MultiCondition pricing added to `fal-image`
+- Added `'fal-ai/ltx-video-13b-distilled/multiconditioning': 0.20` and normalized variant to `FAL_PRICING` map
+- Ensures accurate cost tracking instead of falling back to `default_video`
 
-### Phase 4: Onboarding
-- **CharacterSplash**: `src/components/roleplay/CharacterSplash.tsx` — Full-screen overlay on new conversations with portrait, name, tagline. Auto-dismisses after 2s. Tap to skip.
-- **Timestamp cleanup**: Timestamps hidden for grouped messages, only shown when >5 min gap.
+### 3. ✅ Character swap hint in `MobileSettingsSheet`
+- When both a motion reference video AND an image keyframe are loaded, the Motion Reference section shows:
+  "✨ Character swap mode — appearance from image, motion from video"
+- Otherwise shows default: "Optional video to guide movement and camera"
+
+### 4. ✅ LTX MultiCondition model verified in `api_models`
+- `id: 0fae432e-d8a1-4d71-a4a2-0276394d2ca8`
+- `tasks: ['multi']`, `default_for_tasks: ['multi']`, `is_active: true`, `is_default: true`
+- Already fully wired through `fal-image` edge function
+
+## How Users Perform Character Swap
+
+1. Switch to **Video mode** in workspace
+2. Load character portrait into **Start keyframe slot** (appearance anchor)
+3. Load dance/source video into **Motion Reference** drop zone
+4. Write a prompt (e.g., "A woman dancing energetically, same appearance as the input image, matching choreography of reference video")
+5. Hit **Generate** — LTX MultiCondition auto-selected via smart model switching
 
 ## Files Modified
-- `src/components/roleplay/ChatMessage.tsx` — Typewriter, action text, grouping, scene polish
-- `src/components/roleplay/MobileChatInput.tsx` — Textarea upgrade, action chips, character placeholder
-- `src/pages/MobileRoleplayChat.tsx` — Integration of all new components
-
-## Files Created
-- `src/components/roleplay/TypewriterText.tsx`
-- `src/components/roleplay/QuickReplies.tsx`
-- `src/components/roleplay/CharacterSplash.tsx`
+- `supabase/functions/fal-image/index.ts` — Added pricing entries
+- `src/components/workspace/MobileSettingsSheet.tsx` — Added contextual swap hint
+- DB: `reference_images` bucket file_size_limit → 200MB
