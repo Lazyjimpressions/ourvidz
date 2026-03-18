@@ -73,6 +73,10 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
         asset.metadata?.content_category === 'scene'
       );
     }
+
+    if (activeTab === 'videos') {
+      return allAssets.filter(asset => asset.type === 'video');
+    }
     
     return allAssets;
   }, [rawAssets, activeTab]);
