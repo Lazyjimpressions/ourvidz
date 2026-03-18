@@ -44,6 +44,8 @@ export interface MobileQuickBarProps {
   onRemoveRef: (index: number) => void;
   onDropRef: (index: number, file: File) => void;
   onDropRefUrl?: (index: number, url: string) => void;
+  onRefAddFromLibrary?: (index: number) => void;
+  onRefAddFromFile?: (index: number) => void;
   onAddSlot: () => void;
   
   // Fixed image slots (used in image mode)
