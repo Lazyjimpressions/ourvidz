@@ -1,42 +1,78 @@
 
-# Video Character Swap — Fix: Conditioning Quality
+Audit summary from your latest run (root causes, based on code + job logs):
 
-## Problem
-Character swap was technically working (images[] + videos[] reaching fal.ai correctly) but output didn't retain character identity because:
-1. `aspect_ratio` was overwritten from `"auto"` to `"1:1"` by metadata in edge function
-2. Single image anchor drifted toward motion-video subject over time
-3. Hint-only prompts ("Same appearance...") gave model no scene intent
+1) Prompt visibility regression is real:
+- `MobileSimplifiedWorkspace.tsx` explicitly removed UI-time hint injection (“append at generation time only”), so the textarea no longer shows the auto-instructions.
 
-## Changes Made
+2) Prompt adherence logic is too loose:
+- In `useLibraryFirstWorkspace.ts`, appearance-hint detection treats generic text like “reference image” as sufficient, so it often skips the canonical identity phrase (“Same appearance as the input image”).
+- Your logged prompt confirms this: motion hint present, canonical appearance hint missing.
 
-### 1. ✅ Edge function: aspect_ratio guard (`fal-image/index.ts`)
-- When `images[]` is present (MultiCondition), force `aspect_ratio: "auto"` regardless of metadata
-- Prevents metadata `aspectRatio` from overwriting the client's explicit `"auto"` setting
-- Added logging for verification
+3) Identity-lock frame math is still wrong for LTX constraints:
+- Current anchor uses `maxFrame = duration * fps - 1`, then snaps down to multiple-of-8.
+- For duration=4, fps=30 → `119`, snapped to `112`, which matches your payload.
+- But provider uses `num_frames = 8n+1` (121), so last valid anchor should be `120`. This mismatch weakens end-of-clip identity lock.
 
-### 2. ✅ Identity-lock: end-frame duplication (`useLibraryFirstWorkspace.ts`)
-- When exactly 1 image keyframe + motion video, auto-duplicates the portrait to the last frame
-- Only triggers when end-keyframe slot is empty (manual end-ref takes priority)
-- Anchors character identity at both start AND end, reducing drift
+4) Guardrails are incomplete in video mode:
+- `MobileSimplePromptInput` uses `referenceImage/referenceImageUrl` for char-swap checks, but video mode primarily uses `beginningRefImageUrl`.
+- This can miss validation/augmentation in some flows.
 
-### 3. ✅ Prompt guard: no empty/hint-only submissions (`MobileSimplifiedWorkspace.tsx`)
-- `useEffect` augmentation now skips empty prompts — user must type scene description first
-- Hints only append once user has written something meaningful
+Implementation plan (holistic hardening):
 
-### 4. ✅ Submit validation: hint-only detection (`MobileSimplePromptInput.tsx`)
-- Detects character-swap mode (image ref + motion video)
-- Blocks generation if prompt is only boilerplate hints with no scene intent
-- Shows clear error: "Describe the scene — hints alone aren't enough"
+A) Unify character-swap prompt logic in one shared utility
+- Create a reusable helper (e.g. `src/lib/utils/characterSwapPrompt.ts`) that:
+  - Enforces canonical phrases idempotently:
+    - “Same appearance as the input image”
+    - “matching choreography of reference video”
+  - Separately checks for scene intent (not hint-only).
+- Use strict canonical detection (not broad `reference image` keyword matching).
 
-## Expected Payload After Fix
-```json
-{
-  "aspect_ratio": "auto",
-  "images": [
-    { "image_url": "...", "start_frame_num": 0, "strength": 1 },
-    { "image_url": "...", "start_frame_num": 119, "strength": 1 }
-  ],
-  "videos": [{ "video_url": "...", "start_frame_num": 0 }],
-  "prompt": "woman dancing in studio. Same appearance as the input image, matching choreography of reference video"
-}
-```
+B) Restore visible prompt augmentation (without empty-prompt pollution)
+- In `MobileSimplifiedWorkspace.tsx`, reintroduce UI augmentation when:
+  - video mode + start image exists + motion video exists + prompt is non-empty.
+- Update textarea value so user sees exactly what will be sent.
+- Keep empty prompt untouched.
+
+C) Make submit path deterministic
+- In `MobileSimplePromptInput.tsx` `handleSubmit`:
+  - Detect char-swap using video refs (`beginningRefImageUrl` + `motionRefVideoUrl`), not just image-mode refs.
+  - Compute augmented prompt via shared utility.
+  - Call `onPromptChange(augmented)` before `onGenerate(augmented)` so UI and sent payload match.
+  - Keep/strengthen hint-only blocking.
+
+D) Keep backend-facing safety net in generation hook
+- In `useLibraryFirstWorkspace.ts`, run the same shared augmentation utility right before payload creation (final guard), so no UI race can bypass it.
+
+E) Fix frame math to match LTX 8n+1 behavior
+- In `useLibraryFirstWorkspace.ts`, replace `duration*fps-1` anchor logic with:
+  - compute `num_frames` using same snapping as edge (`8n+1`)
+  - set `maxFrame = num_frames - 1`
+  - identity-lock duplicate anchor at `maxFrame` (for your case: 120).
+- Ensure all auto-generated `start_frame_num` values are snapped/clamped safely.
+
+F) Add edge-function defensive sanitization
+- In `supabase/functions/fal-image/index.ts`, before provider call:
+  - sanitize `images[].start_frame_num` to valid range and multiple-of-8.
+  - log adjustments.
+- This prevents another paid run failing from malformed frame indices if client logic regresses.
+
+G) Auto-route model correctly for char-swap
+- In `MobileSimplifiedWorkspace.tsx`, when motion video is present + at least one keyframe image, auto-switch to `multi` task model if user has not manually overridden.
+- On motion-ref removal, revert to appropriate `i2v/t2v` default.
+
+Verification checklist (before more credit-heavy iteration):
+
+1) Single controlled run, then query `jobs.metadata.input_used`:
+- `model_key = fal-ai/ltx-video-13b-distilled/multiconditioning`
+- `aspect_ratio = auto`
+- `images` includes start + end anchor at `0` and `120` (for 121 frames)
+- `videos[0].start_frame_num = 0`
+- prompt contains both canonical phrases + user scene text
+
+2) UI check:
+- Textarea visibly shows augmented prompt before submit.
+
+3) Output check:
+- Validate identity at start/middle/end frames (not just first frame).
+
+This sequence addresses both failures you called out: “prompt not showing” and “character not adhering,” while adding hard backend safeguards to reduce costly retries.
