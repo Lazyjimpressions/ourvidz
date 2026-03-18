@@ -1,46 +1,53 @@
 
+# Video Character Swap via Existing Workspace — IMPLEMENTED
 
-# Fix: Auto-Augment Prompt for Multi-Conditioning Character Adherence
+## Summary
 
-## Problem
+Character swap is supported natively through the existing Video Multi Mode workflow. No new UI panels needed. Two gaps were closed:
 
-The multi-conditioning generation technically works (both `images[]` and `videos[]` are sent correctly), but the output ignores the character reference because the prompt doesn't instruct the model to use it. The user typed "show woman dancing" — the LTX model needs explicit instructions like "same appearance as the input image" and "matching movement/choreography of reference video" to properly apply the conditioning inputs.
+## Changes Made
 
-## Solution
+### 1. ✅ `reference_images` bucket increased to 200MB
+- Migration: `UPDATE storage.buckets SET file_size_limit = 209715200 WHERE name = 'reference_images'`
+- Supports HD dance/source video uploads
 
-Add automatic prompt augmentation in `useLibraryFirstWorkspace.ts` when building a multi-conditioning payload with both image keyframes AND a motion reference video. This follows the documented best practices from the LTX MultiCondition prompting guide.
+### 2. ✅ LTX MultiCondition pricing added to `fal-image`
+- Added `'fal-ai/ltx-video-13b-distilled/multiconditioning': 0.20` to `FAL_PRICING` map
+- Ensures accurate cost tracking
 
-### File: `src/hooks/useLibraryFirstWorkspace.ts`
+### 3. ✅ Character swap hint in `MobileSettingsSheet`
+- When both a motion reference video AND an image keyframe are loaded, shows:
+  "✨ Character swap mode — appearance from image, motion from video"
 
-After the multi-conditioning payload is built (around line 1498), before sending:
+### 4. ✅ Library "Videos" tab added
+- 4th tab in `UpdatedOptimizedLibrary.tsx` filtering by `asset.type === 'video'`
+- Grid changed from `grid-cols-3` to `grid-cols-4` to accommodate
+- Users can now browse saved videos separately for reuse as motion references
 
-```typescript
-// Auto-augment prompt for character swap workflow
-if (inputObj.images?.length > 0 && inputObj.videos?.length > 0) {
-  const hasAppearanceHint = /same appearance|input image|reference image|character from/i.test(inputObj.prompt);
-  const hasMotionHint = /matching (movement|choreography|motion)|reference video|same movement/i.test(inputObj.prompt);
-  
-  let augmented = inputObj.prompt;
-  if (!hasAppearanceHint) {
-    augmented += '. Same appearance as the input image';
-  }
-  if (!hasMotionHint) {
-    augmented += ', matching choreography of reference video';
-  }
-  inputObj.prompt = augmented;
-  console.log('🎭 MultiCondition: Auto-augmented prompt for character adherence');
-}
-```
+### 5. ✅ Video thumbnail generation improved
+- `SharedGrid.tsx` now generates video thumbnails eagerly on mount
+- Previously required visibility intersection before triggering
+- Videos show thumbnails faster instead of blank tiles
 
-This only appends hints when the user hasn't already included them, preserving user intent while ensuring the model gets the right instructions.
+## User Workflow: Character Swap
 
-### Why this works
+1. Switch to **Video mode** in workspace
+2. Load character portrait into **Start keyframe slot** (appearance anchor)
+3. Load dance/source video into **Motion Reference** drop zone
+4. Write a prompt describing the scene
+5. Hit **Generate** — LTX MultiCondition auto-selected via smart model switching
+6. Save result to Library → appears in **Videos** tab for reuse
 
-The LTX 13B MultiCondition model treats `images[]` as appearance anchors and `videos[]` as motion guides, but it needs textual reinforcement to bridge them. Without explicit prompt language, it tends to generate from the text prompt alone, treating the references as weak suggestions.
+## User Workflow: Loading Source Videos
 
-| Step | File | Change |
-|------|------|--------|
-| 1 | `src/hooks/useLibraryFirstWorkspace.ts` | Add prompt auto-augmentation when both images[] and videos[] are present |
+1. Upload video via Motion Reference "Upload file" or drag-drop into workspace
+2. After generation, save the result to Library via the Save button on the tile
+3. Browse saved videos in Library → **Videos** tab
+4. Use `ImagePickerDialog` with `mediaType="video"` to select from library later
 
-One small, targeted change.
-
+## Files Modified
+- `supabase/functions/fal-image/index.ts` — Added pricing entries
+- `src/components/workspace/MobileSettingsSheet.tsx` — Added contextual swap hint
+- `src/components/library/UpdatedOptimizedLibrary.tsx` — Added Videos tab
+- `src/components/shared/SharedGrid.tsx` — Eager video thumbnail generation
+- DB: `reference_images` bucket file_size_limit → 200MB
