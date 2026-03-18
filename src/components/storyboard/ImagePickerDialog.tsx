@@ -128,7 +128,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         if (mediaType === 'video') return asset.type === 'video';
         return asset.type === 'image';
       });
-  }, [paginatedData]);
+  }, [paginatedData, mediaType]);
 
   const isLoading = activeSource === 'library' ? libraryLoading : workspaceLoading;
 
