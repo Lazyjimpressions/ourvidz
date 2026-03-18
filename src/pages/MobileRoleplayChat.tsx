@@ -544,6 +544,11 @@ const MobileRoleplayChat: React.FC = () => {
 
       // Check if this is a fresh scene start
       const forceNewConversation = locationState?.forceNewConversation || shouldStartFresh;
+      
+      // Show splash for fresh conversations
+      if (forceNewConversation && !splashDismissed) {
+        setShowSplash(true);
+      }
 
       // ✅ FIX: userCharacterId from navigation state is now handled in settings initialization
       // with proper priority: navigationState → localStorage → profileDefault (lines 208-244)
