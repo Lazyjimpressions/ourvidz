@@ -1491,16 +1491,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               const isCharSwap = inputObj.images && inputObj.images.length > 0;
               inputObj.videos = [{
                 video_url: stripToStoragePath(motionRefVideoUrl),
-                start_frame_num: 0,
-                ...(isCharSwap ? {
-                  conditioning_type: 'pose',
-                  preprocess: true,
-                  strength: 0.8,
-                  limit_num_frames: true,
-                } : {}),
+                start_frame_number: 0,
+                strength: isCharSwap ? 0.7 : 1,
               }];
               if (isCharSwap) {
-                console.log('🎭 Character-swap: pose conditioning enabled (strength=0.8, preprocess=true)');
+                console.log('🎭 Character-swap: video strength=0.7 (per fal.ai best practices)');
               }
               
               // Identity-lock: when only 1 image keyframe + motion video, add mid + end anchors
