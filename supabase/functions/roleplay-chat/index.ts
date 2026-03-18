@@ -2894,7 +2894,7 @@ const sceneContext = analyzeSceneContent(response);
       //           2) sceneTemplatePrompt (scene template's scene_prompt from scenes table),
       //           3) pattern-matched setting from AI response (weakest, often wrong)
       const patternSetting = sceneContext.setting || 'the scene';
-      const authoritativeSetting = currentLocation || (sceneTemplatePrompt && !isFirstScene ? sceneTemplatePrompt : null);
+      const authoritativeSetting = sceneTemplatePrompt || currentLocation || null;
       const setting = authoritativeSetting || patternSetting;
       const mood = sceneContext.mood || 'engaging';
       const visuals = sceneContext.visualElements?.slice(0, 3).join(', ') || '';
