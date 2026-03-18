@@ -917,7 +917,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             onChange={(e) => onPromptChange(e.target.value)}
             placeholder={exactCopyMode && hasDisplayReference 
               ? "Optional: Describe modifications (or leave blank for exact copy)" 
-              : "Describe what you want to create..."
+              : (motionRefVideoUrl && (beginningRefImageUrl || referenceImageUrl))
+                ? "Describe the scene — e.g. 'woman dancing in a studio'..."
+                : "Describe what you want to create..."
             }
             className="min-h-[80px] max-h-[120px] resize-none text-base pr-10"
             disabled={isGenerating}
