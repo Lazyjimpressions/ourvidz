@@ -2671,8 +2671,6 @@ const MobileRoleplayChat: React.FC = () => {
               isMobile={isMobile}
               characterName={character?.name}
             />
-              isMobile={isMobile}
-            />
           </div>
         )}
 
