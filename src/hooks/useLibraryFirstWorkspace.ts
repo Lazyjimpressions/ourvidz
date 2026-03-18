@@ -1470,10 +1470,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               });
             }
             if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
-            // maxFrame must be < actual num_frames to avoid fal.ai 500 errors
+            // Compute maxFrame using LTX 8n+1 constraint so identity-lock lands on valid frame
             const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
-            const actualNumFrames = (videoDuration || 5) * fps;
-            const maxFrame = actualNumFrames - 1; // last valid frame index
+            const { getLastValidFrame } = await import('@/lib/utils/characterSwapPrompt');
+            const maxFrame = getLastValidFrame(videoDuration || 5, fps); // e.g. 120 for ~4s@30fps
             
             // All filled entries are images now (no more isVideo splitting)
             if (filledEntries.length > 0) {
