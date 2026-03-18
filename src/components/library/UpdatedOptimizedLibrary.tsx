@@ -30,7 +30,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [lastLightboxClose, setLastLightboxClose] = useState<number>(0);
-  const [activeTab, setActiveTab] = useState<'all' | 'characters' | 'scenes'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'characters' | 'scenes' | 'videos'>('all');
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
