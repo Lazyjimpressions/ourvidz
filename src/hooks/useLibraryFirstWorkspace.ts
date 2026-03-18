@@ -1522,16 +1522,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             inputObj.aspect_ratio = 'auto';
             console.log('🎯 MultiCondition: overriding aspect_ratio to "auto" for ref image adherence');
             
-            // Auto-augment prompt for character swap workflow
-            if (inputObj.videos?.length > 0) {
-              const hasAppearanceHint = /same appearance|input image|reference image|character from/i.test(inputObj.prompt);
-              const hasMotionHint = /matching (movement|choreography|motion)|reference video|same movement/i.test(inputObj.prompt);
-              let augmented = inputObj.prompt;
-              if (!hasAppearanceHint) augmented += '. Same appearance as the input image';
-              if (!hasMotionHint) augmented += ', matching choreography of reference video';
-              inputObj.prompt = augmented;
-              console.log('🎭 MultiCondition: Auto-augmented prompt for character adherence');
-            }
+            // Note: prompt augmentation for character swap is now handled in MobileSimplifiedWorkspace
+            // via useEffect that populates the visible prompt box for user confirmation
           }
         }
         
@@ -1553,7 +1545,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         });
         
         requestPayload = {
-          prompt: finalPrompt,
+          prompt: inputObj.prompt || finalPrompt,
           apiModelId: effectiveModel.id,
           job_type: isFalVideo ? 'fal_video' : 'fal_image',
           modality: isFalVideo ? 'video' : 'image',
