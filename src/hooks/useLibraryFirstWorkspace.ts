@@ -1493,15 +1493,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               }];
               
               // Identity-lock: when only 1 image keyframe + motion video, duplicate image to last frame
-              // This anchors character identity at both start AND end, reducing drift toward source-video subject
+              // maxFrame is already 8n (from getLastValidFrame = 8n+1 - 1), so no extra snapping needed
               if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
-                const lastFrame = Math.floor((maxFrame || 120) / 8) * 8;
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
-                  start_frame_num: lastFrame,
+                  start_frame_num: maxFrame, // e.g. 120 for 121-frame clip
                   strength: inputObj.images[0].strength ?? 1,
                 });
-                console.log(`🔒 Identity-lock: duplicated image anchor to frame ${lastFrame} for stronger character retention`);
+                console.log(`🔒 Identity-lock: duplicated image anchor to frame ${maxFrame} for stronger character retention`);
               }
             }
             
