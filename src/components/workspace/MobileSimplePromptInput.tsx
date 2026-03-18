@@ -544,6 +544,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     }
     
     const hasReference = !!referenceImage || !!referenceImageUrl;
+    const hasVideoStartRef = !!beginningRefImageUrl;
     const canGenerateWithExactCopy = exactCopyMode && hasReference;
     
     if (!prompt.trim() && !canGenerateWithExactCopy) {
@@ -552,13 +553,28 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     }
     
     // Character swap guard: detect hint-only prompts with no actual scene description
-    const isCharSwapMode = hasReference && !!motionRefVideoUrl;
+    // Use BOTH image-mode refs AND video-mode refs for detection
+    const isCharSwapMode = (hasReference || hasVideoStartRef) && !!motionRefVideoUrl;
     if (isCharSwapMode) {
-      const hintOnlyPattern = /^[\s.,]*(?:same appearance as the input image|matching choreography of reference video|[,.\s])*$/i;
-      if (hintOnlyPattern.test(prompt.trim())) {
+      // Use shared utility for strict detection
+      const { hasSceneIntent, augmentCharacterSwapPrompt } = await import('@/lib/utils/characterSwapPrompt');
+      if (!hasSceneIntent(prompt)) {
         toast.error('Describe the scene (e.g. "woman dancing in a studio") — hints alone aren\'t enough');
         return;
       }
+      // Augment prompt with canonical phrases and update UI to match what's sent
+      const augmented = augmentCharacterSwapPrompt(prompt);
+      if (augmented !== prompt) {
+        onPromptChange(augmented);
+      }
+      toast.success('Starting generation...', { duration: 2000 });
+      onGenerate(augmented.trim(), { 
+        mode: currentMode,
+        selectedModel,
+        quality,
+        exactCopyMode
+      });
+      return;
     }
     
     toast.success('Starting generation...', { duration: 2000 });
