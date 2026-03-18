@@ -325,11 +325,12 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
             
             {/* Tabs */}
             <div className="mt-3">
-              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'all' | 'characters' | 'scenes')}>
-                <TabsList className="grid w-full max-w-md grid-cols-3 text-xs md:text-sm">
-                  <TabsTrigger value="all">All Assets</TabsTrigger>
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'all' | 'characters' | 'scenes' | 'videos')}>
+                <TabsList className="grid w-full max-w-md grid-cols-4 text-xs md:text-sm">
+                  <TabsTrigger value="all">All</TabsTrigger>
                   <TabsTrigger value="characters">Characters</TabsTrigger>
                   <TabsTrigger value="scenes">Scenes</TabsTrigger>
+                  <TabsTrigger value="videos">Videos</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
