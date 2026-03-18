@@ -1,51 +1,43 @@
 
-# Video Character Swap — Holistic Fix v2
+# Video Character Swap — Pose Conditioning Fix v3
 
-## Root Causes Identified
+## Root Cause
+Payload structure was correct but `videos[]` defaulted to `conditioning_type="rgb"` (full RGB preservation), overpowering image identity anchors. Edge function also stripped conditioning fields.
 
-1. **Prompt visibility regression**: UI-time hint injection was removed, so textarea never showed augmented prompt
-2. **Loose appearance-hint detection**: Generic regex (`/reference image/`) skipped canonical phrase
-3. **Frame math mismatch**: `duration*fps-1` → 119 → snapped to 112, but LTX 8n+1 needs frame 120
-4. **Incomplete char-swap detection**: `MobileSimplePromptInput` checked image-mode refs only, missed `beginningRefImageUrl`
+## Changes Made (v3)
 
-## Changes Made (v2)
+### A) ✅ Pose conditioning in frontend (`useLibraryFirstWorkspace.ts`)
+- Character-swap mode (images + motion video) now sends `conditioning_type: "pose"`, `preprocess: true`, `strength: 0.8`, `limit_num_frames: true`
+- Non-char-swap flows keep default behavior
 
-### A) ✅ Shared utility: `src/lib/utils/characterSwapPrompt.ts`
-- `augmentCharacterSwapPrompt()` — idempotent canonical phrase enforcement (strict regex)
-- `hasSceneIntent()` — detects hint-only prompts
-- `computeLtxNumFrames()` / `getLastValidFrame()` — correct 8n+1 math
-- `snapFrameToMultipleOf8()` — clamp + snap helper
+### B) ✅ Triple identity anchors (`useLibraryFirstWorkspace.ts`)
+- Single-image char-swap now places 3 anchors: start (F0), mid (~F60), end (F120)
+- Reduces mid-clip identity drift
 
-### B) ✅ UI prompt visibility: `MobileSimplifiedWorkspace.tsx`
-- Restored `useEffect` that visibly augments prompt when char-swap conditions met
-- Only triggers when user has written scene content (no empty-prompt pollution)
-- Auto-routes model to `multi` when motion video + keyframe image detected
+### C) ✅ Edge function pass-through (`fal-image/index.ts`)
+- `videos[]` mapping now preserves: `conditioning_type`, `preprocess`, `strength`, `limit_num_frames`, `max_num_frames`
+- Enum validation for conditioning_type (rgb/pose only)
+- Enhanced logging of conditioning params
 
-### C) ✅ Deterministic submit: `MobileSimplePromptInput.tsx`
-- Detects char-swap using BOTH `referenceImageUrl` AND `beginningRefImageUrl`
-- Augments prompt via shared utility before `onGenerate()` call
-- Updates UI (`onPromptChange`) so textarea matches sent payload
-
-### D) ✅ Generation hook safety net: `useLibraryFirstWorkspace.ts`
-- Replaced loose regex with shared `augmentCharacterSwapPrompt()` utility
-- Fixed frame math: uses `getLastValidFrame()` → 120 for 121-frame clip
-- Identity-lock anchor now lands on correct frame (multiple of 8)
-
-### E) ✅ Edge function defensive sanitization: `fal-image/index.ts`
-- Snaps ALL `images[].start_frame_num` to nearest multiple of 8
-- Clamps to [0, maxValidFrame] range
-- Same sanitization for `videos[].start_frame_num`
-- Logs all adjustments for debugging
+### D) ✅ Preflight UI indicator (`MobileSimplePromptInput.tsx`)
+- "🎭 Character Swap Active • Pose mode • Identity anchors: start/mid/end" shown when char-swap conditions met
 
 ## Expected Payload After Fix
 ```json
 {
-  "aspect_ratio": "auto",
   "images": [
     { "image_url": "...", "start_frame_num": 0, "strength": 1 },
+    { "image_url": "...", "start_frame_num": 56, "strength": 1 },
     { "image_url": "...", "start_frame_num": 120, "strength": 1 }
   ],
-  "videos": [{ "video_url": "...", "start_frame_num": 0 }],
+  "videos": [{
+    "video_url": "...",
+    "start_frame_num": 0,
+    "conditioning_type": "pose",
+    "preprocess": true,
+    "strength": 0.8,
+    "limit_num_frames": true
+  }],
   "prompt": "woman dancing in studio. Same appearance as the input image, matching choreography of reference video"
 }
 ```
