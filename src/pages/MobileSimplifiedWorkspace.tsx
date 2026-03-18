@@ -457,23 +457,8 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, navigate, location.pathname, location.search]);
 
-  // Auto-populate prompt with character swap hints when both image + motion video refs are loaded
-  // Only augment if user has already typed a scene description — never augment an empty prompt
-  useEffect(() => {
-    if (!referenceImageUrl || !motionRefVideoUrl) return;
-    if (!prompt.trim()) return; // Don't augment empty prompts — user needs to describe the scene first
-    // Only augment if user hasn't already included these hints
-    const hasAppearanceHint = /same appearance|input image|reference image|character from/i.test(prompt);
-    const hasMotionHint = /matching (movement|choreography|motion)|reference video|same movement/i.test(prompt);
-    if (!hasAppearanceHint || !hasMotionHint) {
-      let augmented = prompt.trimEnd();
-      if (!augmented.endsWith('.') && !augmented.endsWith(',')) augmented += '.';
-      if (!hasAppearanceHint) augmented += ' Same appearance as the input image';
-      if (!hasMotionHint) augmented += ', matching choreography of reference video';
-      setPrompt(augmented.trim());
-      console.log('🎭 Character swap: Auto-populated prompt with appearance/motion hints');
-    }
-  }, [referenceImageUrl, motionRefVideoUrl]); // Only trigger when refs change, not on every prompt edit
+  // Character swap prompt hints are now appended at generation time in useLibraryFirstWorkspace
+  // (not via useEffect) to ensure they always apply regardless of when user types their prompt
 
   const mappedAssets = useMemo(() => {
     return workspaceAssets.map(toSharedFromWorkspace);
