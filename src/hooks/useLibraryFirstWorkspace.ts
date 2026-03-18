@@ -1485,8 +1485,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               }));
             }
             
-            // Separate motion reference video (if provided)
-            if (motionRefVideoUrl) {
+            // Separate motion reference video (if provided) — reject placeholder paths
+            if (motionRefVideoUrl && !motionRefVideoUrl.includes('placeholder')) {
               inputObj.videos = [{
                 video_url: stripToStoragePath(motionRefVideoUrl),
                 start_frame_num: 0,

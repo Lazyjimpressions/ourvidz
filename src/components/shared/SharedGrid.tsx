@@ -388,6 +388,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     // Set custom MIME data for ref slot drops
     e.dataTransfer.setData('application/x-ref-image', JSON.stringify({
       url: displayUrl || '',
+      originalPath: asset.originalPath || '',
       assetId: asset.id,
       type: asset.type,
     }));

@@ -1,76 +1,53 @@
 
+# Video Character Swap via Existing Workspace — IMPLEMENTED
 
-# Fix: Video Placeholder SVG Sent to fal.ai as Motion Reference
+## Summary
 
-## Root Cause
+Character swap is supported natively through the existing Video Multi Mode workflow. No new UI panels needed. Two gaps were closed:
 
-The fal.ai 422 error is caused by `/video-thumbnail-placeholder.svg` being sent as the video URL in the `videos[]` array. This happens because **SharedGrid.tsx drag data includes the thumbnail/placeholder URL instead of the actual video storage path**.
+## Changes Made
 
-In `SharedGrid.tsx` line 387-390:
-```typescript
-const displayUrl = asset.thumbUrl || generatedVideoThumbnail || (asset.type === 'image' ? fallbackUrl : null);
-e.dataTransfer.setData('application/x-ref-image', JSON.stringify({
-  url: displayUrl || '',  // ← This is the THUMBNAIL, not the video
-  ...
-}));
-```
+### 1. ✅ `reference_images` bucket increased to 200MB
+- Migration: `UPDATE storage.buckets SET file_size_limit = 209715200 WHERE name = 'reference_images'`
+- Supports HD dance/source video uploads
 
-For video assets without thumbnails, `displayUrl` resolves to `null` (because of the `asset.type === 'image'` guard). Then `url` becomes `''`. But the motion ref drop handler at line 849 accepts any truthy `url` — and in cases where the thumbnail is the placeholder SVG (`/video-thumbnail-placeholder.svg`), that gets passed through to the generation pipeline.
+### 2. ✅ LTX MultiCondition pricing added to `fal-image`
+- Added `'fal-ai/ltx-video-13b-distilled/multiconditioning': 0.20` to `FAL_PRICING` map
+- Ensures accurate cost tracking
 
-The edge function then tries to sign `/video-thumbnail-placeholder.svg` as a storage path, fails ("Object not found"), and sends the raw relative path to fal.ai which rejects it.
+### 3. ✅ Character swap hint in `MobileSettingsSheet`
+- When both a motion reference video AND an image keyframe are loaded, shows:
+  "✨ Character swap mode — appearance from image, motion from video"
 
-## Fix
+### 4. ✅ Library "Videos" tab added
+- 4th tab in `UpdatedOptimizedLibrary.tsx` filtering by `asset.type === 'video'`
+- Grid changed from `grid-cols-3` to `grid-cols-4` to accommodate
+- Users can now browse saved videos separately for reuse as motion references
 
-### 1. SharedGrid.tsx — Include `originalPath` in drag data
+### 5. ✅ Video thumbnail generation improved
+- `SharedGrid.tsx` now generates video thumbnails eagerly on mount
+- Previously required visibility intersection before triggering
+- Videos show thumbnails faster instead of blank tiles
 
-Add `originalPath` to the drag transfer data so consumers can use the real storage path for video assets:
+## User Workflow: Character Swap
 
-```typescript
-e.dataTransfer.setData('application/x-ref-image', JSON.stringify({
-  url: displayUrl || '',
-  originalPath: asset.originalPath || '',  // ← ADD THIS
-  assetId: asset.id,
-  type: asset.type,
-}));
-```
+1. Switch to **Video mode** in workspace
+2. Load character portrait into **Start keyframe slot** (appearance anchor)
+3. Load dance/source video into **Motion Reference** drop zone
+4. Write a prompt describing the scene
+5. Hit **Generate** — LTX MultiCondition auto-selected via smart model switching
+6. Save result to Library → appears in **Videos** tab for reuse
 
-### 2. MobileSimplePromptInput.tsx — Use `originalPath` for motion ref drops
+## User Workflow: Loading Source Videos
 
-In the motion ref drop handler (line 846-853), prefer `originalPath` over `url` for video assets:
+1. Upload video via Motion Reference "Upload file" or drag-drop into workspace
+2. After generation, save the result to Library via the Save button on the tile
+3. Browse saved videos in Library → **Videos** tab
+4. Use `ImagePickerDialog` with `mediaType="video"` to select from library later
 
-```typescript
-const refData = e.dataTransfer.getData('application/x-ref-image');
-if (refData) {
-  try {
-    const { url, originalPath, type } = JSON.parse(refData);
-    const videoUrl = originalPath || url;
-    if (videoUrl && !videoUrl.includes('placeholder')) {
-      onMotionRefVideoUrlChange?.(videoUrl);
-    }
-  } catch { /* ignore */ }
-  return;
-}
-```
-
-### 3. MobileSimplePromptInput.tsx — Same fix for QuickBar motion ref drop
-
-The same drop handler pattern exists in the QuickBar's inline motion ref zone. Apply the same `originalPath` preference there.
-
-### 4. Guard in useLibraryFirstWorkspace.ts (defense in depth)
-
-Before setting `inputObj.videos`, validate the URL isn't a placeholder:
-
-```typescript
-if (motionRefVideoUrl && !motionRefVideoUrl.includes('placeholder')) {
-  inputObj.videos = [{ video_url: stripToStoragePath(motionRefVideoUrl), ... }];
-}
-```
-
-## Files to Change
-
-| File | Change |
-|------|--------|
-| `src/components/shared/SharedGrid.tsx` | Add `originalPath` to drag transfer data |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Use `originalPath` for motion ref drops; reject placeholder URLs |
-| `src/hooks/useLibraryFirstWorkspace.ts` | Add placeholder guard before building `videos[]` |
-
+## Files Modified
+- `supabase/functions/fal-image/index.ts` — Added pricing entries
+- `src/components/workspace/MobileSettingsSheet.tsx` — Added contextual swap hint
+- `src/components/library/UpdatedOptimizedLibrary.tsx` — Added Videos tab
+- `src/components/shared/SharedGrid.tsx` — Eager video thumbnail generation
+- DB: `reference_images` bucket file_size_limit → 200MB
