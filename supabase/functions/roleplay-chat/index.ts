@@ -2889,13 +2889,20 @@ const sceneContext = analyzeSceneContent(response);
       console.log('✅ Using template scene prompt (first scene) with character visual description:', scenePrompt.substring(0, 150) + '...');
     } else if (sceneContext?.actions?.length > 0) {
       // ⚡ EFFICIENCY: Skip narrative LLM call when actions are already extracted (~7s saved)
-      const setting = sceneContext.setting || 'the scene';
+      // ✅ FIX: Prefer authoritative location sources over weak pattern matching
+      // Priority: 1) currentLocation (from conversation DB, updated by scene trigger),
+      //           2) sceneTemplatePrompt (scene template's scene_prompt from scenes table),
+      //           3) pattern-matched setting from AI response (weakest, often wrong)
+      const patternSetting = sceneContext.setting || 'the scene';
+      const authoritativeSetting = sceneTemplatePrompt || currentLocation || null;
+      const setting = authoritativeSetting || patternSetting;
       const mood = sceneContext.mood || 'engaging';
       const visuals = sceneContext.visualElements?.slice(0, 3).join(', ') || '';
       // SETTING only -- actions go into the ACTION block of Figure template
       scenePrompt = `${setting}. ${visuals ? `Visual details: ${visuals}.` : ''} The mood is ${mood}.`;
       sceneTemplateName = 'Direct action extraction (no narrative LLM)';
       console.log('⚡ EFFICIENCY: Skipped narrative LLM call, using extracted actions directly:', scenePrompt.substring(0, 150));
+      console.log('🎯 Setting source:', authoritativeSetting ? `authoritative: "${authoritativeSetting.substring(0, 80)}..."` : `pattern-matched fallback: "${patternSetting}"`);
     } else {
       // Generate AI-powered scene narrative using OpenRouter (fallback when no actions extracted)
       console.log('🎬 Generating scene narrative for character:', sceneCharacter.name);
@@ -3797,13 +3804,15 @@ const SCENE_DETECTION_PATTERNS = {
   roleplayActions: [/\*[^*]+\*/g, /\([^)]+\)/g],
   movement: ['moves', 'walks', 'sits', 'stands', 'leans', 'approaches', 'steps', 'turns', 'reaches', 'bends', 'kneels', 'balances'],
   physicalInteractions: ['touches', 'kisses', 'embraces', 'holds', 'caresses', 'grabs', 'pulls', 'pushes', 'strokes', 'rubs'],
-  // ✅ FIX: Expanded environmental keywords to catch more locations
+  // ✅ FIX: Removed ultra-generic patterns ('in the', 'at the', 'on the', 'water') that match nearly
+  // every AI response and produce useless settings like "at the" or "water". Only specific locations now.
   environmental: [
-    'in the', 'at the', 'on the', 'inside', 'within',
     'bedroom', 'kitchen', 'bathroom', 'shower', 'locker room', 'locker', 'changing room',
     'hotel', 'car', 'office', 'cafe', 'beach', 'forest', 'rooftop', 'balcony',
-    'steamy', 'misty', 'tiled', 'wet', 'water', 'streaming', 'dripping',
-    'gym', 'spa', 'sauna', 'pool', 'jacuzzi', 'bath', 'tub'
+    'hot tub', 'jacuzzi', 'bathtub', 'swimming pool',
+    'gym', 'spa', 'sauna', 'pool', 'bath', 'tub',
+    'living room', 'couch', 'sofa', 'hallway', 'garden', 'patio', 'terrace',
+    'club', 'bar', 'restaurant', 'park', 'alley', 'street', 'library', 'classroom', 'dorm'
   ],
   visual: ['wearing', 'dressed', 'naked', 'nude', 'clothing', 'outfit', 'lingerie', 'shirt', 'pants', 'dress', 'skirt', 'wet', 'dripping', 'clinging'],
   emotional: ['passionate', 'intimate', 'romantic', 'seductive', 'sensual', 'aroused', 'excited', 'nervous', 'confident', 'playful', 'sultry', 'forbidden'],
