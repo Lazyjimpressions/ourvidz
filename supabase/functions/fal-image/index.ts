@@ -555,7 +555,7 @@ async function buildModelInput(
           const imgUrl = img.image_url || img.url;
           const signed = await signIfStoragePath(supabase, imgUrl, 'user-library');
           if (signed) {
-            signedImages.push({ image_url: signed, start_frame_num: img.start_frame_num || 0, strength: img.strength ?? 1 });
+            signedImages.push({ image_url: signed, start_frame_number: img.start_frame_number ?? img.start_frame_num ?? 0, strength: img.strength ?? 1 });
           }
         }
         if (signedImages.length > 0) {
