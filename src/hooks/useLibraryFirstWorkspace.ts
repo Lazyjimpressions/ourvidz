@@ -1534,8 +1534,20 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             inputObj.aspect_ratio = 'auto';
             console.log('🎯 MultiCondition: overriding aspect_ratio to "auto" for ref image adherence');
             
-            // Note: prompt augmentation for character swap is now handled in MobileSimplifiedWorkspace
-            // via useEffect that populates the visible prompt box for user confirmation
+            // Character swap prompt augmentation at generation time
+            // Append appearance/motion hints if not already present in the prompt
+            if (motionRefVideoUrl && inputObj.images && inputObj.images.length > 0) {
+              const hasAppearanceHint = /same appearance|input image|reference image|character from/i.test(finalPrompt);
+              const hasMotionHint = /matching (movement|choreography|motion)|reference video|same movement/i.test(finalPrompt);
+              if (!hasAppearanceHint || !hasMotionHint) {
+                let augmented = finalPrompt.trimEnd();
+                if (augmented && !augmented.endsWith('.') && !augmented.endsWith(',')) augmented += '.';
+                if (!hasAppearanceHint) augmented += ' Same appearance as the input image';
+                if (!hasMotionHint) augmented += ', matching choreography of reference video';
+                finalPrompt = augmented.trim();
+                console.log('🎭 Character swap: Augmented prompt at generation time with appearance/motion hints');
+              }
+            }
           }
         }
         
