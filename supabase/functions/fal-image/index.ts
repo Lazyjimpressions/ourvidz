@@ -596,6 +596,14 @@ async function buildModelInput(
         }
       }
 
+      // ── MultiCondition aspect_ratio override (MUST run after images[] populated) ──
+      // When images[] are present, force aspect_ratio=auto so model matches source dimensions
+      if (modelInput.images && Array.isArray(modelInput.images) && modelInput.images.length > 0) {
+        const prevAR = modelInput.aspect_ratio;
+        modelInput.aspect_ratio = 'auto';
+        console.log(`🎯 MultiCondition: forcing aspect_ratio=auto (was "${prevAR}")`);
+      }
+
       // I2V reference image (non-extend, non-multi)
       if (hasImageUrl && !hasVideoInput && !modelInput.images) {
         const signed = await signIfStoragePath(supabase, body.input.image_url, 'user-library');
