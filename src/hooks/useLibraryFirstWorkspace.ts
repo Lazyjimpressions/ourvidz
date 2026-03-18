@@ -1480,7 +1480,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               const imageFrames = autoSpaceFrames(filledEntries.length, maxFrame);
               inputObj.images = filledEntries.map((entry, i) => ({
                 image_url: entry.url,
-                start_frame_num: imageFrames[i],
+                start_frame_number: imageFrames[i],
                 strength: keyframeStrengths[entry.slotIndex] ?? 1,
               }));
             }
