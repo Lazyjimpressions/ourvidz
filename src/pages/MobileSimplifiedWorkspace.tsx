@@ -463,13 +463,18 @@ const MobileSimplifiedWorkspace = () => {
     const hasStartImage = !!beginningRefImageUrl;
     const hasMotion = !!motionRefVideoUrl;
     if (mode !== 'video' || !hasStartImage || !hasMotion) return;
-    if (!prompt || !prompt.trim()) return; // Don't pollute empty prompts
     
     // Lazy import to avoid circular deps
-    import('@/lib/utils/characterSwapPrompt').then(({ augmentCharacterSwapPrompt, hasSceneIntent }) => {
-      // Only augment if user has written actual scene content
-      if (!hasSceneIntent(prompt)) return;
-      const augmented = augmentCharacterSwapPrompt(prompt);
+    import('@/lib/utils/characterSwapPrompt').then(({ augmentCharacterSwapPrompt }) => {
+      const augmented = augmentCharacterSwapPrompt(prompt || '');
+      // If prompt was empty, seed with canonical hints
+      if (!prompt || !prompt.trim()) {
+        const seed = 'Same appearance as the input image, matching choreography of reference video';
+        setPrompt(seed);
+        console.log('🎭 UI: Auto-seeded character swap hints into empty prompt');
+        return;
+      }
+      // Otherwise augment idempotently
       if (augmented !== prompt) {
         setPrompt(augmented);
         console.log('🎭 UI: Visible prompt augmentation applied for character swap');
