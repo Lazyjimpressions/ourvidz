@@ -713,7 +713,11 @@ async function buildModelInput(
     params: Object.keys(modelInput).join(', '),
     has_image_url: !!modelInput.image_url,
     has_image_urls: !!modelInput.image_urls,
-    has_video: !!modelInput.video
+    has_video: !!modelInput.video,
+    images_count: modelInput.images?.length || 0,
+    images_frames: modelInput.images?.map((i: any) => `F${i.start_frame_num}(s=${i.strength})`).join(', ') || 'none',
+    videos_count: modelInput.videos?.length || 0,
+    videos_conditioning: modelInput.videos?.map((v: any) => `${v.conditioning_type || 'rgb'}(s=${v.strength ?? 1},pre=${v.preprocess ?? false})`).join(', ') || 'none',
   });
 
   return { modelInput, generationMode };
