@@ -1,53 +1,47 @@
 
-# Video Character Swap via Existing Workspace — IMPLEMENTED
+Updated diagnosis from your latest logs:
 
-## Summary
+1) The pipeline is now technically correct (no transport/signing issue):
+- `images[]` has a valid signed portrait URL
+- `videos[]` has a valid signed motion URL
+- MultiCondition model is selected and runs successfully
 
-Character swap is supported natively through the existing Video Multi Mode workflow. No new UI panels needed. Two gaps were closed:
+2) The failure is now conditioning quality, not request validity.
+Your logged fal payload shows two key adherence weaknesses:
+- `aspect_ratio` is still sent as `1:1` (not `auto`) even with `images[]`
+- Prompt is only control hints (“Same appearance… matching choreography…”) with no scene/subject intent
 
-## Changes Made
+3) What should happen:
+With this setup, output should keep the reference person’s identity (face/hair/look) while borrowing movement/camera timing from the motion video. It won’t be pixel-identical, but it should be clearly the same character.
 
-### 1. ✅ `reference_images` bucket increased to 200MB
-- Migration: `UPDATE storage.buckets SET file_size_limit = 209715200 WHERE name = 'reference_images'`
-- Supports HD dance/source video uploads
+Implementation plan (targeted fixes):
 
-### 2. ✅ LTX MultiCondition pricing added to `fal-image`
-- Added `'fal-ai/ltx-video-13b-distilled/multiconditioning': 0.20` to `FAL_PRICING` map
-- Ensures accurate cost tracking
+1. Preserve MultiCondition aspect-ratio behavior (highest impact)
+- File: `supabase/functions/fal-image/index.ts`
+- Change precedence so metadata `aspectRatio` does NOT overwrite multi-conditioning `images[]` runs.
+- If `images[]` is present for LTX MultiCondition, force/preserve `aspect_ratio: "auto"` in final model input.
+- Add explicit log of effective aspect ratio (`aspect_ratio_effective`) for verification.
 
-### 3. ✅ Character swap hint in `MobileSettingsSheet`
-- When both a motion reference video AND an image keyframe are loaded, shows:
-  "✨ Character swap mode — appearance from image, motion from video"
+2. Add identity-lock fallback when only one image anchor is provided
+- File: `src/hooks/useLibraryFirstWorkspace.ts`
+- In multi mode with motion video + exactly one image keyframe, auto-add a second anchor of the same image at the last frame.
+- Keep manual end-keyframe behavior higher priority (only auto-duplicate when end slot is empty).
+- Result: stronger identity retention across full clip, less drift toward source-video subject.
 
-### 4. ✅ Library "Videos" tab added
-- 4th tab in `UpdatedOptimizedLibrary.tsx` filtering by `asset.type === 'video'`
-- Grid changed from `grid-cols-3` to `grid-cols-4` to accommodate
-- Users can now browse saved videos separately for reuse as motion references
+3. Tighten prompt UX so hints are visible but not “hint-only”
+- File: `src/pages/MobileSimplifiedWorkspace.tsx`
+- Keep visible prompt augmentation (as requested), but block generation when prompt is only boilerplate hints.
+- Require at least minimal scene intent (e.g., “woman dancing in studio at night”) before submit.
+- Keep hints editable in the box so user controls direction.
 
-### 5. ✅ Video thumbnail generation improved
-- `SharedGrid.tsx` now generates video thumbnails eagerly on mount
-- Previously required visibility intersection before triggering
-- Videos show thumbnails faster instead of blank tiles
+4. Add guardrails at submit layer
+- File: `src/components/workspace/MobileSimplePromptInput.tsx`
+- Detect character-swap state (image keyframe + motion video) and show a clear validation message if prompt is empty/hint-only.
+- This prevents low-signal generations that look unrelated.
 
-## User Workflow: Character Swap
-
-1. Switch to **Video mode** in workspace
-2. Load character portrait into **Start keyframe slot** (appearance anchor)
-3. Load dance/source video into **Motion Reference** drop zone
-4. Write a prompt describing the scene
-5. Hit **Generate** — LTX MultiCondition auto-selected via smart model switching
-6. Save result to Library → appears in **Videos** tab for reuse
-
-## User Workflow: Loading Source Videos
-
-1. Upload video via Motion Reference "Upload file" or drag-drop into workspace
-2. After generation, save the result to Library via the Save button on the tile
-3. Browse saved videos in Library → **Videos** tab
-4. Use `ImagePickerDialog` with `mediaType="video"` to select from library later
-
-## Files Modified
-- `supabase/functions/fal-image/index.ts` — Added pricing entries
-- `src/components/workspace/MobileSettingsSheet.tsx` — Added contextual swap hint
-- `src/components/library/UpdatedOptimizedLibrary.tsx` — Added Videos tab
-- `src/components/shared/SharedGrid.tsx` — Eager video thumbnail generation
-- DB: `reference_images` bucket file_size_limit → 200MB
+5. Verification plan
+- Re-run same case and confirm in `api_usage_logs.request_payload`:
+  - `aspect_ratio: "auto"`
+  - `images` has 2 entries (start + end fallback) when only one portrait supplied
+  - prompt contains user scene intent + optional hints
+- Validate output identity consistency across start/middle/end frames, not just frame 1.
