@@ -771,6 +771,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onRemoveRef={handleRemoveSlot}
         onDropRef={handleDropSlot}
         onDropRefUrl={handleDropSlotUrl}
+        onRefAddFromLibrary={(index) => handleLibraryForSlot(index)}
+        onRefAddFromFile={(index) => handleFileUploadForSlot(index)}
         onAddSlot={handleAddSlot}
         selectedModelTasks={selectedModelTasks}
         fixedSlots={fixedSlots}

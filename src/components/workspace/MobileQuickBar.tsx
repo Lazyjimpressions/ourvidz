@@ -500,6 +500,8 @@ export const MobileQuickBar: React.FC<MobileQuickBarProps> = ({
                 onRemove={() => onRemoveRef(i)}
                 onDrop={(file) => onDropRef(i, file)}
                 onDropUrl={onDropRefUrl ? (url) => onDropRefUrl(i, url) : undefined}
+                onAddFromLibrary={onRefAddFromLibrary ? () => onRefAddFromLibrary(i) : undefined}
+                onAddFromFile={onRefAddFromFile ? () => onRefAddFromFile(i) : undefined}
                 label={slot.label || `Ref ${i + 1}`}
                 disabled={disabled}
                 showLabel
