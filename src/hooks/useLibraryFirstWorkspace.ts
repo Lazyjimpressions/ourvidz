@@ -1545,7 +1545,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         });
         
         requestPayload = {
-          prompt: finalPrompt,
+          prompt: inputObj.prompt || finalPrompt,
           apiModelId: effectiveModel.id,
           job_type: isFalVideo ? 'fal_video' : 'fal_image',
           modality: isFalVideo ? 'video' : 'image',
