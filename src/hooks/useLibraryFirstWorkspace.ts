@@ -1495,7 +1495,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               // Identity-lock: when only 1 image keyframe + motion video, duplicate image to last frame
               // This anchors character identity at both start AND end, reducing drift toward source-video subject
               if (inputObj.images && inputObj.images.length === 1 && !endRefUrl) {
-                const lastFrame = Math.max(0, (maxFrame || 120) - 1);
+                const lastFrame = Math.floor((maxFrame || 120) / 8) * 8;
                 inputObj.images.push({
                   image_url: inputObj.images[0].image_url,
                   start_frame_num: lastFrame,
