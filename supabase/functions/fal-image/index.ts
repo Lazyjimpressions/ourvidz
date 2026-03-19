@@ -578,11 +578,13 @@ async function buildModelInput(
             const videoEntry: Record<string, any> = { video_url: signed, start_frame_number: startFrameNumber };
             if (typeof vid === 'object') {
               if (vid.strength !== undefined) videoEntry.strength = vid.strength;
-              // Note: conditioning_type, preprocess, limit_num_frames are NOT in fal.ai LTX MultiCondition schema
-              // Only video_url, start_frame_number, and strength are supported
+              // Pose conditioning params for character swap (extract motion, not identity)
+              if (vid.conditioning_type) videoEntry.conditioning_type = vid.conditioning_type;
+              if (vid.preprocess !== undefined) videoEntry.preprocess = vid.preprocess;
+              if (vid.limit_num_frames !== undefined) videoEntry.limit_num_frames = vid.limit_num_frames;
             }
             signedVideos.push(videoEntry);
-            console.log(`✅ Video conditioning: start_frame_number=${videoEntry.start_frame_number}, strength=${videoEntry.strength ?? 'default'}`);
+            console.log(`✅ Video conditioning: frame=${videoEntry.start_frame_number}, strength=${videoEntry.strength ?? 'default'}, type=${videoEntry.conditioning_type ?? 'default'}`);
           } else {
             console.warn('⚠️ Skipping invalid video conditioning URL:', vidUrl?.substring?.(0, 80) || vidUrl);
           }

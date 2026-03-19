@@ -22,6 +22,20 @@ export function autoSpaceFrames(count: number, maxFrame: number = 160): number[]
   return Array.from({ length: count }, (_, i) => Math.min(i * step, maxFrame));
 }
 
+/** fal.ai LTX MultiCondition uses fixed 1441 internal frames (0-1440) regardless of output duration */
+export const LTX_INTERNAL_MAX_FRAME = 1440;
+
+/**
+ * Get evenly spaced frame position in fal.ai's 1441 internal space.
+ * For 5 slots: [0, 360, 720, 1080, 1440]
+ * For 3 slots: [0, 720, 1440]
+ */
+export function getFrameForSlot(slotIndex: number, numSlots: number = 5): number {
+  if (numSlots <= 1) return 0;
+  const step = LTX_INTERNAL_MAX_FRAME / (numSlots - 1);
+  return Math.round(slotIndex * step);
+}
+
 /** Frame label for UI display */
 export function getFrameLabel(frameNum: number): string {
   return `F${frameNum}`;

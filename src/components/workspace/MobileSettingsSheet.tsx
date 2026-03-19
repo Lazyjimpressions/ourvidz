@@ -119,6 +119,10 @@ export interface MobileSettingsSheetProps {
   onFirstPassStepsChange?: (steps: number) => void;
   secondPassSteps?: number;
   onSecondPassStepsChange?: (steps: number) => void;
+
+  // Motion video strength for character-swap (lower = less appearance bleed)
+  motionVideoStrength?: number;
+  onMotionVideoStrengthChange?: (strength: number) => void;
 }
 
 const STYLE_PRESETS = [
@@ -352,18 +356,21 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   multiRefActive = false,
   keyframeStrengths,
   onKeyframeStrengthChange,
-  enableDetailPass = false,
+  enableDetailPass = true,
   onEnableDetailPassChange,
   multiCrf = 29,
   onMultiCrfChange,
-  temporalAdainFactor = 0.5,
+  temporalAdainFactor = 1.0,
   onTemporalAdainFactorChange,
-  toneMapCompressionRatio = 0,
+  toneMapCompressionRatio = 0.8,
   onToneMapCompressionRatioChange,
-  firstPassSteps = 8,
+  firstPassSteps = 9,
   onFirstPassStepsChange,
-  secondPassSteps = 8,
+  secondPassSteps = 11,
   onSecondPassStepsChange,
+  // Motion video strength for character-swap
+  motionVideoStrength = 0.55,
+  onMotionVideoStrengthChange,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const refFileInputRef = useRef<HTMLInputElement>(null);
@@ -660,6 +667,102 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
             </div>
           )}
 
+          {/* Motion Reference Video (video mode only, separate from image keyframes) */}
+          {currentMode === 'video' && (
+            <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                Motion / Camera Reference
+              </label>
+              <p className="text-[8px] text-muted-foreground">
+                {motionRefVideoUrl && refSlots?.some(s => s.url)
+                  ? '✨ Character swap mode — appearance from image, motion from video'
+                  : 'Optional video to guide movement and camera'}
+              </p>
+              {motionRefVideoUrl ? (
+                <div className="flex items-start gap-3">
+                  <div className="relative group h-16 w-24 rounded-md overflow-hidden border border-border flex-shrink-0">
+                    <video src={motionRefVideoUrl} className="absolute inset-0 w-full h-full object-cover" muted />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <span className="text-white text-[10px] font-medium">🎬</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onMotionRefVideoUrlRemove?.()}
+                      className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-2.5 h-2.5 text-white" />
+                    </button>
+                  </div>
+                  {/* Inline strength slider for motion video */}
+                  <div className="flex-1 space-y-1 pt-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] text-muted-foreground">Strength</span>
+                      <span className="text-[8px] text-muted-foreground font-mono">{Math.round(motionVideoStrength * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.1}
+                      max={1}
+                      step={0.05}
+                      value={motionVideoStrength}
+                      onChange={(e) => onMotionVideoStrengthChange?.(parseFloat(e.target.value))}
+                      className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer
+                        [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5
+                        [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer
+                        [&::-moz-range-thumb]:h-2.5 [&::-moz-range-thumb]:w-2.5 [&::-moz-range-thumb]:rounded-full
+                        [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
+                    />
+                    <p className="text-[7px] text-muted-foreground/70">Lower = less appearance bleed from source</p>
+                  </div>
+                </div>
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 flex flex-col items-center justify-center hover:border-primary/50 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3 text-muted-foreground/50 mb-0.5" />
+                      <span className="text-[8px] text-muted-foreground/50">Add Video</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-36">
+                    <DropdownMenuItem onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'video/mp4,video/webm,video/quicktime';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (file && onMotionRefVideoFileDrop) onMotionRefVideoFileDrop(file);
+                      };
+                      input.click();
+                    }}>
+                      <Upload className="w-3.5 h-3.5 mr-2" />
+                      Upload file
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = 'video/mp4,video/webm,video/quicktime';
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0];
+                        if (file && onMotionRefVideoFileDrop) onMotionRefVideoFileDrop(file);
+                      };
+                      input.click();
+                    }}>
+                      <Camera className="w-3.5 h-3.5 mr-2" />
+                      Photo Library
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onMotionRefVideoUrlAdd?.()}>
+                      <Library className="w-3.5 h-3.5 mr-2" />
+                      From Library
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          )}
+
           {/* Advanced Video Controls (MultiCondition only) */}
           {currentMode === 'video' && multiRefActive && (
             <Collapsible>
@@ -919,79 +1022,6 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Motion Reference Video (video mode only, separate from image keyframes) */}
-          {currentMode === 'video' && (
-            <div className="space-y-1.5 p-2 rounded-lg border bg-muted/30">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
-                Motion / Camera Reference
-              </label>
-              <p className="text-[8px] text-muted-foreground">
-                {motionRefVideoUrl && refSlots?.some(s => s.url) 
-                  ? '✨ Character swap mode — appearance from image, motion from video'
-                  : 'Optional video to guide movement and camera'}
-              </p>
-              {motionRefVideoUrl ? (
-                <div className="relative group h-16 w-24 rounded-md overflow-hidden border border-border">
-                  <video src={motionRefVideoUrl} className="absolute inset-0 w-full h-full object-cover" muted />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                    <span className="text-white text-[10px] font-medium">🎬</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onMotionRefVideoUrlRemove?.()}
-                    className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-2.5 h-2.5 text-white" />
-                  </button>
-                </div>
-              ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="h-12 w-24 rounded-md border border-dashed border-muted-foreground/30 flex flex-col items-center justify-center hover:border-primary/50 transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3 text-muted-foreground/50 mb-0.5" />
-                      <span className="text-[8px] text-muted-foreground/50">Add Video</span>
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-36">
-                    <DropdownMenuItem onClick={() => {
-                      const input = document.createElement('input');
-                      input.type = 'file';
-                      input.accept = 'video/mp4,video/webm,video/quicktime';
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0];
-                        if (file && onMotionRefVideoFileDrop) onMotionRefVideoFileDrop(file);
-                      };
-                      input.click();
-                    }}>
-                      <Upload className="w-3.5 h-3.5 mr-2" />
-                      Upload file
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => {
-                      const input = document.createElement('input');
-                      input.type = 'file';
-                      input.accept = 'video/mp4,video/webm,video/quicktime';
-                      input.onchange = (e) => {
-                        const file = (e.target as HTMLInputElement).files?.[0];
-                        if (file && onMotionRefVideoFileDrop) onMotionRefVideoFileDrop(file);
-                      };
-                      input.click();
-                    }}>
-                      <Camera className="w-3.5 h-3.5 mr-2" />
-                      Photo Library
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onMotionRefVideoUrlAdd?.()}>
-                      <Library className="w-3.5 h-3.5 mr-2" />
-                      From Library
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
               )}
             </div>
           )}

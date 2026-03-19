@@ -110,6 +110,9 @@ export interface MobileSimplePromptInputProps {
   onFirstPassStepsChange?: (steps: number) => void;
   secondPassSteps?: number;
   onSecondPassStepsChange?: (steps: number) => void;
+  // Motion video strength for character swap
+  motionVideoStrength?: number;
+  onMotionVideoStrengthChange?: (strength: number) => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -189,6 +192,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onFirstPassStepsChange,
   secondPassSteps,
   onSecondPassStepsChange,
+  motionVideoStrength = 0.55,
+  onMotionVideoStrengthChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -964,8 +969,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       {currentMode === 'video' && motionRefVideoUrl && (beginningRefImageUrl || referenceImageUrl) && (
         <div className="mx-3 mb-2 px-2.5 py-1.5 rounded-md bg-accent/30 border border-accent/50 text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-foreground">🎭 Character Swap Active</span>
-          <span>• Anchors: F0(0.85) / mid(0.5) / end(0.4)</span>
-          <span>• Video strength: 0.7</span>
+          <span>• Anchors: {(keyframeStrengths?.[0] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[1] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[2] ?? 0.8).toFixed(2)}</span>
+          <span>• Video: {motionVideoStrength.toFixed(2)}</span>
         </div>
       )}
       
@@ -1080,6 +1085,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onFirstPassStepsChange={onFirstPassStepsChange}
         secondPassSteps={secondPassSteps}
         onSecondPassStepsChange={onSecondPassStepsChange}
+        motionVideoStrength={motionVideoStrength}
+        onMotionVideoStrengthChange={onMotionVideoStrengthChange}
       />
 
       {/* Image Picker Dialog for library/workspace browsing */}

@@ -14,7 +14,7 @@ import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
 import { probeVideoDurationFromUrl } from '@/lib/utils/probeVideoDuration';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
-import { useImageModels } from '@/hooks/useApiModels';
+import { useImageModels, useVideoModels } from '@/hooks/useApiModels';
 import { useSmartModelDefaults } from '@/hooks/useSmartModelDefaults';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
@@ -34,6 +34,7 @@ const MobileSimplifiedWorkspace = () => {
   const navigate = useNavigate();
   const processedRef = useRef(false);
   const { data: imageModels, isLoading: modelsLoading } = useImageModels();
+  const { data: videoModels, isLoading: videoModelsLoading } = useVideoModels();
   const { getDefault } = useSmartModelDefaults();
   
   // Use the proper library-first workspace hook with RV5.1 routing
@@ -114,12 +115,14 @@ const MobileSimplifiedWorkspace = () => {
   // Dedicated motion reference video URL (separate from image keyframes)
   const [motionRefVideoUrl, setMotionRefVideoUrl] = useState<string | null>(null);
   // MultiCondition advanced video settings
-  const [enableDetailPass, setEnableDetailPass] = useState(false);
+  const [enableDetailPass, setEnableDetailPass] = useState(true);
   const [multiCrf, setMultiCrf] = useState(29);
-  const [temporalAdainFactor, setTemporalAdainFactor] = useState(0.5);
-  const [toneMapCompressionRatio, setToneMapCompressionRatio] = useState(0);
-  const [firstPassSteps, setFirstPassSteps] = useState(8);
-  const [secondPassSteps, setSecondPassSteps] = useState(8);
+  const [temporalAdainFactor, setTemporalAdainFactor] = useState(1.0);
+  const [toneMapCompressionRatio, setToneMapCompressionRatio] = useState(0.8);
+  const [firstPassSteps, setFirstPassSteps] = useState(9);
+  const [secondPassSteps, setSecondPassSteps] = useState(11);
+  // Motion video strength for character-swap (lower = less appearance bleed from source video)
+  const [motionVideoStrength, setMotionVideoStrength] = useState(0.55);
   // Track the job_id for the pose slot (index 2) so we can look up pose_description
   const [poseSlotJobId, setPoseSlotJobId] = useState<string | null>(null);
 
@@ -373,6 +376,7 @@ const MobileSimplifiedWorkspace = () => {
       toneMapCompressionRatio,
       firstPassSteps,
       secondPassSteps,
+      motionVideoStrength,
     } : undefined;
     await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc, undefined, advancedParams, motionRefVideoUrl || undefined);
   };
@@ -825,12 +829,18 @@ const MobileSimplifiedWorkspace = () => {
            }}
            selectedModelTasks={(() => {
             if (!selectedModel?.id) return [];
-            const model = imageModels?.find(m => m.id === selectedModel.id);
+            // Check both image and video models based on current mode
+            const model = mode === 'video'
+              ? videoModels?.find(m => m.id === selectedModel.id)
+              : imageModels?.find(m => m.id === selectedModel.id);
             return (model as any)?.tasks || [];
           })()}
           selectedModelCapabilities={(() => {
             if (!selectedModel?.id) return undefined;
-            const model = imageModels?.find(m => m.id === selectedModel.id);
+            // Check both image and video models based on current mode
+            const model = mode === 'video'
+              ? videoModels?.find(m => m.id === selectedModel.id)
+              : imageModels?.find(m => m.id === selectedModel.id);
             return (model as any)?.capabilities as Record<string, any> || undefined;
           })()}
            keyframeStrengths={keyframeStrengths}
@@ -853,6 +863,8 @@ const MobileSimplifiedWorkspace = () => {
            onFirstPassStepsChange={setFirstPassSteps}
            secondPassSteps={secondPassSteps}
            onSecondPassStepsChange={setSecondPassSteps}
+           motionVideoStrength={motionVideoStrength}
+           onMotionVideoStrengthChange={setMotionVideoStrength}
          />
 
         {/* Lightbox */}

@@ -113,7 +113,7 @@ export interface LibraryFirstWorkspaceActions {
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   setReferenceType: (type: 'style' | 'character' | 'composition') => void;
-  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string, videoSlotIsVideo?: boolean[], multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number }, motionRefVideoUrl?: string) => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string, videoSlotIsVideo?: boolean[], multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; identityStrengthStart?: number; identityStrengthMid?: number; identityStrengthEnd?: number; motionVideoStrength?: number }, motionRefVideoUrl?: string) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -429,7 +429,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [extendReverseVideo, setExtendReverseVideo] = useState(false);
   const [sourceVideoDuration, setSourceVideoDuration] = useState(0);
   // Per-keyframe strengths for video multi mode (5 slots)
-  const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1, 1, 1, 1, 1]);
+  const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1.0, 1.0, 1.0, 1.0, 1.0]);
 
   // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -662,7 +662,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     slotRoles?: SlotRole[],
     poseDescription?: string,
     videoSlotIsVideo?: boolean[],
-    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number },
+    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; motionVideoStrength?: number },
     motionRefVideoUrl?: string
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
@@ -1458,7 +1458,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
           } else if (isMultiModel && refImageUrl) {
             // MultiCondition: build images[] from image keyframe slots, videos[] from motionRefVideoUrl
-            const { autoSpaceFrames } = await import('@/types/videoSlots');
+            const { getFrameForSlot, LTX_INTERNAL_MAX_FRAME } = await import('@/types/videoSlots');
+
             // Gather all image ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
             const filledEntries: { url: string; slotIndex: number }[] = [];
             if (refImageUrl) filledEntries.push({ url: stripToStoragePath(refImageUrl), slotIndex: 0 });
@@ -1470,73 +1471,81 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               });
             }
             if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
-            // Compute maxFrame using LTX 8n+1 constraint so identity-lock lands on valid frame
-            const fps = cachedCaps?.input_schema?.frame_rate?.default || 30;
-            const { getLastValidFrame } = await import('@/lib/utils/characterSwapPrompt');
-            const maxFrame = getLastValidFrame(videoDuration || 5, fps); // e.g. 120 for ~4s@30fps
-            
-            // All filled entries are images now (no more isVideo splitting)
+
+            // fal.ai LTX uses fixed 1441 internal frame space (0-1440) regardless of output duration
+            // Each of 5 UI slots maps directly: slot 0→0, 1→360, 2→720, 3→1080, 4→1440
+            console.log(`🎬 MultiCondition: ${filledEntries.length} images, using fixed internal space 0-${LTX_INTERNAL_MAX_FRAME}`);
+
+            // Map each slot directly to its position in the 1441 internal frame space
             if (filledEntries.length > 0) {
-              const imageFrames = autoSpaceFrames(filledEntries.length, maxFrame);
-              inputObj.images = filledEntries.map((entry, i) => ({
-                image_url: entry.url,
-                start_frame_number: imageFrames[i],
-                strength: keyframeStrengths[entry.slotIndex] ?? 1,
-              }));
+              inputObj.images = filledEntries.map((entry) => {
+                const framePos = getFrameForSlot(entry.slotIndex, 5);
+                console.log(`🖼️ Slot ${entry.slotIndex} → frame ${framePos}`);
+                return {
+                  image_url: entry.url,
+                  start_frame_number: framePos,
+                  strength: keyframeStrengths[entry.slotIndex] ?? 1.0,
+                };
+              });
             }
 
             // Separate motion reference video (if provided) — reject placeholder paths
             const hasMotionVideo = !!(motionRefVideoUrl && !motionRefVideoUrl.includes('placeholder'));
             const isCharSwap = hasMotionVideo && !!(inputObj.images && inputObj.images.length > 0);
 
-            // Normalize character-swap image anchors when UI defaults are still all 1.0
-            // This prevents source-video appearance bleed and keeps identity lock stable.
-            if (isCharSwap && inputObj.images && inputObj.images.length > 0) {
-              const allStrengthsAreDefault = inputObj.images.every((img: { strength?: number }) => (img.strength ?? 1) >= 0.99);
-              const uniqueImageUrls = new Set(inputObj.images.map((img: { image_url: string }) => img.image_url));
+            // Use keyframeStrengths directly from sliders (default 1.0 for all)
+            const motionStrength = multiAdvancedParams?.motionVideoStrength ?? 0.55;
 
-              // If every slot points to the same image, force canonical start/mid/end anchors.
+            // For character-swap with duplicate images, create canonical start/mid/end anchors
+            if (isCharSwap && inputObj.images && inputObj.images.length > 0) {
+              const uniqueImageUrls = new Set(inputObj.images.map((img: { image_url: string }) => img.image_url));
+              console.log(`🔍 Character-swap check: isCharSwap=${isCharSwap}, uniqueUrls=${uniqueImageUrls.size}, totalImages=${inputObj.images.length}`);
+
+              // If every slot points to the same image, create 3 anchors at start/mid/end
               if (uniqueImageUrls.size === 1) {
                 const canonicalUrl = inputObj.images[0].image_url;
-                const midFrame = Math.round(maxFrame / 2 / 8) * 8;
+                // Use fixed internal frame positions: 0, 720 (midpoint), 1440
+                const midFrame = getFrameForSlot(2, 5); // 720
+                // Use first 3 keyframeStrengths for start/mid/end anchors (default 1.0)
+                const s0 = keyframeStrengths[0] ?? 1.0;
+                const s1 = keyframeStrengths[1] ?? 1.0;
+                const s2 = keyframeStrengths[2] ?? 1.0;
                 inputObj.images = [
-                  { image_url: canonicalUrl, start_frame_number: 0, strength: 0.85 },
-                  { image_url: canonicalUrl, start_frame_number: midFrame, strength: 0.5 },
-                  { image_url: canonicalUrl, start_frame_number: maxFrame, strength: 0.4 },
+                  { image_url: canonicalUrl, start_frame_number: 0, strength: s0 },
+                  { image_url: canonicalUrl, start_frame_number: midFrame, strength: s1 },
+                  { image_url: canonicalUrl, start_frame_number: LTX_INTERNAL_MAX_FRAME, strength: s2 },
                 ];
-                console.log(`🔒 Character-swap: normalized duplicate anchors to [0(s=0.85), ${midFrame}(s=0.5), ${maxFrame}(s=0.4)]`);
-              } else if (allStrengthsAreDefault) {
-                const sorted = [...inputObj.images].sort(
-                  (a: { start_frame_number: number }, b: { start_frame_number: number }) => a.start_frame_number - b.start_frame_number
-                );
-                inputObj.images = sorted.map((img: { image_url: string; start_frame_number: number }, index: number) => {
-                  const isFirst = index === 0;
-                  const isLast = index === sorted.length - 1;
-                  return {
-                    image_url: img.image_url,
-                    start_frame_number: isFirst ? 0 : isLast ? maxFrame : img.start_frame_number,
-                    strength: isFirst ? 0.85 : isLast ? 0.4 : 0.5,
-                  };
-                });
-                console.log('🔒 Character-swap: auto-tuned temporal image strengths to [start=0.85, mids=0.5, end=0.4]');
+                console.log(`🔒 Character-swap: 3 anchors at [0, ${midFrame}, ${LTX_INTERNAL_MAX_FRAME}] with strengths [${s0}, ${s1}, ${s2}]`);
+              } else {
+                console.log(`📸 Multiple unique images - using slot-based frame positions`);
               }
+            } else {
+              console.log(`⚠️ Not char-swap mode: isCharSwap=${isCharSwap}, hasImages=${!!inputObj.images}`);
             }
 
             if (hasMotionVideo) {
-              const videoStrength = isCharSwap ? 0.55 : 1;
+              const videoStrength = isCharSwap ? motionStrength : 1;
               inputObj.videos = [{
                 video_url: stripToStoragePath(motionRefVideoUrl as string),
                 start_frame_number: 0,
                 strength: videoStrength,
+                // Pose conditioning: extract motion/pose from video, not identity
+                conditioning_type: 'pose',
+                preprocess: true,
+                limit_num_frames: true,
               }];
               if (isCharSwap) {
-                console.log(`🎭 Character-swap: video strength=${videoStrength} to reduce source-video appearance bleed`);
+                console.log(`🎭 Character-swap: video strength=${videoStrength}, conditioning_type=pose`);
               }
             }
 
             // Don't set image_url -- multi uses images[]/videos[] arrays
             delete inputObj.image_url;
-            console.log(`🎬 MultiCondition: ${filledEntries.length} images, ${hasMotionVideo ? 1 : 0} motion ref video`);
+            // Final debug: log the actual arrays being sent
+            console.log(`🎬 MultiCondition FINAL:`, {
+              images: inputObj.images?.map((i: any) => ({ frame: i.start_frame_number, strength: i.strength })),
+              videos: inputObj.videos?.map((v: any) => ({ frame: v.start_frame_number, strength: v.strength })),
+            });
           } else if (refImageUrl) {
             inputObj.image_url = stripToStoragePath(refImageUrl); // Standard I2V
           }

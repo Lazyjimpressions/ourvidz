@@ -400,8 +400,8 @@ export class ClipOrchestrationService {
     durationSeconds: number,
     frameRate: number = 24
   ): MultiConditionConfig {
-    const images: Array<{ image_url: string; start_frame_num: number; strength: number }> = [];
-    const videos: Array<{ video_url: string; start_frame_num: number }> = [];
+    const images: Array<{ image_url: string; start_frame_number: number; strength: number }> = [];
+    const videos: Array<{ video_url: string; start_frame_number: number }> = [];
 
     const totalFrames = Math.round(durationSeconds * frameRate);
     // LTX constraint: frame positions must be multiples of 8
@@ -421,7 +421,7 @@ export class ClipOrchestrationService {
           // Identity at frame 0 - establishes character appearance
           images.push({
             image_url: ref.url,
-            start_frame_num: 0,
+            start_frame_number: 0,
             strength: ref.strength ?? 1,
           });
           console.log('🎬 [MultiCondition] Identity ref at frame 0');
@@ -431,7 +431,7 @@ export class ClipOrchestrationService {
           // Motion reference as video for camera/action style
           videos.push({
             video_url: ref.url,
-            start_frame_num: 0,
+            start_frame_number: 0,
           });
           console.log('🎬 [MultiCondition] Motion ref (video)');
           break;
@@ -440,7 +440,7 @@ export class ClipOrchestrationService {
           // End frame at final position for keyframe transitions
           images.push({
             image_url: ref.url,
-            start_frame_num: endFrameNum,
+            start_frame_number: endFrameNum,
             strength: ref.strength ?? 1,
           });
           console.log('🎬 [MultiCondition] End frame at frame', endFrameNum);
@@ -451,7 +451,7 @@ export class ClipOrchestrationService {
           const midFrame = Math.floor(totalFrames * 0.25 / 8) * 8;
           images.push({
             image_url: ref.url,
-            start_frame_num: midFrame,
+            start_frame_number: midFrame,
             strength: ref.strength ?? 0.5, // Lower strength for scene
           });
           console.log('🎬 [MultiCondition] Scene ref at frame', midFrame);

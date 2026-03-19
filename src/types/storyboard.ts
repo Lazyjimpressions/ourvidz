@@ -225,12 +225,15 @@ export interface ReferenceSlot {
 export interface MultiConditionConfig {
   images?: Array<{
     image_url: string;
-    start_frame_num: number;
+    start_frame_number: number;
     strength: number;
   }>;
   videos?: Array<{
     video_url: string;
-    start_frame_num: number;
+    start_frame_number: number;
+    conditioning_type?: string;
+    preprocess?: boolean;
+    limit_num_frames?: boolean;
   }>;
 }
 
