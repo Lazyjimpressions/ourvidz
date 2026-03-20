@@ -1108,12 +1108,20 @@ serve(async (req) => {
       const webhookSecret = Deno.env.get('FAL_WEBHOOK_SECRET');
       if (!webhookSecret) {
         console.error('❌ FAL_WEBHOOK_SECRET not configured for async model');
-        // Fall through to synchronous as fallback
-      } else {
-        const webhookUrl = `${supabaseUrl}/functions/v1/${webhookFunction}?secret=${webhookSecret}`;
-        console.log('🚀 Async submit to:', falEndpoint, '→ webhook:', webhookFunction);
+        await supabase.from('jobs').update({
+          status: 'failed',
+          error_message: 'Server misconfigured: FAL_WEBHOOK_SECRET required for queue-based fal models',
+        }).eq('id', jobData.id);
+        return new Response(JSON.stringify({
+          error: 'Async fal models require FAL_WEBHOOK_SECRET on the fal-image edge function',
+          details: 'Set the secret in Supabase Dashboard → Edge Functions → fal-image',
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 503 });
+      }
 
-        try {
+      const webhookUrl = `${supabaseUrl}/functions/v1/${webhookFunction}?secret=${webhookSecret}`;
+      console.log('🚀 fal queue submit (third-party):', falEndpoint, '→ webhook:', webhookFunction);
+
+      try {
           const falResponse = await fetch(`${falEndpoint}?fal_webhook=${encodeURIComponent(webhookUrl)}`, {
             method: 'POST',
             headers: { 'Authorization': `Key ${falApiKey}`, 'Content-Type': 'application/json' },
@@ -1140,45 +1148,62 @@ serve(async (req) => {
           }
 
           const queueResult = await falResponse.json();
-          console.log('✅ Async queued:', {
+          console.log('✅ fal queue accepted:', {
             request_id: queueResult.request_id,
-            status: queueResult.status
+            status: queueResult.status,
           });
 
-          // Store request_id for webhook lookup
+          if (!queueResult.request_id) {
+            await supabase.from('jobs').update({
+              status: 'failed',
+              error_message: 'fal queue response missing request_id',
+            }).eq('id', jobData.id);
+            return new Response(JSON.stringify({
+              error: 'Unexpected fal queue response',
+              details: queueResult,
+            }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 });
+          }
+
           await supabase.from('jobs').update({
-            metadata: { ...jobData.metadata, fal_request_id: queueResult.request_id, input_used: modelInput }
+            metadata: { ...jobData.metadata, fal_request_id: queueResult.request_id, input_used: modelInput },
           }).eq('id', jobData.id);
 
-          // Log usage (submission only, actual cost tracked by webhook)
           logApiUsage(supabase, {
-            providerId: apiModel.api_providers.id, modelId: apiModel.id, userId: user.id,
+            providerId: apiModel.api_providers.id,
+            modelId: apiModel.id,
+            userId: user.id,
             requestType: modelModality === 'video' ? 'video' : 'image',
             endpointPath: `/${modelKey}`,
             requestPayload: modelInput,
-            responseStatus: 202, responseTimeMs: Date.now() - Date.now(),
+            responseStatus: falResponse.status,
+            responseTimeMs: 0,
             costUsd: estimatedCost,
-            providerMetadata: { request_id: queueResult.request_id, async: true, model_key: modelKey }
+            providerMetadata: { request_id: queueResult.request_id, async: true, model_key: modelKey },
           }).catch(() => {});
 
           return new Response(JSON.stringify({
             jobId: jobData.id,
             requestId: queueResult.request_id,
             status: 'queued',
-            message: 'Generation queued — results delivered via webhook'
+            message: 'Generation queued — results delivered via webhook',
           }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
 
-        } catch (asyncError) {
-          console.error('❌ Async fetch error:', asyncError);
-          // Fall through to sync as fallback
-          console.log('⚠️ Falling back to synchronous call');
-          await supabase.from('jobs').update({ status: 'processing' }).eq('id', jobData.id);
-        }
+      } catch (asyncError) {
+        const msg = asyncError instanceof Error ? asyncError.message : String(asyncError);
+        console.error('❌ Async fetch error:', asyncError);
+        await supabase.from('jobs').update({
+          status: 'failed',
+          error_message: `fal queue submit failed: ${msg.slice(0, 500)}`,
+        }).eq('id', jobData.id);
+        return new Response(JSON.stringify({
+          error: 'Failed to reach fal.ai queue',
+          details: msg,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 502 });
       }
     }
 
-    // ── 6b. SYNCHRONOUS PATH (images, or async fallback) ──
-    console.log('🚀 Calling fal.ai (sync):', falEndpoint);
+    // ── 6b. SYNCHRONOUS PATH: fal.run only (no webhook / not queue)
+    console.log('🚀 Calling fal.ai (sync fal.run):', falEndpoint);
 
     const startTime = Date.now();
     const requestType = modelModality === 'video' ? 'video' : 'image';

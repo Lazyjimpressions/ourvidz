@@ -32,26 +32,26 @@ Provider-agnostic webhook system for handling long-running video generation jobs
 When model has `endpoint_path = 'fal-webhook'`, uses async submission:
 
 ```typescript
-// Detect async model
-const isAsync = apiModel.endpoint_path === 'fal-webhook';
+// Detect async model (api_models.endpoint_path = 'fal-webhook')
+const isAsync = !!apiModel.endpoint_path;
 
 if (isAsync) {
-  // Submit to queue endpoint with webhook callback
+  // REST: POST to https://queue.fal.run/{model_key}?fal_webhook=<encoded URL>
+  // Body = flat model input JSON (same schema as OpenAPI), NOT { input: ... }, NOT webhook in body.
+  // See: https://docs.fal.ai/model-endpoints/webhooks
   const webhookUrl = `${supabaseUrl}/functions/v1/fal-webhook?secret=${FAL_WEBHOOK_SECRET}`;
 
-  await fetch(`https://queue.fal.run/${modelKey}`, {
+  await fetch(`${providerBaseUrl}/${modelKey}?fal_webhook=${encodeURIComponent(webhookUrl)}`, {
     method: 'POST',
-    headers: { Authorization: `Key ${FAL_KEY}` },
-    body: JSON.stringify({
-      ...modelInput,
-      webhook_url: webhookUrl
-    })
+    headers: { Authorization: `Key ${FAL_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(modelInput),
   });
 
-  // Return immediately - webhook will complete the job
   return { status: 'queued', job_id: job.id };
 }
 ```
+
+**Do not** fall through to a “sync” `fetch` on `queue.fal.run` without a webhook: the queue returns `request_id` + `IN_QUEUE`, not a finished video. Use `fal.run` only for true synchronous models (`endpoint_path` null). Missing `FAL_WEBHOOK_SECRET` must fail fast for async models.
 
 ### fal-webhook (Completion)
 
