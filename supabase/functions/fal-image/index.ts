@@ -78,6 +78,55 @@ const FAL_PRICING: Record<string, number> = {
   'default_video': 0.25
 };
 
+/**
+ * fal.ai LTX MultiConditioning OpenAPI: ImageConditioningInput / VideoConditioningInput
+ * use `start_frame_num` (0–1440, multiple of 8), not `start_frame_number`.
+ * Per-model overrides: `api_models.capabilities.conditioning_timeline`.
+ */
+const DEFAULT_CONDITIONING_TIMELINE = {
+  min: 0,
+  max: 1440,
+  multipleOf: 8,
+  frameField: 'start_frame_num',
+};
+
+function getConditioningTimeline(capabilities: Record<string, unknown> | null | undefined): {
+  min: number;
+  max: number;
+  multipleOf: number;
+  frameField: string;
+} {
+  const ct = capabilities?.conditioning_timeline as Record<string, unknown> | undefined;
+  if (ct && typeof ct === 'object') {
+    return {
+      min: typeof ct.min === 'number' ? ct.min : DEFAULT_CONDITIONING_TIMELINE.min,
+      max: typeof ct.max === 'number' ? ct.max : DEFAULT_CONDITIONING_TIMELINE.max,
+      multipleOf: typeof ct.multipleOf === 'number' ? ct.multipleOf : DEFAULT_CONDITIONING_TIMELINE.multipleOf,
+      frameField: typeof ct.frame_field === 'string' ? ct.frame_field : DEFAULT_CONDITIONING_TIMELINE.frameField,
+    };
+  }
+  return { ...DEFAULT_CONDITIONING_TIMELINE };
+}
+
+function readRawConditioningFrame(item: Record<string, unknown>): number {
+  const v = item.start_frame_num ?? item.start_frame_number ?? item.startFrameNum;
+  if (typeof v === 'number' && !Number.isNaN(v)) return v;
+  if (typeof v === 'string' && v.trim() !== '') {
+    const n = Number(v);
+    return Number.isNaN(n) ? 0 : n;
+  }
+  return 0;
+}
+
+function sanitizeConditioningFrame(
+  raw: number,
+  timeline: { min: number; max: number; multipleOf: number }
+): number {
+  const m = timeline.multipleOf > 0 ? timeline.multipleOf : 8;
+  const snapped = Math.round(raw / m) * m;
+  return Math.min(Math.max(timeline.min, snapped), timeline.max);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION 2: Pure Utility Functions
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -458,6 +507,9 @@ async function buildModelInput(
 
     // ─── Video-specific parameters ───
     if (isVideo) {
+      /** Used for MultiCondition `images[]` / `videos[]` — fal expects `start_frame_num` in 0–1440 space */
+      const conditioningTimeline = getConditioningTimeline(capabilities);
+
       // V2V extend: client sends input.video as a URL string
       if (hasVideoInput) {
         let videoUrl = typeof body.input.video === 'object'
@@ -548,35 +600,46 @@ async function buildModelInput(
         }
       }
 
-      // MultiCondition: images[] array with temporal frame positions
+      // MultiCondition: images[] array with temporal frame positions (fal: start_frame_num, 0–1440)
       if (body.input.images && Array.isArray(body.input.images)) {
-        const signedImages = [];
+        const signedImages: Record<string, unknown>[] = [];
         for (const img of body.input.images) {
           const imgUrl = img.image_url || img.url;
           const signed = await signIfStoragePath(supabase, imgUrl, 'user-library');
           if (signed) {
-            signedImages.push({ image_url: signed, start_frame_number: img.start_frame_number ?? img.start_frame_num ?? 0, strength: img.strength ?? 1 });
+            const raw = readRawConditioningFrame(img as Record<string, unknown>);
+            const frame = sanitizeConditioningFrame(raw, conditioningTimeline);
+            const row: Record<string, unknown> = {
+              image_url: signed,
+              strength: img.strength ?? 1,
+            };
+            row[conditioningTimeline.frameField] = frame;
+            signedImages.push(row);
           }
         }
         if (signedImages.length > 0) {
           modelInput.images = signedImages;
           delete modelInput.image_url;
           delete modelInput.image;
-          console.log(`✅ MultiCondition: ${signedImages.length} temporal images set`);
+          console.log(`✅ MultiCondition: ${signedImages.length} temporal images set (${conditioningTimeline.frameField})`);
         }
       }
 
       // MultiCondition: videos[] array
       if (body.input.videos && Array.isArray(body.input.videos)) {
-        const signedVideos = [];
+        const signedVideos: Record<string, unknown>[] = [];
         for (const vid of body.input.videos) {
           const vidUrl = typeof vid === 'string' ? vid : (vid.video_url || vid.url);
           const signed = await signIfStoragePath(supabase, vidUrl, 'workspace-temp');
 
           if (signed && (signed.startsWith('http://') || signed.startsWith('https://') || signed.startsWith('data:'))) {
-            const startFrameNumber = typeof vid === 'object' ? (vid.start_frame_number ?? vid.start_frame_num ?? 0) : 0;
-            const videoEntry: Record<string, any> = { video_url: signed, start_frame_number: startFrameNumber };
-            if (typeof vid === 'object') {
+            const raw = typeof vid === 'object' && vid !== null
+              ? readRawConditioningFrame(vid as Record<string, unknown>)
+              : 0;
+            const frame = sanitizeConditioningFrame(raw, conditioningTimeline);
+            const videoEntry: Record<string, unknown> = { video_url: signed };
+            videoEntry[conditioningTimeline.frameField] = frame;
+            if (typeof vid === 'object' && vid !== null) {
               if (vid.strength !== undefined) videoEntry.strength = vid.strength;
               // Pose conditioning params for character swap (extract motion, not identity)
               if (vid.conditioning_type) videoEntry.conditioning_type = vid.conditioning_type;
@@ -584,7 +647,8 @@ async function buildModelInput(
               if (vid.limit_num_frames !== undefined) videoEntry.limit_num_frames = vid.limit_num_frames;
             }
             signedVideos.push(videoEntry);
-            console.log(`✅ Video conditioning: frame=${videoEntry.start_frame_number}, strength=${videoEntry.strength ?? 'default'}, type=${videoEntry.conditioning_type ?? 'default'}`);
+            const fk = videoEntry[conditioningTimeline.frameField];
+            console.log(`✅ Video conditioning: ${conditioningTimeline.frameField}=${fk}, strength=${videoEntry.strength ?? 'default'}, type=${videoEntry.conditioning_type ?? 'default'}`);
           } else {
             console.warn('⚠️ Skipping invalid video conditioning URL:', vidUrl?.substring?.(0, 80) || vidUrl);
           }
@@ -603,37 +667,11 @@ async function buildModelInput(
         }
       }
 
-      // ── MultiCondition defensive sanitization (MUST run after images[]/videos[] populated) ──
+      // MultiCondition: force aspect_ratio=auto when images[] present (frame indices already sanitized above)
       if (modelInput.images && Array.isArray(modelInput.images) && modelInput.images.length > 0) {
-        // 1. Force aspect_ratio=auto so model matches source dimensions
         const prevAR = modelInput.aspect_ratio;
         modelInput.aspect_ratio = 'auto';
         console.log(`🎯 MultiCondition: forcing aspect_ratio=auto (was "${prevAR}")`);
-
-        // 2. Sanitize all start_frame_number values to valid multiples of 8
-        const numFrames = modelInput.num_frames || 121;
-        const maxValidFrame = numFrames - 1; // e.g. 120 for 121 frames
-        for (const img of modelInput.images) {
-          const orig = img.start_frame_number;
-          // Snap to nearest multiple of 8, clamp to [0, maxValidFrame]
-          const snapped = Math.min(Math.max(0, Math.round(orig / 8) * 8), maxValidFrame);
-          if (snapped !== orig) {
-            img.start_frame_number = snapped;
-            console.log(`🔧 Frame sanitize: images[] start_frame_number ${orig} → ${snapped}`);
-          }
-        }
-
-        // 3. Sanitize videos[] start_frame_number as well
-        if (modelInput.videos && Array.isArray(modelInput.videos)) {
-          for (const vid of modelInput.videos) {
-            const orig = vid.start_frame_number;
-            const snapped = Math.min(Math.max(0, Math.round(orig / 8) * 8), maxValidFrame);
-            if (snapped !== orig) {
-              vid.start_frame_number = snapped;
-              console.log(`🔧 Frame sanitize: videos[] start_frame_number ${orig} → ${snapped}`);
-            }
-          }
-        }
       }
 
       // I2V reference image (non-extend, non-multi)
@@ -722,9 +760,15 @@ async function buildModelInput(
     has_image_urls: !!modelInput.image_urls,
     has_video: !!modelInput.video,
     images_count: modelInput.images?.length || 0,
-    images_frames: modelInput.images?.map((i: any) => `F${i.start_frame_number}(s=${i.strength})`).join(', ') || 'none',
+    images_frames: modelInput.images?.map((i: any) => {
+      const f = i.start_frame_num ?? i.start_frame_number ?? '?';
+      return `F${f}(s=${i.strength})`;
+    }).join(', ') || 'none',
     videos_count: modelInput.videos?.length || 0,
-    videos_detail: modelInput.videos?.map((v: any) => `F${v.start_frame_number}(s=${v.strength ?? 1})`).join(', ') || 'none',
+    videos_detail: modelInput.videos?.map((v: any) => {
+      const f = v.start_frame_num ?? v.start_frame_number ?? '?';
+      return `F${f}(s=${v.strength ?? 1})`;
+    }).join(', ') || 'none',
   });
 
   return { modelInput, generationMode };
