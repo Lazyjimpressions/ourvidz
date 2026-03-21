@@ -1495,7 +1495,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 console.log(`🖼️ Slot ${entry.slotIndex} → frame ${framePos}`);
                 return {
                   image_url: entry.url,
-                  start_frame_number: framePos,
+                  start_frame_num: framePos,
                   strength: keyframeStrengths[entry.slotIndex] ?? 1.0,
                 };
               });
@@ -1522,9 +1522,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 const s1 = keyframeStrengths[1] ?? 1.0;
                 const s2 = keyframeStrengths[2] ?? 1.0;
                 inputObj.images = [
-                  { image_url: canonicalUrl, start_frame_number: 0, strength: s0 },
-                  { image_url: canonicalUrl, start_frame_number: midFrame, strength: s1 },
-                  { image_url: canonicalUrl, start_frame_number: lastFrame, strength: s2 },
+                  { image_url: canonicalUrl, start_frame_num: 0, strength: s0 },
+                  { image_url: canonicalUrl, start_frame_num: midFrame, strength: s1 },
+                  { image_url: canonicalUrl, start_frame_num: lastFrame, strength: s2 },
                 ];
                 console.log(`🔒 Character-swap: 3 anchors at [0, ${midFrame}, ${lastFrame}] with strengths [${s0}, ${s1}, ${s2}]`);
               } else {
@@ -1542,7 +1542,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               // Build video conditioning entry
               const videoEntry: Record<string, unknown> = {
                 video_url: stripToStoragePath(motionRefVideoUrl as string),
-                start_frame_number: 0,
+                start_frame_num: 0,
                 strength: videoStrength,
               };
 
@@ -1566,8 +1566,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             delete inputObj.image_url;
             // Final debug: log the actual arrays being sent
             console.log(`🎬 MultiCondition FINAL:`, {
-              images: inputObj.images?.map((i: any) => ({ frame: i.start_frame_number, strength: i.strength })),
-              videos: inputObj.videos?.map((v: any) => ({ frame: v.start_frame_number, strength: v.strength })),
+              images: inputObj.images?.map((i: any) => ({ frame: i.start_frame_num, strength: i.strength })),
+              videos: inputObj.videos?.map((v: any) => ({ frame: v.start_frame_num, strength: v.strength })),
             });
           } else if (refImageUrl) {
             inputObj.image_url = stripToStoragePath(refImageUrl); // Standard I2V

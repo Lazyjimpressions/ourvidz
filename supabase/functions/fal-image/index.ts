@@ -88,7 +88,7 @@ const DEFAULT_CONDITIONING_TIMELINE = {
   min: 0,
   max: 160,  // Typical max num_frames for LTX
   multipleOf: 1,  // No snapping needed for actual frame indices
-  frameField: 'start_frame_number',
+  frameField: 'start_frame_num',
 };
 
 /** V2V extend only: tail-conditioning window (~1.6s at 30fps). Not used for MultiCondition `videos[]`. */
