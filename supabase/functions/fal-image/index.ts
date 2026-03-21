@@ -644,17 +644,14 @@ async function buildModelInput(
             videoEntry[conditioningTimeline.frameField] = frame;
             if (typeof vid === 'object' && vid !== null) {
               if (vid.strength !== undefined) videoEntry.strength = vid.strength;
-              // Pose conditioning params for character swap (extract motion, not identity)
-              if (vid.conditioning_type) videoEntry.conditioning_type = vid.conditioning_type;
-              if (vid.preprocess !== undefined) videoEntry.preprocess = vid.preprocess;
-              if (vid.limit_num_frames !== undefined) videoEntry.limit_num_frames = vid.limit_num_frames;
-              if (vid.max_num_frames !== undefined) videoEntry.max_num_frames = vid.max_num_frames;
+              // WARNING: Do NOT pass through conditioning_type, preprocess, limit_num_frames, or max_num_frames
+              // These params cause 500 errors on MultiCondition. All successful jobs only use:
+              // video_url, start_frame_num/start_frame_number, and strength.
+              // See jobs table analysis: every job with conditioning_type="pose" failed.
             }
-            // Do not inject max_num_frames: fal defaults to 1441 for VideoConditioningInput; a 48 cap
-            // caused multicondition 500s vs known-good jobs that omitted this field (see LTX guide).
             signedVideos.push(videoEntry);
             const fk = videoEntry[conditioningTimeline.frameField];
-            console.log(`✅ Video conditioning: ${conditioningTimeline.frameField}=${fk}, strength=${videoEntry.strength ?? 'default'}, type=${videoEntry.conditioning_type ?? 'default'}`);
+            console.log(`✅ Video conditioning: ${conditioningTimeline.frameField}=${fk}, strength=${videoEntry.strength ?? 'default'}`);
           } else {
             console.warn('⚠️ Skipping invalid video conditioning URL:', vidUrl?.substring?.(0, 80) || vidUrl);
           }
