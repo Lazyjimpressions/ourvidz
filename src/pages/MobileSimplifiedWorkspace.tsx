@@ -125,6 +125,8 @@ const MobileSimplifiedWorkspace = () => {
   const [motionVideoStrength, setMotionVideoStrength] = useState(0.55);
   /** fal `preprocess` on motion reference video for MultiCondition pose */
   const [motionVideoPreprocess, setMotionVideoPreprocess] = useState(false);
+  /** Conditioning type for motion video (default, rgb, depth, pose, canny) */
+  const [motionConditioningType, setMotionConditioningType] = useState<'default' | 'rgb' | 'depth' | 'pose' | 'canny'>('default');
   // Track the job_id for the pose slot (index 2) so we can look up pose_description
   const [poseSlotJobId, setPoseSlotJobId] = useState<string | null>(null);
 
@@ -380,6 +382,7 @@ const MobileSimplifiedWorkspace = () => {
       secondPassSteps,
       motionVideoStrength,
       motionVideoPreprocess,
+      motionConditioningType,
     } : undefined;
     await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc, undefined, advancedParams, motionRefVideoUrl || undefined);
   };
@@ -870,6 +873,8 @@ const MobileSimplifiedWorkspace = () => {
            onMotionVideoStrengthChange={setMotionVideoStrength}
            motionVideoPreprocess={motionVideoPreprocess}
            onMotionVideoPreprocessChange={setMotionVideoPreprocess}
+           motionConditioningType={motionConditioningType}
+           onMotionConditioningTypeChange={setMotionConditioningType}
          />
 
         {/* Lightbox */}

@@ -102,6 +102,8 @@ export interface MobileSimplePromptInputProps {
   onEnableDetailPassChange?: (enabled: boolean) => void;
   motionVideoPreprocess?: boolean;
   onMotionVideoPreprocessChange?: (enabled: boolean) => void;
+  motionConditioningType?: 'default' | 'rgb' | 'depth' | 'pose' | 'canny';
+  onMotionConditioningTypeChange?: (type: 'default' | 'rgb' | 'depth' | 'pose' | 'canny') => void;
   multiCrf?: number;
   onMultiCrfChange?: (crf: number) => void;
   temporalAdainFactor?: number;
@@ -198,6 +200,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onMotionVideoStrengthChange,
   motionVideoPreprocess = false,
   onMotionVideoPreprocessChange,
+  motionConditioningType = 'default',
+  onMotionConditioningTypeChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -975,7 +979,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           <span className="font-semibold text-foreground">🎭 Character Swap Active</span>
           <span>• Anchors: {(keyframeStrengths?.[0] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[1] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[2] ?? 0.8).toFixed(2)}</span>
           <span>• Video: {motionVideoStrength.toFixed(2)}</span>
-          <span>• Pose preprocess: {motionVideoPreprocess ? 'on' : 'off'}</span>
+          <span>• Conditioning: {motionConditioningType}</span>
+          <span>• Preprocess: {motionVideoPreprocess ? 'on' : 'off'}</span>
         </div>
       )}
       
@@ -1082,6 +1087,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onEnableDetailPassChange={onEnableDetailPassChange}
         motionVideoPreprocess={motionVideoPreprocess}
         onMotionVideoPreprocessChange={onMotionVideoPreprocessChange}
+        motionConditioningType={motionConditioningType}
+        onMotionConditioningTypeChange={onMotionConditioningTypeChange}
         multiCrf={multiCrf}
         onMultiCrfChange={onMultiCrfChange}
         temporalAdainFactor={temporalAdainFactor}

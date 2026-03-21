@@ -662,7 +662,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     slotRoles?: SlotRole[],
     poseDescription?: string,
     videoSlotIsVideo?: boolean[],
-    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; motionVideoStrength?: number; motionVideoPreprocess?: boolean },
+    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; motionVideoStrength?: number; motionVideoPreprocess?: boolean; motionConditioningType?: 'default' | 'rgb' | 'depth' | 'pose' | 'canny' },
     motionRefVideoUrl?: string
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
@@ -1537,6 +1537,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             if (hasMotionVideo) {
               const videoStrength = isCharSwap ? motionStrength : 1;
               const usePreprocess = multiAdvancedParams?.motionVideoPreprocess ?? false;
+              const conditioningType = multiAdvancedParams?.motionConditioningType ?? 'default';
 
               // Build video conditioning entry
               const videoEntry: Record<string, unknown> = {
@@ -1545,15 +1546,19 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 strength: videoStrength,
               };
 
-              // Optional pose conditioning params (toggle-controlled for testing)
+              // Conditioning type (independent of preprocess)
+              if (conditioningType && conditioningType !== 'default') {
+                videoEntry.conditioning_type = conditioningType;
+              }
+
+              // Preprocess toggle (independent of conditioning type)
               if (usePreprocess) {
-                videoEntry.conditioning_type = 'pose';
                 videoEntry.preprocess = true;
               }
 
               inputObj.videos = [videoEntry];
               if (isCharSwap) {
-                console.log(`🎭 Character-swap: video strength=${videoStrength}, preprocess=${usePreprocess}`);
+                console.log(`🎭 Character-swap: video strength=${videoStrength}, conditioning=${conditioningType}, preprocess=${usePreprocess}`);
               }
             }
 

@@ -112,6 +112,9 @@ export interface MobileSettingsSheetProps {
   /** Run fal pose preprocessing on motion reference video (heavier; off matches lighter multi jobs) */
   motionVideoPreprocess?: boolean;
   onMotionVideoPreprocessChange?: (enabled: boolean) => void;
+  /** Conditioning type for motion video (default, rgb, depth, pose, canny) */
+  motionConditioningType?: 'default' | 'rgb' | 'depth' | 'pose' | 'canny';
+  onMotionConditioningTypeChange?: (type: 'default' | 'rgb' | 'depth' | 'pose' | 'canny') => void;
   multiCrf?: number;
   onMultiCrfChange?: (crf: number) => void;
   temporalAdainFactor?: number;
@@ -132,6 +135,14 @@ const STYLE_PRESETS = [
   'Cinematic Lighting', 'Film Grain', 'Dramatic Composition', 'Soft Focus',
   'High Contrast', 'Moody', 'Natural Light', 'Shallow DOF',
 ];
+
+const CONDITIONING_TYPES = [
+  { value: 'default', label: 'Default', description: 'Model default (typically RGB)' },
+  { value: 'rgb', label: 'RGB', description: 'Standard color-based conditioning' },
+  { value: 'depth', label: 'Depth', description: 'Depth map for spatial structure' },
+  { value: 'pose', label: 'Pose', description: 'Skeletal pose for motion guidance' },
+  { value: 'canny', label: 'Canny', description: 'Edge detection for structure' },
+] as const;
 
 /** Model selector popover chip */
 function ModelChipPopover({ currentMode, selectedModel, onModelChange, imageModels, videoModels, modelsLoading, multiRefActive }: {
@@ -363,6 +374,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onEnableDetailPassChange,
   motionVideoPreprocess = false,
   onMotionVideoPreprocessChange,
+  motionConditioningType = 'default',
+  onMotionConditioningTypeChange,
   multiCrf = 29,
   onMultiCrfChange,
   temporalAdainFactor = 1.0,
@@ -808,12 +821,12 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
-                            Pose preprocess
+                            Preprocess
                             <Info className="h-2.5 w-2.5 opacity-50 shrink-0" />
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[220px] text-xs">
-                          When on, runs fal&apos;s video preprocessing for pose conditioning (heavier). Turn off for a lighter path if motion feels wrong or jobs fail.
+                          When on, runs fal&apos;s video preprocessing (heavier). Turn off for a lighter path if motion feels wrong or jobs fail.
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -821,6 +834,29 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       checked={motionVideoPreprocess}
                       onCheckedChange={(v) => onMotionVideoPreprocessChange?.(v)}
                       className="scale-75 shrink-0"
+                    />
+                  </div>
+                  {/* Conditioning Type Selector */}
+                  <div className="inline-flex items-center gap-1.5 shrink-0">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            Conditioning
+                            <Info className="h-2.5 w-2.5 opacity-50 shrink-0" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px] text-xs">
+                          How the motion reference guides generation. Pose extracts skeletal motion; RGB uses color data; Depth/Canny extract structural features.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <CreativeChipPopover
+                      label=""
+                      value={CONDITIONING_TYPES.find(ct => ct.value === motionConditioningType)?.label || 'Default'}
+                      options={CONDITIONING_TYPES.map(ct => ({ value: ct.value, label: ct.label }))}
+                      selected={motionConditioningType || 'default'}
+                      onSelect={(v) => onMotionConditioningTypeChange?.(v as typeof motionConditioningType)}
                     />
                   </div>
                 </div>
