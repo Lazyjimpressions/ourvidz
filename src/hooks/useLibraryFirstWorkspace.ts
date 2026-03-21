@@ -1517,10 +1517,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               if (uniqueImageUrls.size === 1) {
                 const canonicalUrl = inputObj.images[0].image_url;
                 // Use actual video frame positions: 0, midpoint, last frame
-                // Use first 3 keyframeStrengths for start/mid/end anchors (default 1.0)
-                const s0 = keyframeStrengths[0] ?? 1.0;
-                const s1 = keyframeStrengths[1] ?? 1.0;
-                const s2 = keyframeStrengths[2] ?? 1.0;
+                // Map UI slots to 3 anchors: Start(0) → frame 0, Key3(2) → mid, End(4) → end
+                const s0 = keyframeStrengths[0] ?? 1.0;  // Start slot → frame 0
+                const s1 = keyframeStrengths[2] ?? 1.0;  // Key 3 slot → mid frame
+                const s2 = keyframeStrengths[4] ?? 1.0;  // End slot → last frame
                 inputObj.images = [
                   { image_url: canonicalUrl, start_frame_num: 0, strength: s0 },
                   { image_url: canonicalUrl, start_frame_num: midFrame, strength: s1 },

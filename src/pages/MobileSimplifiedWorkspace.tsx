@@ -114,6 +114,7 @@ const MobileSimplifiedWorkspace = () => {
   const [additionalRefUrls, setAdditionalRefUrls] = useState<string[]>([]);
   // Dedicated motion reference video URL (separate from image keyframes)
   const [motionRefVideoUrl, setMotionRefVideoUrl] = useState<string | null>(null);
+  const [motionRefThumbnailUrl, setMotionRefThumbnailUrl] = useState<string | null>(null);
   // MultiCondition advanced video settings
   const [enableDetailPass, setEnableDetailPass] = useState(true);
   const [multiCrf, setMultiCrf] = useState(29);
@@ -856,7 +857,12 @@ const MobileSimplifiedWorkspace = () => {
              setKeyframeStrengths(next);
            }}
            motionRefVideoUrl={motionRefVideoUrl}
-           onMotionRefVideoUrlChange={setMotionRefVideoUrl}
+           motionRefThumbnailUrl={motionRefThumbnailUrl}
+           onMotionRefVideoUrlChange={(url) => {
+             setMotionRefVideoUrl(url);
+             // Clear thumbnail when video changes (will be populated by picker if available)
+             setMotionRefThumbnailUrl(null);
+           }}
            enableDetailPass={enableDetailPass}
            onEnableDetailPassChange={setEnableDetailPass}
            multiCrf={multiCrf}

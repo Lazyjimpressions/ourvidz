@@ -96,6 +96,7 @@ export interface MobileSimplePromptInputProps {
   onSourceVideoDuration?: (duration: number) => void;
   // Motion reference video (separate from image keyframes)
   motionRefVideoUrl?: string | null;
+  motionRefThumbnailUrl?: string | null;
   onMotionRefVideoUrlChange?: (url: string | null) => void;
   // MultiCondition advanced controls
   enableDetailPass?: boolean;
@@ -183,6 +184,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onKeyframeStrengthChange,
   onSourceVideoDuration,
   motionRefVideoUrl,
+  motionRefThumbnailUrl,
   onMotionRefVideoUrlChange,
   enableDetailPass,
   onEnableDetailPassChange,
@@ -977,7 +979,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       {currentMode === 'video' && motionRefVideoUrl && (beginningRefImageUrl || referenceImageUrl) && (
         <div className="mx-3 mb-2 px-2.5 py-1.5 rounded-md bg-accent/30 border border-accent/50 text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
           <span className="font-semibold text-foreground">🎭 Character Swap Active</span>
-          <span>• Anchors: {(keyframeStrengths?.[0] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[1] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[2] ?? 0.8).toFixed(2)}</span>
+          <span>• Anchors: {(keyframeStrengths?.[0] ?? 1.0).toFixed(2)}/{(keyframeStrengths?.[2] ?? 1.0).toFixed(2)}/{(keyframeStrengths?.[4] ?? 1.0).toFixed(2)}</span>
           <span>• Video: {motionVideoStrength.toFixed(2)}</span>
           <span>• Conditioning: {motionConditioningType}</span>
           <span>• Preprocess: {motionVideoPreprocess ? 'on' : 'off'}</span>
@@ -1069,6 +1071,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         motionIntensity={motionIntensity}
         onMotionIntensityChange={onMotionIntensityChange}
         motionRefVideoUrl={motionRefVideoUrl}
+        motionRefThumbnailUrl={motionRefThumbnailUrl}
         onMotionRefVideoUrlRemove={() => onMotionRefVideoUrlChange?.(null)}
         onMotionRefVideoUrlAdd={() => setMotionPickerOpen(true)}
         onMotionRefVideoFileDrop={async (file) => {

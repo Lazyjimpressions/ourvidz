@@ -33,7 +33,7 @@ export function useRealtimeWorkspace() {
       quality: 'high',
       modelType: asset.modelUsed,
       duration: asset.durationSeconds,
-      thumbnailUrl: undefined,
+      thumbnailUrl: signedUrls.get(`${asset.id}_thumb`) || undefined,
       isUrlLoaded: false,
       isVisible: true,
       virtualIndex: idx,
@@ -43,14 +43,15 @@ export function useRealtimeWorkspace() {
     }));
   }, [assets, signedUrls]);
 
-  // Generate signed URLs for workspace assets
+  // Generate signed URLs for workspace assets (main + thumbnail)
   useEffect(() => {
     let mounted = true;
-    
+
     const generateUrls = async () => {
       const newUrls = new Map<string, string>();
-      
+
       for (const asset of assets) {
+        // Sign main URL
         if (!signedUrls.has(asset.id)) {
           try {
             const signedUrl = await WorkspaceAssetService.generateSignedUrl({
@@ -64,8 +65,24 @@ export function useRealtimeWorkspace() {
             console.error('Failed to generate signed URL for asset:', asset.id, error);
           }
         }
+
+        // Sign thumbnail URL (for videos)
+        const thumbKey = `${asset.id}_thumb`;
+        const assetWithThumb = asset as any;
+        if (!signedUrls.has(thumbKey) && assetWithThumb.thumbnailPath) {
+          try {
+            const thumbUrl = await WorkspaceAssetService.generateThumbnailUrl({
+              thumbnail_path: assetWithThumb.thumbnailPath
+            });
+            if (thumbUrl && mounted) {
+              newUrls.set(thumbKey, thumbUrl);
+            }
+          } catch (error) {
+            console.error('Failed to generate thumbnail URL for asset:', asset.id, error);
+          }
+        }
       }
-      
+
       if (mounted && newUrls.size > 0) {
         setSignedUrls(prev => new Map([...prev, ...newUrls]));
       }

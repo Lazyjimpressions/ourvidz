@@ -57,6 +57,7 @@ export interface MobileSettingsSheetProps {
   refSlots?: Array<{ url?: string | null; label: string; role?: string }>;
   // Motion reference video (separate from image keyframes)
   motionRefVideoUrl?: string | null;
+  motionRefThumbnailUrl?: string | null;
   onMotionRefVideoUrlRemove?: () => void;
   onMotionRefVideoUrlAdd?: () => void;
   onMotionRefVideoFileDrop?: (file: File) => void;
@@ -336,6 +337,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onContentTypeChange,
   refSlots = [],
   motionRefVideoUrl,
+  motionRefThumbnailUrl,
   onMotionRefVideoUrlRemove,
   onMotionRefVideoUrlAdd,
   onMotionRefVideoFileDrop,
@@ -699,7 +701,11 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
               {motionRefVideoUrl ? (
                 <div className="flex items-start gap-3">
                   <div className="relative group h-16 w-24 rounded-md overflow-hidden border border-border flex-shrink-0">
-                    <video src={motionRefVideoUrl} className="absolute inset-0 w-full h-full object-cover" muted />
+                    {motionRefThumbnailUrl ? (
+                      <img src={motionRefThumbnailUrl} alt="Motion reference" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : (
+                      <video src={motionRefVideoUrl} className="absolute inset-0 w-full h-full object-cover" muted />
+                    )}
                     <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                       <span className="text-white text-[10px] font-medium">🎬</span>
                     </div>

@@ -90,12 +90,12 @@ export class WorkspaceAssetService {
     try {
       // Normalize the storage path - remove workspace-temp prefix if present
       let storagePath = asset.temp_storage_path || asset.tempStoragePath;
-      
+
       // Strip workspace-temp/ prefix if present (for resilience)
       if (storagePath.startsWith('workspace-temp/')) {
         storagePath = storagePath.replace('workspace-temp/', '');
       }
-      
+
       console.log('🔗 Generating signed URL for workspace asset:', {
         assetId: asset.id,
         originalPath: asset.temp_storage_path || asset.tempStoragePath,
@@ -116,6 +116,32 @@ export class WorkspaceAssetService {
       }
     } catch (error) {
       console.error('Failed to generate signed URL:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Generate signed URL for workspace asset thumbnail
+   */
+  static async generateThumbnailUrl(asset: any): Promise<string | null> {
+    try {
+      let thumbnailPath = asset.thumbnail_path || asset.thumbnailPath;
+      if (!thumbnailPath) return null;
+
+      // Strip workspace-temp/ prefix if present
+      if (thumbnailPath.startsWith('workspace-temp/')) {
+        thumbnailPath = thumbnailPath.replace('workspace-temp/', '');
+      }
+
+      try {
+        const signed = await UrlCache.getSignedUrl('workspace-temp', thumbnailPath, 3600);
+        return signed;
+      } catch (error) {
+        console.error('Error generating thumbnail URL:', error);
+        return null;
+      }
+    } catch (error) {
+      console.error('Failed to generate thumbnail URL:', error);
       return null;
     }
   }
