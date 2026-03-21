@@ -1458,7 +1458,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
           } else if (isMultiModel && refImageUrl) {
             // MultiCondition: build images[] from image keyframe slots, videos[] from motionRefVideoUrl
-            const { getFrameForSlot, LTX_INTERNAL_MAX_FRAME, LTX_MOTION_COND_MAX_FRAMES } = await import('@/types/videoSlots');
+            const { getFrameForSlot, LTX_INTERNAL_MAX_FRAME } = await import('@/types/videoSlots');
 
             // Gather all image ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
             const filledEntries: { url: string; slotIndex: number }[] = [];
@@ -1533,8 +1533,6 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 conditioning_type: 'pose',
                 preprocess: multiAdvancedParams?.motionVideoPreprocess ?? false,
                 limit_num_frames: true,
-                /** Required when limiting: fal defaults max to 1441 → can 500 on pose preprocess */
-                max_num_frames: LTX_MOTION_COND_MAX_FRAMES,
               }];
               if (isCharSwap) {
                 console.log(

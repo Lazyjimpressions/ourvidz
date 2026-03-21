@@ -381,7 +381,9 @@ LTX Video 13B endpoints do **not** use the same parameters as WAN 2.1 I2V or ima
 
 **Tips:** Keep prompts short and directive. MultiCondition is powerful—avoid stacking too many new details.
 
-**Motion / pose conditioning video:** In fal’s `VideoConditioningInput`, if you set `limit_num_frames: true`, you must also set `max_num_frames` to a modest value (the app uses **48**, matching the Extend tail window). Omitting `max_num_frames` lets the API default to **1441** conditioning frames, which can overload preprocessing and surface as fal **500** errors while **I2V** (no `videos[]`) still succeeds.
+**Motion / pose conditioning video:** In fal’s `VideoConditioningInput`, `max_num_frames` defaults to **1441** (OpenAPI). For MultiCondition, the app sends `limit_num_frames: true` and **does not override** `max_num_frames`, matching known-good fal playground jobs. **V2V Extend** is different: the edge function uses a **48-frame** tail window only for `input.video` extend, not for MultiCondition `videos[]`.
+
+**Debugging multicondition 500:** Correlation example from `jobs.metadata`: `fal_request_id` (e.g. `019d0dc7-6ee0-7000-b9d6-293af3f34ee5`) with `error_message` `Unexpected status code: 500` and `input_used.videos[].max_num_frames: 48` — capping at 48 was retired; use fal’s default by omitting `max_num_frames` on multi.
 
 ---
 

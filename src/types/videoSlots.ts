@@ -26,13 +26,6 @@ export function autoSpaceFrames(count: number, maxFrame: number = 160): number[]
 export const LTX_INTERNAL_MAX_FRAME = 1440;
 
 /**
- * When `limit_num_frames` is true on a conditioning video, fal defaults `max_num_frames` to 1441
- * (per OpenAPI). Without an explicit cap, pose/preprocess can OOM or 500. Match the edge extend
- * tail-conditioning window (~1.6s at 30fps).
- */
-export const LTX_MOTION_COND_MAX_FRAMES = 48;
-
-/**
  * Get evenly spaced frame position in fal.ai's 1441 internal space.
  * For 5 slots: [0, 360, 720, 1080, 1440]
  * For 3 slots: [0, 720, 1440]

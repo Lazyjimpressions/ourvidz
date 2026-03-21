@@ -90,12 +90,8 @@ const DEFAULT_CONDITIONING_TIMELINE = {
   frameField: 'start_frame_num',
 };
 
-/**
- * When `limit_num_frames` is true, fal's VideoConditioningInput defaults `max_num_frames` to 1441.
- * Sending limit without an explicit cap can overload pose/preprocess and return 500 from fal.
- * Keep aligned with v2v extend tail window (~48 frames).
- */
-const VIDEO_CONDITIONING_MAX_FRAMES = 48;
+/** V2V extend only: tail-conditioning window (~1.6s at 30fps). Not used for MultiCondition `videos[]`. */
+const EXTEND_TAIL_MAX_FRAMES = 48;
 
 function getConditioningTimeline(capabilities: Record<string, unknown> | null | undefined): {
   min: number;
@@ -535,7 +531,7 @@ async function buildModelInput(
 
         // Build full VideoConditioningInput with tail-conditioning
         const fps = modelInput.frame_rate || 30;
-        const maxCondFrames = VIDEO_CONDITIONING_MAX_FRAMES; // ~1.6s conditioning window
+        const maxCondFrames = EXTEND_TAIL_MAX_FRAMES; // ~1.6s conditioning window
         const sourceDuration = body.input.source_video_duration || 0;
         const totalFrames = sourceDuration > 0 ? Math.round(sourceDuration * fps) : 0;
 
@@ -654,12 +650,8 @@ async function buildModelInput(
               if (vid.limit_num_frames !== undefined) videoEntry.limit_num_frames = vid.limit_num_frames;
               if (vid.max_num_frames !== undefined) videoEntry.max_num_frames = vid.max_num_frames;
             }
-            if (videoEntry.limit_num_frames === true && videoEntry.max_num_frames === undefined) {
-              videoEntry.max_num_frames = VIDEO_CONDITIONING_MAX_FRAMES;
-              console.log(
-                `🎯 MultiCondition: set max_num_frames=${VIDEO_CONDITIONING_MAX_FRAMES} (limit_num_frames without max avoids fal default 1441)`
-              );
-            }
+            // Do not inject max_num_frames: fal defaults to 1441 for VideoConditioningInput; a 48 cap
+            // caused multicondition 500s vs known-good jobs that omitted this field (see LTX guide).
             signedVideos.push(videoEntry);
             const fk = videoEntry[conditioningTimeline.frameField];
             console.log(`✅ Video conditioning: ${conditioningTimeline.frameField}=${fk}, strength=${videoEntry.strength ?? 'default'}, type=${videoEntry.conditioning_type ?? 'default'}`);
