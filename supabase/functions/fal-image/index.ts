@@ -645,14 +645,14 @@ async function buildModelInput(
             videoEntry[conditioningTimeline.frameField] = frame;
             if (typeof vid === 'object' && vid !== null) {
               if (vid.strength !== undefined) videoEntry.strength = vid.strength;
-              // WARNING: Do NOT pass through conditioning_type, preprocess, limit_num_frames, or max_num_frames
-              // These params cause 500 errors on MultiCondition. All successful jobs only use:
-              // video_url, start_frame_num/start_frame_number, and strength.
-              // See jobs table analysis: every job with conditioning_type="pose" failed.
+              // Pose conditioning params (optional, toggle-controlled for testing)
+              if (vid.conditioning_type) videoEntry.conditioning_type = vid.conditioning_type;
+              if (vid.preprocess !== undefined) videoEntry.preprocess = vid.preprocess;
+              // NOTE: Do NOT pass limit_num_frames or max_num_frames - those caused 500 errors
             }
             signedVideos.push(videoEntry);
             const fk = videoEntry[conditioningTimeline.frameField];
-            console.log(`✅ Video conditioning: ${conditioningTimeline.frameField}=${fk}, strength=${videoEntry.strength ?? 'default'}`);
+            console.log(`✅ Video conditioning: ${conditioningTimeline.frameField}=${fk}, strength=${videoEntry.strength ?? 'default'}, type=${videoEntry.conditioning_type ?? 'rgb'}, preprocess=${videoEntry.preprocess ?? false}`);
           } else {
             console.warn('⚠️ Skipping invalid video conditioning URL:', vidUrl?.substring?.(0, 80) || vidUrl);
           }

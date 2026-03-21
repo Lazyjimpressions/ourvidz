@@ -1536,16 +1536,24 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
             if (hasMotionVideo) {
               const videoStrength = isCharSwap ? motionStrength : 1;
-              // NOTE: Do NOT add conditioning_type, preprocess, or limit_num_frames
-              // Those params cause 500 errors. Successful MultiCondition jobs only use
-              // video_url, start_frame_number, and strength.
-              inputObj.videos = [{
+              const usePreprocess = multiAdvancedParams?.motionVideoPreprocess ?? false;
+
+              // Build video conditioning entry
+              const videoEntry: Record<string, unknown> = {
                 video_url: stripToStoragePath(motionRefVideoUrl as string),
                 start_frame_number: 0,
                 strength: videoStrength,
-              }];
+              };
+
+              // Optional pose conditioning params (toggle-controlled for testing)
+              if (usePreprocess) {
+                videoEntry.conditioning_type = 'pose';
+                videoEntry.preprocess = true;
+              }
+
+              inputObj.videos = [videoEntry];
               if (isCharSwap) {
-                console.log(`🎭 Character-swap: video strength=${videoStrength}`);
+                console.log(`🎭 Character-swap: video strength=${videoStrength}, preprocess=${usePreprocess}`);
               }
             }
 
