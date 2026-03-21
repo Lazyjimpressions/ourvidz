@@ -109,6 +109,9 @@ export interface MobileSettingsSheetProps {
   // MultiCondition advanced controls
   enableDetailPass?: boolean;
   onEnableDetailPassChange?: (enabled: boolean) => void;
+  /** Run fal pose preprocessing on motion reference video (heavier; off matches lighter multi jobs) */
+  motionVideoPreprocess?: boolean;
+  onMotionVideoPreprocessChange?: (enabled: boolean) => void;
   multiCrf?: number;
   onMultiCrfChange?: (crf: number) => void;
   temporalAdainFactor?: number;
@@ -358,6 +361,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onKeyframeStrengthChange,
   enableDetailPass = true,
   onEnableDetailPassChange,
+  motionVideoPreprocess = false,
+  onMotionVideoPreprocessChange,
   multiCrf = 29,
   onMultiCrfChange,
   temporalAdainFactor = 1.0,
@@ -775,27 +780,49 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-2 p-2 rounded-lg border bg-muted/30">
-                {/* Detail Pass toggle */}
-                <div className="flex items-center justify-between">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
-                          Detail Pass
-                          <span className="text-[7px] px-1 py-0.5 rounded bg-destructive/20 text-destructive font-medium">2× cost</span>
-                          <Info className="h-2.5 w-2.5 opacity-50" />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[220px] text-xs">
-                        Enables a second refinement pass for higher quality output. Doubles generation cost.
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <Switch
-                    checked={enableDetailPass}
-                    onCheckedChange={onEnableDetailPassChange}
-                    className="scale-75"
-                  />
+                {/* Detail Pass + motion preprocess: same row, compact (no full-width stretch) */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <div className="inline-flex items-center gap-1.5 shrink-0 max-w-[min(100%,11rem)]">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            Detail Pass
+                            <span className="text-[7px] px-1 py-0.5 rounded bg-destructive/20 text-destructive font-medium">2× cost</span>
+                            <Info className="h-2.5 w-2.5 opacity-50 shrink-0" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          Enables a second refinement pass for higher quality output. Doubles generation cost.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <Switch
+                      checked={enableDetailPass}
+                      onCheckedChange={(v) => onEnableDetailPassChange?.(v)}
+                      className="scale-75 shrink-0"
+                    />
+                  </div>
+                  <div className="inline-flex items-center gap-1.5 shrink-0 max-w-[min(100%,11rem)]">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[9px] text-muted-foreground flex items-center gap-0.5 cursor-help">
+                            Pose preprocess
+                            <Info className="h-2.5 w-2.5 opacity-50 shrink-0" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-xs">
+                          When on, runs fal&apos;s video preprocessing for pose conditioning (heavier). Turn off for a lighter path if motion feels wrong or jobs fail.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <Switch
+                      checked={motionVideoPreprocess}
+                      onCheckedChange={(v) => onMotionVideoPreprocessChange?.(v)}
+                      className="scale-75 shrink-0"
+                    />
+                  </div>
                 </div>
 
                 {/* CRF slider */}

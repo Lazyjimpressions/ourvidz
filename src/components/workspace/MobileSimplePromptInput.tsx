@@ -100,6 +100,8 @@ export interface MobileSimplePromptInputProps {
   // MultiCondition advanced controls
   enableDetailPass?: boolean;
   onEnableDetailPassChange?: (enabled: boolean) => void;
+  motionVideoPreprocess?: boolean;
+  onMotionVideoPreprocessChange?: (enabled: boolean) => void;
   multiCrf?: number;
   onMultiCrfChange?: (crf: number) => void;
   temporalAdainFactor?: number;
@@ -194,6 +196,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onSecondPassStepsChange,
   motionVideoStrength = 0.55,
   onMotionVideoStrengthChange,
+  motionVideoPreprocess = false,
+  onMotionVideoPreprocessChange,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -971,6 +975,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           <span className="font-semibold text-foreground">🎭 Character Swap Active</span>
           <span>• Anchors: {(keyframeStrengths?.[0] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[1] ?? 0.8).toFixed(2)}/{(keyframeStrengths?.[2] ?? 0.8).toFixed(2)}</span>
           <span>• Video: {motionVideoStrength.toFixed(2)}</span>
+          <span>• Pose preprocess: {motionVideoPreprocess ? 'on' : 'off'}</span>
         </div>
       )}
       
@@ -1075,6 +1080,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onKeyframeStrengthChange={onKeyframeStrengthChange}
         enableDetailPass={enableDetailPass}
         onEnableDetailPassChange={onEnableDetailPassChange}
+        motionVideoPreprocess={motionVideoPreprocess}
+        onMotionVideoPreprocessChange={onMotionVideoPreprocessChange}
         multiCrf={multiCrf}
         onMultiCrfChange={onMultiCrfChange}
         temporalAdainFactor={temporalAdainFactor}

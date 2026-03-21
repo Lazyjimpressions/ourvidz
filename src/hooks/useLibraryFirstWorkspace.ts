@@ -113,7 +113,7 @@ export interface LibraryFirstWorkspaceActions {
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   setReferenceType: (type: 'style' | 'character' | 'composition') => void;
-  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string, videoSlotIsVideo?: boolean[], multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; identityStrengthStart?: number; identityStrengthMid?: number; identityStrengthEnd?: number; motionVideoStrength?: number }, motionRefVideoUrl?: string) => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null, additionalImageUrls?: string[], slotRoles?: SlotRole[], poseDescription?: string, videoSlotIsVideo?: boolean[], multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; identityStrengthStart?: number; identityStrengthMid?: number; identityStrengthEnd?: number; motionVideoStrength?: number; motionVideoPreprocess?: boolean }, motionRefVideoUrl?: string) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -662,7 +662,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     slotRoles?: SlotRole[],
     poseDescription?: string,
     videoSlotIsVideo?: boolean[],
-    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; motionVideoStrength?: number },
+    multiAdvancedParams?: { enableDetailPass?: boolean; constantRateFactor?: number; temporalAdainFactor?: number; toneMapCompressionRatio?: number; firstPassSteps?: number; secondPassSteps?: number; motionVideoStrength?: number; motionVideoPreprocess?: boolean },
     motionRefVideoUrl?: string
   ) => {
     if (!prompt.trim() && !exactCopyMode) {
@@ -1458,7 +1458,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
           } else if (isMultiModel && refImageUrl) {
             // MultiCondition: build images[] from image keyframe slots, videos[] from motionRefVideoUrl
-            const { getFrameForSlot, LTX_INTERNAL_MAX_FRAME } = await import('@/types/videoSlots');
+            const { getFrameForSlot, LTX_INTERNAL_MAX_FRAME, LTX_MOTION_COND_MAX_FRAMES } = await import('@/types/videoSlots');
 
             // Gather all image ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
             const filledEntries: { url: string; slotIndex: number }[] = [];
@@ -1531,11 +1531,15 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 strength: videoStrength,
                 // Pose conditioning: extract motion/pose from video, not identity
                 conditioning_type: 'pose',
-                preprocess: true,
+                preprocess: multiAdvancedParams?.motionVideoPreprocess ?? false,
                 limit_num_frames: true,
+                /** Required when limiting: fal defaults max to 1441 → can 500 on pose preprocess */
+                max_num_frames: LTX_MOTION_COND_MAX_FRAMES,
               }];
               if (isCharSwap) {
-                console.log(`🎭 Character-swap: video strength=${videoStrength}, conditioning_type=pose`);
+                console.log(
+                  `🎭 Character-swap: video strength=${videoStrength}, conditioning_type=pose, preprocess=${multiAdvancedParams?.motionVideoPreprocess ?? false}`
+                );
               }
             }
 

@@ -381,6 +381,8 @@ LTX Video 13B endpoints do **not** use the same parameters as WAN 2.1 I2V or ima
 
 **Tips:** Keep prompts short and directive. MultiCondition is powerful—avoid stacking too many new details.
 
+**Motion / pose conditioning video:** In fal’s `VideoConditioningInput`, if you set `limit_num_frames: true`, you must also set `max_num_frames` to a modest value (the app uses **48**, matching the Extend tail window). Omitting `max_num_frames` lets the API default to **1441** conditioning frames, which can overload preprocessing and surface as fal **500** errors while **I2V** (no `videos[]`) still succeeds.
+
 ---
 
 ## Recommended OurVidz Workflows (model usage recipes)

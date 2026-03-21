@@ -123,6 +123,8 @@ const MobileSimplifiedWorkspace = () => {
   const [secondPassSteps, setSecondPassSteps] = useState(11);
   // Motion video strength for character-swap (lower = less appearance bleed from source video)
   const [motionVideoStrength, setMotionVideoStrength] = useState(0.55);
+  /** fal `preprocess` on motion reference video for MultiCondition pose */
+  const [motionVideoPreprocess, setMotionVideoPreprocess] = useState(false);
   // Track the job_id for the pose slot (index 2) so we can look up pose_description
   const [poseSlotJobId, setPoseSlotJobId] = useState<string | null>(null);
 
@@ -377,6 +379,7 @@ const MobileSimplifiedWorkspace = () => {
       firstPassSteps,
       secondPassSteps,
       motionVideoStrength,
+      motionVideoPreprocess,
     } : undefined;
     await generate(undefined, undefined, undefined, undefined, allAdditionalUrls.length > 0 ? allAdditionalUrls : undefined, slotRoles, poseDesc, undefined, advancedParams, motionRefVideoUrl || undefined);
   };
@@ -865,6 +868,8 @@ const MobileSimplifiedWorkspace = () => {
            onSecondPassStepsChange={setSecondPassSteps}
            motionVideoStrength={motionVideoStrength}
            onMotionVideoStrengthChange={setMotionVideoStrength}
+           motionVideoPreprocess={motionVideoPreprocess}
+           onMotionVideoPreprocessChange={setMotionVideoPreprocess}
          />
 
         {/* Lightbox */}

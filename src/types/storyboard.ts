@@ -234,6 +234,8 @@ export interface MultiConditionConfig {
     conditioning_type?: string;
     preprocess?: boolean;
     limit_num_frames?: boolean;
+    /** Required when limit_num_frames is true; fal defaults to 1441 without this */
+    max_num_frames?: number;
   }>;
 }
 
