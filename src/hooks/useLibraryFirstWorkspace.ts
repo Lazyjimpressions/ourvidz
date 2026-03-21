@@ -1458,7 +1458,20 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             if (extendCrf !== 35) inputObj.constant_rate_factor = extendCrf;
           } else if (isMultiModel && refImageUrl) {
             // MultiCondition: build images[] from image keyframe slots, videos[] from motionRefVideoUrl
-            const { getFrameForSlot, LTX_INTERNAL_MAX_FRAME } = await import('@/types/videoSlots');
+
+            // Calculate actual num_frames for this video (LTX requires 8n+1)
+            const frameRate = 30;
+            const rawFrames = Math.round(videoDuration * frameRate);
+            const numFrames = Math.round((rawFrames - 1) / 8) * 8 + 1;
+            const lastFrame = numFrames - 1;
+            const midFrame = Math.floor(lastFrame / 2);
+
+            // Helper to map slot index (0-4) to actual video frame index
+            const getFrameForSlot = (slotIndex: number): number => {
+              // 5 slots map to: start, 1/4, mid, 3/4, end
+              const positions = [0, 0.25, 0.5, 0.75, 1];
+              return Math.round(positions[slotIndex] * lastFrame);
+            };
 
             // Gather all image ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
             const filledEntries: { url: string; slotIndex: number }[] = [];
@@ -1472,14 +1485,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             }
             if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
 
-            // fal.ai LTX uses fixed 1441 internal frame space (0-1440) regardless of output duration
-            // Each of 5 UI slots maps directly: slot 0→0, 1→360, 2→720, 3→1080, 4→1440
-            console.log(`🎬 MultiCondition: ${filledEntries.length} images, using fixed internal space 0-${LTX_INTERNAL_MAX_FRAME}`);
+            // fal.ai MultiCondition uses actual video frame indices (0 to num_frames-1)
+            console.log(`🎬 MultiCondition: ${filledEntries.length} images, num_frames=${numFrames}, frame range 0-${lastFrame}`);
 
-            // Map each slot directly to its position in the 1441 internal frame space
+            // Map each slot to actual video frame position
             if (filledEntries.length > 0) {
               inputObj.images = filledEntries.map((entry) => {
-                const framePos = getFrameForSlot(entry.slotIndex, 5);
+                const framePos = getFrameForSlot(entry.slotIndex);
                 console.log(`🖼️ Slot ${entry.slotIndex} → frame ${framePos}`);
                 return {
                   image_url: entry.url,
@@ -1504,8 +1516,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               // If every slot points to the same image, create 3 anchors at start/mid/end
               if (uniqueImageUrls.size === 1) {
                 const canonicalUrl = inputObj.images[0].image_url;
-                // Use fixed internal frame positions: 0, 720 (midpoint), 1440
-                const midFrame = getFrameForSlot(2, 5); // 720
+                // Use actual video frame positions: 0, midpoint, last frame
                 // Use first 3 keyframeStrengths for start/mid/end anchors (default 1.0)
                 const s0 = keyframeStrengths[0] ?? 1.0;
                 const s1 = keyframeStrengths[1] ?? 1.0;
@@ -1513,9 +1524,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 inputObj.images = [
                   { image_url: canonicalUrl, start_frame_number: 0, strength: s0 },
                   { image_url: canonicalUrl, start_frame_number: midFrame, strength: s1 },
-                  { image_url: canonicalUrl, start_frame_number: LTX_INTERNAL_MAX_FRAME, strength: s2 },
+                  { image_url: canonicalUrl, start_frame_number: lastFrame, strength: s2 },
                 ];
-                console.log(`🔒 Character-swap: 3 anchors at [0, ${midFrame}, ${LTX_INTERNAL_MAX_FRAME}] with strengths [${s0}, ${s1}, ${s2}]`);
+                console.log(`🔒 Character-swap: 3 anchors at [0, ${midFrame}, ${lastFrame}] with strengths [${s0}, ${s1}, ${s2}]`);
               } else {
                 console.log(`📸 Multiple unique images - using slot-based frame positions`);
               }

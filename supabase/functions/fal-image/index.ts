@@ -79,15 +79,16 @@ const FAL_PRICING: Record<string, number> = {
 };
 
 /**
- * fal.ai LTX MultiConditioning OpenAPI: ImageConditioningInput / VideoConditioningInput
- * use `start_frame_num` (0–1440, multiple of 8), not `start_frame_number`.
+ * fal.ai LTX MultiConditioning: ImageConditioningInput / VideoConditioningInput
+ * Use `start_frame_number` with actual video frame indices (0 to num_frames-1).
+ * Successful jobs: frames 0, 64, 120 for 121-frame video.
  * Per-model overrides: `api_models.capabilities.conditioning_timeline`.
  */
 const DEFAULT_CONDITIONING_TIMELINE = {
   min: 0,
-  max: 1440,
-  multipleOf: 8,
-  frameField: 'start_frame_num',
+  max: 160,  // Typical max num_frames for LTX
+  multipleOf: 1,  // No snapping needed for actual frame indices
+  frameField: 'start_frame_number',
 };
 
 /** V2V extend only: tail-conditioning window (~1.6s at 30fps). Not used for MultiCondition `videos[]`. */
