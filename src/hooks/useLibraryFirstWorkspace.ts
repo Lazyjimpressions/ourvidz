@@ -1803,7 +1803,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     prompt, mode, referenceImage, referenceStrength, contentType, quality, selectedModel,
     beginningRefImage, endingRefImage, videoDuration, motionIntensity, soundEnabled,
     aspectRatio, shotType, cameraAngle, style, styleRef, exactCopyMode, referenceMetadata,
-    useOriginalParams, lockSeed, enhancementModel, toast, numImages, videoDuration
+    useOriginalParams, lockSeed, enhancementModel, toast, numImages, videoDuration,
+    keyframeStrengths
   ]);
 
   const clearItem = useCallback(async (id: string, type: 'image' | 'video') => {
