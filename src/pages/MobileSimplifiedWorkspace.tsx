@@ -881,6 +881,7 @@ const MobileSimplifiedWorkspace = () => {
            onMotionVideoPreprocessChange={setMotionVideoPreprocess}
            motionConditioningType={motionConditioningType}
            onMotionConditioningTypeChange={setMotionConditioningType}
+           isCharacterSwapMode={mode === 'video' && !!motionRefVideoUrl && !!beginningRefImageUrl}
          />
 
         {/* Lightbox */}

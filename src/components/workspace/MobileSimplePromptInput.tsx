@@ -118,6 +118,8 @@ export interface MobileSimplePromptInputProps {
   // Motion video strength for character swap
   motionVideoStrength?: number;
   onMotionVideoStrengthChange?: (strength: number) => void;
+  // Character-swap mode detection (greys out Key2 and Key4 slots)
+  isCharacterSwapMode?: boolean;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -200,6 +202,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onSecondPassStepsChange,
   motionVideoStrength = 0.55,
   onMotionVideoStrengthChange,
+  isCharacterSwapMode = false,
   motionVideoPreprocess = false,
   onMotionVideoPreprocessChange,
   motionConditioningType = 'default',
@@ -1104,6 +1107,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onSecondPassStepsChange={onSecondPassStepsChange}
         motionVideoStrength={motionVideoStrength}
         onMotionVideoStrengthChange={onMotionVideoStrengthChange}
+        isCharacterSwapMode={isCharacterSwapMode}
       />
 
       {/* Image Picker Dialog for library/workspace browsing */}

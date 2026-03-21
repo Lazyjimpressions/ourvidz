@@ -130,6 +130,9 @@ export interface MobileSettingsSheetProps {
   // Motion video strength for character-swap (lower = less appearance bleed)
   motionVideoStrength?: number;
   onMotionVideoStrengthChange?: (strength: number) => void;
+
+  // Character-swap mode detection (greys out Key2 and Key4 slots)
+  isCharacterSwapMode?: boolean;
 }
 
 const STYLE_PRESETS = [
@@ -391,6 +394,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   // Motion video strength for character-swap
   motionVideoStrength = 0.55,
   onMotionVideoStrengthChange,
+  // Character-swap mode detection
+  isCharacterSwapMode = false,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const refFileInputRef = useRef<HTMLInputElement>(null);
@@ -959,8 +964,10 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
               <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider px-2">References</p>
               <div className="grid grid-cols-5 gap-2 px-2">
               {refSlots.map((slot, i) => {
+                  // Grey out Key2 (index 1) and Key4 (index 3) in character-swap mode
+                  const isDisabledSlot = isCharacterSwapMode && (i === 1 || i === 3);
                   return (
-                    <div key={i} className="flex flex-col items-center gap-0.5">
+                    <div key={i} className={`flex flex-col items-center gap-0.5 ${isDisabledSlot ? 'opacity-30 pointer-events-none' : ''}`}>
                       {slot.url ? (
                         <div
                           className="relative group h-12 w-12 rounded-md overflow-hidden border border-border"
@@ -1037,8 +1044,8 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                         </DropdownMenu>
                       )}
                       <span className="text-[8px] text-muted-foreground">{slot.label}</span>
-                      {/* Per-keyframe strength slider (video mode only) */}
-                      {slot.url && currentMode === 'video' && onKeyframeStrengthChange && (
+                      {/* Per-keyframe strength slider (video mode only, not for disabled slots) */}
+                      {!isDisabledSlot && slot.url && currentMode === 'video' && onKeyframeStrengthChange && (
                         <div className="w-12 mt-0.5">
                           <input
                             type="range"
