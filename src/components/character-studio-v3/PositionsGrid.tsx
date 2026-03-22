@@ -599,7 +599,7 @@ export function PositionsGrid({
               <p className="text-xs font-medium truncate">{pendingFile.name}</p>
               <div className="space-y-1.5">
                 <Label className="text-xs">Type</Label>
-                <Select value={newOutputType} onValueChange={setNewOutputType}>
+                <Select value={newOutputType} onValueChange={(v) => { setNewOutputType(v); setNewTags([]); }}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {UNIFIED_OUTPUT_TYPES.map(t => (
