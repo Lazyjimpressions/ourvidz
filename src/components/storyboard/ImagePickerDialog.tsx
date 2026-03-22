@@ -106,15 +106,17 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [signing, setSigning] = useState(false);
 
-  // Sync activeSource when prop changes
+  // Sync activeSource/category when props change — contextHint takes priority
   useEffect(() => {
-    setActiveSource(source);
-  }, [source]);
-
-  // Sync filterTag when prop changes
-  useEffect(() => {
-    setActiveCategory((filterTag as CategoryFilter) || 'all');
-  }, [filterTag]);
+    if (contextHint) {
+      const defaults = CONTEXT_HINT_DEFAULTS[contextHint];
+      setActiveSource(defaults.source);
+      setActiveCategory(defaults.category);
+    } else {
+      setActiveSource(source);
+      setActiveCategory((filterTag as CategoryFilter) || 'all');
+    }
+  }, [source, filterTag, contextHint]);
 
   // Library data — fetch all pages automatically when dialog is open
   const {
