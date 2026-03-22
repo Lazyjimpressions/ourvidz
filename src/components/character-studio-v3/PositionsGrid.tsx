@@ -282,11 +282,21 @@ function CanonThumbnail({
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2 space-y-2" align="start" onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-wrap gap-1">
-              {COMMON_TAGS.map(tag => (
-                <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
-              ))}
-            </div>
+            {Object.entries(POSITION_TAG_GROUPS).map(([groupKey, group]) => (
+              <Collapsible key={groupKey} defaultOpen={groupKey === 'composition' || groupKey === 'framing'}>
+                <CollapsibleTrigger className="flex items-center gap-1 w-full text-[9px] font-medium text-muted-foreground uppercase tracking-wider py-0.5 hover:text-foreground">
+                  <ChevronDown className="w-2.5 h-2.5 transition-transform [&[data-state=open]]:rotate-180" />
+                  {group.label}
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="flex flex-wrap gap-1 py-0.5">
+                    {group.tags.map(tag => (
+                      <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
             <div className="flex gap-1">
               <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Custom tag..." className="h-6 text-xs" />
               <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={handleAddTag}><Plus className="w-3 h-3" /></Button>
