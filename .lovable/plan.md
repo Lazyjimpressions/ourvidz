@@ -1,5 +1,6 @@
 
 
+
 ## Character Poses as Dual-Purpose Production Assets
 
 ### Completed: Phase 1 — Surface Canon Assets in ImagePickerDialog
@@ -22,9 +23,26 @@
 3. **`src/pages/StoryboardEditor.tsx`** — Fixed type compatibility
    - Maps `'characters'` source to `'library'` for storyboard's reference_image_source
 
-### Remaining Phases (not yet implemented)
+### Completed: Phase 2 — Smart Context Filtering
 
-**Phase 2: Smart Context Filtering** — Add `contextHint` prop to auto-select tab/filter based on calling context
+**Changes made:**
+
+1. **`src/components/storyboard/ImagePickerDialog.tsx`** — Added `contextHint` prop
+   - New `PickerContextHint` type: `'identity' | 'pose' | 'outfit' | 'scene' | 'style' | 'general'`
+   - `CONTEXT_HINT_DEFAULTS` map auto-selects source tab + category filter on open
+   - `contextHint` takes priority over `source`/`filterTag` props
+   - Merged two separate `useEffect`s into one for source/filter sync
+
+2. **`src/components/workspace/MobileSimplePromptInput.tsx`** — Wired `contextHint` to slot mapping
+   - `SLOT_CONTEXT_HINTS` array maps slot indices → context hints: identity, identity, pose, scene, outfit
+   - `handlePickerSelect` now accepts `'characters'` source type
+   - Picker passes `contextHint` prop so slots auto-navigate to Characters tab
+
+3. **`src/pages/CharacterStudioV3.tsx`** — Added `contextHint="identity"` to both ImagePickerDialog instances
+
+4. **`src/pages/CreateCharacter.tsx`** — Added `contextHint="identity"` to character portrait picker
+
+### Remaining Phases (not yet implemented)
 
 **Phase 3: Bidirectional Canon ↔ Library Bridge** — "Save to Canon" and "Save to Library" actions in lightbox
 
