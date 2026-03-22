@@ -259,3 +259,55 @@ export function toSharedFromLegacy(asset: any): SharedAsset {
     userId: asset.userId || asset.user_id
   };
 }
+
+/**
+ * Map character_canon row (with joined characters data) to SharedAsset.
+ * Expects row from: character_canon joined with characters(name, reference_image_url)
+ * Storage bucket: reference_images
+ */
+export function toSharedFromCanon(row: any): SharedAsset {
+  const rawOriginalPath = row.output_url || '';
+  const originalPath = normalizePath(rawOriginalPath) || '';
+
+  // Canon images don't have separate thumbnails
+  const thumbPath: string | null = null;
+
+  const outputType: string = row.output_type || 'image';
+  const type = detectAssetType(outputType, null, originalPath);
+
+  // Character name from joined data
+  const characterName = row.characters?.name || row.character_name || '';
+  const label = row.label || '';
+  const title = label
+    ? `${characterName} – ${label}`
+    : `${characterName} ${outputType}`;
+
+  return {
+    id: row.id,
+    type,
+    thumbPath,
+    originalPath,
+    title: title.trim(),
+    prompt: '',
+    createdAt: new Date(row.created_at),
+    format: type,
+    modelType: '',
+    metadata: {
+      source: 'character_canon',
+      bucket: 'reference_images',
+      storage_path: originalPath,
+      character_id: row.character_id,
+      output_type: outputType,
+      tags: row.tags || [],
+      is_pinned: row.is_pinned,
+      is_primary: row.is_primary,
+      canon_metadata: row.metadata,
+    },
+    width: undefined,
+    height: undefined,
+    duration: undefined,
+    fileSize: undefined,
+    mimeType: undefined,
+    userId: undefined,
+  };
+}

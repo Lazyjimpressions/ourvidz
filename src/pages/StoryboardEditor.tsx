@@ -945,7 +945,7 @@ const StoryboardEditor = () => {
       <ImagePickerDialog
         isOpen={showLibraryDrawer}
         onClose={() => setShowLibraryDrawer(false)}
-        onSelect={(imageUrl, source) => handleSelectReference(imageUrl, source)}
+        onSelect={(imageUrl, source) => handleSelectReference(imageUrl, source === 'characters' ? 'library' : source)}
         title="Select Reference Image"
         source="workspace"
       />
