@@ -516,6 +516,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 onDownload={() => handleDownload(asset as any)}
                 onUseAsReference={() => handleUseAsReference(asset as any)}
                 onRoleTagToggle={(role) => handleRoleTagToggle(asset, role)}
+                onTagToggle={(tag) => handleDescriptiveTagToggle(asset, tag)}
                 onSaveToCanon={() => {
                   const storagePath = (asset as any).originalPath;
                   if (storagePath) setSaveToCanonPath(storagePath);
