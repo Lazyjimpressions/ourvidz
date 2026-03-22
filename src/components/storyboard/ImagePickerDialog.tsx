@@ -44,6 +44,7 @@ const CATEGORY_TO_OUTPUT_TYPES: Record<CategoryFilter, string[] | null> = {
   position: ['position', 'pose'],
   scene: ['scene'],
   clothing: ['clothing', 'outfit'],
+  style: ['style'],
 };
 
 /** Context hint for auto-selecting tab + category when the picker opens */
