@@ -659,8 +659,10 @@ export function PositionsGrid({
                   )}
                   {onSendToWorkspace && (
                     <Button variant="ghost" size="sm" onClick={async () => {
-                      const signed = await urlSigningService.getSignedUrl(canon.output_url, 'reference_images');
-                      onSendToWorkspace(signed);
+                      const { data } = await supabase.storage.from('reference_images').createSignedUrl(canon.output_url, 3600);
+                      if (data?.signedUrl) {
+                        onSendToWorkspace(data.signedUrl);
+                      }
                       setLightboxOpen(false);
                     }} className="gap-1.5 text-white/70 hover:text-white hover:bg-white/10">
                       <ExternalLink className="w-4 h-4" />
