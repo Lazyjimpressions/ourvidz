@@ -5,7 +5,7 @@ import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { SharedGrid } from '@/components/shared/SharedGrid';
 import { LibraryAssetActions } from '@/components/shared/LightboxActions';
 import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
-import { toggleRoleTag } from '@/components/shared/RoleTagButton';
+import { toggleRoleTag, toggleDescriptiveTag } from '@/components/shared/RoleTagButton';
 import type { SlotRole } from '@/types/slotRoles';
 import { supabase } from '@/integrations/supabase/client';
 import { OurVidzDashboardLayout } from '../OurVidzDashboardLayout';
@@ -219,6 +219,22 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
       refetch();
     } catch (err) {
       console.error('Failed to update role tag:', err);
+      toast.error('Failed to update tag');
+    }
+  }, [refetch]);
+
+  const handleDescriptiveTagToggle = useCallback(async (asset: any, tag: string) => {
+    try {
+      const currentTags: string[] = asset.metadata?.tags || [];
+      const newTags = toggleDescriptiveTag(currentTags, tag);
+      await supabase
+        .from('user_library')
+        .update({ tags: newTags })
+        .eq('id', asset.id);
+      toast.success(`Tag updated`);
+      refetch();
+    } catch (err) {
+      console.error('Failed to update tag:', err);
       toast.error('Failed to update tag');
     }
   }, [refetch]);
@@ -500,6 +516,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 onDownload={() => handleDownload(asset as any)}
                 onUseAsReference={() => handleUseAsReference(asset as any)}
                 onRoleTagToggle={(role) => handleRoleTagToggle(asset, role)}
+                onTagToggle={(tag) => handleDescriptiveTagToggle(asset, tag)}
                 onSaveToCanon={() => {
                   const storagePath = (asset as any).originalPath;
                   if (storagePath) setSaveToCanonPath(storagePath);

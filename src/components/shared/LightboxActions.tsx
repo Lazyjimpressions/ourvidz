@@ -14,8 +14,9 @@ export const WorkspaceAssetActions: React.FC<{
   onDownload?: () => void;
   onUseAsReference?: () => void;
   onRoleTagToggle?: (role: SlotRole) => void;
+  onTagToggle?: (tag: string) => void;
   tags?: string[];
-}> = ({ asset, onSave, onClear, onDiscard, onDownload, onUseAsReference, onRoleTagToggle, tags }) => (
+}> = ({ asset, onSave, onClear, onDiscard, onDownload, onUseAsReference, onRoleTagToggle, onTagToggle, tags }) => (
   <>
     {onSave && (
       <Button size="sm" variant="secondary" onClick={onSave} className="h-7 w-7 p-0" title="Save to Library">
@@ -43,7 +44,7 @@ export const WorkspaceAssetActions: React.FC<{
       </Button>
     )}
     {onRoleTagToggle && tags && (
-      <RoleTagButton tags={tags} onToggle={onRoleTagToggle} />
+      <RoleTagButton tags={tags} onToggle={onRoleTagToggle} onTagToggle={onTagToggle} />
     )}
   </>
 );
@@ -55,9 +56,10 @@ export const LibraryAssetActions: React.FC<{
   onDownload?: () => void;
   onUseAsReference?: () => void;
   onRoleTagToggle?: (role: SlotRole) => void;
+  onTagToggle?: (tag: string) => void;
   onSaveToCanon?: () => void;
   tags?: string[];
-}> = ({ asset, onDelete, onDownload, onUseAsReference, onRoleTagToggle, onSaveToCanon, tags }) => (
+}> = ({ asset, onDelete, onDownload, onUseAsReference, onRoleTagToggle, onTagToggle, onSaveToCanon, tags }) => (
   <>
     {onUseAsReference && (
       <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Use as Reference">
@@ -70,7 +72,7 @@ export const LibraryAssetActions: React.FC<{
       </Button>
     )}
     {onRoleTagToggle && tags && (
-      <RoleTagButton tags={tags} onToggle={onRoleTagToggle} />
+      <RoleTagButton tags={tags} onToggle={onRoleTagToggle} onTagToggle={onTagToggle} />
     )}
     {onSaveToCanon && (
       <Button size="sm" variant="outline" onClick={onSaveToCanon} className="h-7 w-7 p-0" title="Save to Character Canon">

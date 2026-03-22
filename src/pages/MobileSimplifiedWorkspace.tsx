@@ -643,16 +643,21 @@ const MobileSimplifiedWorkspace = () => {
   }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url, referenceImage2Url, additionalRefUrls, setAdditionalRefUrls]);
 
   // Workspace actions - Save to library WITHOUT removing from workspace
+  // Auto-carries the workspace slot role as a tag so library assets retain context
   const handleSaveToLibrary = useCallback(async (asset: any) => {
     try {
-      // Use WorkspaceAssetService.saveToLibrary which only saves, doesn't remove
-      await WorkspaceAssetService.saveToLibrary(asset.id);
+      // Determine role tag from workspace slot position
+      const assetIndex = workspaceAssets.findIndex((a: any) => a.id === asset.id);
+      const role = assetIndex >= 0 ? slotRoles[assetIndex] : undefined;
+      const tags = role && role !== 'reference' ? [`role:${role}`] : undefined;
+
+      await WorkspaceAssetService.saveToLibrary(asset.id, { tags });
       toast.success('Saved to library');
     } catch (e) {
       console.error(e);
       toast.error('Failed to save to library');
     }
-  }, []);
+  }, [workspaceAssets, slotRoles]);
 
   const handleDiscard = useCallback(async (asset: any) => {
     try {
