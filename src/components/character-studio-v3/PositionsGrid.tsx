@@ -400,17 +400,50 @@ export function PositionsGrid({
 
   const handleRequireOriginal = useCallback(async (item: LightboxItem): Promise<string> => {
     const url = item.url;
-    // Skip if already a full signed URL
+
+    // Keep already-signed URLs as-is
     if (url.startsWith('http') && (url.includes('?token=') || url.includes('&token='))) {
       return url;
     }
-    // Detect bucket from URL content
-    const bucket: 'user-library' | 'workspace-temp' | 'reference_images' = url.includes('user-library/')
-      ? 'user-library'
-      : url.includes('workspace-temp/')
-        ? 'workspace-temp'
-        : 'reference_images';
-    return urlSigningService.getSignedUrl(url, bucket as any);
+
+    // External non-storage URLs do not need signing
+    if (url.startsWith('http') && !url.includes('supabase.co/storage/v1/object/')) {
+      return url;
+    }
+
+    const allBuckets: Array<'user-library' | 'reference_images' | 'workspace-temp'> = [
+      'user-library',
+      'reference_images',
+      'workspace-temp',
+    ];
+
+    const inferredPrimaryBucket: 'user-library' | 'reference_images' | 'workspace-temp' =
+      url.includes('/object/sign/reference_images/') ||
+      url.includes('/object/public/reference_images/') ||
+      url.includes('reference_images/') ||
+      url.includes('/canon/')
+        ? 'reference_images'
+        : url.includes('/object/sign/workspace-temp/') ||
+            url.includes('/object/public/workspace-temp/') ||
+            url.includes('workspace-temp/')
+          ? 'workspace-temp'
+          : 'user-library';
+
+    const candidateBuckets = [
+      inferredPrimaryBucket,
+      ...allBuckets.filter((bucket) => bucket !== inferredPrimaryBucket),
+    ];
+
+    let lastError: unknown = null;
+    for (const bucket of candidateBuckets) {
+      try {
+        return await urlSigningService.getSignedUrl(url, bucket as any);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error('Unable to resolve storage bucket for lightbox asset');
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
