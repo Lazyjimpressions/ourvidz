@@ -460,7 +460,6 @@ export interface UpdateClipInput {
   end_frame_url?: string;
   reference_image_url?: string;
   reference_image_source?: ReferenceImageSource;
-  job_id?: string;
   // V3: Multi-conditioning references (Phase 8.2)
   references?: ReferenceSlot[];
 }

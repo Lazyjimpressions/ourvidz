@@ -400,11 +400,17 @@ export function PositionsGrid({
 
   const handleRequireOriginal = useCallback(async (item: LightboxItem): Promise<string> => {
     const url = item.url;
-    if (url.includes('user-library/') || url.includes('workspace-temp/') || url.includes('character-canon/')) {
-      const bucket = url.includes('user-library/') ? 'user-library' : 'workspace-temp';
-      return urlSigningService.getSignedUrl(url, bucket as any);
+    // Skip if already a full signed URL
+    if (url.startsWith('http') && (url.includes('?token=') || url.includes('&token='))) {
+      return url;
     }
-    return url;
+    // Detect bucket from URL content
+    const bucket: 'user-library' | 'workspace-temp' | 'reference_images' = url.includes('user-library/')
+      ? 'user-library'
+      : url.includes('workspace-temp/')
+        ? 'workspace-temp'
+        : 'reference_images';
+    return urlSigningService.getSignedUrl(url, bucket as any);
   }, []);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
