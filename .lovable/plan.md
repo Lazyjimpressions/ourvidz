@@ -1,34 +1,31 @@
 
 
-## Fix: Positions Lightbox Blank Image + Build Error
+## Character Poses as Dual-Purpose Production Assets
 
-### Problem 1: Blank Lightbox
-Canon images stored in `character_canon` table have `output_url` as bare storage paths (e.g. `userId/charId/canon/file.png`) in the `reference_images` bucket. The `handleRequireOriginal` function (line 401-408) fails because:
-- It checks for `character-canon/` substring but maps only to `user-library` or `workspace-temp`
-- Bare paths (no bucket prefix) return the raw path unchanged — not a valid URL
+### Completed: Phase 1 — Surface Canon Assets in ImagePickerDialog
 
-This is the same `UnifiedLightbox` component used everywhere else — the bug is only in PositionsGrid's `handleRequireOriginal` callback, not the lightbox itself.
+**Changes made:**
 
-### Problem 2: Build Error
-`src/types/storyboard.ts` has `job_id?: string` declared twice in `UpdateClipInput` (lines 451 and 463).
+1. **`src/lib/services/AssetMappers.ts`** — Added `toSharedFromCanon()` mapper
+   - Converts `character_canon` rows (with joined `characters` data) to `SharedAsset`
+   - Maps `output_url` → `originalPath`, sets bucket to `reference_images`
+   - Builds title from character name + label/output_type
 
----
+2. **`src/components/storyboard/ImagePickerDialog.tsx`** — Added "Characters" source tab
+   - Three-tab source toggle: Workspace | Library | Characters
+   - Character selector (pill filters) to pick which character's canon to browse
+   - Category filter tabs (All, Characters, Positions, Scenes, Outfits) mapped to `output_type`
+   - Signs against `reference_images` bucket for canon assets
+   - Passes enriched metadata (`characterId`, `outputType`, `tags`) in `onSelect` callback
+   - Output type badge on hover overlay for canon assets
 
-### Changes
+3. **`src/pages/StoryboardEditor.tsx`** — Fixed type compatibility
+   - Maps `'characters'` source to `'library'` for storyboard's reference_image_source
 
-**1. `src/components/character-studio-v3/PositionsGrid.tsx` — Fix `handleRequireOriginal` (lines 401-408)**
+### Remaining Phases (not yet implemented)
 
-Replace the bucket detection logic:
-- If URL contains `user-library/` → bucket `user-library`
-- If URL contains `workspace-temp/` → bucket `workspace-temp`
-- Otherwise (bare path or `reference_images` path) → bucket `reference_images`
+**Phase 2: Smart Context Filtering** — Add `contextHint` prop to auto-select tab/filter based on calling context
 
-This follows the existing convention — every other consumer of `UnifiedLightbox` uses `urlSigningService.getSignedUrl()` with the correct bucket. No new workflow needed.
+**Phase 3: Bidirectional Canon ↔ Library Bridge** — "Save to Canon" and "Save to Library" actions in lightbox
 
-**2. `src/types/storyboard.ts` — Remove duplicate `job_id` (line 463)**
-
-Delete the second `job_id?: string;` declaration.
-
-### Note on Convention
-Character poses come from the `character_canon` table, stored in the `reference_images` bucket. They do NOT come from the user library (`user-library` bucket). The lightbox just needs to sign against the correct bucket. No new signing flow or separate workflow is needed — just correct bucket routing in one callback.
-
+**Phase 4: Role Auto-Assignment** — Auto-set workspace slot roles when canon assets are selected
