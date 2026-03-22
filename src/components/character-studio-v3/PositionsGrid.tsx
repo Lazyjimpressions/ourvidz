@@ -614,14 +614,21 @@ export function PositionsGrid({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Tags</Label>
-                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
-                  {([...POSITION_TAG_GROUPS.composition.tags,
-                    ...POSITION_TAG_GROUPS.framing.tags.slice(0, 3),
-                    ...POSITION_TAG_GROUPS.angle.tags.slice(0, 3),
-                  ] as string[]).map(tag => (
-                    <PillFilter key={tag} active={newTags.includes(tag)} onClick={() => setNewTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} size="sm">{tag}</PillFilter>
-                  ))}
-                </div>
+                {(() => {
+                  const groups = TAG_GROUPS_BY_OUTPUT_TYPE[newOutputType] || POSITION_TAG_GROUPS;
+                  return (
+                    <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                      {Object.entries(groups).map(([groupKey, group]) => (
+                        <React.Fragment key={groupKey}>
+                          <span className="w-full text-[9px] font-medium text-muted-foreground uppercase tracking-wider mt-1">{group.label}</span>
+                          {group.tags.map(tag => (
+                            <PillFilter key={tag} active={newTags.includes(tag)} onClick={() => setNewTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} size="sm">{tag}</PillFilter>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
               <Button size="sm" className="w-full h-7 text-xs" onClick={handleConfirmUpload} disabled={isUploading}>
                 {isUploading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Save
