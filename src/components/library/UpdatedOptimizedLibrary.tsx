@@ -5,7 +5,7 @@ import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { SharedGrid } from '@/components/shared/SharedGrid';
 import { LibraryAssetActions } from '@/components/shared/LightboxActions';
 import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightbox';
-import { toggleRoleTag } from '@/components/shared/RoleTagButton';
+import { toggleRoleTag, toggleDescriptiveTag } from '@/components/shared/RoleTagButton';
 import type { SlotRole } from '@/types/slotRoles';
 import { supabase } from '@/integrations/supabase/client';
 import { OurVidzDashboardLayout } from '../OurVidzDashboardLayout';
