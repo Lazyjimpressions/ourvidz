@@ -1,75 +1,80 @@
 
 
-## Audit: Positions Tab Filter Categories & Their Purpose
+## Tagging UX Audit & Unification Plan
 
-### Current State
+### Current State — Three Disconnected Tagging Surfaces
 
-The Positions tab shows filter pills: **All | Character | Position | Clothing | Scene | Style**
+```text
+Surface         Tags Column?   Tag UI?              Save Flow
+───────────────────────────────────────────────────────────────
+Workspace       NO (no tags    NO — role is set      Save to Library (no tags
+                column on      per-slot at runtime,  applied). Save to Canon
+                workspace_     lost when asset       (via modal, requires
+                assets)        expires)              character).
 
-These filter the `output_type` of canon images stored for this character. Here's what each means in practice:
+Library         YES (tags[]    YES — RoleTagButton   Tags persist. Can
+                on user_       in UnifiedLightbox    "Save to Canon" from
+                library)       via LightboxActions)  here.
 
-### What Each Filter Does
+Character       YES (tags[]    Grouped tag picker    Tags set at upload or
+Canon           on character_  in PositionsGrid      edit time. character_id
+(References)    canon)         upload popover)       is required (NOT NULL).
+```
 
-| Filter | What It Stores | Example Use Case |
-|--------|---------------|-----------------|
-| **Character** | Identity lock — "this is what the character looks like" | Front-facing portrait for face consistency |
-| **Position** | Body arrangement — solo or multi-character | Standing, hugging someone, giving a massage |
-| **Clothing** | Outfit reference — "dress the character like this" | Red dress, school uniform, armor set |
-| **Scene** | Environment/background | Beach sunset, bedroom, office |
-| **Style** | Art style / rendering direction | Watercolor, anime cel-shade, photorealistic |
+### Problems Identified
 
-### The "Style" Question
+1. **Workspace has no tagging** — Slot roles (`character`, `position`, `clothing`) are runtime-only state in `slotRoles[]`. When you save to library, no role tag is carried over. The user must open the library, find the asset, and manually tag it.
 
-Style references are images that define **how** the output should look aesthetically, not **what** is in it. Examples:
-- A watercolor painting you want to match the brushwork of
-- An anime screenshot whose cel-shading you want to replicate
-- A film still whose color grading/lighting you want to copy
+2. **Library uses old tag convention** — `RoleTagButton` shows 5 simple role toggles (`character`, `clothing`, `position`, `scene`, `style`). It does not show the grouped tag picker (composition, interaction, intimate, etc.) from the References tab. Two different tagging UIs for the same concept.
 
-This maps directly to the workspace `role:style` slot. It's a legitimate category but arguably the least used in character studio context — most users set style at the workspace/project level, not per-character.
+3. **Canon requires a character** — `character_canon.character_id` is NOT NULL. You cannot store a "generic two-people-hugging position" without associating it to a specific character. This blocks the use case of reusable position templates.
 
-### The Clothing Question
+4. **Workspace → Library loses context** — `handleSaveToLibrary` calls `WorkspaceAssetService.saveToLibrary(asset.id)` with no tags. The slot role the user already assigned is discarded.
 
-Clothing references on the Positions tab make sense because outfits are character-specific assets. A user might have:
-- "Char A — school uniform" (clothing canon)
-- "Char A — evening dress" (clothing canon)
+5. **No tagging in workspace** — Even if we fix the save flow, there's no UI to tag an asset while it's still in workspace tiles.
 
-These get picked from the ImagePickerDialog Characters tab with `clothing` filter, auto-assigned to the `role:clothing` workspace slot.
+### Design Decisions
 
-### Problem: Tab Naming
+**Q: Should tagging automatically save to library?**
+No. Tagging and saving are separate concerns. But when saving to library FROM workspace, the existing slot role should be carried over as a `role:X` tag automatically.
 
-The tab is called **"Positions"** but it holds all 5 asset types. This is confusing. Two options:
+**Q: Can we tag position references without a character?**
+Yes — use `user_library` with `role:position` + grouped tags (`duo`, `hugging`, etc.). This is the "generic template" path. Character-specific references use `character_canon`. Both are already surfaced in the ImagePickerDialog (Library tab vs Characters tab).
 
-**Option A: Rename tab to "References"** — Accurately describes everything stored there (positions, clothing, scenes, styles, character identity shots). The "Base Angles" section and filters within clarify sub-types.
-
-**Option B: Keep "Positions" but only show position-type assets there. Move clothing/scene/style to their own tabs or sub-sections.** — More organized but adds UI complexity.
-
-### Recommendation
-
-**Option A — Rename to "References"** with these refinements:
-
-1. **Rename the workspace tab** from "Positions" to "References" in `StudioWorkspace.tsx`
-2. **Keep the filter pills** (All, Character, Position, Clothing, Scene, Style) — they work well for narrowing within the tab
-3. **Consider removing "Style" from the filter** if no users are uploading style references per-character. It can be added back later. This simplifies the filter bar to 4 meaningful categories: Character, Position, Clothing, Scene.
-4. **Group the upload popover tags** by output_type context — when uploading as "Clothing", show clothing-relevant tags (casual, formal, fantasy, uniform) instead of position tags (solo, duo, hugging)
+**Q: Should the library tag UI match the References tag UI?**
+Yes. The `RoleTagButton` should be enhanced to show grouped tags (interaction, intimate, etc.) when the asset has a `role:position` tag, and clothing tags when it has `role:clothing`. Same grouped picker, same tag vocabulary.
 
 ### Proposed Changes
 
-1. **`StudioWorkspace.tsx`**: Rename "Positions" tab label to "References" (keep the `workspaceTab` value as `'positions'` to avoid refactoring)
-2. **`PositionsGrid.tsx`**: 
-   - Optionally drop `'style'` from `POSITIONS_GRID_FILTERS` (or keep — low cost)
-   - Show context-aware tags in upload popover based on selected `newOutputType` — position tags for position uploads, clothing tags for clothing uploads
-3. **`positionTags.ts`**: Add a `CLOTHING_TAGS` group (casual, formal, fantasy, uniform, swimwear, armor, sleepwear) for clothing-specific tagging
-4. **No schema changes needed**
+**1. Auto-carry slot role on save-to-library** (`MobileSimplifiedWorkspace.tsx`)
+- When `handleSaveToLibrary` is called, read `slotRoles[index]` for the asset's slot
+- Pass the role to `WorkspaceAssetService.saveToLibrary(assetId, { tags: ['role:position'] })`
+- Update `WorkspaceAssetService.saveToLibrary` to accept optional tags
 
-### Tag Groups by Output Type
+**2. Unify tag picker across Library and References** (`RoleTagButton.tsx`)
+- Extend `RoleTagButton` to accept an optional `outputType` or detect it from existing `role:X` tags
+- When a role is active (e.g., `role:position`), show the relevant grouped tags from `TAG_GROUPS_BY_OUTPUT_TYPE` below the role toggles
+- Reuse the same `POSITION_TAG_GROUPS`, `CLOTHING_TAG_GROUPS`, etc. from `positionTags.ts`
+- This gives library assets the same rich tagging as canon assets
 
-```text
-output_type=position  →  Show: Composition, Framing, Angle, Body, Interaction, Intimate, Action, Mood
-output_type=clothing  →  Show: Style (casual, formal, fantasy), Season (summer, winter), Coverage (full, partial)
-output_type=scene     →  Show: Setting (indoor, outdoor), Time (day, night, sunset), Mood (cozy, dramatic)
-output_type=character →  Show: Framing, Angle (reuse from position)
-output_type=style     →  Show: Medium (watercolor, digital, photo), Aesthetic (anime, realistic, painterly)
-```
+**3. Add inline tag button to workspace tiles** (optional, lower priority)
+- Add a small tag icon to workspace `AssetTile` that opens the same `RoleTagButton` popover
+- Tags are stored in component state (not DB) since `workspace_assets` has no tags column
+- On save-to-library, these tags transfer automatically
 
-This means `positionTags.ts` expands to `canonTags.ts` with tag groups organized by output_type, not just for positions.
+**4. Generic position templates via library** (no schema change)
+- Position references without a character stay in `user_library` with `role:position` + descriptive tags
+- The ImagePickerDialog Library tab already surfaces these via tag filtering
+- No need to make `character_canon.character_id` nullable — that table is specifically for character-bound references
+
+### Files to Change
+
+- `src/components/shared/RoleTagButton.tsx` — Add grouped sub-tags based on active role, using `TAG_GROUPS_BY_OUTPUT_TYPE`
+- `src/pages/MobileSimplifiedWorkspace.tsx` — Pass slot role as tag when saving to library
+- `src/lib/services/NewWorkspaceAssetService.ts` — Accept optional tags param in `saveToLibrary`
+- `src/components/shared/LightboxActions.tsx` — Pass `outputType` context to `RoleTagButton`
+
+### What This Enables
+
+- Generate an image in workspace → slot is "Position" → save to library → automatically tagged `role:position` → open in library lightbox → add `duo`, `hugging`, `passionate` via grouped picker → reusable as generic template OR save to canon for a specific character
 
