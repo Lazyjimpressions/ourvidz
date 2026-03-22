@@ -143,7 +143,7 @@ export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {OUTPUT_TYPES.map((t) => (
+                {UNIFIED_OUTPUT_TYPES.map((t) => (
                   <SelectItem key={t.value} value={t.value}>
                     {t.label}
                   </SelectItem>

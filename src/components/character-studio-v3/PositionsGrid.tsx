@@ -613,8 +613,11 @@ export function PositionsGrid({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Tags</Label>
-                <div className="flex flex-wrap gap-1">
-                  {COMMON_TAGS.slice(0, 8).map(tag => (
+                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                  {POSITION_TAG_GROUPS.composition.tags.concat(
+                    POSITION_TAG_GROUPS.framing.tags.slice(0, 3),
+                    POSITION_TAG_GROUPS.angle.tags.slice(0, 3)
+                  ).map(tag => (
                     <PillFilter key={tag} active={newTags.includes(tag)} onClick={() => setNewTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} size="sm">{tag}</PillFilter>
                   ))}
                 </div>
