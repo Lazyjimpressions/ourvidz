@@ -15,14 +15,7 @@ import { Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-
-const OUTPUT_TYPES = [
-  { value: 'portrait', label: 'Portrait / Identity' },
-  { value: 'position', label: 'Pose / Position' },
-  { value: 'clothing', label: 'Outfit / Clothing' },
-  { value: 'scene', label: 'Scene / Background' },
-  { value: 'style', label: 'Style Reference' },
-] as const;
+import { UNIFIED_OUTPUT_TYPES } from '@/types/positionTags';
 
 interface SaveToCanonModalProps {
   isOpen: boolean;
@@ -150,7 +143,7 @@ export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {OUTPUT_TYPES.map((t) => (
+                {UNIFIED_OUTPUT_TYPES.map((t) => (
                   <SelectItem key={t.value} value={t.value}>
                     {t.label}
                   </SelectItem>

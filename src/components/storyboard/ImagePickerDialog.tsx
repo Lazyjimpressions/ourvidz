@@ -24,25 +24,27 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { PillFilter } from '@/components/ui/pill-filter';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
-
+import { normalizeOutputType } from '@/types/positionTags';
 type SourceTab = 'workspace' | 'library' | 'characters';
-type CategoryFilter = 'all' | 'character' | 'position' | 'scene' | 'clothing';
+type CategoryFilter = 'all' | 'character' | 'position' | 'scene' | 'clothing' | 'style';
 
 const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'character', label: 'Characters' },
   { value: 'position', label: 'Positions' },
-  { value: 'scene', label: 'Scenes' },
   { value: 'clothing', label: 'Outfits' },
+  { value: 'scene', label: 'Scenes' },
+  { value: 'style', label: 'Styles' },
 ];
 
-/** Maps category filter to character_canon output_type values */
-const CATEGORY_TO_OUTPUT_TYPE: Record<CategoryFilter, string | null> = {
+/** Maps category filter to character_canon output_type values (includes legacy normalization) */
+const CATEGORY_TO_OUTPUT_TYPES: Record<CategoryFilter, string[] | null> = {
   all: null,
-  character: 'portrait',
-  position: 'position',
-  scene: 'scene',
-  clothing: 'clothing',
+  character: ['portrait', 'character'],
+  position: ['position', 'pose'],
+  scene: ['scene'],
+  clothing: ['clothing', 'outfit'],
+  style: ['style'],
 };
 
 /** Context hint for auto-selecting tab + category when the picker opens */
@@ -54,7 +56,7 @@ const CONTEXT_HINT_DEFAULTS: Record<PickerContextHint, { source: SourceTab; cate
   pose:     { source: 'characters', category: 'position' },
   outfit:   { source: 'characters', category: 'clothing' },
   scene:    { source: 'characters', category: 'scene' },
-  style:    { source: 'characters', category: 'all' },
+  style:    { source: 'characters', category: 'style' },
   general:  { source: 'library',    category: 'all' },
 };
 
@@ -186,7 +188,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     if (activeSource !== 'characters' || !isOpen || !selectedCharacterId) return;
 
     setCanonLoading(true);
-    const outputTypeFilter = CATEGORY_TO_OUTPUT_TYPE[activeCategory];
+    const outputTypeFilters = CATEGORY_TO_OUTPUT_TYPES[activeCategory];
 
     let query = supabase
       .from('character_canon')
@@ -194,8 +196,8 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       .eq('character_id', selectedCharacterId)
       .order('created_at', { ascending: false });
 
-    if (outputTypeFilter) {
-      query = query.eq('output_type', outputTypeFilter);
+    if (outputTypeFilters) {
+      query = query.in('output_type', outputTypeFilters);
     }
 
     query.then(({ data, error }) => {

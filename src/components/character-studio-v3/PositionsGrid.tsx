@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users, Save } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users, Save, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { AssetTile } from '@/components/shared/AssetTile';
@@ -19,11 +19,14 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-
-const OUTPUT_TYPES = ['all', 'pose', 'outfit', 'style', 'position'] as const;
-type OutputTypeFilter = typeof OUTPUT_TYPES[number];
-
-const COMMON_TAGS = ['front', 'side', 'rear', '3/4', 'full-body', 'half-body', 'close-up', 'casual', 'formal', 'action', 'seated', 'standing'];
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  POSITION_TAG_GROUPS,
+  POSITIONS_GRID_FILTERS,
+  UNIFIED_OUTPUT_TYPES,
+  normalizeOutputType,
+  type PositionsGridFilter,
+} from '@/types/positionTags';
 
 const POSE_KEY_ORDER = ['front_neutral', 'side_left', 'side_right', 'rear', 'three_quarter', 'bust'];
 
@@ -279,11 +282,21 @@ function CanonThumbnail({
             </button>
           </PopoverTrigger>
           <PopoverContent className="w-56 p-2 space-y-2" align="start" onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-wrap gap-1">
-              {COMMON_TAGS.map(tag => (
-                <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
-              ))}
-            </div>
+            {Object.entries(POSITION_TAG_GROUPS).map(([groupKey, group]) => (
+              <Collapsible key={groupKey} defaultOpen={groupKey === 'composition' || groupKey === 'framing'}>
+                <CollapsibleTrigger className="flex items-center gap-1 w-full text-[9px] font-medium text-muted-foreground uppercase tracking-wider py-0.5 hover:text-foreground">
+                  <ChevronDown className="w-2.5 h-2.5 transition-transform [&[data-state=open]]:rotate-180" />
+                  {group.label}
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="flex flex-wrap gap-1 py-0.5">
+                    {group.tags.map(tag => (
+                      <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            ))}
             <div className="flex gap-1">
               <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Custom tag..." className="h-6 text-xs" />
               <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={handleAddTag}><Plus className="w-3 h-3" /></Button>
@@ -341,12 +354,12 @@ export function PositionsGrid({
   onSendToWorkspace,
   characterName,
 }: PositionsGridProps) {
-  const [typeFilter, setTypeFilter] = useState<OutputTypeFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<PositionsGridFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadPopover, setUploadPopover] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [newOutputType, setNewOutputType] = useState('pose');
+  const [newOutputType, setNewOutputType] = useState('position');
   const [newTags, setNewTags] = useState<string[]>([]);
   const [newLabel, setNewLabel] = useState('');
   const navigate = useNavigate();
@@ -377,7 +390,8 @@ export function PositionsGrid({
   };
 
   const filtered = canonImages.filter(c => {
-    if (typeFilter !== 'all' && c.output_type !== typeFilter) return false;
+    const normalized = normalizeOutputType(c.output_type);
+    if (typeFilter !== 'all' && normalized !== typeFilter) return false;
     if (tagFilter && !c.tags?.some(t => t.includes(tagFilter.toLowerCase()))) return false;
     return true;
   });
@@ -457,7 +471,7 @@ export function PositionsGrid({
     await onUpload(pendingFile, newOutputType, newTags, newLabel || undefined);
     setPendingFile(null);
     setUploadPopover(false);
-    setNewOutputType('pose');
+    setNewOutputType('position');
     setNewTags([]);
     setNewLabel('');
   };
@@ -484,7 +498,7 @@ export function PositionsGrid({
       {orderedPresets.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Base Positions</span>
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Base Angles</span>
             {!hasReferenceImage && (
               <span className="text-[9px] text-destructive">Lock a reference image first</span>
             )}
@@ -544,7 +558,7 @@ export function PositionsGrid({
 
       {/* Filter bar */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        {OUTPUT_TYPES.map(type => (
+        {POSITIONS_GRID_FILTERS.map(type => (
           <PillFilter key={type} active={typeFilter === type} onClick={() => setTypeFilter(type)} size="sm">
             {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
           </PillFilter>
@@ -587,10 +601,9 @@ export function PositionsGrid({
                 <Select value={newOutputType} onValueChange={setNewOutputType}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pose">Pose</SelectItem>
-                    <SelectItem value="outfit">Outfit</SelectItem>
-                    <SelectItem value="style">Style</SelectItem>
-                    <SelectItem value="position">Position</SelectItem>
+                    {UNIFIED_OUTPUT_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -600,8 +613,11 @@ export function PositionsGrid({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Tags</Label>
-                <div className="flex flex-wrap gap-1">
-                  {COMMON_TAGS.slice(0, 8).map(tag => (
+                <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                  {([...POSITION_TAG_GROUPS.composition.tags,
+                    ...POSITION_TAG_GROUPS.framing.tags.slice(0, 3),
+                    ...POSITION_TAG_GROUPS.angle.tags.slice(0, 3),
+                  ] as string[]).map(tag => (
                     <PillFilter key={tag} active={newTags.includes(tag)} onClick={() => setNewTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} size="sm">{tag}</PillFilter>
                   ))}
                 </div>
