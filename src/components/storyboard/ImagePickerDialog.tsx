@@ -26,14 +26,15 @@ import { PillFilter } from '@/components/ui/pill-filter';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import { normalizeOutputType } from '@/types/positionTags';
 type SourceTab = 'workspace' | 'library' | 'characters';
-type CategoryFilter = 'all' | 'character' | 'position' | 'scene' | 'clothing';
+type CategoryFilter = 'all' | 'character' | 'position' | 'scene' | 'clothing' | 'style';
 
 const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'character', label: 'Characters' },
   { value: 'position', label: 'Positions' },
-  { value: 'scene', label: 'Scenes' },
   { value: 'clothing', label: 'Outfits' },
+  { value: 'scene', label: 'Scenes' },
+  { value: 'style', label: 'Styles' },
 ];
 
 /** Maps category filter to character_canon output_type values (includes legacy normalization) */
