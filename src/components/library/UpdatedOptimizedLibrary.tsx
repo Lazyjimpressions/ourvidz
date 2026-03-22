@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SaveToCanonModal } from '@/components/shared/SaveToCanonModal';
 
 export const UpdatedOptimizedLibrary: React.FC = () => {
   const navigate = useNavigate();
