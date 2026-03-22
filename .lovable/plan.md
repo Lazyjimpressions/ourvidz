@@ -1,43 +1,70 @@
 
 
-## Fix: Simplify Position Tag Groups & Add Per-Section Custom Tags
+## Fix: Multi-Classification via Tags, Not Single output_type
 
-### Problems
+### The Insight
 
-1. **Three overlapping groups** — "Interaction", "Intimate", and "Action" are confusing. Merge Interaction into Action (general physical actions) and keep Intimate separate (romantic/sensual).
-2. **Tile tag editor always shows position tags** — Line 286 hardcodes `POSITION_TAG_GROUPS` regardless of the canon's `output_type`. A clothing asset shows position tags instead of clothing tags.
-3. **Custom tag input is only at the bottom** — No way to add a custom tag within a specific group's context.
+Any reference image can serve multiple roles simultaneously. A photo of two characters kissing in bikinis on a beach is:
+- **Position**: duo, kissing
+- **Clothing**: bikini, swimwear
+- **Scene**: beach, outdoor
 
-### Changes
+Forcing one `output_type` per image is wrong. Tags should handle all classification.
 
-**1. Restructure `POSITION_TAG_GROUPS` in `src/types/positionTags.ts`**
+### Approach
 
-Merge `interaction` tags into `action`. Trim both lists to essentials:
+Keep `output_type` in the DB as the "primary" category (what the user initially uploaded it as — required NOT NULL column, avoids migration). But change how **filtering and tagging work**:
+
+1. **Filter pills check tags TOO** — Currently `typeFilter` only checks `output_type`. Change it to: show an image under "Clothing" if `output_type === 'clothing'` OR if it has any clothing-related tag (`casual`, `formal`, `bikini`, `swimwear`, etc.).
+
+2. **Tag editor shows ALL groups always** — Stop gating tag groups by `output_type`. Every canon image's tag popover shows all groups (Position, Clothing, Scene, etc.) — collapsed sections the user can expand and pick from. Adding a `bikini` tag to a position image automatically makes it appear under the Clothing filter too.
+
+3. **No output_type selector in tag editor** — Remove the need to "reclassify" an image. Tags handle multi-classification naturally.
+
+### Filter Logic Change
 
 ```text
-Action (merged):  hugging, holding-hands, carrying, piggyback, dancing,
-                  fighting, running, massage, feeding, lifting
-
-Intimate:         kissing, kissing-deeply, cuddling, spooning,
-                  lap-sitting, forehead-touch, nuzzling, embracing
-
-Remove:           back-to-back, hand-on-shoulder, arm-around-waist,
-                  jumping, reaching, brushing-hair
-                  (users can add these as custom tags)
+Current:  show if output_type === filterValue
+Proposed: show if output_type === filterValue 
+          OR tags overlap with filterValue's tag vocabulary
 ```
 
-Keep Composition, Framing, Angle, Body, Mood unchanged.
+Define a mapping: `FILTER_TAGS['clothing'] = ['casual', 'formal', 'bikini', ...]` etc. If any of an image's tags appear in that filter's vocabulary, the image appears under that filter.
 
-**2. Make tile tag editor context-aware** (`PositionsGrid.tsx` line 286)
+### Tag Editor Change
 
-Replace `POSITION_TAG_GROUPS` with `TAG_GROUPS_BY_OUTPUT_TYPE[normalizeOutputType(canon.output_type)]`. This shows clothing tags for clothing assets, scene tags for scene assets, etc.
+Instead of showing only the groups for the image's `output_type`, show all groups in collapsible sections:
 
-**3. Add per-section custom tag input**
+```text
+▼ Position Tags
+  Composition: solo, duo, group
+  Body: standing, sitting, kneeling...
+  Action: hugging, dancing, fighting...
+  Intimate: kissing, cuddling, spooning...
 
-After each group's tag chips, add a small inline `+ Custom` input that adds a tag to that section's visual area (stored flat in DB like all others). This replaces the single bottom-level custom input.
+▼ Clothing Tags  
+  Style: casual, formal, bikini, armor...
+  Season: summer, winter...
 
-### Files
+▼ Scene Tags
+  Setting: indoor, outdoor, beach...
+  Time: day, night, sunset...
 
-- `src/types/positionTags.ts` — Remove `interaction` group, merge its tags into `action`, trim lists
-- `src/components/character-studio-v3/PositionsGrid.tsx` — Context-aware tag groups in tile editor + per-section custom input
+▼ Mood
+  tender, playful, passionate...
+```
+
+Groups with active tags auto-expand. Others collapsed by default.
+
+### Files to Change
+
+- `src/types/positionTags.ts` — Add `FILTER_TAG_VOCABULARY` mapping each filter to its tag list; add `ALL_TAG_GROUPS` combining all output type groups
+- `src/components/character-studio-v3/PositionsGrid.tsx` — Update filter logic to check tags; update tag editor to show all groups with collapse; remove output_type gating in tag popover
+
+### What This Enables
+
+- Upload a kissing-on-beach image as "position"
+- Tag it: `duo`, `kissing`, `bikini`, `outdoor`, `beach`
+- It now appears under Position filter, Clothing filter, AND Scene filter
+- No reclassification needed — tags are the truth
 
