@@ -42,8 +42,37 @@
 
 4. **`src/pages/CreateCharacter.tsx`** — Added `contextHint="identity"` to character portrait picker
 
-### Remaining Phases (not yet implemented)
+### Completed: Phase 3 — Bidirectional Canon ↔ Library Bridge
 
-**Phase 3: Bidirectional Canon ↔ Library Bridge** — "Save to Canon" and "Save to Library" actions in lightbox
+**Changes made:**
 
-**Phase 4: Role Auto-Assignment** — Auto-set workspace slot roles when canon assets are selected
+1. **`src/components/character-studio-v3/PositionsGrid.tsx`** — Fixed bucket + added Save to Library
+   - Fixed "Send to Workspace" to sign against `reference_images` bucket (was `workspace-temp`)
+   - Added "Save to Library" button: downloads from `reference_images`, uploads to `user-library`, creates `user_library` row with role tags and character name
+
+2. **`src/components/shared/SaveToCanonModal.tsx`** — New modal component
+   - Fetches user's characters list
+   - Character selector + output_type dropdown (portrait, position, clothing, scene, style)
+   - Optional label field
+   - Downloads from `user-library`, uploads to `reference_images`, inserts `character_canon` row
+   - Cross-bucket copy via download+upload fallback
+
+3. **`src/components/shared/LightboxActions.tsx`** — Added `onSaveToCanon` prop to `LibraryAssetActions`
+   - New BookmarkPlus icon button for saving library assets to character canon
+
+4. **`src/components/library/UpdatedOptimizedLibrary.tsx`** — Wired Save to Canon
+   - Added `SaveToCanonModal` integration with `saveToCanonPath` state
+   - Library lightbox actions now include "Save to Canon" button
+
+5. **`src/components/workspace/MobileSimplePromptInput.tsx`** — Wired metadata → auto-role
+   - `handlePickerSelect` now accepts third `metadata` arg from canon selections
+   - When `metadata.source === 'character_canon'`, auto-assigns matching slot role via `onSlotRoleChange`
+   - Maps outputType to SlotRole: portrait→character, position→position, clothing→clothing, scene→scene, style→style
+
+### Remaining: Phase 4 — Polish & Enrichment
+
+**Not yet implemented:**
+
+1. **Storyboard auto-tag**: Attach `characterId` to clip metadata when canon assets are used as storyboard references
+2. **Picker thumbnail enrichment**: Show character name + output type badge overlay on Characters tab thumbnails
+3. **Deduplication badges**: Show "Already in Library"/"Already in Canon" indicators before duplicate save actions
