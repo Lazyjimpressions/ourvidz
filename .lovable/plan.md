@@ -1,87 +1,75 @@
 
 
-## Updated Plan: Unified Position Taxonomy with Interaction Tags
+## Audit: Positions Tab Filter Categories & Their Purpose
 
-### Core Decision: Tags, Not Types
+### Current State
 
-Intimate interactions (kissing deeply, massage) and action poses (fighting, dancing) are all **positions** — they describe body arrangement and composition. They should stay as `output_type: 'position'` and use **tags** for granularity.
+The Positions tab shows filter pills: **All | Character | Position | Clothing | Scene | Style**
 
-Why tags over separate types:
-- The workspace slot is "Position" — all body arrangements flow through one slot
-- Tags are combinatorial: `duo` + `kissing` + `close-up` vs a flat type that can only be one thing
-- Users can create custom tags without schema changes
-- The prompt builder already says "in the position from Figure N" regardless of whether it's a hug or a massage
+These filter the `output_type` of canon images stored for this character. Here's what each means in practice:
 
-### Proposed Tag Structure
+### What Each Filter Does
 
-Group tags into categories with a structured picker UI (not a flat list):
+| Filter | What It Stores | Example Use Case |
+|--------|---------------|-----------------|
+| **Character** | Identity lock — "this is what the character looks like" | Front-facing portrait for face consistency |
+| **Position** | Body arrangement — solo or multi-character | Standing, hugging someone, giving a massage |
+| **Clothing** | Outfit reference — "dress the character like this" | Red dress, school uniform, armor set |
+| **Scene** | Environment/background | Beach sunset, bedroom, office |
+| **Style** | Art style / rendering direction | Watercolor, anime cel-shade, photorealistic |
+
+### The "Style" Question
+
+Style references are images that define **how** the output should look aesthetically, not **what** is in it. Examples:
+- A watercolor painting you want to match the brushwork of
+- An anime screenshot whose cel-shading you want to replicate
+- A film still whose color grading/lighting you want to copy
+
+This maps directly to the workspace `role:style` slot. It's a legitimate category but arguably the least used in character studio context — most users set style at the workspace/project level, not per-character.
+
+### The Clothing Question
+
+Clothing references on the Positions tab make sense because outfits are character-specific assets. A user might have:
+- "Char A — school uniform" (clothing canon)
+- "Char A — evening dress" (clothing canon)
+
+These get picked from the ImagePickerDialog Characters tab with `clothing` filter, auto-assigned to the `role:clothing` workspace slot.
+
+### Problem: Tab Naming
+
+The tab is called **"Positions"** but it holds all 5 asset types. This is confusing. Two options:
+
+**Option A: Rename tab to "References"** — Accurately describes everything stored there (positions, clothing, scenes, styles, character identity shots). The "Base Angles" section and filters within clarify sub-types.
+
+**Option B: Keep "Positions" but only show position-type assets there. Move clothing/scene/style to their own tabs or sub-sections.** — More organized but adds UI complexity.
+
+### Recommendation
+
+**Option A — Rename to "References"** with these refinements:
+
+1. **Rename the workspace tab** from "Positions" to "References" in `StudioWorkspace.tsx`
+2. **Keep the filter pills** (All, Character, Position, Clothing, Scene, Style) — they work well for narrowing within the tab
+3. **Consider removing "Style" from the filter** if no users are uploading style references per-character. It can be added back later. This simplifies the filter bar to 4 meaningful categories: Character, Position, Clothing, Scene.
+4. **Group the upload popover tags** by output_type context — when uploading as "Clothing", show clothing-relevant tags (casual, formal, fantasy, uniform) instead of position tags (solo, duo, hugging)
+
+### Proposed Changes
+
+1. **`StudioWorkspace.tsx`**: Rename "Positions" tab label to "References" (keep the `workspaceTab` value as `'positions'` to avoid refactoring)
+2. **`PositionsGrid.tsx`**: 
+   - Optionally drop `'style'` from `POSITIONS_GRID_FILTERS` (or keep — low cost)
+   - Show context-aware tags in upload popover based on selected `newOutputType` — position tags for position uploads, clothing tags for clothing uploads
+3. **`positionTags.ts`**: Add a `CLOTHING_TAGS` group (casual, formal, fantasy, uniform, swimwear, armor, sleepwear) for clothing-specific tagging
+4. **No schema changes needed**
+
+### Tag Groups by Output Type
 
 ```text
-Composition     solo, duo, group
-Framing         full-body, half-body, close-up, bust, overhead
-Angle           front, side, rear, 3/4, low-angle, birds-eye
-Body            standing, sitting, lying, kneeling, leaning, crouching
-
-Interaction     hugging, holding-hands, back-to-back, carrying,
-                piggyback, hand-on-shoulder, arm-around-waist
-
-Intimate        kissing, kissing-deeply, cuddling, spooning,
-                lap-sitting, forehead-touch, nuzzling, embracing
-
-Action          dancing, fighting, running, jumping, reaching,
-                massage, feeding, brushing-hair, lifting
-
-Mood            tender, playful, passionate, dramatic, casual, intense
+output_type=position  →  Show: Composition, Framing, Angle, Body, Interaction, Intimate, Action, Mood
+output_type=clothing  →  Show: Style (casual, formal, fantasy), Season (summer, winter), Coverage (full, partial)
+output_type=scene     →  Show: Setting (indoor, outdoor), Time (day, night, sunset), Mood (cozy, dramatic)
+output_type=character →  Show: Framing, Angle (reuse from position)
+output_type=style     →  Show: Medium (watercolor, digital, photo), Aesthetic (anime, realistic, painterly)
 ```
 
-**Why "Intimate" as a separate group**: Users generating romantic/couple content need to quickly find these without scanning through generic interactions. It also allows the UI to gate or label this section clearly.
-
-### How It Works in Practice
-
-1. User generates or uploads a position reference of two people kissing
-2. Tags it: `duo`, `kissing-deeply`, `close-up`, `passionate`
-3. In workspace, picks this from Characters tab → Position filter
-4. Auto-assigns `role:position` slot
-5. Prompt builder uses it as "position from Figure N" — the tags inform the user's text prompt, not the system prompt
-
-### Tag Picker UI Change
-
-Replace the current flat `COMMON_TAGS` chip list in PositionsGrid with a **grouped tag picker**:
-- Collapsible sections by category (Composition, Interaction, Intimate, Action, etc.)
-- Multi-select within and across groups
-- Free-text custom tag input at the bottom
-- Tags stored as flat array in DB (e.g., `['duo', 'kissing-deeply', 'close-up']`) — grouping is UI-only
-
-### Implementation Changes
-
-**1. Define tag groups** — New constant in `src/types/slotRoles.ts` or a new `src/types/positionTags.ts`:
-```text
-POSITION_TAG_GROUPS = {
-  composition: ['solo', 'duo', 'group'],
-  framing: ['full-body', 'half-body', 'close-up', ...],
-  interaction: ['hugging', 'holding-hands', ...],
-  intimate: ['kissing', 'kissing-deeply', 'cuddling', ...],
-  action: ['dancing', 'fighting', 'massage', ...],
-  mood: ['tender', 'passionate', 'playful', ...],
-}
-```
-
-**2. Update PositionsGrid tag picker** — Replace flat chip list with grouped sections. Each group has a header and toggleable chips. Show intimate group with a subtle label/divider.
-
-**3. Update ImagePickerDialog category filters** — Within the "Position" category on the Characters tab, add sub-filter chips for tag groups so users can narrow by `duo` + `intimate` to find kissing references quickly.
-
-**4. Unify output_type values** (from previous audit):
-- Merge `pose` → `position`, `outfit` → `clothing`
-- Runtime normalization for legacy data
-- Rename "Base Positions" → "Base Angles"
-
-**5. No schema changes** — Tags remain a flat `text[]` column. Grouping is purely a UI concern.
-
-### Files to Change
-
-- `src/types/positionTags.ts` — New file: tag group definitions
-- `src/components/character-studio-v3/PositionsGrid.tsx` — Grouped tag picker, unified output_types, rename Base Positions
-- `src/components/storyboard/ImagePickerDialog.tsx` — Sub-filter chips within Position category
-- `src/components/shared/SaveToCanonModal.tsx` — Align output_type labels
-- `src/types/slotRoles.ts` — No changes needed (position role covers all)
+This means `positionTags.ts` expands to `canonTags.ts` with tag groups organized by output_type, not just for positions.
 
