@@ -344,12 +344,12 @@ export function PositionsGrid({
   onSendToWorkspace,
   characterName,
 }: PositionsGridProps) {
-  const [typeFilter, setTypeFilter] = useState<OutputTypeFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<PositionsGridFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadPopover, setUploadPopover] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [newOutputType, setNewOutputType] = useState('pose');
+  const [newOutputType, setNewOutputType] = useState('position');
   const [newTags, setNewTags] = useState<string[]>([]);
   const [newLabel, setNewLabel] = useState('');
   const navigate = useNavigate();
