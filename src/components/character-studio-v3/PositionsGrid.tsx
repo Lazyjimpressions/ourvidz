@@ -204,6 +204,7 @@ function CanonThumbnail({
   const [editingTags, setEditingTags] = useState(false);
   const [localTags, setLocalTags] = useState<string[]>(canon.tags || []);
   const [tagInput, setTagInput] = useState('');
+  const [sectionTagInputs, setSectionTagInputs] = useState<Record<string, string>>({});
 
   const handleSendToWorkspace = () => {
     if (signedUrl && onSendToWorkspace) {
