@@ -1,7 +1,8 @@
 /**
  * ImagePickerDialog Component
  *
- * A dialog that allows users to browse and select images from their library or workspace.
+ * A dialog that allows users to browse and select images from their library, workspace,
+ * or character canon assets (poses, outfits, styles).
  * Uses direct Supabase storage signing (no useSignedAssets hook) for reliable dialog-context signing.
  */
 
@@ -15,15 +16,16 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Image as ImageIcon, Library, Loader2, Check, FolderOpen, ImageOff, Play } from 'lucide-react';
+import { Search, Image as ImageIcon, Library, Loader2, Check, FolderOpen, ImageOff, Play, Users } from 'lucide-react';
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
-import { toSharedFromLibrary, toSharedFromWorkspace } from '@/lib/services/AssetMappers';
+import { toSharedFromLibrary, toSharedFromWorkspace, toSharedFromCanon } from '@/lib/services/AssetMappers';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { PillFilter } from '@/components/ui/pill-filter';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 
+type SourceTab = 'workspace' | 'library' | 'characters';
 type CategoryFilter = 'all' | 'character' | 'position' | 'scene' | 'clothing';
 
 const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
@@ -34,12 +36,26 @@ const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: 'clothing', label: 'Outfits' },
 ];
 
+/** Maps category filter to character_canon output_type values */
+const CATEGORY_TO_OUTPUT_TYPE: Record<CategoryFilter, string | null> = {
+  all: null,
+  character: 'portrait',
+  position: 'position',
+  scene: 'scene',
+  clothing: 'clothing',
+};
+
 interface ImagePickerDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (imageUrl: string, source: 'library' | 'workspace') => void;
+  onSelect: (imageUrl: string, source: 'library' | 'workspace' | 'characters', metadata?: {
+    source: 'character_canon';
+    characterId: string;
+    outputType: string;
+    tags: string[];
+  }) => void;
   title?: string;
-  source?: 'workspace' | 'library';
+  source?: 'workspace' | 'library' | 'characters';
   /** Pre-select a category filter tab (e.g. 'character', 'position') */
   filterTag?: string;
   /** Filter by media type: 'image' (default), 'video', or 'all' */
@@ -58,10 +74,16 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
-  const [activeSource, setActiveSource] = useState<'workspace' | 'library'>(source);
+  const [activeSource, setActiveSource] = useState<SourceTab>(source);
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>(
     (filterTag as CategoryFilter) || 'all'
   );
+
+  // Character canon state
+  const [canonAssets, setCanonAssets] = useState<any[]>([]);
+  const [canonLoading, setCanonLoading] = useState(false);
+  const [characters, setCharacters] = useState<{ id: string; name: string }[]>([]);
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
 
   // Direct signing state
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
@@ -117,6 +139,58 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     }
   }, [activeSource, isOpen]);
 
+  // Character canon data — load characters list + canon assets
+  useEffect(() => {
+    if (activeSource === 'characters' && isOpen) {
+      // Load user's characters for the selector
+      const loadCharacters = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from('characters')
+          .select('id, name')
+          .eq('user_id', user.id)
+          .order('name');
+        if (data && data.length > 0) {
+          setCharacters(data);
+          // Auto-select first character if none selected
+          if (!selectedCharacterId) {
+            setSelectedCharacterId(data[0].id);
+          }
+        }
+      };
+      loadCharacters();
+    }
+  }, [activeSource, isOpen]);
+
+  // Load canon assets when character selection changes
+  useEffect(() => {
+    if (activeSource !== 'characters' || !isOpen || !selectedCharacterId) return;
+
+    setCanonLoading(true);
+    const outputTypeFilter = CATEGORY_TO_OUTPUT_TYPE[activeCategory];
+
+    let query = supabase
+      .from('character_canon')
+      .select('*, characters(name, reference_image_url)')
+      .eq('character_id', selectedCharacterId)
+      .order('created_at', { ascending: false });
+
+    if (outputTypeFilter) {
+      query = query.eq('output_type', outputTypeFilter);
+    }
+
+    query.then(({ data, error }) => {
+      if (error) {
+        console.error('❌ Failed to load canon assets:', error);
+        setCanonAssets([]);
+      } else {
+        setCanonAssets(data || []);
+      }
+      setCanonLoading(false);
+    });
+  }, [activeSource, isOpen, selectedCharacterId, activeCategory]);
+
   // Flatten paginated library data and filter to only images
   const libraryImageAssets = useMemo(() => {
     if (!paginatedData?.pages) return [];
@@ -130,10 +204,28 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       });
   }, [paginatedData, mediaType]);
 
-  const isLoading = activeSource === 'library' ? libraryLoading : workspaceLoading;
+  const isLoading = activeSource === 'library'
+    ? libraryLoading
+    : activeSource === 'workspace'
+      ? workspaceLoading
+      : canonLoading;
 
   // Filter by search query and category
   const filteredAssets = useMemo(() => {
+    if (activeSource === 'characters') {
+      // Canon assets are already filtered by output_type in the query
+      if (!searchQuery.trim()) return canonAssets;
+      const query = searchQuery.toLowerCase();
+      return canonAssets.filter((asset: any) => {
+        const label = asset.label || '';
+        const tags = asset.tags || [];
+        return (
+          label.toLowerCase().includes(query) ||
+          tags.some((tag: string) => tag.toLowerCase().includes(query))
+        );
+      });
+    }
+
     const rawAssets = activeSource === 'library' ? libraryImageAssets : workspaceAssets;
     return rawAssets.filter((asset: any) => {
       // Category filter (library only)
@@ -155,17 +247,25 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         tags.some((tag: string) => tag.toLowerCase().includes(query))
       );
     });
-  }, [activeSource, libraryImageAssets, workspaceAssets, searchQuery, activeCategory]);
+  }, [activeSource, libraryImageAssets, workspaceAssets, canonAssets, searchQuery, activeCategory]);
 
   // Convert to SharedAsset format
   const sharedAssets: SharedAsset[] = useMemo(() => {
+    if (activeSource === 'characters') {
+      return filteredAssets.map(toSharedFromCanon);
+    }
     if (activeSource === 'library') {
       return filteredAssets.map(toSharedFromLibrary);
     }
     return filteredAssets.map(toSharedFromWorkspace);
   }, [filteredAssets, activeSource]);
 
-  const bucket = activeSource === 'workspace' ? 'workspace-temp' : 'user-library';
+  // Determine the bucket for signing
+  const bucket = activeSource === 'characters'
+    ? 'reference_images'
+    : activeSource === 'workspace'
+      ? 'workspace-temp'
+      : 'user-library';
 
   // Direct signing effect — signs all thumbnails when assets/bucket/dialog state changes
   useEffect(() => {
@@ -245,7 +345,13 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     try {
       const path = asset.originalPath;
       if (path.startsWith('http://') || path.startsWith('https://')) {
-        onSelect(path, activeSource);
+        const canonMeta = activeSource === 'characters' ? {
+          source: 'character_canon' as const,
+          characterId: asset.metadata?.character_id || '',
+          outputType: asset.metadata?.output_type || '',
+          tags: asset.metadata?.tags || [],
+        } : undefined;
+        onSelect(path, activeSource, canonMeta);
         onClose();
         return;
       }
@@ -256,7 +362,13 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         console.error('❌ Failed to sign original for selection:', error);
         return;
       }
-      onSelect(data.signedUrl, activeSource);
+      const canonMeta = activeSource === 'characters' ? {
+        source: 'character_canon' as const,
+        characterId: asset.metadata?.character_id || '',
+        outputType: asset.metadata?.output_type || '',
+        tags: asset.metadata?.tags || [],
+      } : undefined;
+      onSelect(data.signedUrl, activeSource, canonMeta);
       onClose();
     } catch (e) {
       console.error('❌ Failed to sign original for selection:', e);
@@ -285,13 +397,15 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       <DialogContent className="max-w-2xl max-h-[80vh] bg-gray-950 border-gray-800">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
-            {activeSource === 'workspace' ? <FolderOpen className="w-4 h-4" /> : <Library className="w-4 h-4" />}
+            {activeSource === 'workspace' ? <FolderOpen className="w-4 h-4" /> :
+              activeSource === 'characters' ? <Users className="w-4 h-4" /> :
+              <Library className="w-4 h-4" />}
             {title}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Source Toggle */}
+          {/* Source Toggle — 3 tabs */}
           <div className="flex gap-1 bg-gray-900 rounded-lg p-1">
             <button
               onClick={() => { setActiveSource('workspace'); setSelectedAssetId(null); }}
@@ -317,10 +431,38 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
               <Library className="w-3.5 h-3.5" />
               Library
             </button>
+            <button
+              onClick={() => { setActiveSource('characters'); setSelectedAssetId(null); }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                activeSource === 'characters'
+                  ? 'bg-gray-800 text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Users className="w-3.5 h-3.5" />
+              Characters
+            </button>
           </div>
 
-          {/* Category Filter Tabs (library only) */}
-          {activeSource === 'library' && (
+          {/* Character Selector (characters source only) */}
+          {activeSource === 'characters' && characters.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {characters.map((char) => (
+                <PillFilter
+                  key={char.id}
+                  active={selectedCharacterId === char.id}
+                  onClick={() => { setSelectedCharacterId(char.id); setSelectedAssetId(null); }}
+                  size="sm"
+                >
+                  {char.name}
+                </PillFilter>
+              ))}
+            </div>
+          )}
+
+          {/* Category Filter Tabs (library + characters) */}
+          {(activeSource === 'library' || activeSource === 'characters') && (
             <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
               {CATEGORY_TABS.map((tab) => (
                 <PillFilter
@@ -360,12 +502,18 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                  <p className="text-sm text-gray-400">
                    {searchQuery
                      ? `No ${mediaType === 'video' ? 'videos' : 'images'} match your search`
-                     : activeSource === 'workspace'
-                       ? `No recent ${mediaType === 'video' ? 'videos' : 'images'} in your workspace`
-                       : `No ${mediaType === 'video' ? 'videos' : 'images'} in your library`}
+                     : activeSource === 'characters'
+                       ? selectedCharacterId
+                         ? 'No canon assets for this character yet'
+                         : 'No characters found'
+                       : activeSource === 'workspace'
+                         ? `No recent ${mediaType === 'video' ? 'videos' : 'images'} in your workspace`
+                         : `No ${mediaType === 'video' ? 'videos' : 'images'} in your library`}
                  </p>
                  <p className="text-xs text-gray-500 mt-1">
-                   Generate {mediaType === 'video' ? 'videos' : 'images'} in the Workspace to use them here
+                   {activeSource === 'characters'
+                     ? 'Generate poses in the Character Studio Positions tab'
+                     : `Generate ${mediaType === 'video' ? 'videos' : 'images'} in the Workspace to use them here`}
                  </p>
               </div>
             ) : (
@@ -451,13 +599,19 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
                         </div>
                       )}
 
-                      {/* Hover overlay with prompt preview */}
+                      {/* Hover overlay with title/type preview */}
                       {!isFailed && !isStillLoading && (
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 hover:opacity-100 transition-opacity">
                           <div className="absolute bottom-0 left-0 right-0 p-2">
                             <p className="text-[10px] text-white/80 line-clamp-2">
                               {asset.title || asset.prompt || 'Untitled'}
                             </p>
+                            {/* Show output type badge for canon assets */}
+                            {activeSource === 'characters' && asset.metadata?.output_type && (
+                              <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[8px] font-medium bg-primary/20 text-primary-foreground/80 capitalize">
+                                {asset.metadata.output_type}
+                              </span>
+                            )}
                           </div>
                         </div>
                       )}
