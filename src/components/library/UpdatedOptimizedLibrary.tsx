@@ -500,6 +500,11 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 onDownload={() => handleDownload(asset as any)}
                 onUseAsReference={() => handleUseAsReference(asset as any)}
                 onRoleTagToggle={(role) => handleRoleTagToggle(asset, role)}
+                onSaveToCanon={() => {
+                  const storagePath = (asset as any).originalPath;
+                  if (storagePath) setSaveToCanonPath(storagePath);
+                  else toast.error('No storage path available for this asset');
+                }}
                 tags={(asset as any).metadata?.tags || []}
               />
             );
