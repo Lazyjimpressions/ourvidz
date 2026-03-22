@@ -24,7 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { PillFilter } from '@/components/ui/pill-filter';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
-
+import { normalizeOutputType } from '@/types/positionTags';
 type SourceTab = 'workspace' | 'library' | 'characters';
 type CategoryFilter = 'all' | 'character' | 'position' | 'scene' | 'clothing';
 
