@@ -659,7 +659,7 @@ export function PositionsGrid({
                   )}
                   {onSendToWorkspace && (
                     <Button variant="ghost" size="sm" onClick={async () => {
-                      const signed = await urlSigningService.getSignedUrl(canon.output_url, 'workspace-temp' as any);
+                      const signed = await urlSigningService.getSignedUrl(canon.output_url, 'reference_images');
                       onSendToWorkspace(signed);
                       setLightboxOpen(false);
                     }} className="gap-1.5 text-white/70 hover:text-white hover:bg-white/10">
