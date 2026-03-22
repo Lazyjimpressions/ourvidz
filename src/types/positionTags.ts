@@ -21,17 +21,13 @@ export const POSITION_TAG_GROUPS = {
     label: 'Body',
     tags: ['standing', 'sitting', 'lying', 'kneeling', 'leaning', 'crouching'],
   },
-  interaction: {
-    label: 'Interaction',
-    tags: ['hugging', 'holding-hands', 'back-to-back', 'carrying', 'piggyback', 'hand-on-shoulder', 'arm-around-waist'],
+  action: {
+    label: 'Action',
+    tags: ['hugging', 'holding-hands', 'carrying', 'piggyback', 'dancing', 'fighting', 'running', 'massage', 'feeding', 'lifting'],
   },
   intimate: {
     label: 'Intimate',
     tags: ['kissing', 'kissing-deeply', 'cuddling', 'spooning', 'lap-sitting', 'forehead-touch', 'nuzzling', 'embracing'],
-  },
-  action: {
-    label: 'Action',
-    tags: ['dancing', 'fighting', 'running', 'jumping', 'reaching', 'massage', 'feeding', 'brushing-hair', 'lifting'],
   },
   mood: {
     label: 'Mood',

@@ -204,6 +204,7 @@ function CanonThumbnail({
   const [editingTags, setEditingTags] = useState(false);
   const [localTags, setLocalTags] = useState<string[]>(canon.tags || []);
   const [tagInput, setTagInput] = useState('');
+  const [sectionTagInputs, setSectionTagInputs] = useState<Record<string, string>>({});
 
   const handleSendToWorkspace = () => {
     if (signedUrl && onSendToWorkspace) {
@@ -282,31 +283,56 @@ function CanonThumbnail({
               <Tag className="w-3 h-3" />
             </button>
           </PopoverTrigger>
-          <PopoverContent className="w-56 p-2 space-y-2" align="start" onClick={(e) => e.stopPropagation()}>
-            {Object.entries(POSITION_TAG_GROUPS).map(([groupKey, group]) => (
-              <Collapsible key={groupKey} defaultOpen={groupKey === 'composition' || groupKey === 'framing'}>
-                <CollapsibleTrigger className="flex items-center gap-1 w-full text-[9px] font-medium text-muted-foreground uppercase tracking-wider py-0.5 hover:text-foreground">
-                  <ChevronDown className="w-2.5 h-2.5 transition-transform [&[data-state=open]]:rotate-180" />
-                  {group.label}
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <div className="flex flex-wrap gap-1 py-0.5">
-                    {group.tags.map(tag => (
-                      <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
-                    ))}
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            ))}
-            <div className="flex gap-1">
-              <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTag()} placeholder="Custom tag..." className="h-6 text-xs" />
-              <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={handleAddTag}><Plus className="w-3 h-3" /></Button>
-            </div>
+          <PopoverContent className="w-60 p-2 space-y-2 max-h-80 overflow-y-auto" align="start" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const normalizedType = normalizeOutputType(canon.output_type);
+              const groups = TAG_GROUPS_BY_OUTPUT_TYPE[normalizedType] || POSITION_TAG_GROUPS;
+              return Object.entries(groups).map(([groupKey, group]) => {
+                const sectionInput = sectionTagInputs[groupKey] || '';
+                const handleSectionAdd = () => {
+                  const tag = sectionInput.trim().toLowerCase();
+                  if (tag && !localTags.includes(tag)) {
+                    const newTags = [...localTags, tag];
+                    setLocalTags(newTags);
+                    onUpdateTags(canon.id, newTags);
+                  }
+                  setSectionTagInputs(prev => ({ ...prev, [groupKey]: '' }));
+                };
+                return (
+                  <Collapsible key={groupKey} defaultOpen={groupKey === 'composition' || groupKey === 'framing' || groupKey === 'clothingStyle' || groupKey === 'setting'}>
+                    <CollapsibleTrigger className="flex items-center gap-1 w-full text-[9px] font-medium text-muted-foreground uppercase tracking-wider py-0.5 hover:text-foreground">
+                      <ChevronDown className="w-2.5 h-2.5 transition-transform [&[data-state=open]]:rotate-180" />
+                      {group.label}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="flex flex-wrap gap-1 py-0.5">
+                        {group.tags.map(tag => (
+                          <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
+                        ))}
+                      </div>
+                      <div className="flex gap-1 mt-0.5">
+                        <Input
+                          value={sectionInput}
+                          onChange={(e) => setSectionTagInputs(prev => ({ ...prev, [groupKey]: e.target.value }))}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSectionAdd()}
+                          placeholder={`+ custom ${group.label.toLowerCase()}…`}
+                          className="h-5 text-[10px] px-1.5"
+                        />
+                        <Button size="sm" variant="ghost" className="h-5 px-1 min-w-0" onClick={handleSectionAdd}><Plus className="w-2.5 h-2.5" /></Button>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              });
+            })()}
             {localTags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {localTags.map(tag => (
-                  <Badge key={tag} variant="secondary" className="text-[9px] cursor-pointer hover:bg-destructive/20" onClick={() => handleRemoveTag(tag)}>{tag} ×</Badge>
-                ))}
+              <div className="pt-1 border-t border-border">
+                <span className="text-[9px] text-muted-foreground font-medium">Active tags</span>
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {localTags.map(tag => (
+                    <Badge key={tag} variant="secondary" className="text-[9px] cursor-pointer hover:bg-destructive/20" onClick={() => handleRemoveTag(tag)}>{tag} ×</Badge>
+                  ))}
+                </div>
               </div>
             )}
           </PopoverContent>
