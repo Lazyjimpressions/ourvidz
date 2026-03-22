@@ -669,6 +669,52 @@ export function PositionsGrid({
                       Send to Workspace
                     </Button>
                   )}
+                  <Button variant="ghost" size="sm" onClick={async () => {
+                    try {
+                      // Download from reference_images and re-upload to user-library
+                      const { data: downloadData, error: dlError } = await supabase.storage
+                        .from('reference_images')
+                        .download(canon.output_url);
+                      if (dlError || !downloadData) throw dlError || new Error('Download failed');
+
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (!user) throw new Error('Not authenticated');
+                      
+                      const fileName = canon.output_url.split('/').pop() || 'canon_asset.png';
+                      const destPath = `${user.id}/canon-exports/${Date.now()}_${fileName}`;
+                      
+                      const { error: uploadError } = await supabase.storage
+                        .from('user-library')
+                        .upload(destPath, downloadData, { contentType: downloadData.type || 'image/png' });
+                      if (uploadError) throw uploadError;
+
+                      // Insert user_library row
+                      const roleTags = canon.tags?.filter((t: string) => t.startsWith('role:')) || [`role:${canon.output_type}`];
+                      const { error: insertError } = await supabase
+                        .from('user_library')
+                        .insert({
+                          user_id: user.id,
+                          asset_type: 'image',
+                          storage_path: destPath,
+                          file_size_bytes: downloadData.size || 0,
+                          mime_type: downloadData.type || 'image/png',
+                          original_prompt: canon.label || `${characterName || 'Character'} ${canon.output_type}`,
+                          model_used: 'canon_export',
+                          custom_title: `${characterName || 'Character'} - ${canon.label || canon.output_type}`,
+                          tags: roleTags,
+                          content_category: canon.output_type === 'portrait' ? 'portrait' : 'general',
+                        });
+                      if (insertError) throw insertError;
+
+                      toast({ title: 'Saved to Library' });
+                    } catch (err) {
+                      console.error('❌ Save to library failed:', err);
+                      toast({ title: 'Failed to save to library', variant: 'destructive' });
+                    }
+                  }} className="gap-1.5 text-white/70 hover:text-white hover:bg-white/10">
+                    <Save className="w-4 h-4" />
+                    Save to Library
+                  </Button>
                   <div className="ml-auto">
                     <Button variant="ghost" size="icon" onClick={() => {
                       onDelete(canon.id);
