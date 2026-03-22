@@ -1,11 +1,11 @@
 # Workspace Reference Image/I2I UX Specification
 
-**Document Version:** 1.0
-**Last Updated:** January 10, 2026
+**Document Version:** 2.0
+**Last Updated:** 2026-03-22
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/workspace`
-**Component:** `SimplePromptInput.tsx`, `MobileSimplePromptInput.tsx`
+**Component:** `MobileSimplePromptInput.tsx`, `MobileSettingsSheet.tsx`
 
 ---
 
@@ -365,10 +365,66 @@ Reference image selection and I2I (Image-to-Image) workflow specification, inclu
 
 ---
 
+---
+
+## Video Multi-Reference Mode (Character-Swap)
+
+**Added:** 2026-03-22
+
+For video generation, the workspace supports a multi-reference mode that enables character-swap workflows using the LTX Video 13B MultiCondition endpoint.
+
+### Overview
+
+Multi-reference video mode allows users to:
+
+- Provide a single identity image anchored at multiple keyframes
+- Use a motion reference video for choreography and camera movement
+- Control per-anchor strength values independently
+
+### Keyframe Slot System
+
+5 slots map to positions along the video timeline:
+
+| Slot | Label | Frame Position | Character-Swap |
+|------|-------|----------------|----------------|
+| 0 | Start | Frame 0 | Active |
+| 1 | Key 2 | ~25% | Greyed out |
+| 2 | Key 3 | Midpoint | Active |
+| 3 | Key 4 | ~75% | Greyed out |
+| 4 | End | Last frame | Active |
+
+### Character-Swap Mode Detection
+
+Automatically detected when:
+
+1. Video mode is active
+2. Motion reference video is set
+3. At least one keyframe image is set
+
+### Strength Configuration
+
+- **Start anchor (slot 0):** Typically 1.0 (strong identity lock)
+- **Mid anchor (slot 2):** Typically 0.75 (moderate reinforcement)
+- **End anchor (slot 4):** Typically 0.5 (allow motion influence)
+- **Motion video strength:** Default 0.55
+
+### Motion Conditioning Options
+
+| Control | Values | Effect |
+|---------|--------|--------|
+| Conditioning Type | default, identity, pose, depth | How motion is extracted |
+| Preprocess | true/false | Apply pose estimation |
+| Motion Strength | 0.0-1.0 | Motion reference influence |
+
+**Full specification:** See [VIDEO_MULTI_REF.md](./VIDEO_MULTI_REF.md)
+
+---
+
 ## Related Docs
 
 - [PURPOSE.md](./PURPOSE.md) - Business requirements
 - [UX_GENERATION.md](./UX_GENERATION.md) - Generation workflow spec
 - [UX_CONTROLS.md](./UX_CONTROLS.md) - Control panel spec
-- [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - **NEW:** Comprehensive Seedream I2I reference image guide (v4 Edit, v4.5 Edit, exact copy mode, NSFW enhancement)
+- [VIDEO_MULTI_REF.md](./VIDEO_MULTI_REF.md) - Video multi-reference/character-swap specification
+- [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - Seedream I2I reference guide
 - [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md) - Implementation status

@@ -608,7 +608,7 @@ const handleReferenceImageRemove = (type: 'single' | 'start' | 'end') => {
 ## Related Documentation
 
 - `docs/01-PAGES/01-WORKSPACE/PURPOSE.md` - Workspace overview
-- `docs/01-PAGES/01-WORKSPACE/UX_CONTROLS.md` - UI controls specification
+- `docs/01-PAGES/01-WORKSPACE/UX_SPEC.md` - Unified UX specification
 - `docs/01-PAGES/01-WORKSPACE/DEVELOPMENT_STATUS.md` - Implementation status
 - `docs/09-REFERENCE/Seedream_model_guide.md` - Seedream model reference
 
@@ -616,8 +616,7 @@ const handleReferenceImageRemove = (type: 'single' | 'start' | 'end') => {
 
 ## Code References
 
-- `src/components/workspace/SimplePromptInput.tsx` - Desktop reference image UI
-- `src/components/workspace/MobileSimplePromptInput.tsx` - Mobile reference image UI
+- `src/components/workspace/MobileSimplePromptInput.tsx` - Reference image UI
 - `src/hooks/useLibraryFirstWorkspace.ts` - Reference image state management
 - `supabase/functions/fal-image/index.ts` - Seedream I2I API handling
 - `supabase/functions/enhance-prompt/index.ts` - Prompt enhancement logic

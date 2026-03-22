@@ -1,6 +1,6 @@
 # Workspace Development Status - Consolidated
 
-**Last Updated:** January 10, 2026 (Updated with dynamic model loading and model control implementation details)
+**Last Updated:** 2026-03-22
 **Status:** **95% Complete - Production Ready**
 **Purpose:** Single source of truth for workspace development status, implementation details, and next steps
 
@@ -11,7 +11,7 @@
 ### Production Ready (95% Complete)
 
 **Core Features:**
-- Responsive workspace pages: SimplifiedWorkspace.tsx, MobileSimplifiedWorkspace.tsx
+- Responsive workspace pages: MobileSimplifiedWorkspace.tsx, MobileMobileSimplifiedWorkspace.tsx
 - Generation submission with realtime staging
 - Grid display with preview (SharedLightbox)
 - Save to Library / Discard workflow
@@ -157,8 +157,8 @@ The workspace feature uses a health check system to conditionally show local SDX
 ### Pages (2 files)
 ```
 src/pages/
-├── SimplifiedWorkspace.tsx (633 lines) - Desktop workspace
-└── MobileSimplifiedWorkspace.tsx (553 lines) - Mobile workspace
+├── MobileSimplifiedWorkspace.tsx (633 lines) - Desktop workspace
+└── MobileMobileSimplifiedWorkspace.tsx (553 lines) - Mobile workspace
 ```
 
 ### Components (3 key files)
@@ -428,10 +428,9 @@ supabase/functions/
 ## Related Documentation
 
 - **PRD:** [PURPOSE.md](./PURPOSE.md) - Business requirements and technical overview
-- **UX Generation:** [UX_GENERATION.md](./UX_GENERATION.md) - Generation workflow specifications
-- **UX Controls:** [UX_CONTROLS.md](./UX_CONTROLS.md) - Control panel specifications
-- **UX Reference:** [UX_REFERENCE.md](./UX_REFERENCE.md) - Reference image/I2I workflow specifications
-- **Seedream I2I:** [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - **NEW:** Comprehensive Seedream I2I reference image guide (v4 Edit, v4.5 Edit, exact copy mode, NSFW enhancement)
+- **UX Spec:** [UX_SPEC.md](./UX_SPEC.md) - Unified UX specification (generation, controls, reference/I2I)
+- **Video Multi-Ref:** [VIDEO_MULTI_REF.md](./VIDEO_MULTI_REF.md) - Character-swap/multi-reference specification
+- **Seedream I2I:** [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - Seedream I2I reference image guide
 - **Prompting System:** [docs/03-SYSTEMS/PROMPTING_SYSTEM.md](../03-SYSTEMS/PROMPTING_SYSTEM.md) - Model routing details
 
 ---

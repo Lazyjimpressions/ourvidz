@@ -1,7 +1,7 @@
 # fal.ai — LTX Video 13B (Distilled) Reference
 
-**Last Updated:** February 15, 2026  
-**Status:** Authoritative Reference  
+**Last Updated:** 2026-03-22
+**Status:** Authoritative Reference
 **Scope:** LTX Video-0.9.7 13B Distilled endpoints (T2V, I2V, Extend, MultiCondition) via fal.ai API
 
 ---
@@ -562,6 +562,49 @@ LTX Video 13B endpoints do **not** use the same parameters as WAN 2.1 I2V or ima
 ### 5) T2V establishing shot
 
 > `Wide establishing shot of a quiet hallway with warm tungsten lighting and soft shadows. Camera: slow push-in. Mood: cinematic, calm. No jitter, no sudden cut.`
+
+---
+
+## OurVidz Character-Swap Implementation (March 2026)
+
+The workspace implements a **character-swap workflow** using MultiCondition that allows users to replace the person in a dance/motion video while preserving choreography.
+
+### How It Works
+
+1. User provides a single identity image (canonical keyframe)
+2. User provides a motion reference video (choreography source)
+3. System creates 3 anchors from the image at frames [0, mid, end]
+4. System combines anchors with motion reference video
+
+### API Payload Structure
+
+```json
+{
+  "images": [
+    { "image_url": "identity.png", "start_frame_num": 0, "strength": 1.0 },
+    { "image_url": "identity.png", "start_frame_num": 60, "strength": 0.75 },
+    { "image_url": "identity.png", "start_frame_num": 120, "strength": 0.5 }
+  ],
+  "videos": [
+    { "video_url": "motion.mp4", "start_frame_num": 0, "strength": 0.55 }
+  ]
+}
+```
+
+### Key Implementation Details
+
+- **Frame field:** Must use `start_frame_num` (not `start_frame_number`)
+- **Strength mapping:** UI slots [0, 2, 4] map to anchors [start, mid, end]
+- **Motion strength:** Default 0.55 balances choreography fidelity vs. appearance bleed
+- **Conditioning options:** `conditioning_type` (pose/depth/identity) and `preprocess` toggle
+
+### Implementation Files
+
+- `useLibraryFirstWorkspace.ts` - Frame calculations, strength mapping
+- `MobileSettingsSheet.tsx` - Keyframe slot UI, conditioning controls
+- `fal-image/index.ts` - API payload construction
+
+**Full specification:** See [VIDEO_MULTI_REF.md](../../01-PAGES/01-WORKSPACE/VIDEO_MULTI_REF.md)
 
 ---
 

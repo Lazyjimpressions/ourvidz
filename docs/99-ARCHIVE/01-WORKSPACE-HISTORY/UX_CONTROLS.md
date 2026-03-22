@@ -1,11 +1,11 @@
 # Workspace Controls UX Specification
 
 **Document Version:** 1.0
-**Last Updated:** January 10, 2026 (Updated with model control applicability and dynamic model loading details)
+**Last Updated:** 2026-03-22
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/workspace`
-**Component:** `SimplePromptInput.tsx`, `MobileSimplePromptInput.tsx`
+**Component:** `MobileSimplePromptInput.tsx`, `MobileMobileSimplePromptInput.tsx`
 
 ---
 

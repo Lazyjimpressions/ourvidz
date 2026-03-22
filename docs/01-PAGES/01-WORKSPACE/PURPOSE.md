@@ -1,6 +1,6 @@
 ﻿# Workspace Purpose & PRD (Product Requirements Document)
 
-**Last Updated:** January 10, 2026 (Updated with model control applicability and dynamic model loading details)
+**Last Updated:** 2026-03-22
 **Status:** ✅ **Production Ready - 95% Complete**
 **Priority:** **HIGH** - Core MVP Feature
 
@@ -447,6 +447,13 @@ const modelInput = {
 
 ---
 
-**Status**: PRD updated January 2026. 95% complete, production ready. This document serves as the strategic foundation for all workspace development decisions and success metrics.
+**Status**: PRD updated March 2026. 95% complete, production ready. This document serves as the strategic foundation for all workspace development decisions and success metrics.
 
 **Document Purpose**: This is the definitive Product Requirements Document (PRD) that defines the business goals, user requirements, and success criteria for the workspace feature. It serves as the strategic foundation for all development decisions.
+
+## Related Docs
+
+- [UX_SPEC.md](./UX_SPEC.md) - Unified UX specification
+- [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md) - Implementation status
+- [VIDEO_MULTI_REF.md](./VIDEO_MULTI_REF.md) - Video multi-reference specification
+- [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - Seedream I2I guide

@@ -1,7 +1,7 @@
 # Workspace Generation UX Specification
 
 **Document Version:** 1.0
-**Last Updated:** January 10, 2026 (Updated with default model selection logic and mobile vs desktop differences)
+**Last Updated:** 2026-03-22
 **Status:** Active
 **Author:** AI Assistant
 **Page:** `/workspace`
@@ -45,8 +45,8 @@ Generation workflow specification for workspace image and video generation with 
 |-----------|---------|----------|
 | `SimplifiedWorkspace` | Desktop workspace page | `src/pages/SimplifiedWorkspace.tsx` |
 | `MobileSimplifiedWorkspace` | Mobile workspace page | `src/pages/MobileSimplifiedWorkspace.tsx` |
-| `SimplePromptInput` | Desktop prompt input | `src/components/workspace/SimplePromptInput.tsx` |
-| `MobileSimplePromptInput` | Mobile prompt input | `src/components/workspace/MobileSimplePromptInput.tsx` |
+| `SimplePromptInput` | Desktop prompt input | `src/components/workspace/MobileSimplePromptInput.tsx` |
+| `MobileSimplePromptInput` | Mobile prompt input | `src/components/workspace/MobileMobileSimplePromptInput.tsx` |
 | `SharedGrid` | Unified grid for workspace | `src/components/shared/SharedGrid.tsx` |
 | `SharedLightbox` | Unified image/video preview | `src/components/shared/SharedLightbox.tsx` |
 
