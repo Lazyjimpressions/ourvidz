@@ -56,7 +56,7 @@ const CONTEXT_HINT_DEFAULTS: Record<PickerContextHint, { source: SourceTab; cate
   pose:     { source: 'characters', category: 'position' },
   outfit:   { source: 'characters', category: 'clothing' },
   scene:    { source: 'characters', category: 'scene' },
-  style:    { source: 'characters', category: 'all' },
+  style:    { source: 'characters', category: 'style' },
   general:  { source: 'library',    category: 'all' },
 };
 
