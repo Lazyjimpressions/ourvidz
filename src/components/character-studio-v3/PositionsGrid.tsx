@@ -558,7 +558,7 @@ export function PositionsGrid({
 
       {/* Filter bar */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        {OUTPUT_TYPES.map(type => (
+        {POSITIONS_GRID_FILTERS.map(type => (
           <PillFilter key={type} active={typeFilter === type} onClick={() => setTypeFilter(type)} size="sm">
             {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
           </PillFilter>
