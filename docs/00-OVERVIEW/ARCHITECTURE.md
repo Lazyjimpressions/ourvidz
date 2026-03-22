@@ -498,6 +498,12 @@ SUPABASE_ANON_KEY=your_anon_key
 
 ---
 
-**For API details, see [03-API.md](./03-API.md)**  
-**For deployment info, see [04-DEPLOYMENT.md](./04-DEPLOYMENT.md)**  
-**For workspace details, see [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md)** 
+## Related Documentation
+
+- [ENVIRONMENT.md](./ENVIRONMENT.md) - Infrastructure snapshot and database tables
+- [AI_CONTEXT.md](./AI_CONTEXT.md) - Quick AI session context
+- [DOCUMENTATION_GUIDE.md](./DOCUMENTATION_GUIDE.md) - Documentation structure and governance
+- [PRD.md](./PRD.md) - Product requirements and vision
+- [01-WORKSPACE/PURPOSE.md](../01-PAGES/01-WORKSPACE/PURPOSE.md) - Workspace page requirements
+- [01-WORKSPACE/UX_SPEC.md](../01-PAGES/01-WORKSPACE/UX_SPEC.md) - Workspace UX specification
+ 
