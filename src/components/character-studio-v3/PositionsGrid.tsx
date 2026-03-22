@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users, Save } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users, Save, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { AssetTile } from '@/components/shared/AssetTile';
@@ -19,11 +19,14 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-
-const OUTPUT_TYPES = ['all', 'pose', 'outfit', 'style', 'position'] as const;
-type OutputTypeFilter = typeof OUTPUT_TYPES[number];
-
-const COMMON_TAGS = ['front', 'side', 'rear', '3/4', 'full-body', 'half-body', 'close-up', 'casual', 'formal', 'action', 'seated', 'standing'];
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  POSITION_TAG_GROUPS,
+  POSITIONS_GRID_FILTERS,
+  UNIFIED_OUTPUT_TYPES,
+  normalizeOutputType,
+  type PositionsGridFilter,
+} from '@/types/positionTags';
 
 const POSE_KEY_ORDER = ['front_neutral', 'side_left', 'side_right', 'rear', 'three_quarter', 'bust'];
 
