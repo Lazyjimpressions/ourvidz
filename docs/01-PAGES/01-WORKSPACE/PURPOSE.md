@@ -456,4 +456,7 @@ const modelInput = {
 - [UX_SPEC.md](./UX_SPEC.md) - Unified UX specification
 - [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md) - Implementation status
 - [VIDEO_MULTI_REF.md](./VIDEO_MULTI_REF.md) - Video multi-reference specification
-- [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - Seedream I2I guide
+
+### Model Reference Guides
+
+- [SEEDREAM_I2I.md](../../09-REFERENCE/SEEDREAM/SEEDREAM_I2I.md) - Seedream I2I guide

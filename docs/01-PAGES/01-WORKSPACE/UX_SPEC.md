@@ -504,4 +504,8 @@ Automatically detected when:
 - [PURPOSE.md](./PURPOSE.md) - Business requirements
 - [DEVELOPMENT_STATUS.md](./DEVELOPMENT_STATUS.md) - Implementation status
 - [VIDEO_MULTI_REF.md](./VIDEO_MULTI_REF.md) - Video multi-reference/character-swap specification
-- [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - Seedream I2I reference guide
+
+### Model Reference Guides
+
+- [SEEDREAM_I2I.md](../../09-REFERENCE/SEEDREAM/SEEDREAM_I2I.md) - Seedream I2I reference guide
+- [LTX_VIDEO_13B_FAL_AI_GUIDE.md](../../09-REFERENCE/LTX/LTX_VIDEO_13B_FAL_AI_GUIDE.md) - LTX video model reference

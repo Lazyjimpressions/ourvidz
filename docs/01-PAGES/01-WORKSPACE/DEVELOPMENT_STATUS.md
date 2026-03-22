@@ -430,8 +430,8 @@ supabase/functions/
 - **PRD:** [PURPOSE.md](./PURPOSE.md) - Business requirements and technical overview
 - **UX Spec:** [UX_SPEC.md](./UX_SPEC.md) - Unified UX specification (generation, controls, reference/I2I)
 - **Video Multi-Ref:** [VIDEO_MULTI_REF.md](./VIDEO_MULTI_REF.md) - Character-swap/multi-reference specification
-- **Seedream I2I:** [SEEDREAM_I2I.md](./SEEDREAM_I2I.md) - Seedream I2I reference image guide
-- **Prompting System:** [docs/03-SYSTEMS/PROMPTING_SYSTEM.md](../03-SYSTEMS/PROMPTING_SYSTEM.md) - Model routing details
+- **Seedream I2I:** [SEEDREAM_I2I.md](../../09-REFERENCE/SEEDREAM/SEEDREAM_I2I.md) - Seedream I2I reference image guide
+- **Prompting System:** [PROMPTING_SYSTEM.md](../../03-SYSTEMS/PROMPTING_SYSTEM.md) - Model routing details
 
 ---
 
