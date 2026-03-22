@@ -461,7 +461,7 @@ export function PositionsGrid({
     await onUpload(pendingFile, newOutputType, newTags, newLabel || undefined);
     setPendingFile(null);
     setUploadPopover(false);
-    setNewOutputType('pose');
+    setNewOutputType('position');
     setNewTags([]);
     setNewLabel('');
   };
