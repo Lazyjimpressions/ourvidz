@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Save, ChevronRight, Trash2, Download, Copy, Shuffle } from 'lucide-react';
+import { Save, ChevronRight, Trash2, Download, Copy, Shuffle, BookmarkPlus } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import { RoleTagButton } from './RoleTagButton';
 import type { SlotRole } from '@/types/slotRoles';
@@ -55,8 +55,9 @@ export const LibraryAssetActions: React.FC<{
   onDownload?: () => void;
   onUseAsReference?: () => void;
   onRoleTagToggle?: (role: SlotRole) => void;
+  onSaveToCanon?: () => void;
   tags?: string[];
-}> = ({ asset, onDelete, onDownload, onUseAsReference, onRoleTagToggle, tags }) => (
+}> = ({ asset, onDelete, onDownload, onUseAsReference, onRoleTagToggle, onSaveToCanon, tags }) => (
   <>
     {onUseAsReference && (
       <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Use as Reference">
@@ -70,6 +71,11 @@ export const LibraryAssetActions: React.FC<{
     )}
     {onRoleTagToggle && tags && (
       <RoleTagButton tags={tags} onToggle={onRoleTagToggle} />
+    )}
+    {onSaveToCanon && (
+      <Button size="sm" variant="outline" onClick={onSaveToCanon} className="h-7 w-7 p-0" title="Save to Character Canon">
+        <BookmarkPlus className="w-3 h-3" />
+      </Button>
     )}
     {onDelete && (
       <Button size="sm" variant="outline" onClick={onDelete} className="h-7 w-7 p-0" title="Delete">

@@ -690,7 +690,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   };
 
   // Handle image selection from the picker dialog
-  const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace' | 'characters') => {
+  const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace' | 'characters', metadata?: {
+    source: 'character_canon';
+    characterId: string;
+    outputType: string;
+    tags: string[];
+  }) => {
     const index = pickerSlotIndex;
     if (index === 0) {
       onReferenceImageUrlSet?.(imageUrl, 'single');
@@ -703,7 +708,25 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       newAdditional[additionalIndex] = imageUrl;
       onAdditionalRefsChange?.(newAdditional);
     }
-  }, [pickerSlotIndex, onReferenceImageUrlSet, onReferenceImage2UrlSet, additionalRefUrls, onAdditionalRefsChange]);
+
+    // Auto-assign role tag when a canon asset is selected
+    if (metadata?.source === 'character_canon' && metadata.outputType && onSlotRoleChange) {
+      const roleMap: Record<string, SlotRole> = {
+        portrait: 'character',
+        character: 'character',
+        position: 'position',
+        pose: 'position',
+        clothing: 'clothing',
+        outfit: 'clothing',
+        scene: 'scene',
+        style: 'style',
+      };
+      const mappedRole = roleMap[metadata.outputType];
+      if (mappedRole) {
+        onSlotRoleChange(index, mappedRole);
+      }
+    }
+  }, [pickerSlotIndex, onReferenceImageUrlSet, onReferenceImage2UrlSet, additionalRefUrls, onAdditionalRefsChange, onSlotRoleChange]);
 
   // Handle remove for a specific slot index
   const handleRemoveSlot = (index: number) => {

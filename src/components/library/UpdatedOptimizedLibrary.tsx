@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SaveToCanonModal } from '@/components/shared/SaveToCanonModal';
 
 export const UpdatedOptimizedLibrary: React.FC = () => {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [lastLightboxClose, setLastLightboxClose] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'all' | 'characters' | 'scenes' | 'videos'>('all');
+  const [saveToCanonPath, setSaveToCanonPath] = useState<string | null>(null);
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -498,10 +500,24 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 onDownload={() => handleDownload(asset as any)}
                 onUseAsReference={() => handleUseAsReference(asset as any)}
                 onRoleTagToggle={(role) => handleRoleTagToggle(asset, role)}
+                onSaveToCanon={() => {
+                  const storagePath = (asset as any).originalPath;
+                  if (storagePath) setSaveToCanonPath(storagePath);
+                  else toast.error('No storage path available for this asset');
+                }}
                 tags={(asset as any).metadata?.tags || []}
               />
             );
           }}
+        />
+      )}
+      
+      {/* Save to Canon Modal */}
+      {saveToCanonPath && (
+        <SaveToCanonModal
+          isOpen={true}
+          onClose={() => setSaveToCanonPath(null)}
+          storagePath={saveToCanonPath}
         />
       )}
     </>
