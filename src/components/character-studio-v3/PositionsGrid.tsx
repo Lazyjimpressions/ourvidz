@@ -16,7 +16,7 @@ import { UnifiedLightbox, LightboxItem } from '@/components/shared/UnifiedLightb
 import { useSignedUrl } from '@/hooks/useSignedUrl';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
