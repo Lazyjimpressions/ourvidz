@@ -1,78 +1,87 @@
 
 
+## Updated Plan: Unified Position Taxonomy with Interaction Tags
 
-## Character Poses as Dual-Purpose Production Assets
+### Core Decision: Tags, Not Types
 
-### Completed: Phase 1 — Surface Canon Assets in ImagePickerDialog
+Intimate interactions (kissing deeply, massage) and action poses (fighting, dancing) are all **positions** — they describe body arrangement and composition. They should stay as `output_type: 'position'` and use **tags** for granularity.
 
-**Changes made:**
+Why tags over separate types:
+- The workspace slot is "Position" — all body arrangements flow through one slot
+- Tags are combinatorial: `duo` + `kissing` + `close-up` vs a flat type that can only be one thing
+- Users can create custom tags without schema changes
+- The prompt builder already says "in the position from Figure N" regardless of whether it's a hug or a massage
 
-1. **`src/lib/services/AssetMappers.ts`** — Added `toSharedFromCanon()` mapper
-   - Converts `character_canon` rows (with joined `characters` data) to `SharedAsset`
-   - Maps `output_url` → `originalPath`, sets bucket to `reference_images`
-   - Builds title from character name + label/output_type
+### Proposed Tag Structure
 
-2. **`src/components/storyboard/ImagePickerDialog.tsx`** — Added "Characters" source tab
-   - Three-tab source toggle: Workspace | Library | Characters
-   - Character selector (pill filters) to pick which character's canon to browse
-   - Category filter tabs (All, Characters, Positions, Scenes, Outfits) mapped to `output_type`
-   - Signs against `reference_images` bucket for canon assets
-   - Passes enriched metadata (`characterId`, `outputType`, `tags`) in `onSelect` callback
-   - Output type badge on hover overlay for canon assets
+Group tags into categories with a structured picker UI (not a flat list):
 
-3. **`src/pages/StoryboardEditor.tsx`** — Fixed type compatibility
-   - Maps `'characters'` source to `'library'` for storyboard's reference_image_source
+```text
+Composition     solo, duo, group
+Framing         full-body, half-body, close-up, bust, overhead
+Angle           front, side, rear, 3/4, low-angle, birds-eye
+Body            standing, sitting, lying, kneeling, leaning, crouching
 
-### Completed: Phase 2 — Smart Context Filtering
+Interaction     hugging, holding-hands, back-to-back, carrying,
+                piggyback, hand-on-shoulder, arm-around-waist
 
-**Changes made:**
+Intimate        kissing, kissing-deeply, cuddling, spooning,
+                lap-sitting, forehead-touch, nuzzling, embracing
 
-1. **`src/components/storyboard/ImagePickerDialog.tsx`** — Added `contextHint` prop
-   - New `PickerContextHint` type: `'identity' | 'pose' | 'outfit' | 'scene' | 'style' | 'general'`
-   - `CONTEXT_HINT_DEFAULTS` map auto-selects source tab + category filter on open
-   - `contextHint` takes priority over `source`/`filterTag` props
-   - Merged two separate `useEffect`s into one for source/filter sync
+Action          dancing, fighting, running, jumping, reaching,
+                massage, feeding, brushing-hair, lifting
 
-2. **`src/components/workspace/MobileSimplePromptInput.tsx`** — Wired `contextHint` to slot mapping
-   - `SLOT_CONTEXT_HINTS` array maps slot indices → context hints: identity, identity, pose, scene, outfit
-   - `handlePickerSelect` now accepts `'characters'` source type
-   - Picker passes `contextHint` prop so slots auto-navigate to Characters tab
+Mood            tender, playful, passionate, dramatic, casual, intense
+```
 
-3. **`src/pages/CharacterStudioV3.tsx`** — Added `contextHint="identity"` to both ImagePickerDialog instances
+**Why "Intimate" as a separate group**: Users generating romantic/couple content need to quickly find these without scanning through generic interactions. It also allows the UI to gate or label this section clearly.
 
-4. **`src/pages/CreateCharacter.tsx`** — Added `contextHint="identity"` to character portrait picker
+### How It Works in Practice
 
-### Completed: Phase 3 — Bidirectional Canon ↔ Library Bridge
+1. User generates or uploads a position reference of two people kissing
+2. Tags it: `duo`, `kissing-deeply`, `close-up`, `passionate`
+3. In workspace, picks this from Characters tab → Position filter
+4. Auto-assigns `role:position` slot
+5. Prompt builder uses it as "position from Figure N" — the tags inform the user's text prompt, not the system prompt
 
-**Changes made:**
+### Tag Picker UI Change
 
-1. **`src/components/character-studio-v3/PositionsGrid.tsx`** — Fixed bucket + added Save to Library
-   - Fixed "Send to Workspace" to sign against `reference_images` bucket (was `workspace-temp`)
-   - Added "Save to Library" button: downloads from `reference_images`, uploads to `user-library`, creates `user_library` row with role tags and character name
+Replace the current flat `COMMON_TAGS` chip list in PositionsGrid with a **grouped tag picker**:
+- Collapsible sections by category (Composition, Interaction, Intimate, Action, etc.)
+- Multi-select within and across groups
+- Free-text custom tag input at the bottom
+- Tags stored as flat array in DB (e.g., `['duo', 'kissing-deeply', 'close-up']`) — grouping is UI-only
 
-2. **`src/components/shared/SaveToCanonModal.tsx`** — New modal component
-   - Fetches user's characters list
-   - Character selector + output_type dropdown (portrait, position, clothing, scene, style)
-   - Optional label field
-   - Downloads from `user-library`, uploads to `reference_images`, inserts `character_canon` row
-   - Cross-bucket copy via download+upload fallback
+### Implementation Changes
 
-3. **`src/components/shared/LightboxActions.tsx`** — Added `onSaveToCanon` prop to `LibraryAssetActions`
-   - New BookmarkPlus icon button for saving library assets to character canon
+**1. Define tag groups** — New constant in `src/types/slotRoles.ts` or a new `src/types/positionTags.ts`:
+```text
+POSITION_TAG_GROUPS = {
+  composition: ['solo', 'duo', 'group'],
+  framing: ['full-body', 'half-body', 'close-up', ...],
+  interaction: ['hugging', 'holding-hands', ...],
+  intimate: ['kissing', 'kissing-deeply', 'cuddling', ...],
+  action: ['dancing', 'fighting', 'massage', ...],
+  mood: ['tender', 'passionate', 'playful', ...],
+}
+```
 
-4. **`src/components/library/UpdatedOptimizedLibrary.tsx`** — Wired Save to Canon
-   - Added `SaveToCanonModal` integration with `saveToCanonPath` state
-   - Library lightbox actions now include "Save to Canon" button
+**2. Update PositionsGrid tag picker** — Replace flat chip list with grouped sections. Each group has a header and toggleable chips. Show intimate group with a subtle label/divider.
 
-5. **`src/components/workspace/MobileSimplePromptInput.tsx`** — Wired metadata → auto-role
-   - `handlePickerSelect` now accepts third `metadata` arg from canon selections
-   - When `metadata.source === 'character_canon'`, auto-assigns matching slot role via `onSlotRoleChange`
-   - Maps outputType to SlotRole: portrait→character, position→position, clothing→clothing, scene→scene, style→style
+**3. Update ImagePickerDialog category filters** — Within the "Position" category on the Characters tab, add sub-filter chips for tag groups so users can narrow by `duo` + `intimate` to find kissing references quickly.
 
-### Remaining: Phase 4 — Polish & Enrichment
+**4. Unify output_type values** (from previous audit):
+- Merge `pose` → `position`, `outfit` → `clothing`
+- Runtime normalization for legacy data
+- Rename "Base Positions" → "Base Angles"
 
-**Not yet implemented:**
+**5. No schema changes** — Tags remain a flat `text[]` column. Grouping is purely a UI concern.
 
-1. **Storyboard auto-tag**: Attach `characterId` to clip metadata when canon assets are used as storyboard references
-2. **Picker thumbnail enrichment**: Show character name + output type badge overlay on Characters tab thumbnails
-3. **Deduplication badges**: Show "Already in Library"/"Already in Canon" indicators before duplicate save actions
+### Files to Change
+
+- `src/types/positionTags.ts` — New file: tag group definitions
+- `src/components/character-studio-v3/PositionsGrid.tsx` — Grouped tag picker, unified output_types, rename Base Positions
+- `src/components/storyboard/ImagePickerDialog.tsx` — Sub-filter chips within Position category
+- `src/components/shared/SaveToCanonModal.tsx` — Align output_type labels
+- `src/types/slotRoles.ts` — No changes needed (position role covers all)
+
