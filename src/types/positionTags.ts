@@ -94,6 +94,32 @@ export const TAG_GROUPS_BY_OUTPUT_TYPE: Record<string, Record<string, { label: s
   style: STYLE_TAG_GROUPS,
 };
 
+/**
+ * ALL tag groups organized by category label for the unified tag editor.
+ * Each entry has a `category` (top-level collapsible header) and nested `groups`.
+ */
+export const ALL_TAG_CATEGORIES = [
+  { category: 'Position', key: 'position', groups: POSITION_TAG_GROUPS },
+  { category: 'Clothing', key: 'clothing', groups: CLOTHING_TAG_GROUPS },
+  { category: 'Scene', key: 'scene', groups: SCENE_TAG_GROUPS },
+  { category: 'Style', key: 'style', groups: STYLE_TAG_GROUPS },
+] as const;
+
+/**
+ * Maps each filter value to the full set of tags that should surface an asset
+ * under that filter — regardless of its output_type.
+ */
+export const FILTER_TAG_VOCABULARY: Record<string, string[]> = {
+  character: [
+    ...CHARACTER_TAG_GROUPS.framing.tags,
+    ...CHARACTER_TAG_GROUPS.angle.tags,
+  ],
+  position: Object.values(POSITION_TAG_GROUPS).flatMap(g => [...g.tags]),
+  clothing: Object.values(CLOTHING_TAG_GROUPS).flatMap(g => [...g.tags]),
+  scene: Object.values(SCENE_TAG_GROUPS).flatMap(g => [...g.tags]),
+  style: Object.values(STYLE_TAG_GROUPS).flatMap(g => [...g.tags]),
+};
+
 export type PositionTagGroup = keyof typeof POSITION_TAG_GROUPS;
 
 /** Flat list of all position tags for quick lookups */
