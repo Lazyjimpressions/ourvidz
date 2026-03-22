@@ -36,13 +36,13 @@ const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: 'clothing', label: 'Outfits' },
 ];
 
-/** Maps category filter to character_canon output_type values */
-const CATEGORY_TO_OUTPUT_TYPE: Record<CategoryFilter, string | null> = {
+/** Maps category filter to character_canon output_type values (includes legacy normalization) */
+const CATEGORY_TO_OUTPUT_TYPES: Record<CategoryFilter, string[] | null> = {
   all: null,
-  character: 'portrait',
-  position: 'position',
-  scene: 'scene',
-  clothing: 'clothing',
+  character: ['portrait', 'character'],
+  position: ['position', 'pose'],
+  scene: ['scene'],
+  clothing: ['clothing', 'outfit'],
 };
 
 /** Context hint for auto-selecting tab + category when the picker opens */
