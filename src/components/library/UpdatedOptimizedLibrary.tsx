@@ -223,6 +223,22 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     }
   }, [refetch]);
 
+  const handleDescriptiveTagToggle = useCallback(async (asset: any, tag: string) => {
+    try {
+      const currentTags: string[] = asset.metadata?.tags || [];
+      const newTags = toggleDescriptiveTag(currentTags, tag);
+      await supabase
+        .from('user_library')
+        .update({ tags: newTags })
+        .eq('id', asset.id);
+      toast.success(`Tag updated`);
+      refetch();
+    } catch (err) {
+      console.error('Failed to update tag:', err);
+      toast.error('Failed to update tag');
+    }
+  }, [refetch]);
+
   const handleUseAsReference = useCallback(async (asset: any) => {
     try {
       let referenceUrl: string | null = asset.url || null;
