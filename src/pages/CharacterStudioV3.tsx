@@ -302,7 +302,7 @@ export default function CharacterStudioV3() {
           </div>
         )}
 
-        <ImagePickerDialog isOpen={showImagePicker} onClose={() => setShowImagePicker(false)} onSelect={(url) => { updateCharacter({ reference_image_url: url }); setShowImagePicker(false); }} />
+        <ImagePickerDialog isOpen={showImagePicker} onClose={() => setShowImagePicker(false)} onSelect={(url) => { updateCharacter({ reference_image_url: url }); setShowImagePicker(false); }} contextHint="identity" />
         {savedCharacterId && <SceneGenerationModal isOpen={showSceneModal} onClose={() => { setShowSceneModal(false); setSceneToEdit(null); }} characterId={savedCharacterId} character={{ name: character.name, id: savedCharacterId }} onSceneCreated={() => { setShowSceneModal(false); setSceneToEdit(null); }} />}
       </div>
     );
@@ -367,7 +367,7 @@ export default function CharacterStudioV3() {
       </div>
 
       {/* Modals */}
-      <ImagePickerDialog isOpen={showImagePicker} onClose={() => setShowImagePicker(false)} onSelect={(url) => { updateCharacter({ reference_image_url: url }); setShowImagePicker(false); }} />
+      <ImagePickerDialog isOpen={showImagePicker} onClose={() => setShowImagePicker(false)} onSelect={(url) => { updateCharacter({ reference_image_url: url }); setShowImagePicker(false); }} contextHint="identity" />
       <CharacterTemplateSelector open={showTemplateSelector} onOpenChange={setShowTemplateSelector} onSelectTemplate={handleTemplateSelect} />
       {savedCharacterId && <SceneGenerationModal isOpen={showSceneModal} onClose={() => { setShowSceneModal(false); setSceneToEdit(null); }} characterId={savedCharacterId} character={{ name: character.name, id: savedCharacterId }} onSceneCreated={() => { setShowSceneModal(false); setSceneToEdit(null); }} />}
     </div>

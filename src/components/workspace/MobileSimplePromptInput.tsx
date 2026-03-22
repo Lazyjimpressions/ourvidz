@@ -242,6 +242,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   const SLOT_FILTER_TAGS = ['character', 'character', 'position', 'scene', 'clothing'] as const;
   const pickerFilterTag = SLOT_FILTER_TAGS[pickerSlotIndex] || undefined;
 
+  // Map slot index to contextHint for smart tab/category selection
+  const SLOT_CONTEXT_HINTS = ['identity', 'identity', 'pose', 'scene', 'outfit'] as const;
+  const pickerContextHint = SLOT_CONTEXT_HINTS[pickerSlotIndex] || undefined;
+
   const handleEnhance = async () => {
     if (!prompt.trim() || !selectedModel?.id) return;
     setIsEnhancing(true);
@@ -686,7 +690,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   };
 
   // Handle image selection from the picker dialog
-  const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace') => {
+  const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace' | 'characters') => {
     const index = pickerSlotIndex;
     if (index === 0) {
       onReferenceImageUrlSet?.(imageUrl, 'single');
@@ -1118,6 +1122,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         title={`Select ${SLOT_FILTER_TAGS[pickerSlotIndex]?.[0]?.toUpperCase()}${SLOT_FILTER_TAGS[pickerSlotIndex]?.slice(1) || 'Reference'} Image`}
         source="library"
         filterTag={pickerFilterTag}
+        contextHint={pickerContextHint as any}
       />
 
       {/* Motion Reference Video Picker (library/workspace) */}

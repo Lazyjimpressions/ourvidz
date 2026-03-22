@@ -45,6 +45,19 @@ const CATEGORY_TO_OUTPUT_TYPE: Record<CategoryFilter, string | null> = {
   clothing: 'clothing',
 };
 
+/** Context hint for auto-selecting tab + category when the picker opens */
+export type PickerContextHint = 'identity' | 'pose' | 'outfit' | 'scene' | 'style' | 'general';
+
+/** Maps contextHint → default source tab + category filter */
+const CONTEXT_HINT_DEFAULTS: Record<PickerContextHint, { source: SourceTab; category: CategoryFilter }> = {
+  identity: { source: 'characters', category: 'character' },
+  pose:     { source: 'characters', category: 'position' },
+  outfit:   { source: 'characters', category: 'clothing' },
+  scene:    { source: 'characters', category: 'scene' },
+  style:    { source: 'characters', category: 'all' },
+  general:  { source: 'library',    category: 'all' },
+};
+
 interface ImagePickerDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -60,6 +73,8 @@ interface ImagePickerDialogProps {
   filterTag?: string;
   /** Filter by media type: 'image' (default), 'video', or 'all' */
   mediaType?: 'image' | 'video' | 'all';
+  /** Auto-select source tab + category based on calling context */
+  contextHint?: PickerContextHint;
 }
 
 export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
@@ -70,6 +85,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   source = 'library',
   filterTag,
   mediaType = 'image',
+  contextHint,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -90,15 +106,17 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const [signing, setSigning] = useState(false);
 
-  // Sync activeSource when prop changes
+  // Sync activeSource/category when props change — contextHint takes priority
   useEffect(() => {
-    setActiveSource(source);
-  }, [source]);
-
-  // Sync filterTag when prop changes
-  useEffect(() => {
-    setActiveCategory((filterTag as CategoryFilter) || 'all');
-  }, [filterTag]);
+    if (contextHint) {
+      const defaults = CONTEXT_HINT_DEFAULTS[contextHint];
+      setActiveSource(defaults.source);
+      setActiveCategory(defaults.category);
+    } else {
+      setActiveSource(source);
+      setActiveCategory((filterTag as CategoryFilter) || 'all');
+    }
+  }, [source, filterTag, contextHint]);
 
   // Library data — fetch all pages automatically when dialog is open
   const {
