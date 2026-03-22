@@ -511,6 +511,15 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
           }}
         />
       )}
+      
+      {/* Save to Canon Modal */}
+      {saveToCanonPath && (
+        <SaveToCanonModal
+          isOpen={true}
+          onClose={() => setSaveToCanonPath(null)}
+          storagePath={saveToCanonPath}
+        />
+      )}
     </>
   );
 };
