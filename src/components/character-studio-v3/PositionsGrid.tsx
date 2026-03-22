@@ -498,7 +498,7 @@ export function PositionsGrid({
       {orderedPresets.length > 0 && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Base Positions</span>
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Base Angles</span>
             {!hasReferenceImage && (
               <span className="text-[9px] text-destructive">Lock a reference image first</span>
             )}
