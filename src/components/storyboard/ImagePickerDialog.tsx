@@ -186,7 +186,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     if (activeSource !== 'characters' || !isOpen || !selectedCharacterId) return;
 
     setCanonLoading(true);
-    const outputTypeFilter = CATEGORY_TO_OUTPUT_TYPE[activeCategory];
+    const outputTypeFilters = CATEGORY_TO_OUTPUT_TYPES[activeCategory];
 
     let query = supabase
       .from('character_canon')
@@ -194,8 +194,8 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       .eq('character_id', selectedCharacterId)
       .order('created_at', { ascending: false });
 
-    if (outputTypeFilter) {
-      query = query.eq('output_type', outputTypeFilter);
+    if (outputTypeFilters) {
+      query = query.in('output_type', outputTypeFilters);
     }
 
     query.then(({ data, error }) => {
