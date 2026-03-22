@@ -1,8 +1,9 @@
 /**
- * Position Tag Groups — Grouped tag definitions for canon position assets.
+ * Canon Tag Groups — Grouped tag definitions for canon reference assets.
  * Tags are stored as a flat text[] in the DB; grouping is UI-only.
  */
 
+/** Position-specific tag groups */
 export const POSITION_TAG_GROUPS = {
   composition: {
     label: 'Composition',
@@ -37,6 +38,65 @@ export const POSITION_TAG_GROUPS = {
     tags: ['tender', 'playful', 'passionate', 'dramatic', 'casual', 'intense'],
   },
 } as const;
+
+/** Clothing-specific tag groups */
+export const CLOTHING_TAG_GROUPS = {
+  clothingStyle: {
+    label: 'Style',
+    tags: ['casual', 'formal', 'fantasy', 'uniform', 'athletic', 'sleepwear', 'swimwear', 'armor', 'lingerie', 'costume'],
+  },
+  season: {
+    label: 'Season',
+    tags: ['summer', 'winter', 'spring', 'autumn'],
+  },
+  coverage: {
+    label: 'Coverage',
+    tags: ['full', 'partial', 'minimal', 'layered'],
+  },
+} as const;
+
+/** Scene-specific tag groups */
+export const SCENE_TAG_GROUPS = {
+  setting: {
+    label: 'Setting',
+    tags: ['indoor', 'outdoor', 'urban', 'nature', 'fantasy-setting', 'studio'],
+  },
+  timeOfDay: {
+    label: 'Time',
+    tags: ['day', 'night', 'sunset', 'sunrise', 'twilight'],
+  },
+  sceneMood: {
+    label: 'Mood',
+    tags: ['cozy', 'dramatic', 'romantic', 'eerie', 'serene', 'vibrant'],
+  },
+} as const;
+
+/** Character / identity tag groups (reuses framing & angle from position) */
+export const CHARACTER_TAG_GROUPS = {
+  framing: POSITION_TAG_GROUPS.framing,
+  angle: POSITION_TAG_GROUPS.angle,
+} as const;
+
+/** Style reference tag groups */
+export const STYLE_TAG_GROUPS = {
+  medium: {
+    label: 'Medium',
+    tags: ['watercolor', 'digital', 'photo', 'oil-painting', 'pencil', 'ink'],
+  },
+  aesthetic: {
+    label: 'Aesthetic',
+    tags: ['anime', 'realistic', 'painterly', 'cel-shade', 'comic', 'retro'],
+  },
+} as const;
+
+/** Mapping from output_type → relevant tag groups */
+export const TAG_GROUPS_BY_OUTPUT_TYPE: Record<string, Record<string, { label: string; tags: readonly string[] }>> = {
+  position: POSITION_TAG_GROUPS,
+  clothing: CLOTHING_TAG_GROUPS,
+  scene: SCENE_TAG_GROUPS,
+  character: CHARACTER_TAG_GROUPS,
+  style: STYLE_TAG_GROUPS,
+};
 
 export type PositionTagGroup = keyof typeof POSITION_TAG_GROUPS;
 

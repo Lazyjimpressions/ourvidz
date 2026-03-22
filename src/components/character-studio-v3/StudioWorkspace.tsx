@@ -214,7 +214,7 @@ export function StudioWorkspace({
           )}
         >
           <Crosshair className="w-3 h-3" />
-          Positions
+          References
           {(canonImages?.length ?? 0) > 0 && <Badge variant="secondary" className="ml-1 h-3.5 px-1 text-[9px]">{canonImages!.length}</Badge>}
         </button>
         <button
