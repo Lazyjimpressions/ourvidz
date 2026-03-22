@@ -1122,6 +1122,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         title={`Select ${SLOT_FILTER_TAGS[pickerSlotIndex]?.[0]?.toUpperCase()}${SLOT_FILTER_TAGS[pickerSlotIndex]?.slice(1) || 'Reference'} Image`}
         source="library"
         filterTag={pickerFilterTag}
+        contextHint={pickerContextHint as any}
       />
 
       {/* Motion Reference Video Picker (library/workspace) */}
