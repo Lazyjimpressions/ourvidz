@@ -706,10 +706,10 @@ export function PositionsGrid({
                         });
                       if (insertError) throw insertError;
 
-                      toast({ title: 'Saved to Library' });
+                      toast.success('Saved to Library');
                     } catch (err) {
                       console.error('❌ Save to library failed:', err);
-                      toast({ title: 'Failed to save to library', variant: 'destructive' });
+                      toast.error('Failed to save to library');
                     }
                   }} className="gap-1.5 text-white/70 hover:text-white hover:bg-white/10">
                     <Save className="w-4 h-4" />
