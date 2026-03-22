@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users, Save } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { AssetTile } from '@/components/shared/AssetTile';
