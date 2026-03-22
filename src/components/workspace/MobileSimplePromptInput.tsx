@@ -242,6 +242,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   const SLOT_FILTER_TAGS = ['character', 'character', 'position', 'scene', 'clothing'] as const;
   const pickerFilterTag = SLOT_FILTER_TAGS[pickerSlotIndex] || undefined;
 
+  // Map slot index to contextHint for smart tab/category selection
+  const SLOT_CONTEXT_HINTS = ['identity', 'identity', 'pose', 'scene', 'outfit'] as const;
+  const pickerContextHint = SLOT_CONTEXT_HINTS[pickerSlotIndex] || undefined;
+
   const handleEnhance = async () => {
     if (!prompt.trim() || !selectedModel?.id) return;
     setIsEnhancing(true);
