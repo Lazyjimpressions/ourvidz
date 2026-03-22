@@ -690,7 +690,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   };
 
   // Handle image selection from the picker dialog
-  const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace') => {
+  const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace' | 'characters') => {
     const index = pickerSlotIndex;
     if (index === 0) {
       onReferenceImageUrlSet?.(imageUrl, 'single');

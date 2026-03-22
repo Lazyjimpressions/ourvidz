@@ -534,6 +534,7 @@ const CreateCharacter: React.FC = () => {
         onClose={() => setShowImagePicker(false)}
         onSelect={handleSelectFromLibrary}
         title="Select Character Portrait"
+        contextHint="identity"
       />
     </div>
   );
