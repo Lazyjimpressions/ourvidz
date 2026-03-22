@@ -24,6 +24,7 @@ import {
   POSITION_TAG_GROUPS,
   POSITIONS_GRID_FILTERS,
   UNIFIED_OUTPUT_TYPES,
+  TAG_GROUPS_BY_OUTPUT_TYPE,
   normalizeOutputType,
   type PositionsGridFilter,
 } from '@/types/positionTags';
