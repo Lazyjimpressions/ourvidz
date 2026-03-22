@@ -1,41 +1,34 @@
 
-# Video Character Swap — Field Name Fix v4
 
-## Root Cause
-`start_frame_num` was wrong — fal.ai API requires `start_frame_number`. All frame positioning was silently ignored. Additionally, `conditioning_type`, `preprocess`, `limit_num_frames` are not in the LTX MultiCondition schema.
+## Fix: Positions Lightbox Blank Image + Build Error
 
-## Changes Made (v4)
+### Problem 1: Blank Lightbox
+Canon images stored in `character_canon` table have `output_url` as bare storage paths (e.g. `userId/charId/canon/file.png`) in the `reference_images` bucket. The `handleRequireOriginal` function (line 401-408) fails because:
+- It checks for `character-canon/` substring but maps only to `user-library` or `workspace-temp`
+- Bare paths (no bucket prefix) return the raw path unchanged — not a valid URL
 
-### A) ✅ Field name fix: `start_frame_num` → `start_frame_number`
-- `src/hooks/useLibraryFirstWorkspace.ts` — images[] and videos[] arrays
-- `supabase/functions/fal-image/index.ts` — signing, sanitization, logging
-- `src/lib/services/ClipOrchestrationService.ts` — all frame references
+This is the same `UnifiedLightbox` component used everywhere else — the bug is only in PositionsGrid's `handleRequireOriginal` callback, not the lightbox itself.
 
-### B) ✅ Removed unsupported video conditioning fields
-- Removed `conditioning_type`, `preprocess`, `limit_num_frames`, `max_num_frames` from character-swap videos[]
-- Only `video_url`, `start_frame_number`, `strength` sent (per official API schema)
+### Problem 2: Build Error
+`src/types/storyboard.ts` has `job_id?: string` declared twice in `UpdateClipInput` (lines 451 and 463).
 
-### C) ✅ Tuned strengths per fal.ai best practices
-- Image anchors: F0=0.85, mid=0.5, end=0.4 (was all 1.0)
-- Video conditioning: strength=0.7 (was 0.8)
-- "Layer conditioning strategically" — high start, lower later anchors
+---
 
-### D) ✅ Updated preflight UI
-- Shows anchor strengths and video strength instead of "Pose mode"
+### Changes
 
-## Expected Payload After Fix
-```json
-{
-  "images": [
-    { "image_url": "...", "start_frame_number": 0, "strength": 0.85 },
-    { "image_url": "...", "start_frame_number": 56, "strength": 0.5 },
-    { "image_url": "...", "start_frame_number": 120, "strength": 0.4 }
-  ],
-  "videos": [{
-    "video_url": "...",
-    "start_frame_number": 0,
-    "strength": 0.7
-  }],
-  "prompt": "..."
-}
-```
+**1. `src/components/character-studio-v3/PositionsGrid.tsx` — Fix `handleRequireOriginal` (lines 401-408)**
+
+Replace the bucket detection logic:
+- If URL contains `user-library/` → bucket `user-library`
+- If URL contains `workspace-temp/` → bucket `workspace-temp`
+- Otherwise (bare path or `reference_images` path) → bucket `reference_images`
+
+This follows the existing convention — every other consumer of `UnifiedLightbox` uses `urlSigningService.getSignedUrl()` with the correct bucket. No new workflow needed.
+
+**2. `src/types/storyboard.ts` — Remove duplicate `job_id` (line 463)**
+
+Delete the second `job_id?: string;` declaration.
+
+### Note on Convention
+Character poses come from the `character_canon` table, stored in the `reference_images` bucket. They do NOT come from the user library (`user-library` bucket). The lightbox just needs to sign against the correct bucket. No new signing flow or separate workflow is needed — just correct bucket routing in one callback.
+
