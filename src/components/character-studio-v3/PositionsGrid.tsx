@@ -601,10 +601,9 @@ export function PositionsGrid({
                 <Select value={newOutputType} onValueChange={setNewOutputType}>
                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pose">Pose</SelectItem>
-                    <SelectItem value="outfit">Outfit</SelectItem>
-                    <SelectItem value="style">Style</SelectItem>
-                    <SelectItem value="position">Position</SelectItem>
+                    {UNIFIED_OUTPUT_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
