@@ -420,7 +420,11 @@ export function PositionsGrid({
 
   const filtered = canonImages.filter(c => {
     const normalized = normalizeOutputType(c.output_type);
-    if (typeFilter !== 'all' && normalized !== typeFilter) return false;
+    if (typeFilter !== 'all') {
+      const matchesType = normalized === typeFilter;
+      const matchesTags = c.tags?.some(t => FILTER_TAG_VOCABULARY[typeFilter]?.includes(t)) ?? false;
+      if (!matchesType && !matchesTags) return false;
+    }
     if (tagFilter && !c.tags?.some(t => t.includes(tagFilter.toLowerCase()))) return false;
     return true;
   });
