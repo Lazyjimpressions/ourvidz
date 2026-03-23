@@ -1,68 +1,46 @@
+## Unified Storage Architecture (Implemented)
 
+### Summary
+Migrated from dual-bucket (`user-library` + `reference_images`) to unified `user-library` bucket for all permanent assets. `workspace-temp` remains separate for ephemeral staging.
 
-## Revised Plan: Shared Tag Editor Component
+### What Changed
 
-### Core Insight
+**Edge Functions:**
+- `fal-image`: `signIfStoragePath` default bucket → `user-library`; candidate bucket order prioritizes `user-library`
+- `character-portrait`: Reference image signing defaults to `user-library` first
+- `fal-webhook` / `replicate-webhook`: Already write to `workspace-temp` → `user-library`; no changes needed
 
-You're right — the tag picker in PositionsGrid and the one needed in the Library lightbox are driven by the same `tag_presets` table via the same `UnifiedTagPicker` component. The only difference is the **save target** (character_canon vs user_library) and the **category hint** (output_type vs content_category). That's a callback difference, not a component difference.
+**Client Upload Paths:**
+- `SaveToCanonModal`: Zero-copy — inserts `character_canon` row pointing to existing `user-library` path; accepts `sourceTags` for tag transfer and `sourceLibraryId` for traceability
+- `useCharacterStudio.uploadCanon`: Uploads to `user-library/{userId}/canon/...`
+- `ReferenceImageSlots` (Playground): Uploads to `user-library/{userId}/references/...`
+- `CreateCharacter`: Uploads refs to `user-library/{userId}/references/...`
+- `storage.ts`: `uploadReferenceImage` → `user-library`; `getReferenceImageUrl` → tries `user-library` then `reference_images` fallback
 
-The PositionsGrid already has the correct mobile pattern (lifted state + ResponsiveModal drawer + UnifiedTagPicker). Instead of rebuilding that in the library, we should extract it into a shared component.
+**Read/Sign Paths:**
+- `UrlSigningService`: Added `reference_images` to bucket prefix normalization list
+- `useReferenceUrls`: Signs against `user-library` first, falls back to `reference_images` for legacy
+- `ImagePickerDialog`: Bucket for characters tab → `user-library` with `reference_images` legacy fallback in both thumbnail signing and selection signing
+- `CharacterHistoryStrip`, `CharacterStudioPromptBarV2`, `CharacterStudioV2`: Default bucket → `user-library`
+- `AssetMappers`: Updated doc comment
 
-### What to Build
+### Migration Safety
+- All `reference_images` is kept as a legacy fallback bucket in signing paths
+- Existing `character_canon.output_url` values pointing to `reference_images` paths continue to work
+- Future backfill task can move files and update DB paths
 
-**1. New shared component: `TagEditorDrawer`**
-
-Extract the drawer pattern from PositionsGrid into `src/components/shared/TagEditorDrawer.tsx`:
-
-```text
-Props:
-  - open: boolean
-  - onOpenChange: (open: boolean) => void
-  - tags: string[]
-  - onTagsChange: (tags: string[]) => void
-  - categoryHint?: string        // "position", "character", "scene", etc.
-  - title?: string               // e.g. asset label
-  - categoryBadge?: string       // e.g. "portrait", "position"
+### Architecture (Target State)
+```
+workspace-temp/  → ephemeral staging (TTL, auto-cleanup)
+user-library/    → all permanent user assets:
+  {userId}/portraits/...     (character portraits)
+  {userId}/canon/...         (canon positions/outfits/styles)
+  {userId}/references/...    (uploaded reference images)
+  {userId}/scenes/...        (scene images)
+  {userId}/workspace/...     (promoted workspace assets)
 ```
 
-Internals: `ResponsiveModal` → `ResponsiveModalContent` → header with Tag icon + badge + count → `UnifiedTagPicker`. No save logic — the parent handles persistence via `onTagsChange`.
-
-**2. Update PositionsGrid to use `TagEditorDrawer`**
-
-Replace the inline ResponsiveModal block (lines 668-697) with `<TagEditorDrawer>`. No behavior change — just deduplication.
-
-**3. Update Library lightbox to use `TagEditorDrawer`**
-
-In `UpdatedOptimizedLibrary.tsx`:
-- Add state: `tagEditorAssetId: string | null`, `tagEditorDraft: string[]`
-- In `actionsSlot`, replace the inline `RoleTagButton` (which opens a broken popover) with a simple tag icon button that calls `setTagEditorAssetId(asset.id)`
-- Render `<TagEditorDrawer>` once, outside the lightbox, with `onTagsChange` wired to the existing `handleDescriptiveTagToggle` / `handleRoleTagToggle` logic
-- On close, persist any changes
-
-**4. Simplify `RoleTagButton` usage**
-
-The legacy role tag vertical list inside `RoleTagButton`'s popover becomes unnecessary in lightbox contexts. Keep `RoleTagButton` for non-lightbox grid hover actions (where popovers work fine on desktop). In the `TagEditorDrawer`, role tags can optionally be shown as horizontal pills above the `UnifiedTagPicker` — same data, better layout.
-
-**5. Update `LightboxActions.tsx`**
-
-Add `onOpenTagEditor?: () => void` prop to `LibraryAssetActions`. When provided, render a simple tag trigger button instead of `RoleTagButton`. When not provided, fall back to current `RoleTagButton` popover (backward compatible for non-lightbox contexts).
-
-### What Does NOT Need Separate Logic
-
-- The `UnifiedTagPicker` component itself — already shared, no changes needed
-- The `useTagPresets` hook — already shared
-- The tag data model — both tables store flat `tags[]` arrays with the same vocabulary
-
-### Character vs Non-Character: No Convention Break
-
-Both `character_canon.tags` and `user_library.tags` store the same tag vocabulary from `tag_presets`. The only difference is: canon assets always have a `character_id` (so `categoryHint` comes from `output_type`), while library assets use `content_category`. This is handled by the `categoryHint` prop — the shared component doesn't care about the source table.
-
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/shared/TagEditorDrawer.tsx` | **New** — shared drawer with ResponsiveModal + UnifiedTagPicker |
-| `src/components/shared/LightboxActions.tsx` | Add `onOpenTagEditor` prop, render trigger button when provided |
-| `src/components/library/UpdatedOptimizedLibrary.tsx` | Lift tag editor state, render `TagEditorDrawer`, wire save logic |
-| `src/components/character-studio-v3/PositionsGrid.tsx` | Replace inline drawer with `TagEditorDrawer` |
-
+### Remaining Work (Future Tasks)
+1. Backfill script to move existing `reference_images` files to `user-library` and update `character_canon.output_url` paths
+2. Update `ReferenceImageManager.ts` service (currently unused in active flows)
+3. Deprecate `reference_images` bucket after backfill complete
