@@ -582,14 +582,21 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
       }
 
       const { error: insertError } = await supabase
-        .from('character_canon')
+        .from('user_library')
         .insert({
+          user_id: user.id,
+          asset_type: 'image',
+          storage_path: path,
+          original_prompt: '',
+          model_used: 'upload',
+          file_size_bytes: file.size,
+          mime_type: file.type || 'image/png',
           character_id: savedCharacterId,
           output_type: outputType,
-          output_url: path,
           tags: autoTags,
           label: label || null,
-        });
+          content_category: 'character',
+        } as any);
       if (insertError) throw insertError;
       await loadCanon();
       toast({ title: 'Position added', description: label || outputType });
