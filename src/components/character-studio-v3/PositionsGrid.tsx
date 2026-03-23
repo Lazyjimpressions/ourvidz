@@ -345,6 +345,7 @@ export function PositionsGrid({
   onUpdatePresetPrompt,
   onSendToWorkspace,
   characterName,
+  characterId,
 }: PositionsGridProps) {
   const isMobile = useIsMobile();
   const [typeFilter, setTypeFilter] = useState<PositionsGridFilter>('all');
