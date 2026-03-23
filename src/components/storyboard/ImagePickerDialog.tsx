@@ -324,13 +324,23 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
               return { id: asset.id, url: path };
             }
             try {
+              // Try primary bucket first
               const { data, error } = await supabase.storage
                 .from(bucket)
                 .createSignedUrl(path, 3600);
-              if (error || !data?.signedUrl) {
-                return { id: asset.id, failed: true as const };
+              if (!error && data?.signedUrl) {
+                return { id: asset.id, url: data.signedUrl };
               }
-              return { id: asset.id, url: data.signedUrl };
+              // Legacy fallback: try reference_images for old canon assets
+              if (bucket === 'user-library') {
+                const { data: legacyData, error: legacyError } = await supabase.storage
+                  .from('reference_images')
+                  .createSignedUrl(path, 3600);
+                if (!legacyError && legacyData?.signedUrl) {
+                  return { id: asset.id, url: legacyData.signedUrl };
+                }
+              }
+              return { id: asset.id, failed: true as const };
             } catch {
               return { id: asset.id, failed: true as const };
             }

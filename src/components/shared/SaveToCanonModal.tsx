@@ -20,10 +20,14 @@ import { UNIFIED_OUTPUT_TYPES } from '@/types/positionTags';
 interface SaveToCanonModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** The storage path in user-library bucket to copy from */
+  /** The storage path in user-library bucket — used directly as output_url (zero-copy) */
   storagePath: string;
   /** Optional pre-filled label */
   defaultLabel?: string;
+  /** Tags from the source asset to carry over */
+  sourceTags?: string[];
+  /** Source library asset ID for traceability */
+  sourceLibraryId?: string;
 }
 
 export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
@@ -31,6 +35,8 @@ export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
   onClose,
   storagePath,
   defaultLabel = '',
+  sourceTags = [],
+  sourceLibraryId,
 }) => {
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>('');
   const [outputType, setOutputType] = useState<string>('position');
@@ -61,38 +67,27 @@ export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
 
     setIsSaving(true);
     try {
-      // Generate a destination path in reference_images bucket
-      const fileName = storagePath.split('/').pop() || 'asset.png';
-      const destPath = `${selectedCharacterId}/canon/${outputType}/${Date.now()}_${fileName}`;
+      // Zero-copy: use the existing user-library storage path directly
+      // Merge source tags with the role tag for the output type
+      const roleTag = `role:${outputType}`;
+      const mergedTags = Array.from(new Set([roleTag, ...sourceTags]));
 
-      // Copy file from user-library to reference_images
-      const { error: copyError } = await supabase.storage
-        .from('user-library')
-        .copy(storagePath, `../reference_images/${destPath}`);
-
-      // If copy fails (cross-bucket not supported), download and re-upload
-      if (copyError) {
-        console.log('📦 Cross-bucket copy not supported, using download+upload fallback');
-        const { data: downloadData, error: dlError } = await supabase.storage
-          .from('user-library')
-          .download(storagePath);
-        if (dlError || !downloadData) throw dlError || new Error('Download failed');
-
-        const { error: uploadError } = await supabase.storage
-          .from('reference_images')
-          .upload(destPath, downloadData, { contentType: downloadData.type });
-        if (uploadError) throw uploadError;
+      // Build metadata with traceability
+      const metadata: Record<string, unknown> = {};
+      if (sourceLibraryId) {
+        metadata.source_library_id = sourceLibraryId;
       }
 
-      // Insert character_canon row
+      // Insert character_canon row pointing to the same storage path
       const { error: insertError } = await supabase
         .from('character_canon')
         .insert({
           character_id: selectedCharacterId,
           output_type: outputType,
-          output_url: destPath,
+          output_url: storagePath,
           label: label.trim() || null,
-          tags: [`role:${outputType}`],
+          tags: mergedTags,
+          metadata,
         });
 
       if (insertError) throw insertError;
