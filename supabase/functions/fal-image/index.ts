@@ -143,7 +143,7 @@ function sanitizeConditioningFrame(
 async function signIfStoragePath(
   supabase: any,
   url: string | null | undefined,
-  defaultBucket = 'reference_images'
+  defaultBucket = 'user-library'
 ): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url;
