@@ -37,6 +37,7 @@ const AdminContent = () => {
     { id: 'api-providers', label: 'API Providers', component: <ApiProvidersTab /> },
     { id: 'api-models', label: 'API Models', component: <ApiModelsTab /> },
     { id: 'api-usage', label: 'API Usage & Costs', component: <ApiUsageTab /> },
+    { id: 'tag-taxonomy', label: 'Tag Taxonomy', component: <TagTaxonomyTab /> },
     { id: 'database', label: 'Database Manager', component: <AdminDatabaseManager /> }
   ];
 

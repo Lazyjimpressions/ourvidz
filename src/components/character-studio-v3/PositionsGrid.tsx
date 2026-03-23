@@ -20,13 +20,11 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { UnifiedTagPicker } from '@/components/shared/UnifiedTagPicker';
+import { useTagPresets } from '@/hooks/useTagPresets';
 import {
-  POSITION_TAG_GROUPS,
   POSITIONS_GRID_FILTERS,
   UNIFIED_OUTPUT_TYPES,
-  TAG_GROUPS_BY_OUTPUT_TYPE,
-  ALL_TAG_CATEGORIES,
-  FILTER_TAG_VOCABULARY,
   normalizeOutputType,
   type PositionsGridFilter,
 } from '@/types/positionTags';
