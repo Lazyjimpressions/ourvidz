@@ -393,9 +393,17 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         onClose();
         return;
       }
-      const { data, error } = await supabase.storage
+      let { data, error } = await supabase.storage
         .from(bucket)
         .createSignedUrl(path, 3600);
+      // Legacy fallback for old reference_images paths
+      if (error && bucket === 'user-library') {
+        const legacy = await supabase.storage.from('reference_images').createSignedUrl(path, 3600);
+        if (!legacy.error && legacy.data?.signedUrl) {
+          data = legacy.data;
+          error = null;
+        }
+      }
       if (error || !data?.signedUrl) {
         console.error('❌ Failed to sign original for selection:', error);
         return;
