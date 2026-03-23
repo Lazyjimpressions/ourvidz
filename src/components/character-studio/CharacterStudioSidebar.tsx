@@ -215,17 +215,17 @@ export function CharacterStudioSidebar({
           );
         }
 
-        // Upload to reference_images bucket
-        const path = `${user.id}/ref_${Date.now()}.jpg`;
+        // Upload to user-library bucket
+        const path = `${user.id}/references/ref_${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
-          .from('reference_images')
+          .from('user-library')
           .upload(path, processedFile, { upsert: true });
 
         if (uploadError) throw uploadError;
 
         // Get signed URL for display and Image Match Mode
         const { data: signedData, error: signError } = await supabase.storage
-          .from('reference_images')
+          .from('user-library')
           .createSignedUrl(path, 3600);
 
         if (signError) throw signError;

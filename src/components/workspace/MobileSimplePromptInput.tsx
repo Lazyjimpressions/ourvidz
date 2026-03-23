@@ -709,8 +709,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       onAdditionalRefsChange?.(newAdditional);
     }
 
-    // Auto-assign role tag when a canon asset is selected
-    if (metadata?.source === 'character_canon' && metadata.outputType && onSlotRoleChange) {
+    // Auto-assign role tag when a character asset is selected
+    if (metadata?.source === 'user_library' && metadata.outputType && onSlotRoleChange) {
       const roleMap: Record<string, SlotRole> = {
         portrait: 'character',
         character: 'character',

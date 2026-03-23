@@ -239,7 +239,7 @@ export default function CharacterStudioV3() {
     onCanonSetPrimary: setCanonPrimary,
     onCanonUpdateTags: updateCanonTags,
     onUpdatePortraitTags: updatePortraitTags,
-    onSaveAsPosition: (imageUrl: string) => saveCanonFromUrl(imageUrl, 'pose', ['role:position'], undefined, undefined),
+    onSaveAsPosition: (imageUrl: string) => saveCanonFromUrl(imageUrl, 'position', ['role:position'], undefined, undefined),
     onAssignCanonPoseKey: assignCanonPoseKey,
     canonPosePresets,
     onGeneratePosition: (poseKey: string) => generateCanonPosition(poseKey, selectedImageModel || undefined),

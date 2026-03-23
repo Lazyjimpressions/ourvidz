@@ -261,21 +261,18 @@ export function toSharedFromLegacy(asset: any): SharedAsset {
 }
 
 /**
- * Map character_canon row (with joined characters data) to SharedAsset.
- * Expects row from: character_canon joined with characters(name, reference_image_url)
- * Storage bucket: user-library (unified) — legacy paths may reference reference_images
+ * Map character asset row from user_library to SharedAsset.
+ * Storage bucket: user-library (unified)
  */
 export function toSharedFromCanon(row: any): SharedAsset {
-  const rawOriginalPath = row.output_url || '';
+  const rawOriginalPath = row.output_url || row.storage_path || '';
   const originalPath = normalizePath(rawOriginalPath) || '';
 
-  // Canon images don't have separate thumbnails
   const thumbPath: string | null = null;
 
   const outputType: string = row.output_type || 'image';
   const type = detectAssetType(outputType, null, originalPath);
 
-  // Character name from joined data
   const characterName = row.characters?.name || row.character_name || '';
   const label = row.label || '';
   const title = label
@@ -293,15 +290,15 @@ export function toSharedFromCanon(row: any): SharedAsset {
     format: type,
     modelType: '',
     metadata: {
-      source: 'character_canon',
-      bucket: 'reference_images',
+      source: 'user_library',
+      bucket: 'user-library',
       storage_path: originalPath,
       character_id: row.character_id,
       output_type: outputType,
       tags: row.tags || [],
       is_pinned: row.is_pinned,
       is_primary: row.is_primary,
-      canon_metadata: row.metadata,
+      canon_metadata: row.generation_metadata || row.metadata,
     },
     width: undefined,
     height: undefined,

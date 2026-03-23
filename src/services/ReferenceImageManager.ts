@@ -153,7 +153,7 @@ class ReferenceImageManager {
     // Delete from storage
     if (data.storage_path) {
       const { error: storageError } = await this.supabase.storage
-        .from('reference_images')
+        .from('user-library')
         .remove([data.storage_path]);
 
       if (storageError) throw storageError;

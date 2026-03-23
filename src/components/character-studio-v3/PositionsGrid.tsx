@@ -719,9 +719,9 @@ export function PositionsGrid({
                   )}
                   <Button variant="ghost" size="sm" onClick={async () => {
                     try {
-                      // Download from reference_images and re-upload to user-library
+                      // Asset already in user-library — just create a library record
                       const { data: downloadData, error: dlError } = await supabase.storage
-                        .from('reference_images')
+                        .from('user-library')
                         .download(canon.output_url);
                       if (dlError || !downloadData) throw dlError || new Error('Download failed');
 
