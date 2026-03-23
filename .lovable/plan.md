@@ -1,70 +1,108 @@
 
 
-## Fix: Multi-Classification via Tags, Not Single output_type
+## Unified Tag Taxonomy: DB-Driven Presets
 
-### The Insight
+### The Core Insight
 
-Any reference image can serve multiple roles simultaneously. A photo of two characters kissing in bikinis on a beach is:
-- **Position**: duo, kissing
-- **Clothing**: bikini, swimwear
-- **Scene**: beach, outdoor
+There are currently two disconnected tagging systems:
+1. **Character Canon** (PositionsGrid) — uses hardcoded `POSITION_TAG_GROUPS`, `CLOTHING_TAG_GROUPS`, etc. from `positionTags.ts`
+2. **User Library** (RoleTagButton) — uses `role:X` prefix tags + the same hardcoded groups gated by active role
 
-Forcing one `output_type` per image is wrong. Tags should handle all classification.
+Both store tags as flat `text[]` on their respective tables. The tag **picker UI** (what options to show) is hardcoded in TypeScript. This means:
+- Admin cannot add/remove/reorder tag options without a code deploy
+- Users who add custom tags lose group association on reload
+- Two separate UIs render the same concept differently
 
-### Approach
-
-Keep `output_type` in the DB as the "primary" category (what the user initially uploaded it as — required NOT NULL column, avoids migration). But change how **filtering and tagging work**:
-
-1. **Filter pills check tags TOO** — Currently `typeFilter` only checks `output_type`. Change it to: show an image under "Clothing" if `output_type === 'clothing'` OR if it has any clothing-related tag (`casual`, `formal`, `bikini`, `swimwear`, etc.).
-
-2. **Tag editor shows ALL groups always** — Stop gating tag groups by `output_type`. Every canon image's tag popover shows all groups (Position, Clothing, Scene, etc.) — collapsed sections the user can expand and pick from. Adding a `bikini` tag to a position image automatically makes it appear under the Clothing filter too.
-
-3. **No output_type selector in tag editor** — Remove the need to "reclassify" an image. Tags handle multi-classification naturally.
-
-### Filter Logic Change
+### Proposed Architecture: Presets Table + Flat Storage
 
 ```text
-Current:  show if output_type === filterValue
-Proposed: show if output_type === filterValue 
-          OR tags overlap with filterValue's tag vocabulary
+┌─────────────────────────────┐
+│     tag_presets (DB)         │  ← Admin manages via Admin Portal
+│  category, group, tag_value │  ← "The menu"
+└──────────────┬──────────────┘
+               │ fetched by UI
+               ▼
+┌─────────────────────────────┐
+│  Unified Tag Picker Component│  ← Same component for canon + library
+│  (collapsible groups)        │
+└──────────────┬──────────────┘
+               │ writes to
+               ▼
+┌─────────────────────────────┐
+│  character_canon.tags[]      │  ← Flat text[], unchanged
+│  user_library.tags[]         │  ← Flat text[], unchanged
+└─────────────────────────────┘
 ```
 
-Define a mapping: `FILTER_TAGS['clothing'] = ['casual', 'formal', 'bikini', ...]` etc. If any of an image's tags appear in that filter's vocabulary, the image appears under that filter.
+**Presets = the menu. Tags[] = the order.** They are decoupled. A custom tag typed by a user goes straight into `tags[]` without needing a preset. An admin can later "promote" a popular custom tag into a preset so it shows in the picker for everyone.
 
-### Tag Editor Change
+### New Table: `tag_presets`
 
-Instead of showing only the groups for the image's `output_type`, show all groups in collapsible sections:
-
-```text
-▼ Position Tags
-  Composition: solo, duo, group
-  Body: standing, sitting, kneeling...
-  Action: hugging, dancing, fighting...
-  Intimate: kissing, cuddling, spooning...
-
-▼ Clothing Tags  
-  Style: casual, formal, bikini, armor...
-  Season: summer, winter...
-
-▼ Scene Tags
-  Setting: indoor, outdoor, beach...
-  Time: day, night, sunset...
-
-▼ Mood
-  tender, playful, passionate...
+```sql
+CREATE TABLE public.tag_presets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category text NOT NULL,        -- 'position', 'clothing', 'scene', 'style'
+  group_key text NOT NULL,       -- 'action', 'intimate', 'clothingStyle', etc.
+  group_label text NOT NULL,     -- 'Action', 'Intimate', 'Style' (display)
+  tag_value text NOT NULL,       -- 'hugging', 'bikini', etc.
+  sort_order int NOT NULL DEFAULT 0,
+  is_active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (category, group_key, tag_value)
+);
 ```
 
-Groups with active tags auto-expand. Others collapsed by default.
+RLS: All authenticated users can SELECT active presets. Admins can INSERT/UPDATE/DELETE.
 
-### Files to Change
+### Admin vs User Customization
 
-- `src/types/positionTags.ts` — Add `FILTER_TAG_VOCABULARY` mapping each filter to its tag list; add `ALL_TAG_GROUPS` combining all output type groups
-- `src/components/character-studio-v3/PositionsGrid.tsx` — Update filter logic to check tags; update tag editor to show all groups with collapse; remove output_type gating in tag popover
+| Action | Admin | User |
+|--------|-------|------|
+| Add preset tag to picker | Yes (via Admin Portal or DB) | No |
+| Remove/deactivate preset tag | Yes | No |
+| Reorder tags within a group | Yes (sort_order) | No |
+| Add a custom tag to an asset | Yes | Yes (inline input, stored in tags[]) |
+| See custom tags in picker | Only after admin promotes | No (appears as pill on asset only) |
 
-### What This Enables
+Admin gets a new tab in the Admin Portal: **Tag Taxonomy** — a simple CRUD table editor for `tag_presets`, grouped by category. This is a permanent, schema-level change.
 
-- Upload a kissing-on-beach image as "position"
-- Tag it: `duo`, `kissing`, `bikini`, `outdoor`, `beach`
-- It now appears under Position filter, Clothing filter, AND Scene filter
-- No reclassification needed — tags are the truth
+Users can type any custom tag via the inline input in each group. It goes into the asset's `tags[]` but does not appear in the picker for other assets. This keeps the picker clean while allowing flexibility.
+
+### Migration Path
+
+1. Create `tag_presets` table
+2. Seed it with the current hardcoded values from `positionTags.ts`
+3. Create a React Query hook `useTagPresets()` that fetches and caches presets
+4. Replace hardcoded constants in the tag picker with data from `useTagPresets()`
+5. Keep `positionTags.ts` as a **fallback** — if the query fails, use hardcoded values (graceful degradation)
+6. Unify the tag picker: both `RoleTagButton` and PositionsGrid's inline popover use the same `<UnifiedTagPicker>` component fed by `useTagPresets()`
+
+### Unified Tag Picker Component
+
+A single `<UnifiedTagPicker>` replaces both the PositionsGrid inline popover and the RoleTagButton sub-tags:
+- Accepts `tags: string[]` and `onTagsChange: (tags: string[]) => void`
+- Fetches presets via `useTagPresets()`
+- Renders collapsible category sections (Position, Clothing, Scene, Style)
+- Auto-expands sections with active tags
+- Each section has an inline custom tag input
+- Custom tags render as pills within their section (tracked via local state mapping `tag → groupKey`)
+- Orphan tags (from DB, not in any preset or custom map) render in a "Custom" section at bottom
+
+### What Changes
+
+- **New migration**: `tag_presets` table + seed data from current hardcoded values
+- **New hook**: `src/hooks/useTagPresets.ts` — fetches presets, groups by category/group, caches
+- **New component**: `src/components/shared/UnifiedTagPicker.tsx` — replaces both tag UIs
+- **Admin tab**: `src/components/admin/TagTaxonomyTab.tsx` — CRUD for tag_presets
+- **Update**: `PositionsGrid.tsx` — use `UnifiedTagPicker` instead of inline popover
+- **Update**: `RoleTagButton.tsx` — use `UnifiedTagPicker` for sub-tags
+- **Update**: `Admin.tsx` — add Tag Taxonomy tab
+- **Keep**: `positionTags.ts` as fallback constants + `FILTER_TAG_VOCABULARY` (derived from presets at runtime)
+
+### What Stays the Same
+
+- `character_canon.tags[]` — flat text array, no schema change
+- `user_library.tags[]` — flat text array, no schema change
+- `output_type` on character_canon — kept as primary category, unchanged
+- Filter logic in PositionsGrid — still uses tag vocabulary for cross-category filtering, just sourced from presets instead of hardcoded constants
 
