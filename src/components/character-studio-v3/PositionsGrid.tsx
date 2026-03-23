@@ -20,13 +20,11 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { UnifiedTagPicker } from '@/components/shared/UnifiedTagPicker';
+import { useTagPresets } from '@/hooks/useTagPresets';
 import {
-  POSITION_TAG_GROUPS,
   POSITIONS_GRID_FILTERS,
   UNIFIED_OUTPUT_TYPES,
-  TAG_GROUPS_BY_OUTPUT_TYPE,
-  ALL_TAG_CATEGORIES,
-  FILTER_TAG_VOCABULARY,
   normalizeOutputType,
   type PositionsGridFilter,
 } from '@/types/positionTags';
@@ -205,8 +203,6 @@ function CanonThumbnail({
   const [showActions, setShowActions] = useState(false);
   const [editingTags, setEditingTags] = useState(false);
   const [localTags, setLocalTags] = useState<string[]>(canon.tags || []);
-  const [tagInput, setTagInput] = useState('');
-  const [sectionTagInputs, setSectionTagInputs] = useState<Record<string, string>>({});
 
   const handleSendToWorkspace = () => {
     if (signedUrl && onSendToWorkspace) {
@@ -214,31 +210,6 @@ function CanonThumbnail({
     }
   };
 
-  const handleAddTag = () => {
-    const tag = tagInput.trim().toLowerCase();
-    if (tag && !localTags.includes(tag)) {
-      const newTags = [...localTags, tag];
-      setLocalTags(newTags);
-      onUpdateTags(canon.id, newTags);
-    }
-    setTagInput('');
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    const newTags = localTags.filter(t => t !== tag);
-    setLocalTags(newTags);
-    onUpdateTags(canon.id, newTags);
-  };
-
-  const handleToggleCommonTag = (tag: string) => {
-    if (localTags.includes(tag)) {
-      handleRemoveTag(tag);
-    } else {
-      const newTags = [...localTags, tag];
-      setLocalTags(newTags);
-      onUpdateTags(canon.id, newTags);
-    }
-  };
 
   return (
     <SignedCanonTile
@@ -285,70 +256,16 @@ function CanonThumbnail({
               <Tag className="w-3 h-3" />
             </button>
           </PopoverTrigger>
-           <PopoverContent className="w-64 p-2 space-y-1.5 max-h-96 overflow-y-auto" align="start" onClick={(e) => e.stopPropagation()}>
-            {ALL_TAG_CATEGORIES.map(({ category, key: catKey, groups }) => {
-              const normalizedType = normalizeOutputType(canon.output_type);
-              const hasActiveTags = Object.values(groups).some(g => g.tags.some(t => localTags.includes(t)));
-              const isPrimary = catKey === normalizedType;
-              return (
-                <Collapsible key={catKey} defaultOpen={isPrimary || hasActiveTags}>
-                  <CollapsibleTrigger className="flex items-center gap-1 w-full text-[10px] font-semibold text-foreground py-0.5 hover:text-primary border-b border-border/50 mb-0.5">
-                    <ChevronDown className="w-3 h-3 transition-transform" />
-                    {category}
-                    {hasActiveTags && <span className="ml-auto text-[8px] text-primary">●</span>}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pl-1 space-y-1">
-                    {Object.entries(groups).map(([groupKey, group]) => {
-                      const sectionInput = sectionTagInputs[`${catKey}_${groupKey}`] || '';
-                      const handleSectionAdd = () => {
-                        const tag = sectionInput.trim().toLowerCase();
-                        if (tag && !localTags.includes(tag)) {
-                          const newTags = [...localTags, tag];
-                          setLocalTags(newTags);
-                          onUpdateTags(canon.id, newTags);
-                        }
-                        setSectionTagInputs(prev => ({ ...prev, [`${catKey}_${groupKey}`]: '' }));
-                      };
-                      return (
-                        <Collapsible key={groupKey} defaultOpen={isPrimary || group.tags.some(t => localTags.includes(t))}>
-                          <CollapsibleTrigger className="flex items-center gap-1 w-full text-[9px] font-medium text-muted-foreground uppercase tracking-wider py-0.5 hover:text-foreground">
-                            <ChevronDown className="w-2.5 h-2.5 transition-transform" />
-                            {group.label}
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <div className="flex flex-wrap gap-1 py-0.5">
-                              {group.tags.map(tag => (
-                                <PillFilter key={tag} active={localTags.includes(tag)} onClick={() => handleToggleCommonTag(tag)} size="sm">{tag}</PillFilter>
-                              ))}
-                            </div>
-                            <div className="flex gap-1 mt-0.5">
-                              <Input
-                                value={sectionInput}
-                                onChange={(e) => setSectionTagInputs(prev => ({ ...prev, [`${catKey}_${groupKey}`]: e.target.value }))}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSectionAdd()}
-                                placeholder={`+ custom ${group.label.toLowerCase()}…`}
-                                className="h-5 text-[10px] px-1.5"
-                              />
-                              <Button size="sm" variant="ghost" className="h-5 px-1 min-w-0" onClick={handleSectionAdd}><Plus className="w-2.5 h-2.5" /></Button>
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      );
-                    })}
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            })}
-            {localTags.length > 0 && (
-              <div className="pt-1 border-t border-border">
-                <span className="text-[9px] text-muted-foreground font-medium">Active tags</span>
-                <div className="flex flex-wrap gap-1 mt-0.5">
-                  {localTags.map(tag => (
-                    <Badge key={tag} variant="secondary" className="text-[9px] cursor-pointer hover:bg-destructive/20" onClick={() => handleRemoveTag(tag)}>{tag} ×</Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+           <PopoverContent className="w-64 p-2 max-h-96 overflow-y-auto" align="start" onClick={(e) => e.stopPropagation()}>
+            <UnifiedTagPicker
+              tags={localTags}
+              onTagsChange={(newTags) => {
+                setLocalTags(newTags);
+                onUpdateTags(canon.id, newTags);
+              }}
+              primaryCategory={normalizeOutputType(canon.output_type)}
+              compact
+            />
           </PopoverContent>
         </Popover>
         {/* Assign to base position */}
@@ -430,11 +347,13 @@ export function PositionsGrid({
     }) || null;
   };
 
+  const { filterVocabulary } = useTagPresets();
+
   const filtered = canonImages.filter(c => {
     const normalized = normalizeOutputType(c.output_type);
     if (typeFilter !== 'all') {
       const matchesType = normalized === typeFilter;
-      const matchesTags = c.tags?.some(t => FILTER_TAG_VOCABULARY[typeFilter]?.includes(t)) ?? false;
+      const matchesTags = c.tags?.some(t => filterVocabulary[typeFilter]?.includes(t)) ?? false;
       if (!matchesType && !matchesTags) return false;
     }
     if (tagFilter && !c.tags?.some(t => t.includes(tagFilter.toLowerCase()))) return false;
@@ -658,21 +577,14 @@ export function PositionsGrid({
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Tags</Label>
-                {(() => {
-                  const groups = TAG_GROUPS_BY_OUTPUT_TYPE[newOutputType] || POSITION_TAG_GROUPS;
-                  return (
-                    <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
-                      {Object.entries(groups).map(([groupKey, group]) => (
-                        <React.Fragment key={groupKey}>
-                          <span className="w-full text-[9px] font-medium text-muted-foreground uppercase tracking-wider mt-1">{group.label}</span>
-                          {group.tags.map(tag => (
-                            <PillFilter key={tag} active={newTags.includes(tag)} onClick={() => setNewTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} size="sm">{tag}</PillFilter>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  );
-                })()}
+                <div className="max-h-48 overflow-y-auto">
+                  <UnifiedTagPicker
+                    tags={newTags}
+                    onTagsChange={setNewTags}
+                    primaryCategory={newOutputType}
+                    compact
+                  />
+                </div>
               </div>
               <Button size="sm" className="w-full h-7 text-xs" onClick={handleConfirmUpload} disabled={isUploading}>
                 {isUploading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}Save

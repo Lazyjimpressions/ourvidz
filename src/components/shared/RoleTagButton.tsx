@@ -10,7 +10,7 @@ import {
   MEANINGFUL_ROLES,
   ROLE_TAG_PREFIX,
 } from '@/types/slotRoles';
-import { TAG_GROUPS_BY_OUTPUT_TYPE } from '@/types/positionTags';
+import { UnifiedTagPicker } from '@/components/shared/UnifiedTagPicker';
 
 /** Extract current role tags from a tags array */
 export function getRoleTags(tags: string[]): SlotRole[] {
@@ -47,9 +47,26 @@ export const RoleTagButton: React.FC<{
   const activeRoles = getRoleTags(tags);
   const hasRoles = activeRoles.length > 0;
 
-  // Determine which grouped sub-tags to show based on active role
-  const activeRole = activeRoles.length === 1 ? activeRoles[0] : null;
-  const tagGroups = activeRole ? TAG_GROUPS_BY_OUTPUT_TYPE[activeRole] : null;
+  // Determine primary category from active role for the unified picker
+  const primaryCategory = activeRoles.length === 1 ? activeRoles[0] : undefined;
+
+  // Non-role tags for the unified picker
+  const descriptiveTags = tags.filter(t => !t.startsWith(ROLE_TAG_PREFIX));
+
+  const handleTagsChange = (newTags: string[]) => {
+    if (!onTagToggle) return;
+    // Find diff between old and new descriptive tags
+    const oldSet = new Set(descriptiveTags);
+    const newSet = new Set(newTags);
+    // Added tags
+    for (const t of newTags) {
+      if (!oldSet.has(t)) onTagToggle(t);
+    }
+    // Removed tags
+    for (const t of descriptiveTags) {
+      if (!newSet.has(t)) onTagToggle(t);
+    }
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -67,12 +84,12 @@ export const RoleTagButton: React.FC<{
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="min-w-[160px] w-auto max-h-[320px] overflow-y-auto p-1.5 z-[100] bg-popover border border-border shadow-lg"
+        className="min-w-[200px] w-auto max-h-[400px] overflow-y-auto p-1.5 z-[100] bg-popover border border-border shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Role toggles */}
         <p className="text-[9px] text-muted-foreground px-1.5 pb-1 font-medium uppercase tracking-wider">Role Tags</p>
-        <div className="space-y-0.5">
+        <div className="space-y-0.5 mb-2">
           {MEANINGFUL_ROLES.map((role) => {
             const isActive = activeRoles.includes(role);
             return (
@@ -92,36 +109,15 @@ export const RoleTagButton: React.FC<{
           })}
         </div>
 
-        {/* Grouped sub-tags when exactly one role is active */}
-        {tagGroups && onTagToggle && (
-          <div className="mt-2 pt-2 border-t border-border space-y-2">
-            {Object.entries(tagGroups).map(([groupKey, group]) => (
-              <div key={groupKey}>
-                <p className="text-[9px] text-muted-foreground px-1.5 pb-0.5 font-medium uppercase tracking-wider">
-                  {group.label}
-                </p>
-                <div className="flex flex-wrap gap-1 px-1">
-                  {group.tags.map((tag) => {
-                    const isActive = tags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => onTagToggle(tag)}
-                        className={cn(
-                          "px-1.5 py-0.5 rounded text-[10px] transition-colors border",
-                          isActive
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "text-muted-foreground hover:bg-accent border-border"
-                        )}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+        {/* Unified tag picker for descriptive tags */}
+        {onTagToggle && (
+          <div className="border-t border-border pt-2">
+            <UnifiedTagPicker
+              tags={descriptiveTags}
+              onTagsChange={handleTagsChange}
+              primaryCategory={primaryCategory}
+              compact
+            />
           </div>
         )}
       </PopoverContent>

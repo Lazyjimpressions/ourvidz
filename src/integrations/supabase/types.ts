@@ -2450,6 +2450,39 @@ export type Database = {
         }
         Relationships: []
       }
+      tag_presets: {
+        Row: {
+          category: string
+          created_at: string
+          group_key: string
+          group_label: string
+          id: string
+          is_active: boolean
+          sort_order: number
+          tag_value: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          group_key: string
+          group_label: string
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          tag_value: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          group_key?: string
+          group_label?: string
+          id?: string
+          is_active?: boolean
+          sort_order?: number
+          tag_value?: string
+        }
+        Relationships: []
+      }
       usage_logs: {
         Row: {
           action: string
