@@ -88,7 +88,7 @@ export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
           output_url: storagePath,
           label: label.trim() || null,
           tags: mergedTags,
-          metadata,
+          metadata: metadataValue as any,
         });
 
       if (insertError) throw insertError;
