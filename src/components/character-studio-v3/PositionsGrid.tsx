@@ -449,23 +449,17 @@ export function PositionsGrid({
       return url;
     }
 
-    const allBuckets: Array<'user-library' | 'reference_images' | 'workspace-temp'> = [
+    const allBuckets: Array<'user-library' | 'workspace-temp'> = [
       'user-library',
-      'reference_images',
       'workspace-temp',
     ];
 
-    const inferredPrimaryBucket: 'user-library' | 'reference_images' | 'workspace-temp' =
-      url.includes('/object/sign/reference_images/') ||
-      url.includes('/object/public/reference_images/') ||
-      url.includes('reference_images/') ||
-      url.includes('/canon/')
-        ? 'reference_images'
-        : url.includes('/object/sign/workspace-temp/') ||
-            url.includes('/object/public/workspace-temp/') ||
-            url.includes('workspace-temp/')
-          ? 'workspace-temp'
-          : 'user-library';
+    const inferredPrimaryBucket: 'user-library' | 'workspace-temp' =
+      url.includes('/object/sign/workspace-temp/') ||
+        url.includes('/object/public/workspace-temp/') ||
+        url.includes('workspace-temp/')
+        ? 'workspace-temp'
+        : 'user-library';
 
     const candidateBuckets = [
       inferredPrimaryBucket,
