@@ -383,17 +383,20 @@ export function PositionsGrid({
     ? canonImages.find(c => c.id === activeTagEditorCanonId)
     : null;
 
-  // Query duo poses from user_library
+  // Query duo poses from user_library scoped to this character
   const { data: duoPoses } = useQuery({
-    queryKey: ['duo-poses'],
+    queryKey: ['duo-poses', characterId],
     queryFn: async () => {
+      if (!characterId) return [];
       const { data } = await supabase
         .from('user_library')
         .select('id, storage_path, tags, custom_title, original_prompt, created_at')
+        .eq('character_id', characterId)
         .contains('tags', ['role:position', 'duo'])
         .order('created_at', { ascending: false });
       return data || [];
     },
+    enabled: !!characterId,
   });
 
   // Match canon images to fixed position slots by pose_key in metadata
