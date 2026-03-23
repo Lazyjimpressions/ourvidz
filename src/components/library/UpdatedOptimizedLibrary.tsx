@@ -36,6 +36,10 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'characters' | 'scenes' | 'videos'>('all');
   const [saveToCanonPath, setSaveToCanonPath] = useState<string | null>(null);
 
+  // Tag editor drawer state (lifted for mobile stability)
+  const [tagEditorAssetId, setTagEditorAssetId] = useState<string | null>(null);
+  const [tagEditorDraft, setTagEditorDraft] = useState<string[]>([]);
+
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
 
