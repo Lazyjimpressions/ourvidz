@@ -368,7 +368,7 @@ serve(async (req) => {
     if (isI2I && referenceImageUrl) {
       signedReferenceUrl = referenceImageUrl;
       if (!referenceImageUrl.startsWith('http') && !referenceImageUrl.startsWith('data:')) {
-        const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+        const knownBuckets = ['user-library', 'workspace-temp', 'reference_images']; // user-library first (unified storage)
         const parts = referenceImageUrl.split('/');
         let bucket = 'reference_images';
         let path = referenceImageUrl;
