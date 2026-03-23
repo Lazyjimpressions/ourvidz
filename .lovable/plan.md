@@ -1,60 +1,48 @@
 
 
-## Plan: Audit & Fix Post-Migration Issues
+## Fix: Character Studio Image Display Issues
 
-### Bugs Found
+### Root Causes Identified
 
-**Bug 1: Duo poses show across ALL characters (cross-character leak)**
-`PositionsGrid.tsx` lines 386-396 queries duo poses with NO `character_id` filter — just `tags contains ['role:position', 'duo']`. This is why Amanda New sees a duo pose from another character.
+**Issue 1: Edge function stores signed URLs as `storage_path` for portraits**
+The currently deployed edge function stores `finalImageUrl` (a signed URL with 1-year expiry) into `user_library.storage_path` for portrait rows. This works temporarily but is architecturally wrong — signed URLs expire, and the `storage_path` column should contain bare paths. Position rows correctly store bare paths.
 
-**Fix**: Add `characterId` prop to `PositionsGrid`, pass it from `StudioWorkspace` and `CharacterStudioV3`, and scope the duo query with `.eq('character_id', characterId)`.
+The edge function code in the repo (line 707) now stores `storagePath` (bare path), but the currently deployed version still stores signed URLs. This means the function needs redeployment.
 
-**Bug 2: "Save as Position" uses output_type `'pose'` instead of `'position'`**
-`CharacterStudioV3.tsx` line 242: `saveCanonFromUrl(imageUrl, 'pose', ...)`. The `loadCanon` query does return this (it excludes only `'portrait'`), but the `PositionsGrid` filter bar uses `normalizeOutputType()` which may not map `'pose'` correctly, causing display issues in filtered views.
+**Issue 2: Base angle slots don't match legacy positions (no `pose_key` in metadata)**
+DB shows positions with `generation_metadata: {}` (empty) for Alexa's "Front", "Bust", "Rear" and Amanda New's "Rear". The `getCanonForPoseKey()` function only checks `metadata.pose_key`, which is missing from these migrated rows.
 
-**Fix**: Change output_type from `'pose'` to `'position'` in the `onSaveAsPosition` call.
+**Issue 3: `user_library` not in realtime publication**
+The table is not in `supabase_realtime`, so the realtime subscription in `usePortraitVersions` never fires. Portraits only appear after a manual `fetchPortraits()` call.
 
-**Bug 3: Base position slots may not populate after migration**
-The backfill copied `character_canon.metadata` to `user_library.generation_metadata`. The `getCanonForPoseKey()` function reads `c.metadata` which maps to `generation_metadata` in `loadCanon`. This mapping looks correct: `metadata: (d as any).generation_metadata ?? null`. However, if the original `character_canon` rows had `pose_key` stored differently (e.g., in the `output_type` field rather than `metadata.pose_key`), those slots won't match.
+### Fixes
 
-**Fix**: Audit by also checking `output_type` or `label` as fallback for pose_key matching. Additionally, verify with a DB query whether existing canon rows have `pose_key` in their metadata.
+**1. Add label fallback to `getCanonForPoseKey()` in `PositionsGrid.tsx`**
+When `metadata.pose_key` is missing, fall back to matching the `label` field against a known label→poseKey map (e.g., "Front" → `front_neutral`, "Bust" → `bust`, "Rear" → `rear`).
 
-**Bug 4: Legacy `reference_images` bucket still used for uploads**
-Several files still upload to `reference_images` instead of `user-library`:
-- `CharacterStudioSidebar.tsx` (reference image upload, lines 218-229)
-- `ReferenceImageManager.ts` (all uploads)
-- `storage.ts` `uploadReferenceImage` function
+**2. Backfill `pose_key` into `generation_metadata` via SQL migration**
+Update existing position rows where `generation_metadata` is empty but `label` maps to a known pose key. This makes future lookups fast without fallback.
 
-**Fix**: Migrate these upload paths to `user-library/{userId}/references/...`.
+**3. Add `user_library` to realtime publication via SQL migration**
+`ALTER PUBLICATION supabase_realtime ADD TABLE user_library;` — enables the existing realtime subscriptions in `usePortraitVersions` and any future ones.
 
-**Bug 5: Legacy `character_canon` references in mappers/types**
-- `AssetMappers.ts` still has a `character_canon` mapper function
-- `ImagePickerDialog.tsx` metadata typing still references `source: 'character_canon'`
-- `MobileSimplePromptInput.tsx` checks `metadata?.source === 'character_canon'`
+**4. Fix edge function `storage_path` to store bare path (already in code)**
+The repo code already stores bare paths. The fix is just ensuring the function redeploys. But we also need to fix the ~20 existing rows that have signed URLs as `storage_path` — extract the bare path from the signed URL and update them.
 
-**Fix**: Update these to reference `user_library` with `character_id` filter context.
+**5. Data cleanup migration: extract bare paths from signed URLs in `storage_path`**
+For rows where `storage_path` starts with `https://`, extract the path after `/user-library/` and before `?token=`.
 
 ### Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/components/character-studio-v3/PositionsGrid.tsx` | Add `characterId` prop; scope duo query to character; remove "Duo Poses" as special section (it's just another tag filter) |
-| `src/components/character-studio-v3/StudioWorkspace.tsx` | Pass `characterId` to PositionsGrid |
-| `src/pages/CharacterStudioV3.tsx` | Fix `onSaveAsPosition` output_type from `'pose'` to `'position'`; pass characterId |
-| `src/components/character-studio/CharacterStudioSidebar.tsx` | Upload refs to `user-library` bucket |
-| `src/lib/storage.ts` | Update `uploadReferenceImage` to use `user-library` bucket |
-| `src/services/ReferenceImageManager.ts` | Update all `reference_images` references to `user-library` |
-| `src/lib/services/AssetMappers.ts` | Remove/update `character_canon` mapper |
-| `src/components/storyboard/ImagePickerDialog.tsx` | Update metadata typing from `character_canon` to `user_library` |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Update `character_canon` check |
-| `src/components/character-studio/CharacterMediaStrip.tsx` | Remove `reference_images` from known buckets |
-| `src/components/character-studio/CharacterHistoryStrip.tsx` | Same |
-| `src/pages/CharacterStudioV2.tsx` | Same |
+| `src/components/character-studio-v3/PositionsGrid.tsx` | Add label→poseKey fallback in `getCanonForPoseKey()` |
+| SQL migration | Add `user_library` to realtime publication; backfill `pose_key` from labels; extract bare paths from signed URLs in `storage_path` |
+| `supabase/functions/character-portrait/index.ts` | Already correct in repo — just needs redeployment (happens automatically) |
 
 ### Execution Order
 
-1. Fix the two immediate bugs (duo pose leak + wrong output_type) -- highest impact
-2. Migrate remaining `reference_images` upload paths to `user-library`
-3. Clean up legacy `character_canon` references in mappers and types
-4. Verify base position slot matching works with migrated data
+1. SQL migration (realtime publication + data fixes)
+2. Code fix for `getCanonForPoseKey` fallback
+3. Verify edge function deploys with bare-path storage
 
