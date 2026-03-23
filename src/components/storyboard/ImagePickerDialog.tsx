@@ -37,7 +37,7 @@ const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: 'style', label: 'Styles' },
 ];
 
-/** Maps category filter to character_canon output_type values (includes legacy normalization) */
+/** Maps category filter to output_type values for character assets in user_library */
 const CATEGORY_TO_OUTPUT_TYPES: Record<CategoryFilter, string[] | null> = {
   all: null,
   character: ['portrait', 'character'],
