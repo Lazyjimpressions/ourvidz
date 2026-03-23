@@ -664,37 +664,17 @@ export function PositionsGrid({
         Create in Workspace →
       </button>
 
-      {/* Mobile Tag Editor Drawer */}
-      <ResponsiveModal
+      {/* Mobile Tag Editor Drawer (shared component) */}
+      <TagEditorDrawer
         open={!!activeTagEditorCanonId}
         onOpenChange={(open) => { if (!open) handleCloseTagEditor(); }}
-      >
-        <ResponsiveModalContent>
-          <ResponsiveModalHeader>
-            <ResponsiveModalTitle className="flex items-center gap-2">
-              <Tag className="w-4 h-4" />
-              Edit Tags
-              {activeTagEditorCanon && (
-                <Badge variant="secondary" className="text-xs capitalize ml-1">
-                  {activeTagEditorCanon.output_type}
-                </Badge>
-              )}
-              {activeTagDraft.length > 0 && (
-                <span className="text-xs text-muted-foreground ml-auto">
-                  {activeTagDraft.length} tag{activeTagDraft.length !== 1 ? 's' : ''}
-                </span>
-              )}
-            </ResponsiveModalTitle>
-          </ResponsiveModalHeader>
-          <div className="px-4 pb-4">
-            <UnifiedTagPicker
-              tags={activeTagDraft}
-              onTagsChange={setActiveTagDraft}
-              primaryCategory={activeTagEditorCanon ? normalizeOutputType(activeTagEditorCanon.output_type) : undefined}
-            />
-          </div>
-        </ResponsiveModalContent>
-      </ResponsiveModal>
+        tags={activeTagDraft}
+        onTagsChange={setActiveTagDraft}
+        categoryHint={activeTagEditorCanon ? normalizeOutputType(activeTagEditorCanon.output_type) : undefined}
+        title="Edit Tags"
+        categoryBadge={activeTagEditorCanon?.output_type}
+        showRoleTags={false}
+      />
 
       {/* Unified Lightbox */}
       {lightboxOpen && filtered.length > 0 && (
