@@ -27,7 +27,7 @@ async function getSignedUrl(url: string): Promise<string> {
     // Parse bucket and path from storage path like "workspace-temp/user_id/file.png" or "user-library/..."
     const knownBuckets = ['workspace-temp', 'user-library', 'characters', 'reference_images'];
     const parts = url.split('/');
-    let bucket = 'workspace-temp';
+    let bucket = 'user-library';
     let path = url;
 
     if (knownBuckets.includes(parts[0])) {

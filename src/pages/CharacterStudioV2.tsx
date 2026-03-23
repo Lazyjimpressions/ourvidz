@@ -28,7 +28,7 @@ async function getSignedPreviewUrl(url: string): Promise<string> {
     // Parse bucket and path from storage path
     const knownBuckets = ['workspace-temp', 'user-library', 'characters', 'reference_images'];
     const parts = url.split('/');
-    let bucket = 'characters';
+    let bucket = 'user-library';
     let path = url;
 
     if (knownBuckets.includes(parts[0])) {
