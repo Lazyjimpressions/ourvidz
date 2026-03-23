@@ -152,7 +152,7 @@ async function signIfStoragePath(
   const knownBuckets = [
     'user-library',
     'workspace-temp',
-    'reference_images',
+    'reference_images', // legacy fallback
     'sdxl_image_high',
     'sdxl_image_fast',
     'video_high',
