@@ -1,48 +1,66 @@
 
+Root cause is now clear and reproducible:
 
-## Fix: Character Studio Image Display Issues
+1) Running `character-portrait` deployment is stale (not the repo version): logs show repeated  
+`Failed to insert portrait batch 0: record "new" has no field "output_type"`.
 
-### Root Causes Identified
+2) The trigger migration left a legacy trigger active on `character_portraits`:
+- Intended drop used `update_portrait_count`
+- Actual trigger name is `trigger_update_character_portrait_count`
+So legacy inserts into `character_portraits` now crash after the trigger function was rewritten for `user_library`.
 
-**Issue 1: Edge function stores signed URLs as `storage_path` for portraits**
-The currently deployed edge function stores `finalImageUrl` (a signed URL with 1-year expiry) into `user_library.storage_path` for portrait rows. This works temporarily but is architecturally wrong — signed URLs expire, and the `storage_path` column should contain bare paths. Position rows correctly store bare paths.
+3) New generated rows are being written as orphan library rows (`character_id = null`, `output_type = null`) with only `roleplay_metadata.character_id`, so Character Studio queries exclude them.
 
-The edge function code in the repo (line 707) now stores `storagePath` (bare path), but the currently deployed version still stores signed URLs. This means the function needs redeployment.
+Implementation plan (holistic fix):
 
-**Issue 2: Base angle slots don't match legacy positions (no `pose_key` in metadata)**
-DB shows positions with `generation_metadata: {}` (empty) for Alexa's "Front", "Bust", "Rear" and Amanda New's "Rear". The `getCanonForPoseKey()` function only checks `metadata.pose_key`, which is missing from these migrated rows.
+1. Database hardening + data repair migration
+- Drop legacy trigger on `character_portraits`:
+  `DROP TRIGGER IF EXISTS trigger_update_character_portrait_count ON public.character_portraits;`
+- Backfill orphan portrait rows in `user_library` where:
+  `roleplay_metadata->>'type' = 'character_portrait'` and `character_id/output_type` are null:
+  - set `character_id` from `roleplay_metadata->>'character_id'`
+  - set `output_type = 'portrait'`
+- Deduplicate by `(user_id, storage_path, character_id, output_type='portrait')`, keeping the best populated row.
+- Keep `user_library` as single source of truth.
 
-**Issue 3: `user_library` not in realtime publication**
-The table is not in `supabase_realtime`, so the realtime subscription in `usePortraitVersions` never fires. Portraits only appear after a manual `fetchPortraits()` call.
+2. Force deploy the correct edge function code
+- Redeploy `character-portrait` immediately (do not wait for incidental deploys).
+- Confirm logs no longer emit `record "new" has no field "output_type"`.
 
-### Fixes
+3. Make edge function failure explicit (prevent silent partial success)
+- In `supabase/functions/character-portrait/index.ts`, if portrait DB insert fails, return error instead of success payload.
+- Keep canon-position insert behavior explicit and logged.
 
-**1. Add label fallback to `getCanonForPoseKey()` in `PositionsGrid.tsx`**
-When `metadata.pose_key` is missing, fall back to matching the `label` field against a known label→poseKey map (e.g., "Front" → `front_neutral`, "Bust" → `bust`, "Rear" → `rear`).
+4. Align all portrait autosave writers to unified schema
+Update `fal-image`, `fal-webhook`, `replicate-webhook`, and `job-callback` character-portrait inserts to always include:
+- `character_id`
+- `output_type = 'portrait'`
+- `generation_metadata.job_id`
+This prevents future regressions when async/webhook paths are used.
 
-**2. Backfill `pose_key` into `generation_metadata` via SQL migration**
-Update existing position rows where `generation_metadata` is empty but `label` maps to a known pose key. This makes future lookups fast without fallback.
+5. Client resilience for legacy rows during transition
+In `src/hooks/usePortraitVersions.ts`:
+- Add fallback fetch path for legacy rows identified via `roleplay_metadata` (`type=character_portrait`, matching character_id) when strict rows are missing.
+- Merge + de-dup in memory by storage path/id.
+- Keep strict path as primary once data is repaired.
 
-**3. Add `user_library` to realtime publication via SQL migration**
-`ALTER PUBLICATION supabase_realtime ADD TABLE user_library;` — enables the existing realtime subscriptions in `usePortraitVersions` and any future ones.
+6. Verification checklist (must pass)
+- For Alexa and Amanda New:
+  - Newly generated image appears in Character Studio Portraits immediately.
+  - Image can be used/seen in References flow as expected.
+- SQL validation:
+  - Recent character_portrait jobs have `portrait_rows > 0` in `user_library`
+  - No new orphan rows (`character_id null/output_type null`) for those jobs.
+- Edge logs:
+  - No `Failed to insert portrait batch`
+  - No `record "new" has no field "output_type"`.
 
-**4. Fix edge function `storage_path` to store bare path (already in code)**
-The repo code already stores bare paths. The fix is just ensuring the function redeploys. But we also need to fix the ~20 existing rows that have signed URLs as `storage_path` — extract the bare path from the signed URL and update them.
-
-**5. Data cleanup migration: extract bare paths from signed URLs in `storage_path`**
-For rows where `storage_path` starts with `https://`, extract the path after `/user-library/` and before `?token=`.
-
-### Files to Modify
-
-| File | Change |
-|------|--------|
-| `src/components/character-studio-v3/PositionsGrid.tsx` | Add label→poseKey fallback in `getCanonForPoseKey()` |
-| SQL migration | Add `user_library` to realtime publication; backfill `pose_key` from labels; extract bare paths from signed URLs in `storage_path` |
-| `supabase/functions/character-portrait/index.ts` | Already correct in repo — just needs redeployment (happens automatically) |
-
-### Execution Order
-
-1. SQL migration (realtime publication + data fixes)
-2. Code fix for `getCanonForPoseKey` fallback
-3. Verify edge function deploys with bare-path storage
-
+Files targeted:
+- `supabase/migrations/<new_fix>.sql`
+- `supabase/functions/character-portrait/index.ts`
+- `supabase/functions/fal-image/index.ts`
+- `supabase/functions/fal-webhook/index.ts`
+- `supabase/functions/replicate-webhook/index.ts`
+- `supabase/functions/job-callback/index.ts`
+- `src/hooks/usePortraitVersions.ts`
+- (optional guard) `src/hooks/useCharacterStudio.ts` for strict success handling
