@@ -605,6 +605,8 @@ export function PositionsGrid({
             canonPosePresets={canonPosePresets}
             onOpenLightbox={(i) => { setLightboxIndex(i); setLightboxOpen(true); }}
             onSendToWorkspace={onSendToWorkspace}
+            onOpenTagEditor={handleOpenTagEditor}
+            isMobile={isMobile}
           />
         ))}
 
