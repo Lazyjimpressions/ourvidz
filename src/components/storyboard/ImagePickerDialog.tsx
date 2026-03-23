@@ -37,7 +37,7 @@ const CATEGORY_TABS: { value: CategoryFilter; label: string }[] = [
   { value: 'style', label: 'Styles' },
 ];
 
-/** Maps category filter to character_canon output_type values (includes legacy normalization) */
+/** Maps category filter to output_type values for character assets in user_library */
 const CATEGORY_TO_OUTPUT_TYPES: Record<CategoryFilter, string[] | null> = {
   all: null,
   character: ['portrait', 'character'],
@@ -64,7 +64,7 @@ interface ImagePickerDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (imageUrl: string, source: 'library' | 'workspace' | 'characters', metadata?: {
-    source: 'character_canon';
+    source: 'user_library';
     characterId: string;
     outputType: string;
     tags: string[];
@@ -410,7 +410,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       const path = asset.originalPath;
       if (path.startsWith('http://') || path.startsWith('https://')) {
         const canonMeta = activeSource === 'characters' ? {
-          source: 'character_canon' as const,
+          source: 'user_library' as const,
           characterId: asset.metadata?.character_id || '',
           outputType: asset.metadata?.output_type || '',
           tags: asset.metadata?.tags || [],
@@ -422,20 +422,12 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
       let { data, error } = await supabase.storage
         .from(bucket)
         .createSignedUrl(path, 3600);
-      // Legacy fallback for old reference_images paths
-      if (error && bucket === 'user-library') {
-        const legacy = await supabase.storage.from('reference_images').createSignedUrl(path, 3600);
-        if (!legacy.error && legacy.data?.signedUrl) {
-          data = legacy.data;
-          error = null;
-        }
-      }
       if (error || !data?.signedUrl) {
         console.error('❌ Failed to sign original for selection:', error);
         return;
       }
       const canonMeta = activeSource === 'characters' ? {
-        source: 'character_canon' as const,
+        source: 'user_library' as const,
         characterId: asset.metadata?.character_id || '',
         outputType: asset.metadata?.output_type || '',
         tags: asset.metadata?.tags || [],

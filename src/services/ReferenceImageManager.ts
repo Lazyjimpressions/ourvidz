@@ -33,7 +33,7 @@ class ReferenceImageManager {
 
     // Upload to storage
     const { data: uploadData, error: uploadError } = await this.supabase.storage
-      .from('reference_images')
+      .from('user-library')
       .upload(filePath, upload.file, {
         cacheControl: '3600',
         upsert: false
@@ -43,7 +43,7 @@ class ReferenceImageManager {
 
     // Get public URL
     const { data: urlData } = this.supabase.storage
-      .from('reference_images')
+      .from('user-library')
       .getPublicUrl(filePath);
 
     // Create thumbnail
@@ -110,8 +110,8 @@ class ReferenceImageManager {
       return {
         id: item.id,
         characterId,
-        imageUrl: item.storage_path ? this.supabase.storage.from('reference_images').getPublicUrl(item.storage_path).data.publicUrl : '',
-        thumbnailUrl: item.thumbnail_path ? this.supabase.storage.from('reference_images').getPublicUrl(item.thumbnail_path).data.publicUrl : undefined,
+        imageUrl: item.storage_path ? this.supabase.storage.from('user-library').getPublicUrl(item.storage_path).data.publicUrl : '',
+        thumbnailUrl: item.thumbnail_path ? this.supabase.storage.from('user-library').getPublicUrl(item.thumbnail_path).data.publicUrl : undefined,
         metadata: {
           consistency_score: metadata.consistency_score,
           generation_params: metadata.generation_params,
@@ -153,7 +153,7 @@ class ReferenceImageManager {
     // Delete from storage
     if (data.storage_path) {
       const { error: storageError } = await this.supabase.storage
-        .from('reference_images')
+        .from('user-library')
         .remove([data.storage_path]);
 
       if (storageError) throw storageError;

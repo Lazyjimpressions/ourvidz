@@ -48,6 +48,7 @@ interface PositionsGridProps {
   hasReferenceImage?: boolean;
   onUpdatePresetPrompt?: (poseKey: string, newFragment: string) => Promise<void>;
   onSendToWorkspace?: (signedUrl: string) => void;
+  characterId?: string;
   characterName?: string;
 }
 
@@ -344,6 +345,7 @@ export function PositionsGrid({
   onUpdatePresetPrompt,
   onSendToWorkspace,
   characterName,
+  characterId,
 }: PositionsGridProps) {
   const isMobile = useIsMobile();
   const [typeFilter, setTypeFilter] = useState<PositionsGridFilter>('all');
@@ -382,17 +384,20 @@ export function PositionsGrid({
     ? canonImages.find(c => c.id === activeTagEditorCanonId)
     : null;
 
-  // Query duo poses from user_library
+  // Query duo poses from user_library scoped to this character
   const { data: duoPoses } = useQuery({
-    queryKey: ['duo-poses'],
+    queryKey: ['duo-poses', characterId],
     queryFn: async () => {
+      if (!characterId) return [];
       const { data } = await supabase
         .from('user_library')
         .select('id, storage_path, tags, custom_title, original_prompt, created_at')
+        .eq('character_id', characterId)
         .contains('tags', ['role:position', 'duo'])
         .order('created_at', { ascending: false });
       return data || [];
     },
+    enabled: !!characterId,
   });
 
   // Match canon images to fixed position slots by pose_key in metadata
@@ -445,23 +450,17 @@ export function PositionsGrid({
       return url;
     }
 
-    const allBuckets: Array<'user-library' | 'reference_images' | 'workspace-temp'> = [
+    const allBuckets: Array<'user-library' | 'workspace-temp'> = [
       'user-library',
-      'reference_images',
       'workspace-temp',
     ];
 
-    const inferredPrimaryBucket: 'user-library' | 'reference_images' | 'workspace-temp' =
-      url.includes('/object/sign/reference_images/') ||
-      url.includes('/object/public/reference_images/') ||
-      url.includes('reference_images/') ||
-      url.includes('/canon/')
-        ? 'reference_images'
-        : url.includes('/object/sign/workspace-temp/') ||
-            url.includes('/object/public/workspace-temp/') ||
-            url.includes('workspace-temp/')
-          ? 'workspace-temp'
-          : 'user-library';
+    const inferredPrimaryBucket: 'user-library' | 'workspace-temp' =
+      url.includes('/object/sign/workspace-temp/') ||
+        url.includes('/object/public/workspace-temp/') ||
+        url.includes('workspace-temp/')
+        ? 'workspace-temp'
+        : 'user-library';
 
     const candidateBuckets = [
       inferredPrimaryBucket,
@@ -709,7 +708,7 @@ export function PositionsGrid({
                   )}
                   {onSendToWorkspace && (
                     <Button variant="ghost" size="sm" onClick={async () => {
-                      const { data } = await supabase.storage.from('reference_images').createSignedUrl(canon.output_url, 3600);
+                      const { data } = await supabase.storage.from('user-library').createSignedUrl(canon.output_url, 3600);
                       if (data?.signedUrl) {
                         onSendToWorkspace(data.signedUrl);
                       }
@@ -721,9 +720,9 @@ export function PositionsGrid({
                   )}
                   <Button variant="ghost" size="sm" onClick={async () => {
                     try {
-                      // Download from reference_images and re-upload to user-library
+                      // Asset already in user-library — just create a library record
                       const { data: downloadData, error: dlError } = await supabase.storage
-                        .from('reference_images')
+                        .from('user-library')
                         .download(canon.output_url);
                       if (dlError || !downloadData) throw dlError || new Error('Download failed');
 
