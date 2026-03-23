@@ -691,7 +691,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   // Handle image selection from the picker dialog
   const handlePickerSelect = useCallback((imageUrl: string, _source: 'library' | 'workspace' | 'characters', metadata?: {
-    source: 'character_canon';
+    source: 'user_library';
     characterId: string;
     outputType: string;
     tags: string[];
