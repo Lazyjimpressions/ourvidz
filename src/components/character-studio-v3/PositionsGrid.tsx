@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users, Save, ChevronDown } from 'lucide-react';
+import { Trash2, Star, ExternalLink, Tag, Plus, Upload, Loader2, RefreshCw, Crosshair, Pencil, Users, Save, ChevronDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CharacterCanon, CanonPosePreset } from '@/hooks/useCharacterStudio';
 import { AssetTile } from '@/components/shared/AssetTile';
@@ -22,6 +22,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { UnifiedTagPicker } from '@/components/shared/UnifiedTagPicker';
 import { useTagPresets } from '@/hooks/useTagPresets';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  ResponsiveModal,
+  ResponsiveModalContent,
+  ResponsiveModalHeader,
+  ResponsiveModalTitle,
+} from '@/components/ui/responsive-modal';
 import {
   POSITIONS_GRID_FILTERS,
   UNIFIED_OUTPUT_TYPES,
@@ -188,6 +195,8 @@ function CanonThumbnail({
   canonPosePresets,
   onOpenLightbox,
   onSendToWorkspace,
+  onOpenTagEditor,
+  isMobile,
 }: {
   canon: CharacterCanon;
   index: number;
@@ -198,9 +207,12 @@ function CanonThumbnail({
   canonPosePresets?: Record<string, CanonPosePreset>;
   onOpenLightbox: (index: number) => void;
   onSendToWorkspace?: (signedUrl: string) => void;
+  onOpenTagEditor: (canonId: string, currentTags: string[]) => void;
+  isMobile: boolean;
 }) {
   const { signedUrl } = useSignedUrl(canon.output_url);
   const [showActions, setShowActions] = useState(false);
+  // Desktop-only popover state
   const [editingTags, setEditingTags] = useState(false);
   const [localTags, setLocalTags] = useState<string[]>(canon.tags || []);
 
@@ -210,6 +222,15 @@ function CanonThumbnail({
     }
   };
 
+  const handleTagClick = (e: React.MouseEvent | React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isMobile) {
+      onOpenTagEditor(canon.id, canon.tags || []);
+    } else {
+      setEditingTags(true);
+    }
+  };
 
   return (
     <SignedCanonTile
@@ -233,67 +254,81 @@ function CanonThumbnail({
         </div>
       )}
 
-      {/* Hover actions */}
-      <div
-        className={cn(
-          "absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity",
-          editingTags ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        )}
-        onMouseEnter={() => setShowActions(true)}
-        onMouseLeave={() => { if (!editingTags) { setShowActions(false); } }}
-      >
-        <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
-          <Trash2 className="w-3 h-3" />
+      {/* Mobile: persistent tag button (always visible) */}
+      {isMobile && (
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); }}
+          onClick={handleTagClick}
+          className="absolute bottom-1 right-1 z-10 p-2 rounded-full bg-black/50 text-white min-w-[44px] min-h-[44px] flex items-center justify-center"
+          title="Edit tags"
+        >
+          <Tag className="w-4 h-4" />
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }} className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')} title="Set as primary">
-          <Star className="w-3 h-3" />
-        </button>
-        {onSendToWorkspace && (
-          <button onClick={(e) => { e.stopPropagation(); handleSendToWorkspace(); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Send to Workspace">
-            <ExternalLink className="w-3 h-3" />
+      )}
+
+      {/* Desktop: Hover actions */}
+      {!isMobile && (
+        <div
+          className={cn(
+            "absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity",
+            editingTags ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}
+          onMouseEnter={() => setShowActions(true)}
+          onMouseLeave={() => { if (!editingTags) { setShowActions(false); } }}
+        >
+          <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
+            <Trash2 className="w-3 h-3" />
           </button>
-        )}
-        <Popover open={editingTags} onOpenChange={setEditingTags} modal>
-          <PopoverTrigger asChild>
-            <button onClick={(e) => { e.stopPropagation(); setEditingTags(true); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
-              <Tag className="w-3 h-3" />
+          <button onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }} className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')} title="Set as primary">
+            <Star className="w-3 h-3" />
+          </button>
+          {onSendToWorkspace && (
+            <button onClick={(e) => { e.stopPropagation(); handleSendToWorkspace(); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Send to Workspace">
+              <ExternalLink className="w-3 h-3" />
             </button>
-          </PopoverTrigger>
-           <PopoverContent className="w-64 p-2 max-h-96 overflow-y-auto" align="start" onClick={(e) => e.stopPropagation()}>
-            <UnifiedTagPicker
-              tags={localTags}
-              onTagsChange={(newTags) => {
-                setLocalTags(newTags);
-                onUpdateTags(canon.id, newTags);
-              }}
-              primaryCategory={normalizeOutputType(canon.output_type)}
-              compact
-            />
-          </PopoverContent>
-        </Popover>
-        {/* Assign to base position */}
-        {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
-          <Popover>
+          )}
+          <Popover open={editingTags} onOpenChange={setEditingTags} modal>
             <PopoverTrigger asChild>
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Assign to position">
-                <Crosshair className="w-3 h-3" />
+              <button onClick={handleTagClick} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
+                <Tag className="w-3 h-3" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-40 p-1.5" align="start" onClick={(e) => e.stopPropagation()}>
-              <p className="text-[10px] text-muted-foreground font-medium px-1 mb-1">Assign to slot</p>
-              {POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => (
-                <button
-                  key={k}
-                  onClick={() => onAssignPoseKey(canon.id, k)}
-                  className="w-full text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors"
-                >
-                  {canonPosePresets[k].label}
-                </button>
-              ))}
+            <PopoverContent className="w-64 p-2 max-h-96 overflow-y-auto" align="start" onClick={(e) => e.stopPropagation()}>
+              <UnifiedTagPicker
+                tags={localTags}
+                onTagsChange={(newTags) => {
+                  setLocalTags(newTags);
+                  onUpdateTags(canon.id, newTags);
+                }}
+                primaryCategory={normalizeOutputType(canon.output_type)}
+                compact
+              />
             </PopoverContent>
           </Popover>
-        )}
-      </div>
+          {/* Assign to base position */}
+          {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Assign to position">
+                  <Crosshair className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-1.5" align="start" onClick={(e) => e.stopPropagation()}>
+                <p className="text-[10px] text-muted-foreground font-medium px-1 mb-1">Assign to slot</p>
+                {POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => (
+                  <button
+                    key={k}
+                    onClick={() => onAssignPoseKey(canon.id, k)}
+                    className="w-full text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors"
+                  >
+                    {canonPosePresets[k].label}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+      )}
     </SignedCanonTile>
   );
 }
@@ -315,6 +350,7 @@ export function PositionsGrid({
   onSendToWorkspace,
   characterName,
 }: PositionsGridProps) {
+  const isMobile = useIsMobile();
   const [typeFilter, setTypeFilter] = useState<PositionsGridFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -328,6 +364,28 @@ export function PositionsGrid({
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Mobile tag editor state (lifted from CanonThumbnail)
+  const [activeTagEditorCanonId, setActiveTagEditorCanonId] = useState<string | null>(null);
+  const [activeTagDraft, setActiveTagDraft] = useState<string[]>([]);
+
+  const handleOpenTagEditor = useCallback((canonId: string, currentTags: string[]) => {
+    setActiveTagEditorCanonId(canonId);
+    setActiveTagDraft(currentTags);
+  }, []);
+
+  const handleCloseTagEditor = useCallback(() => {
+    // Save on close
+    if (activeTagEditorCanonId) {
+      onUpdateTags(activeTagEditorCanonId, activeTagDraft);
+    }
+    setActiveTagEditorCanonId(null);
+    setActiveTagDraft([]);
+  }, [activeTagEditorCanonId, activeTagDraft, onUpdateTags]);
+
+  const activeTagEditorCanon = activeTagEditorCanonId
+    ? canonImages.find(c => c.id === activeTagEditorCanonId)
+    : null;
 
   // Query duo poses from user_library
   const { data: duoPoses } = useQuery({
@@ -547,6 +605,8 @@ export function PositionsGrid({
             canonPosePresets={canonPosePresets}
             onOpenLightbox={(i) => { setLightboxIndex(i); setLightboxOpen(true); }}
             onSendToWorkspace={onSendToWorkspace}
+            onOpenTagEditor={handleOpenTagEditor}
+            isMobile={isMobile}
           />
         ))}
 
@@ -603,6 +663,38 @@ export function PositionsGrid({
       <button onClick={() => navigate('/workspace?mode=image')} className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2">
         Create in Workspace →
       </button>
+
+      {/* Mobile Tag Editor Drawer */}
+      <ResponsiveModal
+        open={!!activeTagEditorCanonId}
+        onOpenChange={(open) => { if (!open) handleCloseTagEditor(); }}
+      >
+        <ResponsiveModalContent>
+          <ResponsiveModalHeader>
+            <ResponsiveModalTitle className="flex items-center gap-2">
+              <Tag className="w-4 h-4" />
+              Edit Tags
+              {activeTagEditorCanon && (
+                <Badge variant="secondary" className="text-xs capitalize ml-1">
+                  {activeTagEditorCanon.output_type}
+                </Badge>
+              )}
+              {activeTagDraft.length > 0 && (
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {activeTagDraft.length} tag{activeTagDraft.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </ResponsiveModalTitle>
+          </ResponsiveModalHeader>
+          <div className="px-4 pb-4">
+            <UnifiedTagPicker
+              tags={activeTagDraft}
+              onTagsChange={setActiveTagDraft}
+              primaryCategory={activeTagEditorCanon ? normalizeOutputType(activeTagEditorCanon.output_type) : undefined}
+            />
+          </div>
+        </ResponsiveModalContent>
+      </ResponsiveModal>
 
       {/* Unified Lightbox */}
       {lightboxOpen && filtered.length > 0 && (
