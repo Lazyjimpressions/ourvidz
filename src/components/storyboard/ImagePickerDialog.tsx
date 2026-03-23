@@ -477,6 +477,13 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           {/* Character Selector (characters source only) */}
           {activeSource === 'characters' && characters.length > 0 && (
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              <PillFilter
+                active={selectedCharacterId === null}
+                onClick={() => { setSelectedCharacterId(null); setSelectedAssetId(null); }}
+                size="sm"
+              >
+                All
+              </PillFilter>
               {characters.map((char) => (
                 <PillFilter
                   key={char.id}
