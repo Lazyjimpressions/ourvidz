@@ -294,7 +294,6 @@ function CanonThumbnail({
               compact
             />
           </PopoverContent>
-          </PopoverContent>
         </Popover>
         {/* Assign to base position */}
         {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
