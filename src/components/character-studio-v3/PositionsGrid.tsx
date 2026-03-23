@@ -400,12 +400,29 @@ export function PositionsGrid({
     enabled: !!characterId,
   });
 
-  // Match canon images to fixed position slots by pose_key in metadata
+  // Match canon images to fixed position slots by pose_key in metadata, with label fallback
   const getCanonForPoseKey = (poseKey: string): CharacterCanon | null => {
-    return canonImages.find(c => {
+    // Primary: match by metadata.pose_key
+    const byMeta = canonImages.find(c => {
       const meta = c.metadata as Record<string, any> | null;
       return meta?.pose_key === poseKey;
-    }) || null;
+    });
+    if (byMeta) return byMeta;
+
+    // Fallback: match by label for legacy/migrated rows
+    const labelMap: Record<string, string> = {
+      'front_neutral': 'Front',
+      'rear': 'Rear',
+      'bust': 'Bust',
+      'side_left': 'Side Left',
+      'side_right': 'Side Right',
+      'three_quarter': 'Three Quarter',
+    };
+    const expectedLabel = labelMap[poseKey];
+    if (expectedLabel) {
+      return canonImages.find(c => c.label === expectedLabel) || null;
+    }
+    return null;
   };
 
   const { filterVocabulary } = useTagPresets();
