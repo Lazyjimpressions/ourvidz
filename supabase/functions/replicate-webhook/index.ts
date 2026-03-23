@@ -418,11 +418,18 @@ serve(async (req) => {
                     width: workspaceAsset.width,
                     height: workspaceAsset.height,
                     tags: ['character', 'portrait'],
+                    character_id: characterId,
+                    output_type: 'portrait',
+                    generation_metadata: {
+                      job_id: job.id,
+                      provider: 'replicate',
+                    },
                     roleplay_metadata: {
                       type: 'character_portrait',
                       character_id: characterId,
                       character_name: job.metadata.character_name,
-                      consistency_method: job.metadata.consistency_method
+                      consistency_method: job.metadata.consistency_method,
+                      job_id: job.id,
                     },
                     content_category: 'character'
                   })

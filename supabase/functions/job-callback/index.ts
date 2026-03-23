@@ -442,11 +442,18 @@ serve(async (req) => {
                     width: firstImageAsset.generation_settings?.width,
                     height: firstImageAsset.generation_settings?.height,
                     tags: ['character', 'portrait'],
+                    character_id: characterId,
+                    output_type: 'portrait',
+                    generation_metadata: {
+                      job_id: jobId,
+                      provider: 'worker-callback',
+                    },
                     roleplay_metadata: {
                       type: 'character_portrait',
                       character_id: characterId,
                       character_name: job.metadata.character_name,
-                      consistency_method: job.metadata.consistency_method
+                      consistency_method: job.metadata.consistency_method,
+                      job_id: jobId,
                     },
                     content_category: 'character'
                   })
