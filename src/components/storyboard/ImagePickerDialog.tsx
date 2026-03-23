@@ -64,7 +64,7 @@ interface ImagePickerDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (imageUrl: string, source: 'library' | 'workspace' | 'characters', metadata?: {
-    source: 'character_canon';
+    source: 'user_library';
     characterId: string;
     outputType: string;
     tags: string[];
