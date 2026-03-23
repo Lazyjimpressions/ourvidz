@@ -286,6 +286,7 @@ export class LibraryAssetService {
       tags: asset.tags,
       isFavorite: asset.is_favorite,
       collectionId: asset.collection_id,
+      contentCategory: (asset as any).content_category,
       status: 'completed' // Library assets are always completed
     };
   }
