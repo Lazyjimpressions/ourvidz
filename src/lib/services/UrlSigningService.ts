@@ -68,7 +68,7 @@ export class UrlSigningService {
     }
     
     // Remove bucket prefix if present
-    const bucketPrefixes = [bucket, 'workspace-temp', 'user-library'];
+    const bucketPrefixes = [bucket, 'workspace-temp', 'user-library', 'reference_images'];
     for (const prefix of bucketPrefixes) {
       if (path.startsWith(`${prefix}/`)) {
         return path.substring(prefix.length + 1);
