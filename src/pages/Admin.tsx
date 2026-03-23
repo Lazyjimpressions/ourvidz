@@ -20,6 +20,7 @@ import { ApiProvidersTab } from '@/components/admin/ApiProvidersTab';
 import { ApiModelsTab } from '@/components/admin/ApiModelsTab';
 import { ApiUsageTab } from '@/components/admin/ApiUsageTab';
 import { PromptScoringAnalytics } from '@/components/admin/PromptScoringAnalytics';
+import { TagTaxonomyTab } from '@/components/admin/TagTaxonomyTab';
 
 const AdminContent = () => {
 
