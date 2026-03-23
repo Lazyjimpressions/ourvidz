@@ -48,6 +48,7 @@ interface PositionsGridProps {
   hasReferenceImage?: boolean;
   onUpdatePresetPrompt?: (poseKey: string, newFragment: string) => Promise<void>;
   onSendToWorkspace?: (signedUrl: string) => void;
+  characterId?: string;
   characterName?: string;
 }
 
