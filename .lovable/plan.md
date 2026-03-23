@@ -1,69 +1,68 @@
 
 
-## Audit: ImagePickerDialog Issues in Workspace
+## Revised Plan: Shared Tag Editor Component
 
-### Problems Found
+### Core Insight
 
-**1. No "All Characters" option in Characters tab**
-When the Characters source tab is active, the picker shows individual character pills but no way to view assets across all characters at once. This forces users to click through each character individually to find an asset.
+You're right — the tag picker in PositionsGrid and the one needed in the Library lightbox are driven by the same `tag_presets` table via the same `UnifiedTagPicker` component. The only difference is the **save target** (character_canon vs user_library) and the **category hint** (output_type vs content_category). That's a callback difference, not a component difference.
 
-**2. Library category filters miss most assets**
-The category filter (Characters, Positions, Outfits, Scenes, Styles) checks `asset.tags` for values like `'position'` or `'role:position'` (line 252-257). However, many library assets were saved without these role tags, so they only appear under "All". The `content_category` field (e.g. `'scene'`, `'portrait'`) on library rows is mapped into `metadata` by `toSharedFromLibrary` but is never checked by the filter — this is a missed signal.
+The PositionsGrid already has the correct mobile pattern (lifted state + ResponsiveModal drawer + UnifiedTagPicker). Instead of rebuilding that in the library, we should extract it into a shared component.
 
-**3. Canon assets have no thumbnail path, causing signing overhead**
-`toSharedFromCanon` always sets `thumbPath: null`. The signing loop then signs every canon asset using its full `output_url` path against `reference_images` bucket. If `output_url` is already an absolute URL, it passes through — but if many assets have storage paths, they all get individually signed with no thumbnail optimization.
+### What to Build
 
-**4. Category filter not applied to library `content_category`**
-Library assets have both `tags[]` and `content_category` fields. The picker only checks tags, ignoring `content_category`. An asset with `content_category: 'scene'` but no `'scene'` or `'role:scene'` tag won't appear under the Scenes filter.
+**1. New shared component: `TagEditorDrawer`**
 
-### Plan
+Extract the drawer pattern from PositionsGrid into `src/components/shared/TagEditorDrawer.tsx`:
 
-#### A. Add "All Characters" option (ImagePickerDialog.tsx)
-- Add an "All" pill at the start of the character selector (line 470)
-- When "All" is selected (`selectedCharacterId === null`), query `character_canon` without the `.eq('character_id', ...)` filter — just fetch all canon assets for the user's characters
-- Adjust the `loadCanonAssets` effect to handle `selectedCharacterId === null`
-- Default to "All" instead of auto-selecting the first character
-
-#### B. Fix library category filtering to include `content_category` (ImagePickerDialog.tsx)
-- In the `filteredAssets` memo (line 250-269), when `activeSource === 'library'` and `activeCategory !== 'all'`, also check:
-  - `asset.content_category` matches the active category (mapping: `'portrait'` → `'character'`, `'scene'` → `'scene'`, etc.)
-  - This uses the raw paginated library data which has `content_category` from the DB
-- Define a mapping: `{ character: ['portrait', 'character'], position: ['position', 'pose'], scene: ['scene'], clothing: ['clothing', 'outfit'], style: ['style'] }`
-- Check: `hasRoleTag || contentCategoryMatches`
-
-#### C. Ensure raw library data retains `content_category` for filtering
-- Verify `transformLibraryAsset` passes `content_category` through (it currently doesn't include it in `UnifiedLibraryAsset`)
-- Add `contentCategory?: string` to `UnifiedLibraryAsset` type and map it in `transformLibraryAsset`
-- Then in the filter, check `asset.contentCategory` alongside tags
-
-### Files to modify
-- `src/components/storyboard/ImagePickerDialog.tsx` — Add "All" character pill, fix category filter logic
-- `src/lib/services/LibraryAssetService.ts` — Add `contentCategory` to `UnifiedLibraryAsset` and `transformLibraryAsset`
-
-### Technical details
-
-Category filter enhancement (ImagePickerDialog, filteredAssets memo):
-```typescript
-const CATEGORY_TO_CONTENT_CATEGORIES: Record<CategoryFilter, string[]> = {
-  all: [],
-  character: ['portrait', 'character'],
-  position: ['position', 'pose'],
-  scene: ['scene'],
-  clothing: ['clothing', 'outfit'],
-  style: ['style'],
-};
-
-// In the library filter branch:
-const hasRoleTag = tags.some(t => t === activeCategory || t === `role:${activeCategory}`);
-const contentCat = asset.contentCategory || asset.content_category || '';
-const hasCategoryMatch = CATEGORY_TO_CONTENT_CATEGORIES[activeCategory]?.includes(contentCat);
-if (!hasRoleTag && !hasCategoryMatch) return false;
+```text
+Props:
+  - open: boolean
+  - onOpenChange: (open: boolean) => void
+  - tags: string[]
+  - onTagsChange: (tags: string[]) => void
+  - categoryHint?: string        // "position", "character", "scene", etc.
+  - title?: string               // e.g. asset label
+  - categoryBadge?: string       // e.g. "portrait", "position"
 ```
 
-"All Characters" canon query (when `selectedCharacterId === null`):
-```typescript
-// Remove .eq('character_id', selectedCharacterId) 
-// Instead, get all character IDs for the user and use .in('character_id', userCharacterIds)
-// Or simply omit the character filter since RLS already scopes to user's characters
-```
+Internals: `ResponsiveModal` → `ResponsiveModalContent` → header with Tag icon + badge + count → `UnifiedTagPicker`. No save logic — the parent handles persistence via `onTagsChange`.
+
+**2. Update PositionsGrid to use `TagEditorDrawer`**
+
+Replace the inline ResponsiveModal block (lines 668-697) with `<TagEditorDrawer>`. No behavior change — just deduplication.
+
+**3. Update Library lightbox to use `TagEditorDrawer`**
+
+In `UpdatedOptimizedLibrary.tsx`:
+- Add state: `tagEditorAssetId: string | null`, `tagEditorDraft: string[]`
+- In `actionsSlot`, replace the inline `RoleTagButton` (which opens a broken popover) with a simple tag icon button that calls `setTagEditorAssetId(asset.id)`
+- Render `<TagEditorDrawer>` once, outside the lightbox, with `onTagsChange` wired to the existing `handleDescriptiveTagToggle` / `handleRoleTagToggle` logic
+- On close, persist any changes
+
+**4. Simplify `RoleTagButton` usage**
+
+The legacy role tag vertical list inside `RoleTagButton`'s popover becomes unnecessary in lightbox contexts. Keep `RoleTagButton` for non-lightbox grid hover actions (where popovers work fine on desktop). In the `TagEditorDrawer`, role tags can optionally be shown as horizontal pills above the `UnifiedTagPicker` — same data, better layout.
+
+**5. Update `LightboxActions.tsx`**
+
+Add `onOpenTagEditor?: () => void` prop to `LibraryAssetActions`. When provided, render a simple tag trigger button instead of `RoleTagButton`. When not provided, fall back to current `RoleTagButton` popover (backward compatible for non-lightbox contexts).
+
+### What Does NOT Need Separate Logic
+
+- The `UnifiedTagPicker` component itself — already shared, no changes needed
+- The `useTagPresets` hook — already shared
+- The tag data model — both tables store flat `tags[]` arrays with the same vocabulary
+
+### Character vs Non-Character: No Convention Break
+
+Both `character_canon.tags` and `user_library.tags` store the same tag vocabulary from `tag_presets`. The only difference is: canon assets always have a `character_id` (so `categoryHint` comes from `output_type`), while library assets use `content_category`. This is handled by the `categoryHint` prop — the shared component doesn't care about the source table.
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/components/shared/TagEditorDrawer.tsx` | **New** — shared drawer with ResponsiveModal + UnifiedTagPicker |
+| `src/components/shared/LightboxActions.tsx` | Add `onOpenTagEditor` prop, render trigger button when provided |
+| `src/components/library/UpdatedOptimizedLibrary.tsx` | Lift tag editor state, render `TagEditorDrawer`, wire save logic |
+| `src/components/character-studio-v3/PositionsGrid.tsx` | Replace inline drawer with `TagEditorDrawer` |
 
