@@ -79,17 +79,28 @@ export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
       }
       const metadataValue = Object.keys(metadata).length > 0 ? metadata : null;
 
-      // Insert character_canon row pointing to the same storage path
+      // Get current user for the insert
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error('Not authenticated');
+
+      // Insert into user_library (unified table) with character association
       const { error: insertError } = await supabase
-        .from('character_canon')
+        .from('user_library')
         .insert({
+          user_id: currentUser.id,
+          asset_type: 'image',
+          storage_path: storagePath,
+          original_prompt: '',
+          model_used: 'reference',
+          file_size_bytes: 0,
+          mime_type: 'image/png',
           character_id: selectedCharacterId,
           output_type: outputType,
-          output_url: storagePath,
           label: label.trim() || null,
           tags: mergedTags,
-          metadata: metadataValue as any,
-        });
+          generation_metadata: metadataValue || {},
+          content_category: 'character',
+        } as any);
 
       if (insertError) throw insertError;
 

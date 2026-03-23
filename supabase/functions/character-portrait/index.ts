@@ -761,36 +761,47 @@ serve(async (req) => {
         .eq('id', characterId);
     }
 
-    // === Auto-save to character_canon for canon position generation ===
+    // === Auto-save canon position to user_library (unified table) ===
     let canonId: string | null = null;
     if (canonPoseKey && canonPosePreset && characterId && processedImages.length > 0) {
       try {
-        const { data: canonData, error: canonError } = await supabase
-          .from('character_canon')
-          .insert({
-            character_id: characterId,
-            output_type: 'position',
-            output_url: processedImages[0].storagePath || processedImages[0].imageUrl,
-            tags: canonPosePreset.tags || [],
-            label: canonPosePreset.label || canonPoseKey,
-            is_pinned: false,
-            is_primary: false,
-            metadata: {
-              pose_key: canonPoseKey,
-              job_id: jobData.id,
-              generation_time_ms: generationTime,
-              model_key: apiModel.model_key,
-              provider: providerName,
-            }
-          })
-          .select('id')
-          .single();
+        const canonStoragePath = processedImages[0].storagePath;
+        if (canonStoragePath) {
+          // Update the existing user_library row to also be a position
+          const { data: canonData, error: canonError } = await supabase
+            .from('user_library')
+            .insert({
+              user_id: user.id,
+              asset_type: 'image',
+              storage_path: canonStoragePath,
+              original_prompt: prompt,
+              model_used: apiModel.display_name,
+              file_size_bytes: 0,
+              mime_type: 'image/png',
+              character_id: characterId,
+              output_type: 'position',
+              tags: canonPosePreset.tags || [],
+              label: canonPosePreset.label || canonPoseKey,
+              is_pinned: false,
+              is_primary: false,
+              generation_metadata: {
+                pose_key: canonPoseKey,
+                job_id: jobData.id,
+                generation_time_ms: generationTime,
+                model_key: apiModel.model_key,
+                provider: providerName,
+              },
+              content_category: 'character',
+            })
+            .select('id')
+            .single();
 
-        if (canonError) {
-          console.error('⚠️ Failed to auto-save canon position:', canonError);
-        } else {
-          canonId = canonData.id;
-          console.log('📐 Canon position auto-saved:', canonId);
+          if (canonError) {
+            console.error('⚠️ Failed to auto-save canon position:', canonError);
+          } else {
+            canonId = canonData?.id || null;
+            console.log('📐 Canon position auto-saved:', canonId);
+          }
         }
       } catch (canonErr) {
         console.error('⚠️ Canon auto-save error:', canonErr);

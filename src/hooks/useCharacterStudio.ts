@@ -690,17 +690,16 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     }
   }, [savedCharacterId, user, loadCanon, toast]);
 
-  // Assign or change the pose_key on an existing canon entry
+  // Assign or change the pose_key on an existing canon entry — unified via user_library
   const assignCanonPoseKey = useCallback(async (canonId: string, poseKey: string) => {
     try {
-      // Get current metadata
       const canon = canonImages.find(c => c.id === canonId);
       const currentMeta = (canon?.metadata as Record<string, any>) || {};
       const newMeta = { ...currentMeta, pose_key: poseKey };
       
       const { error } = await supabase
-        .from('character_canon')
-        .update({ metadata: newMeta as any })
+        .from('user_library')
+        .update({ generation_metadata: newMeta } as any)
         .eq('id', canonId);
       if (error) throw error;
       await loadCanon();
