@@ -289,12 +289,11 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     return filteredAssets.map(toSharedFromWorkspace);
   }, [filteredAssets, activeSource]);
 
-  // Determine the bucket for signing
-  const bucket = activeSource === 'characters'
-    ? 'reference_images'
-    : activeSource === 'workspace'
-      ? 'workspace-temp'
-      : 'user-library';
+  // Determine the bucket for signing — unified storage: all permanent assets in user-library
+  // Legacy reference_images paths will be tried as fallback in the signing effect below
+  const bucket = activeSource === 'workspace'
+    ? 'workspace-temp'
+    : 'user-library';
 
   // Direct signing effect — signs all thumbnails when assets/bucket/dialog state changes
   useEffect(() => {
@@ -325,13 +324,23 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
               return { id: asset.id, url: path };
             }
             try {
+              // Try primary bucket first
               const { data, error } = await supabase.storage
                 .from(bucket)
                 .createSignedUrl(path, 3600);
-              if (error || !data?.signedUrl) {
-                return { id: asset.id, failed: true as const };
+              if (!error && data?.signedUrl) {
+                return { id: asset.id, url: data.signedUrl };
               }
-              return { id: asset.id, url: data.signedUrl };
+              // Legacy fallback: try reference_images for old canon assets
+              if (bucket === 'user-library') {
+                const { data: legacyData, error: legacyError } = await supabase.storage
+                  .from('reference_images')
+                  .createSignedUrl(path, 3600);
+                if (!legacyError && legacyData?.signedUrl) {
+                  return { id: asset.id, url: legacyData.signedUrl };
+                }
+              }
+              return { id: asset.id, failed: true as const };
             } catch {
               return { id: asset.id, failed: true as const };
             }
@@ -384,9 +393,17 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         onClose();
         return;
       }
-      const { data, error } = await supabase.storage
+      let { data, error } = await supabase.storage
         .from(bucket)
         .createSignedUrl(path, 3600);
+      // Legacy fallback for old reference_images paths
+      if (error && bucket === 'user-library') {
+        const legacy = await supabase.storage.from('reference_images').createSignedUrl(path, 3600);
+        if (!legacy.error && legacy.data?.signedUrl) {
+          data = legacy.data;
+          error = null;
+        }
+      }
       if (error || !data?.signedUrl) {
         console.error('❌ Failed to sign original for selection:', error);
         return;

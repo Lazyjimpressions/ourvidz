@@ -562,8 +562,8 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     setIsCanonUploading(true);
     try {
       const ext = file.name.split('.').pop() || 'png';
-      const path = `${user.id}/${savedCharacterId}/canon/${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('reference_images').upload(path, file);
+      const path = `${user.id}/canon/${savedCharacterId}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('user-library').upload(path, file);
       if (uploadError) throw uploadError;
 
       // Auto-inject role tags based on outputType

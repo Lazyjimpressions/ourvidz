@@ -140,17 +140,17 @@ const CreateCharacter: React.FC = () => {
           );
         }
 
-        // Upload to reference_images bucket
-        const path = `${user.id}/ref_${Date.now()}.jpg`;
+        // Upload to user-library bucket (unified storage)
+        const path = `${user.id}/references/ref_${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
-          .from('reference_images')
+          .from('user-library')
           .upload(path, processedFile);
 
         if (uploadError) throw uploadError;
 
         // Get signed URL for display and I2I
         const { data: signedData } = await supabase.storage
-          .from('reference_images')
+          .from('user-library')
           .createSignedUrl(path, 3600);
 
         if (signedData?.signedUrl) {

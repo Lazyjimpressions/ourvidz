@@ -263,7 +263,7 @@ export function toSharedFromLegacy(asset: any): SharedAsset {
 /**
  * Map character_canon row (with joined characters data) to SharedAsset.
  * Expects row from: character_canon joined with characters(name, reference_image_url)
- * Storage bucket: reference_images
+ * Storage bucket: user-library (unified) — legacy paths may reference reference_images
  */
 export function toSharedFromCanon(row: any): SharedAsset {
   const rawOriginalPath = row.output_url || '';

@@ -143,7 +143,7 @@ function sanitizeConditioningFrame(
 async function signIfStoragePath(
   supabase: any,
   url: string | null | undefined,
-  defaultBucket = 'reference_images'
+  defaultBucket = 'user-library'
 ): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url;
@@ -152,7 +152,7 @@ async function signIfStoragePath(
   const knownBuckets = [
     'user-library',
     'workspace-temp',
-    'reference_images',
+    'reference_images', // legacy fallback
     'sdxl_image_high',
     'sdxl_image_fast',
     'video_high',
@@ -190,7 +190,7 @@ async function signIfStoragePath(
 
   const candidateBuckets = hasExplicitBucket
     ? [parts[0]]
-    : Array.from(new Set([defaultBucket, 'workspace-temp', 'user-library', 'reference_images', ...knownBuckets]));
+    : Array.from(new Set([defaultBucket, 'user-library', 'workspace-temp', 'reference_images', ...knownBuckets]));
 
   for (const bucket of candidateBuckets) {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);

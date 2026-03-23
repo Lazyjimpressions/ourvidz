@@ -39,9 +39,18 @@ export const useReferenceUrls = () => {
         }
       }));
 
-      const { data, error } = await supabase.storage
-        .from('reference_images')
+      // Try user-library first (unified storage), fall back to reference_images for legacy paths
+      let { data, error } = await supabase.storage
+        .from('user-library')
         .createSignedUrl(path, 14400); // 4 hours
+
+      if (error) {
+        const legacy = await supabase.storage.from('reference_images').createSignedUrl(path, 14400);
+        if (!legacy.error && legacy.data?.signedUrl) {
+          data = legacy.data;
+          error = null;
+        }
+      }
 
       if (error || !data?.signedUrl) {
         console.error('Failed to get signed URL:', error);

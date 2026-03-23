@@ -475,7 +475,7 @@ export const uploadReferenceImage = async (
   const fileName = `${Date.now()}-ref.${fileExtension}`;
   console.log('🖼️ Uploading reference image:', fileName, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
   
-  return uploadFile('reference_images', fileName, file, onProgress);
+  return uploadFile('user-library', fileName, file, onProgress);
 };
 
 export const getReferenceImageUrl = async (filePath: string): Promise<string | null> => {
@@ -485,9 +485,17 @@ export const getReferenceImageUrl = async (filePath: string): Promise<string | n
   if (cleanPath.startsWith('reference_images/')) {
     cleanPath = cleanPath.replace('reference_images/', '');
   }
+  if (cleanPath.startsWith('user-library/')) {
+    cleanPath = cleanPath.replace('user-library/', '');
+  }
   
-  const { data, error } = await getSignedUrl('reference_images', cleanPath);
-  return error ? null : data?.signedUrl || null;
+  // Try user-library first (unified storage), fall back to reference_images for legacy
+  const { data, error } = await getSignedUrl('user-library', cleanPath);
+  if (error) {
+    const legacyResult = await getSignedUrl('reference_images', cleanPath);
+    return legacyResult.error ? null : legacyResult.data?.signedUrl || null;
+  }
+  return data?.signedUrl || null;
 };
 
 /**
