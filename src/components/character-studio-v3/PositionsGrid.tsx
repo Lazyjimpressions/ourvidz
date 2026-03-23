@@ -195,6 +195,8 @@ function CanonThumbnail({
   canonPosePresets,
   onOpenLightbox,
   onSendToWorkspace,
+  onOpenTagEditor,
+  isMobile,
 }: {
   canon: CharacterCanon;
   index: number;
@@ -205,9 +207,12 @@ function CanonThumbnail({
   canonPosePresets?: Record<string, CanonPosePreset>;
   onOpenLightbox: (index: number) => void;
   onSendToWorkspace?: (signedUrl: string) => void;
+  onOpenTagEditor: (canonId: string, currentTags: string[]) => void;
+  isMobile: boolean;
 }) {
   const { signedUrl } = useSignedUrl(canon.output_url);
   const [showActions, setShowActions] = useState(false);
+  // Desktop-only popover state
   const [editingTags, setEditingTags] = useState(false);
   const [localTags, setLocalTags] = useState<string[]>(canon.tags || []);
 
@@ -217,6 +222,15 @@ function CanonThumbnail({
     }
   };
 
+  const handleTagClick = (e: React.MouseEvent | React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isMobile) {
+      onOpenTagEditor(canon.id, canon.tags || []);
+    } else {
+      setEditingTags(true);
+    }
+  };
 
   return (
     <SignedCanonTile
@@ -240,67 +254,81 @@ function CanonThumbnail({
         </div>
       )}
 
-      {/* Hover actions */}
-      <div
-        className={cn(
-          "absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity",
-          editingTags ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        )}
-        onMouseEnter={() => setShowActions(true)}
-        onMouseLeave={() => { if (!editingTags) { setShowActions(false); } }}
-      >
-        <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
-          <Trash2 className="w-3 h-3" />
+      {/* Mobile: persistent tag button (always visible) */}
+      {isMobile && (
+        <button
+          onPointerDown={(e) => { e.stopPropagation(); }}
+          onClick={handleTagClick}
+          className="absolute bottom-1 right-1 z-10 p-2 rounded-full bg-black/50 text-white min-w-[44px] min-h-[44px] flex items-center justify-center"
+          title="Edit tags"
+        >
+          <Tag className="w-4 h-4" />
         </button>
-        <button onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }} className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')} title="Set as primary">
-          <Star className="w-3 h-3" />
-        </button>
-        {onSendToWorkspace && (
-          <button onClick={(e) => { e.stopPropagation(); handleSendToWorkspace(); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Send to Workspace">
-            <ExternalLink className="w-3 h-3" />
+      )}
+
+      {/* Desktop: Hover actions */}
+      {!isMobile && (
+        <div
+          className={cn(
+            "absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity",
+            editingTags ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}
+          onMouseEnter={() => setShowActions(true)}
+          onMouseLeave={() => { if (!editingTags) { setShowActions(false); } }}
+        >
+          <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
+            <Trash2 className="w-3 h-3" />
           </button>
-        )}
-        <Popover open={editingTags} onOpenChange={setEditingTags} modal>
-          <PopoverTrigger asChild>
-            <button onClick={(e) => { e.stopPropagation(); setEditingTags(true); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
-              <Tag className="w-3 h-3" />
+          <button onClick={(e) => { e.stopPropagation(); onSetPrimary(canon.id); }} className={cn('p-1.5 rounded-full', canon.is_primary ? 'bg-yellow-500 text-black' : 'bg-white/20 hover:bg-white/40 text-white')} title="Set as primary">
+            <Star className="w-3 h-3" />
+          </button>
+          {onSendToWorkspace && (
+            <button onClick={(e) => { e.stopPropagation(); handleSendToWorkspace(); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Send to Workspace">
+              <ExternalLink className="w-3 h-3" />
             </button>
-          </PopoverTrigger>
-           <PopoverContent className="w-64 p-2 max-h-96 overflow-y-auto" align="start" onClick={(e) => e.stopPropagation()}>
-            <UnifiedTagPicker
-              tags={localTags}
-              onTagsChange={(newTags) => {
-                setLocalTags(newTags);
-                onUpdateTags(canon.id, newTags);
-              }}
-              primaryCategory={normalizeOutputType(canon.output_type)}
-              compact
-            />
-          </PopoverContent>
-        </Popover>
-        {/* Assign to base position */}
-        {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
-          <Popover>
+          )}
+          <Popover open={editingTags} onOpenChange={setEditingTags} modal>
             <PopoverTrigger asChild>
-              <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Assign to position">
-                <Crosshair className="w-3 h-3" />
+              <button onClick={handleTagClick} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
+                <Tag className="w-3 h-3" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-40 p-1.5" align="start" onClick={(e) => e.stopPropagation()}>
-              <p className="text-[10px] text-muted-foreground font-medium px-1 mb-1">Assign to slot</p>
-              {POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => (
-                <button
-                  key={k}
-                  onClick={() => onAssignPoseKey(canon.id, k)}
-                  className="w-full text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors"
-                >
-                  {canonPosePresets[k].label}
-                </button>
-              ))}
+            <PopoverContent className="w-64 p-2 max-h-96 overflow-y-auto" align="start" onClick={(e) => e.stopPropagation()}>
+              <UnifiedTagPicker
+                tags={localTags}
+                onTagsChange={(newTags) => {
+                  setLocalTags(newTags);
+                  onUpdateTags(canon.id, newTags);
+                }}
+                primaryCategory={normalizeOutputType(canon.output_type)}
+                compact
+              />
             </PopoverContent>
           </Popover>
-        )}
-      </div>
+          {/* Assign to base position */}
+          {onAssignPoseKey && canonPosePresets && Object.keys(canonPosePresets).length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Assign to position">
+                  <Crosshair className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-40 p-1.5" align="start" onClick={(e) => e.stopPropagation()}>
+                <p className="text-[10px] text-muted-foreground font-medium px-1 mb-1">Assign to slot</p>
+                {POSE_KEY_ORDER.filter(k => canonPosePresets[k]).map(k => (
+                  <button
+                    key={k}
+                    onClick={() => onAssignPoseKey(canon.id, k)}
+                    className="w-full text-left text-xs px-2 py-1 rounded hover:bg-accent transition-colors"
+                  >
+                    {canonPosePresets[k].label}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+      )}
     </SignedCanonTile>
   );
 }
