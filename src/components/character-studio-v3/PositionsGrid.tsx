@@ -21,6 +21,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useTagPresets } from '@/hooks/useTagPresets';
+import { UnifiedTagPicker } from '@/components/shared/UnifiedTagPicker';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { TagEditorDrawer } from '@/components/shared/TagEditorDrawer';
 import {
