@@ -20,15 +20,9 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { UnifiedTagPicker } from '@/components/shared/UnifiedTagPicker';
 import { useTagPresets } from '@/hooks/useTagPresets';
 import { useIsMobile } from '@/hooks/use-mobile';
-import {
-  ResponsiveModal,
-  ResponsiveModalContent,
-  ResponsiveModalHeader,
-  ResponsiveModalTitle,
-} from '@/components/ui/responsive-modal';
+import { TagEditorDrawer } from '@/components/shared/TagEditorDrawer';
 import {
   POSITIONS_GRID_FILTERS,
   UNIFIED_OUTPUT_TYPES,
