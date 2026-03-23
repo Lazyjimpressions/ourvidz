@@ -110,8 +110,8 @@ class ReferenceImageManager {
       return {
         id: item.id,
         characterId,
-        imageUrl: item.storage_path ? this.supabase.storage.from('reference_images').getPublicUrl(item.storage_path).data.publicUrl : '',
-        thumbnailUrl: item.thumbnail_path ? this.supabase.storage.from('reference_images').getPublicUrl(item.thumbnail_path).data.publicUrl : undefined,
+        imageUrl: item.storage_path ? this.supabase.storage.from('user-library').getPublicUrl(item.storage_path).data.publicUrl : '',
+        thumbnailUrl: item.thumbnail_path ? this.supabase.storage.from('user-library').getPublicUrl(item.thumbnail_path).data.publicUrl : undefined,
         metadata: {
           consistency_score: metadata.consistency_score,
           generation_params: metadata.generation_params,
