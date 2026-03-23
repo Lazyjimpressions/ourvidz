@@ -470,10 +470,17 @@ async function handlePostProcessing(
           model_used: modelKey,
           generation_seed: generationSeed,
           tags: ["character", "portrait"],
+          character_id: characterId,
+          output_type: "portrait",
+          generation_metadata: {
+            job_id: job.id,
+            provider: "fal",
+          },
           roleplay_metadata: {
             type: "character_portrait",
             character_id: characterId,
             character_name: job.metadata?.character_name,
+            job_id: job.id,
           },
           content_category: "character",
         })

@@ -741,7 +741,16 @@ serve(async (req) => {
           .single();
         
         if (libraryError) {
-          console.error(`⚠️ user_library insert failed for batch ${batchIndex}:`, libraryError);
+          console.error(`❌ user_library insert failed for batch ${batchIndex}:`, libraryError);
+          await supabase
+            .from('jobs')
+            .update({
+              status: 'failed',
+              error_message: `user_library insert failed (batch ${batchIndex}): ${libraryError.message}`,
+              completed_at: new Date().toISOString(),
+            })
+            .eq('id', jobData.id);
+          throw new Error(`Failed to save portrait to library: ${libraryError.message}`);
         } else {
           portraitId = libraryData?.id || null;
         }

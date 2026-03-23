@@ -53,11 +53,50 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
         .order('created_at', { ascending: false });
       
       if (fetchError) throw fetchError;
+
+      let rows = data || [];
+
+      // Transition fallback: include legacy/orphan portrait rows linked via roleplay_metadata
+      if (rows.length === 0) {
+        const { data: orphanRows, error: orphanError } = await supabase
+          .from('user_library')
+          .select('*')
+          .is('character_id', null)
+          .or('output_type.is.null,output_type.eq.portrait')
+          .contains('roleplay_metadata', {
+            type: 'character_portrait',
+            character_id: targetId,
+          } as any)
+          .order('created_at', { ascending: false });
+
+        if (orphanError) throw orphanError;
+        rows = orphanRows || [];
+      }
+
+      // De-dup by storage_path (fallback to id)
+      const deduped = Array.from(
+        rows.reduce((map, row) => {
+          const key = row.storage_path || row.id;
+          const existing = map.get(key);
+          if (!existing) {
+            map.set(key, row);
+            return map;
+          }
+
+          const existingHasCharacter = Boolean((existing as any).character_id);
+          const candidateHasCharacter = Boolean((row as any).character_id);
+          if (!existingHasCharacter && candidateHasCharacter) {
+            map.set(key, row);
+          }
+
+          return map;
+        }, new Map<string, any>()).values()
+      );
       
       // Map user_library rows to CharacterPortrait interface
-      const mapped: CharacterPortrait[] = (data || []).map(row => ({
+      const mapped: CharacterPortrait[] = deduped.map(row => ({
         id: row.id,
-        character_id: (row as any).character_id,
+        character_id: (row as any).character_id || targetId,
         image_url: row.storage_path,
         thumbnail_url: row.thumbnail_path || null,
         prompt: row.original_prompt || null,

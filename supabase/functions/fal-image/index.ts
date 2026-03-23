@@ -853,18 +853,31 @@ async function handlePostProcessing(
 
         // Create library record
         const { data: libAsset, error: libErr } = await supabase.from('user_library').insert({
-          user_id: user.id, asset_type: resultType, storage_path: destKey,
-          thumbnail_path: libraryThumbPath, file_size_bytes: fileSizeBytes,
+          user_id: user.id,
+          asset_type: resultType,
+          storage_path: destKey,
+          thumbnail_path: libraryThumbPath,
+          file_size_bytes: fileSizeBytes,
           mime_type: resultType === 'video' ? 'video/mp4' : 'image/png',
-          original_prompt: body.prompt, model_used: modelKey,
+          original_prompt: body.prompt,
+          model_used: modelKey,
           generation_seed: generationSeed,
           width: falResult.images?.[0]?.width || falResult.width,
           height: falResult.images?.[0]?.height || falResult.height,
           tags: ['character', 'portrait'],
+          character_id: characterId,
+          output_type: 'portrait',
+          generation_metadata: {
+            job_id: jobData.id,
+            provider: 'fal',
+            generation_mode: body.referenceImageUrl ? 'i2i' : 'txt2img',
+          },
           roleplay_metadata: {
-            type: 'character_portrait', character_id: characterId,
+            type: 'character_portrait',
+            character_id: characterId,
             character_name: body.metadata.character_name || body.metadata.characterName,
-            consistency_method: body.metadata.consistency_method || body.metadata.consistencyMethod
+            consistency_method: body.metadata.consistency_method || body.metadata.consistencyMethod,
+            job_id: jobData.id,
           },
           content_category: 'character'
         }).select().single();
