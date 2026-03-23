@@ -645,7 +645,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     }
   }, [savedCharacterId]);
 
-  // Save an existing image URL as a canon position (no re-upload)
+  // Save an existing image URL as a canon position (no re-upload) — unified via user_library
   const saveCanonFromUrl = useCallback(async (
     imageUrl: string,
     outputType: string,
@@ -653,9 +653,9 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     label?: string,
     poseKey?: string
   ) => {
-    if (!savedCharacterId) return;
+    if (!savedCharacterId || !user?.id) return;
     try {
-      const metadata = poseKey ? { pose_key: poseKey } : null;
+      const generationMeta = poseKey ? { pose_key: poseKey } : {};
       // Auto-inject role tags based on outputType
       const autoTags = [...tags];
       const roleTagMap: Record<string, string> = { image: 'character', pose: 'position', position: 'position', outfit: 'clothing', style: 'style' };
@@ -665,15 +665,22 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
       }
 
       const { error } = await supabase
-        .from('character_canon')
+        .from('user_library')
         .insert({
+          user_id: user.id,
+          asset_type: 'image',
+          storage_path: imageUrl,
+          original_prompt: '',
+          model_used: 'reference',
+          file_size_bytes: 0,
+          mime_type: 'image/png',
           character_id: savedCharacterId,
           output_type: outputType,
-          output_url: imageUrl,
           tags: autoTags,
           label: label || null,
-          metadata,
-        });
+          generation_metadata: generationMeta,
+          content_category: 'character',
+        } as any);
       if (error) throw error;
       await loadCanon();
       toast({ title: 'Saved as position', description: label || outputType });
@@ -681,7 +688,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
       console.error('❌ Error saving canon from URL:', err);
       toast({ title: 'Save failed', description: err instanceof Error ? err.message : 'Error', variant: 'destructive' });
     }
-  }, [savedCharacterId, loadCanon, toast]);
+  }, [savedCharacterId, user, loadCanon, toast]);
 
   // Assign or change the pose_key on an existing canon entry
   const assignCanonPoseKey = useCallback(async (canonId: string, poseKey: string) => {
