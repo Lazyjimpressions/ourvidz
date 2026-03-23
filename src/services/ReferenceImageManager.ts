@@ -33,7 +33,7 @@ class ReferenceImageManager {
 
     // Upload to storage
     const { data: uploadData, error: uploadError } = await this.supabase.storage
-      .from('reference_images')
+      .from('user-library')
       .upload(filePath, upload.file, {
         cacheControl: '3600',
         upsert: false
@@ -43,7 +43,7 @@ class ReferenceImageManager {
 
     // Get public URL
     const { data: urlData } = this.supabase.storage
-      .from('reference_images')
+      .from('user-library')
       .getPublicUrl(filePath);
 
     // Create thumbnail
