@@ -610,7 +610,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
 
   const deleteCanon = useCallback(async (canonId: string) => {
     try {
-      const { error } = await supabase.from('character_canon').delete().eq('id', canonId);
+      const { error } = await supabase.from('user_library').delete().eq('id', canonId);
       if (error) throw error;
       setCanonImages(prev => prev.filter(c => c.id !== canonId));
     } catch (err) {
@@ -621,7 +621,7 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
 
   const updateCanonTags = useCallback(async (canonId: string, tags: string[]) => {
     try {
-      const { error } = await supabase.from('character_canon').update({ tags }).eq('id', canonId);
+      const { error } = await supabase.from('user_library').update({ tags }).eq('id', canonId);
       if (error) throw error;
       setCanonImages(prev => prev.map(c => c.id === canonId ? { ...c, tags } : c));
     } catch (err) {
@@ -632,9 +632,12 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
   const setCanonPrimary = useCallback(async (canonId: string) => {
     if (!savedCharacterId) return;
     try {
-      // Reset all, then set target
-      await supabase.from('character_canon').update({ is_primary: false }).eq('character_id', savedCharacterId);
-      const { error } = await supabase.from('character_canon').update({ is_primary: true }).eq('id', canonId);
+      // Reset all for this character, then set target
+      await supabase.from('user_library')
+        .update({ is_primary: false } as any)
+        .eq('character_id', savedCharacterId)
+        .neq('output_type', 'portrait');
+      const { error } = await supabase.from('user_library').update({ is_primary: true } as any).eq('id', canonId);
       if (error) throw error;
       setCanonImages(prev => prev.map(c => ({ ...c, is_primary: c.id === canonId })));
     } catch (err) {
