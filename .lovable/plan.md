@@ -1,87 +1,69 @@
 
-Goal: stop the tag editor from auto-closing on mobile by replacing the fragile “hover overlay + nested popover” pattern with a device-appropriate interaction model, while preserving fast desktop behavior.
 
-What’s actually happening
-- The current tag trigger lives inside a hover-driven action overlay on each tile.
-- On touch devices, hover state is unstable and event order differs (tap/pointer/click + viewport shifts), so the trigger/open state and tile click behavior race each other.
-- The tag editor is also tied to per-tile local state, making it easy to unmount/close during list re-renders.
-- Desktop works mostly because hover + pointer model is stable; mobile does not.
+## Audit: ImagePickerDialog Issues in Workspace
 
-Holistic design decision
-- Desktop: keep inline, contextual editing (popover anchored to tile action).
-- Mobile: use a dedicated bottom-sheet tag editor (Drawer/ResponsiveModal), not a popover inside a hover overlay.
-- Centralize tag-editor open state at PositionsGrid level (single source of truth), not inside each tile.
+### Problems Found
 
-Implementation plan
+**1. No "All Characters" option in Characters tab**
+When the Characters source tab is active, the picker shows individual character pills but no way to view assets across all characters at once. This forces users to click through each character individually to find an asset.
 
-1) Refactor tag editor state ownership (PositionsGrid)
-- Add grid-level state:
-  - `activeTagEditorCanonId: string | null`
-  - `activeTagDraft: string[]`
-- Pass handlers into `CanonThumbnail`:
-  - `onOpenTagEditor(canonId)`
-  - remove per-thumbnail `editingTags/localTags` ownership
-- Keep saves explicit:
-  - live-save on change (current behavior) or “Apply” button in mobile sheet (recommended for stability + fewer writes).
+**2. Library category filters miss most assets**
+The category filter (Characters, Positions, Outfits, Scenes, Styles) checks `asset.tags` for values like `'position'` or `'role:position'` (line 252-257). However, many library assets were saved without these role tags, so they only appear under "All". The `content_category` field (e.g. `'scene'`, `'portrait'`) on library rows is mapped into `metadata` by `toSharedFromLibrary` but is never checked by the filter — this is a missed signal.
 
-2) Split mobile vs desktop interaction model
-- Detect touch/mobile (`useMobileDetection` or `useIsMobile`).
-- In `CanonThumbnail`:
-  - Desktop: retain hover actions and popover trigger.
-  - Mobile/touch: show persistent action affordance (visible tag button or kebab), no hover dependency.
-- Increase mobile action hit targets to >=44px.
+**3. Canon assets have no thumbnail path, causing signing overhead**
+`toSharedFromCanon` always sets `thumbPath: null`. The signing loop then signs every canon asset using its full `output_url` path against `reference_images` bucket. If `output_url` is already an absolute URL, it passes through — but if many assets have storage paths, they all get individually signed with no thumbnail optimization.
 
-3) Move mobile tag editor to ResponsiveModal/Drawer
-- Render one shared editor outside tile grid in `PositionsGrid`:
-  - `ResponsiveModal open={!!activeTagEditorCanonId}`
-  - `ResponsiveModalContent` with safe-area spacing (`pb-safe`, top inset handling).
-- Inside modal, render `UnifiedTagPicker` bound to selected canon draft tags.
-- Close only via modal close/Apply/Cancel; no dependency on tile hover state.
+**4. Category filter not applied to library `content_category`**
+Library assets have both `tags[]` and `content_category` fields. The picker only checks tags, ignoring `content_category`. An asset with `content_category: 'scene'` but no `'scene'` or `'role:scene'` tag won't appear under the Scenes filter.
 
-4) Harden event boundaries to prevent unintended tile/lightbox clicks
-- For action buttons (tag/delete/star/send/assign):
-  - stop propagation on both trigger and interaction start path used by touch.
-- Guard tile open handler:
-  - ignore open-lightbox when action UI is active for that tile.
-- Ensure modal open does not mutate hover/action visibility state unexpectedly.
+### Plan
 
-5) Keep desktop UX intact and predictable
-- Desktop continues to use popover for quick inline edits.
-- Optionally still centralize data updates via parent callbacks, but do not change desktop visual flow.
-- Ensure assign-position popover and tag editor do not conflict (mutual exclusivity per tile).
+#### A. Add "All Characters" option (ImagePickerDialog.tsx)
+- Add an "All" pill at the start of the character selector (line 470)
+- When "All" is selected (`selectedCharacterId === null`), query `character_canon` without the `.eq('character_id', ...)` filter — just fetch all canon assets for the user's characters
+- Adjust the `loadCanonAssets` effect to handle `selectedCharacterId === null`
+- Default to "All" instead of auto-selecting the first character
 
-6) Accessibility + UX polish
-- Add clear mobile editor header: image label/type + active tag count.
-- Provide explicit close/Apply actions.
-- Maintain scrollable content and keyboard-safe behavior in drawer.
-- Preserve custom-tag-per-group placement in `UnifiedTagPicker` while open.
+#### B. Fix library category filtering to include `content_category` (ImagePickerDialog.tsx)
+- In the `filteredAssets` memo (line 250-269), when `activeSource === 'library'` and `activeCategory !== 'all'`, also check:
+  - `asset.content_category` matches the active category (mapping: `'portrait'` → `'character'`, `'scene'` → `'scene'`, etc.)
+  - This uses the raw paginated library data which has `content_category` from the DB
+- Define a mapping: `{ character: ['portrait', 'character'], position: ['position', 'pose'], scene: ['scene'], clothing: ['clothing', 'outfit'], style: ['style'] }`
+- Check: `hasRoleTag || contentCategoryMatches`
 
-Files to update
-- `src/components/character-studio-v3/PositionsGrid.tsx`
-  - lift tag editor state
-  - mobile drawer integration
-  - touch-safe action rendering + event guards
-- `src/components/shared/UnifiedTagPicker.tsx`
-  - no structural rewrite, but ensure it works well in modal context (height/scroll/focus)
-- `src/hooks/useMobileDetection.ts` or `src/hooks/use-mobile.tsx`
-  - reuse existing detection consistently (no duplicate ad-hoc checks)
-- (Optional) `src/components/ui/responsive-modal.tsx`
-  - only if small safe-area/focus tweaks are needed for this use-case
+#### C. Ensure raw library data retains `content_category` for filtering
+- Verify `transformLibraryAsset` passes `content_category` through (it currently doesn't include it in `UnifiedLibraryAsset`)
+- Add `contentCategory?: string` to `UnifiedLibraryAsset` type and map it in `transformLibraryAsset`
+- Then in the filter, check `asset.contentCategory` alongside tags
 
-Validation plan (must pass before closing issue)
-- Mobile (<=767px):
-  - tap Edit Tags → drawer opens and stays open
-  - select/unselect preset tags, add/remove custom tags, close/reopen: state persists correctly
-  - tapping around inside editor does not dismiss unexpectedly
-- Desktop (>=1024px):
-  - hover actions still work
-  - popover opens/closes normally and doesn’t trigger lightbox
-- Cross-check:
-  - no console errors
-  - no regression in delete/set-primary/send-to-workspace/assign-position actions
-  - test end-to-end on the same route the issue was reported (`/character-studio/:id`, Positions tab)
+### Files to modify
+- `src/components/storyboard/ImagePickerDialog.tsx` — Add "All" character pill, fix category filter logic
+- `src/lib/services/LibraryAssetService.ts` — Add `contentCategory` to `UnifiedLibraryAsset` and `transformLibraryAsset`
 
-Why this is the right fix
-- It removes the root architectural mismatch (hover popover inside tile overlays) instead of patching symptoms.
-- It aligns with mobile UX standards (sheet/drawer + larger targets).
-- It keeps desktop speed while giving mobile a stable, deliberate interaction model.
+### Technical details
+
+Category filter enhancement (ImagePickerDialog, filteredAssets memo):
+```typescript
+const CATEGORY_TO_CONTENT_CATEGORIES: Record<CategoryFilter, string[]> = {
+  all: [],
+  character: ['portrait', 'character'],
+  position: ['position', 'pose'],
+  scene: ['scene'],
+  clothing: ['clothing', 'outfit'],
+  style: ['style'],
+};
+
+// In the library filter branch:
+const hasRoleTag = tags.some(t => t === activeCategory || t === `role:${activeCategory}`);
+const contentCat = asset.contentCategory || asset.content_category || '';
+const hasCategoryMatch = CATEGORY_TO_CONTENT_CATEGORIES[activeCategory]?.includes(contentCat);
+if (!hasRoleTag && !hasCategoryMatch) return false;
+```
+
+"All Characters" canon query (when `selectedCharacterId === null`):
+```typescript
+// Remove .eq('character_id', selectedCharacterId) 
+// Instead, get all character IDs for the user and use .in('character_id', userCharacterIds)
+// Or simply omit the character filter since RLS already scopes to user's characters
+```
+
