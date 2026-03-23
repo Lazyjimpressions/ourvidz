@@ -375,11 +375,13 @@ export function PositionsGrid({
     }) || null;
   };
 
+  const { filterVocabulary } = useTagPresets();
+
   const filtered = canonImages.filter(c => {
     const normalized = normalizeOutputType(c.output_type);
     if (typeFilter !== 'all') {
       const matchesType = normalized === typeFilter;
-      const matchesTags = c.tags?.some(t => FILTER_TAG_VOCABULARY[typeFilter]?.includes(t)) ?? false;
+      const matchesTags = c.tags?.some(t => filterVocabulary[typeFilter]?.includes(t)) ?? false;
       if (!matchesType && !matchesTags) return false;
     }
     if (tagFilter && !c.tags?.some(t => t.includes(tagFilter.toLowerCase()))) return false;
