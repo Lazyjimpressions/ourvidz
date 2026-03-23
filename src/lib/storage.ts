@@ -475,7 +475,7 @@ export const uploadReferenceImage = async (
   const fileName = `${Date.now()}-ref.${fileExtension}`;
   console.log('🖼️ Uploading reference image:', fileName, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
   
-  return uploadFile('reference_images', fileName, file, onProgress);
+  return uploadFile('user-library', fileName, file, onProgress);
 };
 
 export const getReferenceImageUrl = async (filePath: string): Promise<string | null> => {
