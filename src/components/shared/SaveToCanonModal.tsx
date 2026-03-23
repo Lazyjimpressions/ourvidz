@@ -77,6 +77,7 @@ export const SaveToCanonModal: React.FC<SaveToCanonModalProps> = ({
       if (sourceLibraryId) {
         metadata.source_library_id = sourceLibraryId;
       }
+      const metadataValue = Object.keys(metadata).length > 0 ? metadata : null;
 
       // Insert character_canon row pointing to the same storage path
       const { error: insertError } = await supabase
