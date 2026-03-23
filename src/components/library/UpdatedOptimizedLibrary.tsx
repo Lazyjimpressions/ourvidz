@@ -245,6 +245,33 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     }
   }, [refetch]);
 
+  // Open tag editor drawer for an asset
+  const handleOpenTagEditor = useCallback((asset: any) => {
+    const currentTags: string[] = asset.metadata?.tags || [];
+    setTagEditorAssetId(asset.id);
+    setTagEditorDraft(currentTags);
+  }, []);
+
+  // Save tags from drawer on change
+  const handleTagEditorChange = useCallback(async (newTags: string[]) => {
+    setTagEditorDraft(newTags);
+    if (!tagEditorAssetId) return;
+    try {
+      await supabase
+        .from('user_library')
+        .update({ tags: newTags })
+        .eq('id', tagEditorAssetId);
+    } catch (err) {
+      console.error('Failed to save tags:', err);
+    }
+  }, [tagEditorAssetId]);
+
+  const handleCloseTagEditor = useCallback(() => {
+    setTagEditorAssetId(null);
+    setTagEditorDraft([]);
+    refetch();
+  }, [refetch]);
+
   const handleUseAsReference = useCallback(async (asset: any) => {
     try {
       let referenceUrl: string | null = asset.url || null;
