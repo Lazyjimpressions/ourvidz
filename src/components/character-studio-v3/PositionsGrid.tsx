@@ -253,7 +253,7 @@ function CanonThumbnail({
             <ExternalLink className="w-3 h-3" />
           </button>
         )}
-        <Popover open={editingTags} onOpenChange={setEditingTags}>
+        <Popover open={editingTags} onOpenChange={setEditingTags} modal>
           <PopoverTrigger asChild>
             <button onClick={(e) => { e.stopPropagation(); setEditingTags(true); }} className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white" title="Edit tags">
               <Tag className="w-3 h-3" />
