@@ -548,8 +548,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 onDelete={() => handleDelete(asset as any)}
                 onDownload={() => handleDownload(asset as any)}
                 onUseAsReference={() => handleUseAsReference(asset as any)}
-                onRoleTagToggle={(role) => handleRoleTagToggle(asset, role)}
-                onTagToggle={(tag) => handleDescriptiveTagToggle(asset, tag)}
+                onOpenTagEditor={() => handleOpenTagEditor(asset)}
                 onSaveToCanon={() => {
                   const storagePath = (asset as any).originalPath;
                   if (storagePath) setSaveToCanonPath(storagePath);
@@ -561,6 +560,25 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
           }}
         />
       )}
+
+      {/* Tag Editor Drawer (shared component, rendered outside lightbox) */}
+      <TagEditorDrawer
+        open={!!tagEditorAssetId}
+        onOpenChange={(open) => { if (!open) handleCloseTagEditor(); }}
+        tags={tagEditorDraft}
+        onTagsChange={handleTagEditorChange}
+        categoryHint={
+          tagEditorAssetId
+            ? (filteredAssets.find((a: any) => a.id === tagEditorAssetId) as any)?.metadata?.content_category
+            : undefined
+        }
+        title="Edit Tags"
+        categoryBadge={
+          tagEditorAssetId
+            ? (filteredAssets.find((a: any) => a.id === tagEditorAssetId) as any)?.metadata?.content_category
+            : undefined
+        }
+      />
       
       {/* Save to Canon Modal */}
       {saveToCanonPath && (
