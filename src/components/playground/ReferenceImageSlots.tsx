@@ -45,7 +45,7 @@ export const ReferenceImageSlots: React.FC<ReferenceImageSlotsProps> = ({
     setUploading(true);
     try {
       const ext = file.name.split('.').pop() || 'jpg';
-      const path = `${user.id}/ref_${Date.now()}.${ext}`;
+      const path = `${user.id}/references/ref_${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('reference_images')
         .upload(path, file, { upsert: true });
