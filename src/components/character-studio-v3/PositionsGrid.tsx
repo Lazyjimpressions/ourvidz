@@ -210,31 +210,6 @@ function CanonThumbnail({
     }
   };
 
-  const handleAddTag = () => {
-    const tag = tagInput.trim().toLowerCase();
-    if (tag && !localTags.includes(tag)) {
-      const newTags = [...localTags, tag];
-      setLocalTags(newTags);
-      onUpdateTags(canon.id, newTags);
-    }
-    setTagInput('');
-  };
-
-  const handleRemoveTag = (tag: string) => {
-    const newTags = localTags.filter(t => t !== tag);
-    setLocalTags(newTags);
-    onUpdateTags(canon.id, newTags);
-  };
-
-  const handleToggleCommonTag = (tag: string) => {
-    if (localTags.includes(tag)) {
-      handleRemoveTag(tag);
-    } else {
-      const newTags = [...localTags, tag];
-      setLocalTags(newTags);
-      onUpdateTags(canon.id, newTags);
-    }
-  };
 
   return (
     <SignedCanonTile
