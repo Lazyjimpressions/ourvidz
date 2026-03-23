@@ -535,22 +535,29 @@ export function useCharacterStudio({ characterId, defaultRole = 'ai' }: UseChara
     }
   }, [selectedItemId, selectedItemType, portraits, scenes]);
 
-  // === Canon (Positions) CRUD ===
+  // === Canon (Positions) CRUD — unified via user_library ===
   const loadCanon = useCallback(async () => {
     if (!savedCharacterId) return;
     try {
       const { data, error } = await supabase
-        .from('character_canon')
+        .from('user_library')
         .select('*')
         .eq('character_id', savedCharacterId)
+        .not('output_type', 'eq', 'portrait') // Portraits handled by usePortraitVersions
         .order('is_primary', { ascending: false })
         .order('created_at', { ascending: false });
       if (error) throw error;
       setCanonImages((data || []).map(d => ({
-        ...d,
+        id: d.id,
+        character_id: (d as any).character_id,
+        output_type: (d as any).output_type || 'position',
+        output_url: d.storage_path,
+        is_pinned: (d as any).is_pinned ?? false,
         is_primary: (d as any).is_primary ?? false,
-        tags: (d as any).tags ?? [],
+        tags: d.tags ?? [],
         label: (d as any).label ?? null,
+        metadata: (d as any).generation_metadata ?? null,
+        created_at: d.created_at,
       })));
     } catch (err) {
       console.error('❌ Error loading canon:', err);
