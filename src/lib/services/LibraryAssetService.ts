@@ -47,6 +47,7 @@ export interface UnifiedLibraryAsset {
   enhancedPrompt?: string;
   seed?: number;
   generationParams?: Record<string, any>;
+  contentCategory?: string;
   customTitle?: string;
   tags: string[];
   isFavorite: boolean;
@@ -285,6 +286,7 @@ export class LibraryAssetService {
       tags: asset.tags,
       isFavorite: asset.is_favorite,
       collectionId: asset.collection_id,
+      contentCategory: (asset as any).content_category,
       status: 'completed' // Library assets are always completed
     };
   }

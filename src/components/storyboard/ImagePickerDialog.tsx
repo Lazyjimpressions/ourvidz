@@ -173,9 +173,9 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           .order('name');
         if (data && data.length > 0) {
           setCharacters(data);
-          // Auto-select first character if none selected
-          if (!selectedCharacterId) {
-            setSelectedCharacterId(data[0].id);
+          // Default to "All" (null) — don't auto-select first character
+          if (selectedCharacterId === undefined) {
+            setSelectedCharacterId(null);
           }
         }
       };
@@ -185,7 +185,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
 
   // Load canon assets when character selection changes
   useEffect(() => {
-    if (activeSource !== 'characters' || !isOpen || !selectedCharacterId) return;
+    if (activeSource !== 'characters' || !isOpen) return;
 
     setCanonLoading(true);
     const outputTypeFilters = CATEGORY_TO_OUTPUT_TYPES[activeCategory];
@@ -193,8 +193,12 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     let query = supabase
       .from('character_canon')
       .select('*, characters(name, reference_image_url)')
-      .eq('character_id', selectedCharacterId)
       .order('created_at', { ascending: false });
+
+    // If a specific character is selected, filter by it; otherwise fetch all (RLS scopes to user)
+    if (selectedCharacterId) {
+      query = query.eq('character_id', selectedCharacterId);
+    }
 
     if (outputTypeFilters) {
       query = query.in('output_type', outputTypeFilters);
@@ -254,7 +258,12 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         const hasRoleTag = tags.some(
           (t: string) => t === activeCategory || t === `role:${activeCategory}`
         );
-        if (!hasRoleTag) return false;
+        const contentCat = asset.contentCategory || '';
+        const categoryContentTypes = CATEGORY_TO_OUTPUT_TYPES[activeCategory];
+        const hasCategoryMatch = categoryContentTypes
+          ? categoryContentTypes.includes(contentCat)
+          : false;
+        if (!hasRoleTag && !hasCategoryMatch) return false;
       }
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase();
@@ -468,6 +477,13 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           {/* Character Selector (characters source only) */}
           {activeSource === 'characters' && characters.length > 0 && (
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              <PillFilter
+                active={selectedCharacterId === null}
+                onClick={() => { setSelectedCharacterId(null); setSelectedAssetId(null); }}
+                size="sm"
+              >
+                All
+              </PillFilter>
               {characters.map((char) => (
                 <PillFilter
                   key={char.id}
