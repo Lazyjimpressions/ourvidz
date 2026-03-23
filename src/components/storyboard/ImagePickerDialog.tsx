@@ -185,7 +185,7 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
 
   // Load canon assets when character selection changes
   useEffect(() => {
-    if (activeSource !== 'characters' || !isOpen || !selectedCharacterId) return;
+    if (activeSource !== 'characters' || !isOpen) return;
 
     setCanonLoading(true);
     const outputTypeFilters = CATEGORY_TO_OUTPUT_TYPES[activeCategory];
@@ -193,8 +193,12 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     let query = supabase
       .from('character_canon')
       .select('*, characters(name, reference_image_url)')
-      .eq('character_id', selectedCharacterId)
       .order('created_at', { ascending: false });
+
+    // If a specific character is selected, filter by it; otherwise fetch all (RLS scopes to user)
+    if (selectedCharacterId) {
+      query = query.eq('character_id', selectedCharacterId);
+    }
 
     if (outputTypeFilters) {
       query = query.in('output_type', outputTypeFilters);
