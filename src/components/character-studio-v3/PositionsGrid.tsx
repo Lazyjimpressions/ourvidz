@@ -350,6 +350,7 @@ export function PositionsGrid({
   onSendToWorkspace,
   characterName,
 }: PositionsGridProps) {
+  const isMobile = useIsMobile();
   const [typeFilter, setTypeFilter] = useState<PositionsGridFilter>('all');
   const [tagFilter, setTagFilter] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -363,6 +364,28 @@ export function PositionsGrid({
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Mobile tag editor state (lifted from CanonThumbnail)
+  const [activeTagEditorCanonId, setActiveTagEditorCanonId] = useState<string | null>(null);
+  const [activeTagDraft, setActiveTagDraft] = useState<string[]>([]);
+
+  const handleOpenTagEditor = useCallback((canonId: string, currentTags: string[]) => {
+    setActiveTagEditorCanonId(canonId);
+    setActiveTagDraft(currentTags);
+  }, []);
+
+  const handleCloseTagEditor = useCallback(() => {
+    // Save on close
+    if (activeTagEditorCanonId) {
+      onUpdateTags(activeTagEditorCanonId, activeTagDraft);
+    }
+    setActiveTagEditorCanonId(null);
+    setActiveTagDraft([]);
+  }, [activeTagEditorCanonId, activeTagDraft, onUpdateTags]);
+
+  const activeTagEditorCanon = activeTagEditorCanonId
+    ? canonImages.find(c => c.id === activeTagEditorCanonId)
+    : null;
 
   // Query duo poses from user_library
   const { data: duoPoses } = useQuery({
