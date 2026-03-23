@@ -707,7 +707,7 @@ export function PositionsGrid({
                   )}
                   {onSendToWorkspace && (
                     <Button variant="ghost" size="sm" onClick={async () => {
-                      const { data } = await supabase.storage.from('reference_images').createSignedUrl(canon.output_url, 3600);
+                      const { data } = await supabase.storage.from('user-library').createSignedUrl(canon.output_url, 3600);
                       if (data?.signedUrl) {
                         onSendToWorkspace(data.signedUrl);
                       }
