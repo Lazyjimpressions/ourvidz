@@ -47,6 +47,7 @@ export interface UnifiedLibraryAsset {
   enhancedPrompt?: string;
   seed?: number;
   generationParams?: Record<string, any>;
+  contentCategory?: string;
   customTitle?: string;
   tags: string[];
   isFavorite: boolean;
