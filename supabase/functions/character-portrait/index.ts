@@ -685,9 +685,21 @@ serve(async (req) => {
 
       const finalImageUrl = libraryImageUrl || imageUrl;
 
-      // ========== INSERT INTO USER_LIBRARY TABLE ==========
+      // ========== INSERT INTO USER_LIBRARY (unified table — replaces character_portraits + user_library) ==========
+      let portraitId: string | null = null;
       if (storagePath) {
-        const { error: libraryError } = await supabase
+        // Check if this is the first portrait for the character
+        let isFirstPortrait = false;
+        if (characterId) {
+          const { count } = await supabase
+            .from('user_library')
+            .select('*', { count: 'exact', head: true })
+            .eq('character_id', characterId)
+            .eq('output_type', 'portrait');
+          isFirstPortrait = (count || 0) === 0 && batchIndex === 0;
+        }
+
+        const { data: libraryData, error: libraryError } = await supabase
           .from('user_library')
           .insert({
             user_id: user.id,
@@ -699,40 +711,11 @@ serve(async (req) => {
             mime_type: 'image/png',
             tags: ['character', 'portrait', character.name].filter(Boolean),
             content_category: 'character',
-            roleplay_metadata: {
-              character_id: characterId,
-              character_name: character.name,
-              type: 'character_portrait',
-              generation_mode: isI2I ? 'i2i' : 'txt2img',
-              job_id: jobData.id,
-              batch_index: batchIndex
-            }
-          });
-        
-        if (libraryError) {
-          console.error(`⚠️ user_library insert failed for batch ${batchIndex}:`, libraryError);
-        }
-      }
-
-      // ========== INSERT INTO CHARACTER_PORTRAITS TABLE ==========
-      let portraitId: string | null = null;
-      if (characterId) {
-        const { count } = await supabase
-          .from('character_portraits')
-          .select('*', { count: 'exact', head: true })
-          .eq('character_id', characterId);
-
-        const isFirstPortrait = (count || 0) === 0 && batchIndex === 0;
-
-        const { data: portraitData, error: portraitError } = await supabase
-          .from('character_portraits')
-          .insert({
-            character_id: characterId,
-            image_url: finalImageUrl,
-            prompt: prompt,
-            enhanced_prompt: prompt,
+            // Unified character fields
+            character_id: characterId || null,
+            output_type: 'portrait',
             is_primary: isFirstPortrait,
-            sort_order: (count || 0) + batchIndex,
+            sort_order: batchIndex,
             generation_metadata: {
               model: apiModel.display_name,
               model_key: apiModel.model_key,
@@ -744,15 +727,23 @@ serve(async (req) => {
               storage_path: storagePath,
               batch_index: batchIndex,
               batch_total: allImages.length
+            },
+            roleplay_metadata: {
+              character_id: characterId,
+              character_name: character.name,
+              type: 'character_portrait',
+              generation_mode: isI2I ? 'i2i' : 'txt2img',
+              job_id: jobData.id,
+              batch_index: batchIndex
             }
           })
-          .select()
+          .select('id')
           .single();
-
-        if (portraitError) {
-          console.error(`❌ Failed to insert portrait batch ${batchIndex}:`, JSON.stringify(portraitError));
+        
+        if (libraryError) {
+          console.error(`⚠️ user_library insert failed for batch ${batchIndex}:`, libraryError);
         } else {
-          portraitId = portraitData.id;
+          portraitId = libraryData?.id || null;
         }
       }
 
