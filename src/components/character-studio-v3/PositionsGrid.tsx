@@ -235,9 +235,12 @@ function CanonThumbnail({
 
       {/* Hover actions */}
       <div
-        className="absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity opacity-0 group-hover:opacity-100"
+        className={cn(
+          "absolute inset-0 bg-black/40 flex items-center justify-center gap-1.5 transition-opacity",
+          editingTags ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        )}
         onMouseEnter={() => setShowActions(true)}
-        onMouseLeave={() => { setShowActions(false); setEditingTags(false); }}
+        onMouseLeave={() => { if (!editingTags) { setShowActions(false); } }}
       >
         <button onClick={(e) => { e.stopPropagation(); onDelete(canon.id); }} className="p-1.5 rounded-full bg-destructive/80 hover:bg-destructive text-destructive-foreground" title="Delete">
           <Trash2 className="w-3 h-3" />
