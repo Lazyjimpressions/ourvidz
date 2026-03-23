@@ -136,6 +136,7 @@ export function StudioWorkspace({
           hasReferenceImage={hasReferenceImage}
           onUpdatePresetPrompt={onUpdatePresetPrompt}
           onSendToWorkspace={handleSendToWorkspace}
+          characterId={character.id}
         />
       </ScrollArea>
     );
