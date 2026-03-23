@@ -258,7 +258,12 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
         const hasRoleTag = tags.some(
           (t: string) => t === activeCategory || t === `role:${activeCategory}`
         );
-        if (!hasRoleTag) return false;
+        const contentCat = asset.contentCategory || '';
+        const categoryContentTypes = CATEGORY_TO_OUTPUT_TYPES[activeCategory];
+        const hasCategoryMatch = categoryContentTypes
+          ? categoryContentTypes.includes(contentCat)
+          : false;
+        if (!hasRoleTag && !hasCategoryMatch) return false;
       }
       if (!searchQuery.trim()) return true;
       const query = searchQuery.toLowerCase();
