@@ -685,9 +685,21 @@ serve(async (req) => {
 
       const finalImageUrl = libraryImageUrl || imageUrl;
 
-      // ========== INSERT INTO USER_LIBRARY TABLE ==========
+      // ========== INSERT INTO USER_LIBRARY (unified table — replaces character_portraits + user_library) ==========
+      let portraitId: string | null = null;
       if (storagePath) {
-        const { error: libraryError } = await supabase
+        // Check if this is the first portrait for the character
+        let isFirstPortrait = false;
+        if (characterId) {
+          const { count } = await supabase
+            .from('user_library')
+            .select('*', { count: 'exact', head: true })
+            .eq('character_id', characterId)
+            .eq('output_type', 'portrait');
+          isFirstPortrait = (count || 0) === 0 && batchIndex === 0;
+        }
+
+        const { data: libraryData, error: libraryError } = await supabase
           .from('user_library')
           .insert({
             user_id: user.id,
@@ -699,40 +711,11 @@ serve(async (req) => {
             mime_type: 'image/png',
             tags: ['character', 'portrait', character.name].filter(Boolean),
             content_category: 'character',
-            roleplay_metadata: {
-              character_id: characterId,
-              character_name: character.name,
-              type: 'character_portrait',
-              generation_mode: isI2I ? 'i2i' : 'txt2img',
-              job_id: jobData.id,
-              batch_index: batchIndex
-            }
-          });
-        
-        if (libraryError) {
-          console.error(`⚠️ user_library insert failed for batch ${batchIndex}:`, libraryError);
-        }
-      }
-
-      // ========== INSERT INTO CHARACTER_PORTRAITS TABLE ==========
-      let portraitId: string | null = null;
-      if (characterId) {
-        const { count } = await supabase
-          .from('character_portraits')
-          .select('*', { count: 'exact', head: true })
-          .eq('character_id', characterId);
-
-        const isFirstPortrait = (count || 0) === 0 && batchIndex === 0;
-
-        const { data: portraitData, error: portraitError } = await supabase
-          .from('character_portraits')
-          .insert({
-            character_id: characterId,
-            image_url: finalImageUrl,
-            prompt: prompt,
-            enhanced_prompt: prompt,
+            // Unified character fields
+            character_id: characterId || null,
+            output_type: 'portrait',
             is_primary: isFirstPortrait,
-            sort_order: (count || 0) + batchIndex,
+            sort_order: batchIndex,
             generation_metadata: {
               model: apiModel.display_name,
               model_key: apiModel.model_key,
@@ -744,15 +727,23 @@ serve(async (req) => {
               storage_path: storagePath,
               batch_index: batchIndex,
               batch_total: allImages.length
+            },
+            roleplay_metadata: {
+              character_id: characterId,
+              character_name: character.name,
+              type: 'character_portrait',
+              generation_mode: isI2I ? 'i2i' : 'txt2img',
+              job_id: jobData.id,
+              batch_index: batchIndex
             }
           })
-          .select()
+          .select('id')
           .single();
-
-        if (portraitError) {
-          console.error(`❌ Failed to insert portrait batch ${batchIndex}:`, JSON.stringify(portraitError));
+        
+        if (libraryError) {
+          console.error(`⚠️ user_library insert failed for batch ${batchIndex}:`, libraryError);
         } else {
-          portraitId = portraitData.id;
+          portraitId = libraryData?.id || null;
         }
       }
 
@@ -770,36 +761,47 @@ serve(async (req) => {
         .eq('id', characterId);
     }
 
-    // === Auto-save to character_canon for canon position generation ===
+    // === Auto-save canon position to user_library (unified table) ===
     let canonId: string | null = null;
     if (canonPoseKey && canonPosePreset && characterId && processedImages.length > 0) {
       try {
-        const { data: canonData, error: canonError } = await supabase
-          .from('character_canon')
-          .insert({
-            character_id: characterId,
-            output_type: 'position',
-            output_url: processedImages[0].storagePath || processedImages[0].imageUrl,
-            tags: canonPosePreset.tags || [],
-            label: canonPosePreset.label || canonPoseKey,
-            is_pinned: false,
-            is_primary: false,
-            metadata: {
-              pose_key: canonPoseKey,
-              job_id: jobData.id,
-              generation_time_ms: generationTime,
-              model_key: apiModel.model_key,
-              provider: providerName,
-            }
-          })
-          .select('id')
-          .single();
+        const canonStoragePath = processedImages[0].storagePath;
+        if (canonStoragePath) {
+          // Update the existing user_library row to also be a position
+          const { data: canonData, error: canonError } = await supabase
+            .from('user_library')
+            .insert({
+              user_id: user.id,
+              asset_type: 'image',
+              storage_path: canonStoragePath,
+              original_prompt: prompt,
+              model_used: apiModel.display_name,
+              file_size_bytes: 0,
+              mime_type: 'image/png',
+              character_id: characterId,
+              output_type: 'position',
+              tags: canonPosePreset.tags || [],
+              label: canonPosePreset.label || canonPoseKey,
+              is_pinned: false,
+              is_primary: false,
+              generation_metadata: {
+                pose_key: canonPoseKey,
+                job_id: jobData.id,
+                generation_time_ms: generationTime,
+                model_key: apiModel.model_key,
+                provider: providerName,
+              },
+              content_category: 'character',
+            })
+            .select('id')
+            .single();
 
-        if (canonError) {
-          console.error('⚠️ Failed to auto-save canon position:', canonError);
-        } else {
-          canonId = canonData.id;
-          console.log('📐 Canon position auto-saved:', canonId);
+          if (canonError) {
+            console.error('⚠️ Failed to auto-save canon position:', canonError);
+          } else {
+            canonId = canonData?.id || null;
+            console.log('📐 Canon position auto-saved:', canonId);
+          }
         }
       } catch (canonErr) {
         console.error('⚠️ Canon auto-save error:', canonErr);

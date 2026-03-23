@@ -190,29 +190,55 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     setCanonLoading(true);
     const outputTypeFilters = CATEGORY_TO_OUTPUT_TYPES[activeCategory];
 
-    let query = supabase
-      .from('character_canon')
-      .select('*, characters(name, reference_image_url)')
-      .order('created_at', { ascending: false });
+    // Query user_library (unified table) for character-associated assets
+    const loadCanonFromLibrary = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        setCanonAssets([]);
+        setCanonLoading(false);
+        return;
+      }
 
-    // If a specific character is selected, filter by it; otherwise fetch all (RLS scopes to user)
-    if (selectedCharacterId) {
-      query = query.eq('character_id', selectedCharacterId);
-    }
+      let query = supabase
+        .from('user_library')
+        .select('*, characters!user_library_character_id_fkey(name, reference_image_url)')
+        .eq('user_id', currentUser.id)
+        .not('character_id', 'is', null)
+        .order('created_at', { ascending: false });
 
-    if (outputTypeFilters) {
-      query = query.in('output_type', outputTypeFilters);
-    }
+      if (selectedCharacterId) {
+        query = query.eq('character_id', selectedCharacterId);
+      }
 
-    query.then(({ data, error }) => {
+      if (outputTypeFilters) {
+        query = query.in('output_type', outputTypeFilters);
+      }
+
+      const { data, error } = await query;
       if (error) {
-        console.error('❌ Failed to load canon assets:', error);
+        console.error('❌ Failed to load character assets:', error);
         setCanonAssets([]);
       } else {
-        setCanonAssets(data || []);
+        // Map user_library rows to canon-compatible format for toSharedFromCanon
+        const mapped = (data || []).map(row => ({
+          id: row.id,
+          character_id: (row as any).character_id,
+          output_type: (row as any).output_type || 'position',
+          output_url: row.storage_path,
+          is_pinned: (row as any).is_pinned || false,
+          is_primary: (row as any).is_primary || false,
+          tags: row.tags || [],
+          label: (row as any).label || null,
+          metadata: (row as any).generation_metadata || null,
+          created_at: row.created_at,
+          characters: (row as any).characters || null,
+        }));
+        setCanonAssets(mapped);
       }
       setCanonLoading(false);
-    });
+    };
+
+    loadCanonFromLibrary();
   }, [activeSource, isOpen, selectedCharacterId, activeCategory]);
 
   // Flatten paginated library data and filter to only images

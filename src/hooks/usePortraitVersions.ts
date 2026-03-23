@@ -25,13 +25,17 @@ interface UsePortraitVersionsOptions {
   enabled?: boolean;
 }
 
+/**
+ * Manages character portraits via the unified user_library table.
+ * Queries: user_library WHERE character_id = X AND output_type = 'portrait'
+ */
 export function usePortraitVersions({ characterId, enabled = true }: UsePortraitVersionsOptions) {
   const [portraits, setPortraits] = useState<CharacterPortrait[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const { toast } = useToast();
 
-  // Fetch portraits for this character (accepts optional override for freshly-saved characters)
+  // Fetch portraits for this character from user_library
   const fetchPortraits = useCallback(async (overrideCharacterId?: string) => {
     const targetId = overrideCharacterId || characterId;
     if (!targetId) return;
@@ -41,15 +45,32 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     
     try {
       const { data, error: fetchError } = await supabase
-        .from('character_portraits')
+        .from('user_library')
         .select('*')
         .eq('character_id', targetId)
+        .eq('output_type', 'portrait')
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false });
       
       if (fetchError) throw fetchError;
       
-      setPortraits(data || []);
+      // Map user_library rows to CharacterPortrait interface
+      const mapped: CharacterPortrait[] = (data || []).map(row => ({
+        id: row.id,
+        character_id: (row as any).character_id,
+        image_url: row.storage_path,
+        thumbnail_url: row.thumbnail_path || null,
+        prompt: row.original_prompt || null,
+        enhanced_prompt: null,
+        generation_metadata: (row as any).generation_metadata || {},
+        is_primary: (row as any).is_primary || false,
+        sort_order: (row as any).sort_order || 0,
+        tags: row.tags || [],
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
+      
+      setPortraits(mapped);
     } catch (err) {
       console.error('Error fetching portraits:', err);
       setError(err instanceof Error ? err : new Error('Failed to fetch portraits'));
@@ -63,17 +84,18 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     if (!characterId) return;
     
     try {
-      // First, unset any existing primary
+      // First, unset any existing primary portraits for this character
       await supabase
-        .from('character_portraits')
-        .update({ is_primary: false })
+        .from('user_library')
+        .update({ is_primary: false } as any)
         .eq('character_id', characterId)
+        .eq('output_type', 'portrait')
         .eq('is_primary', true);
       
       // Then set the new primary
       const { error: updateError } = await supabase
-        .from('character_portraits')
-        .update({ is_primary: true })
+        .from('user_library')
+        .update({ is_primary: true } as any)
         .eq('id', portraitId);
       
       if (updateError) throw updateError;
@@ -84,14 +106,14 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
         is_primary: p.id === portraitId
       })));
       
-      // Also update the character's main image_url AND reference_image_url for scene generation
+      // Also update the character's main image_url AND reference_image_url
       const portrait = portraits.find(p => p.id === portraitId);
       if (portrait) {
         await supabase
           .from('characters')
           .update({
             image_url: portrait.image_url,
-            reference_image_url: portrait.image_url  // Also set reference for scene generation
+            reference_image_url: portrait.image_url
           })
           .eq('id', characterId);
       }
@@ -110,30 +132,15 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     }
   }, [characterId, portraits, toast]);
 
-  // Delete a portrait and its corresponding library entry
+  // Delete a portrait from user_library (single source of truth)
   const deletePortrait = useCallback(async (portraitId: string) => {
     try {
-      // Find the portrait first so we can match it in user_library
-      const portrait = portraits.find(p => p.id === portraitId);
-      
       const { error: deleteError } = await supabase
-        .from('character_portraits')
+        .from('user_library')
         .delete()
         .eq('id', portraitId);
       
       if (deleteError) throw deleteError;
-      
-      // Also delete from user_library if the image_url matches a storage_path
-      if (portrait?.image_url) {
-        const { error: libError } = await supabase
-          .from('user_library')
-          .delete()
-          .eq('storage_path', portrait.image_url);
-        
-        if (libError) {
-          console.warn('⚠️ Could not delete library entry:', libError);
-        }
-      }
       
       setPortraits(prev => prev.filter(p => p.id !== portraitId));
       
@@ -149,22 +156,50 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
         variant: "destructive"
       });
     }
-  }, [portraits, toast]);
+  }, [toast]);
 
   // Add a new portrait
   const addPortrait = useCallback(async (portrait: Omit<CharacterPortrait, 'id' | 'created_at' | 'updated_at'>) => {
     try {
       const { data, error: insertError } = await supabase
-        .from('character_portraits')
-        .insert(portrait)
+        .from('user_library')
+        .insert({
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          asset_type: 'image',
+          storage_path: portrait.image_url,
+          original_prompt: portrait.prompt || '',
+          model_used: 'fal',
+          file_size_bytes: 0,
+          mime_type: 'image/png',
+          character_id: portrait.character_id,
+          output_type: 'portrait',
+          is_primary: portrait.is_primary,
+          sort_order: portrait.sort_order,
+          tags: portrait.tags,
+          generation_metadata: portrait.generation_metadata as any,
+        } as any)
         .select()
         .single();
       
       if (insertError) throw insertError;
       
-      setPortraits(prev => [data, ...prev]);
+      const mapped: CharacterPortrait = {
+        id: data.id,
+        character_id: (data as any).character_id,
+        image_url: data.storage_path,
+        thumbnail_url: data.thumbnail_path || null,
+        prompt: data.original_prompt || null,
+        enhanced_prompt: null,
+        generation_metadata: (data as any).generation_metadata || {},
+        is_primary: (data as any).is_primary || false,
+        sort_order: (data as any).sort_order || 0,
+        tags: data.tags || [],
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      };
       
-      return data;
+      setPortraits(prev => [mapped, ...prev]);
+      return mapped;
     } catch (err) {
       console.error('Error adding portrait:', err);
       toast({
@@ -186,12 +221,11 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
 
       for (const update of updates) {
         await supabase
-          .from('character_portraits')
-          .update({ sort_order: update.sort_order })
+          .from('user_library')
+          .update({ sort_order: update.sort_order } as any)
           .eq('id', update.id);
       }
 
-      // Update local state
       setPortraits(prev => {
         const sorted = [...prev].sort((a, b) => {
           const aIndex = newOrder.indexOf(a.id);
@@ -214,13 +248,12 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
   const updatePortraitTags = useCallback(async (portraitId: string, tags: string[]) => {
     try {
       const { error: updateError } = await supabase
-        .from('character_portraits')
+        .from('user_library')
         .update({ tags })
         .eq('id', portraitId);
 
       if (updateError) throw updateError;
 
-      // Update local state
       setPortraits(prev => prev.map(p =>
         p.id === portraitId ? { ...p, tags } : p
       ));
@@ -237,31 +270,53 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     }
   }, [toast]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates on user_library for this character's portraits
   useEffect(() => {
     if (!characterId || !enabled) return;
     
     fetchPortraits();
     
     const channel = supabase
-      .channel(`character_portraits:${characterId}`)
+      .channel(`user_library_portraits:${characterId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'character_portraits',
+          table: 'user_library',
           filter: `character_id=eq.${characterId}`
         },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setPortraits(prev => [payload.new as CharacterPortrait, ...prev]);
-          } else if (payload.eventType === 'UPDATE') {
+          const row = payload.new as any;
+          const oldRow = payload.old as any;
+          
+          if (payload.eventType === 'INSERT' && row?.output_type === 'portrait') {
+            const mapped: CharacterPortrait = {
+              id: row.id,
+              character_id: row.character_id,
+              image_url: row.storage_path,
+              thumbnail_url: row.thumbnail_path || null,
+              prompt: row.original_prompt || null,
+              enhanced_prompt: null,
+              generation_metadata: row.generation_metadata || {},
+              is_primary: row.is_primary || false,
+              sort_order: row.sort_order || 0,
+              tags: row.tags || [],
+              created_at: row.created_at,
+              updated_at: row.updated_at,
+            };
+            setPortraits(prev => [mapped, ...prev]);
+          } else if (payload.eventType === 'UPDATE' && row?.output_type === 'portrait') {
             setPortraits(prev => prev.map(p => 
-              p.id === payload.new.id ? payload.new as CharacterPortrait : p
+              p.id === row.id ? {
+                ...p,
+                is_primary: row.is_primary || false,
+                sort_order: row.sort_order || 0,
+                tags: row.tags || [],
+              } : p
             ));
           } else if (payload.eventType === 'DELETE') {
-            setPortraits(prev => prev.filter(p => p.id !== payload.old.id));
+            setPortraits(prev => prev.filter(p => p.id !== oldRow?.id));
           }
         }
       )
@@ -272,7 +327,6 @@ export function usePortraitVersions({ characterId, enabled = true }: UsePortrait
     };
   }, [characterId, enabled, fetchPortraits]);
 
-  // Get the primary portrait
   const primaryPortrait = portraits.find(p => p.is_primary) || portraits[0] || null;
 
   return {

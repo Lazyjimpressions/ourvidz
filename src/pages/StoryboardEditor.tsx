@@ -170,7 +170,7 @@ const StoryboardEditor = () => {
     }
   }, [activeProject?.title]);
 
-  // Load character canons when project has a primary character
+  // Load character canons from unified user_library when project has a primary character
   useEffect(() => {
     const loadCanons = async () => {
       if (!activeProject?.primary_character_id) {
@@ -180,9 +180,10 @@ const StoryboardEditor = () => {
 
       try {
         const { data, error } = await supabase
-          .from('character_canon')
+          .from('user_library')
           .select('*')
           .eq('character_id', activeProject.primary_character_id)
+          .not('output_type', 'is', null)
           .order('created_at', { ascending: false });
 
         if (error) {
@@ -190,8 +191,22 @@ const StoryboardEditor = () => {
           return;
         }
 
-        setCharacterCanons((data || []) as CharacterCanon[]);
-        console.log('🎭 Loaded character canons:', data?.length || 0);
+        // Map user_library rows to CharacterCanon format
+        const mapped = (data || []).map(row => ({
+          id: row.id,
+          character_id: (row as any).character_id,
+          output_type: (row as any).output_type || 'position',
+          output_url: row.storage_path,
+          is_pinned: (row as any).is_pinned || false,
+          is_primary: (row as any).is_primary || false,
+          tags: row.tags || [],
+          label: (row as any).label || null,
+          metadata: (row as any).generation_metadata || null,
+          created_at: row.created_at,
+        }));
+
+        setCharacterCanons(mapped as CharacterCanon[]);
+        console.log('🎭 Loaded character canons:', mapped.length);
       } catch (err) {
         console.error('Error loading canons:', err);
       }
