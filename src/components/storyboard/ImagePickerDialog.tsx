@@ -289,12 +289,11 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
     return filteredAssets.map(toSharedFromWorkspace);
   }, [filteredAssets, activeSource]);
 
-  // Determine the bucket for signing
-  const bucket = activeSource === 'characters'
-    ? 'reference_images'
-    : activeSource === 'workspace'
-      ? 'workspace-temp'
-      : 'user-library';
+  // Determine the bucket for signing — unified storage: all permanent assets in user-library
+  // Legacy reference_images paths will be tried as fallback in the signing effect below
+  const bucket = activeSource === 'workspace'
+    ? 'workspace-temp'
+    : 'user-library';
 
   // Direct signing effect — signs all thumbnails when assets/bucket/dialog state changes
   useEffect(() => {

@@ -53,7 +53,7 @@ export const ReferenceImageSlots: React.FC<ReferenceImageSlotsProps> = ({
       if (uploadError) throw uploadError;
 
       const { data: signedData } = await supabase.storage
-        .from('reference_images')
+        .from('user-library')
         .createSignedUrl(path, 3600);
 
       if (signedData?.signedUrl) {

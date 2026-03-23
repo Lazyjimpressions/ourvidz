@@ -370,7 +370,7 @@ serve(async (req) => {
       if (!referenceImageUrl.startsWith('http') && !referenceImageUrl.startsWith('data:')) {
         const knownBuckets = ['user-library', 'workspace-temp', 'reference_images']; // user-library first (unified storage)
         const parts = referenceImageUrl.split('/');
-        let bucket = 'reference_images';
+        let bucket = 'user-library';
         let path = referenceImageUrl;
 
         if (knownBuckets.includes(parts[0])) {

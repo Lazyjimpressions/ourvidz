@@ -190,7 +190,7 @@ async function signIfStoragePath(
 
   const candidateBuckets = hasExplicitBucket
     ? [parts[0]]
-    : Array.from(new Set([defaultBucket, 'workspace-temp', 'user-library', 'reference_images', ...knownBuckets]));
+    : Array.from(new Set([defaultBucket, 'user-library', 'workspace-temp', 'reference_images', ...knownBuckets]));
 
   for (const bucket of candidateBuckets) {
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
