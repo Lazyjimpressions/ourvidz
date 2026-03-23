@@ -2598,20 +2598,27 @@ export type Database = {
       user_library: {
         Row: {
           asset_type: string
+          character_id: string | null
           collection_id: string | null
           content_category: string | null
           created_at: string | null
           custom_title: string | null
           duration_seconds: number | null
           file_size_bytes: number
+          generation_metadata: Json
           generation_seed: number | null
           height: number | null
           id: string
           is_favorite: boolean | null
+          is_pinned: boolean
+          is_primary: boolean
+          label: string | null
           mime_type: string
           model_used: string
           original_prompt: string
+          output_type: string | null
           roleplay_metadata: Json | null
+          sort_order: number
           storage_path: string
           tags: string[] | null
           thumbnail_path: string | null
@@ -2622,20 +2629,27 @@ export type Database = {
         }
         Insert: {
           asset_type: string
+          character_id?: string | null
           collection_id?: string | null
           content_category?: string | null
           created_at?: string | null
           custom_title?: string | null
           duration_seconds?: number | null
           file_size_bytes: number
+          generation_metadata?: Json
           generation_seed?: number | null
           height?: number | null
           id?: string
           is_favorite?: boolean | null
+          is_pinned?: boolean
+          is_primary?: boolean
+          label?: string | null
           mime_type: string
           model_used: string
           original_prompt: string
+          output_type?: string | null
           roleplay_metadata?: Json | null
+          sort_order?: number
           storage_path: string
           tags?: string[] | null
           thumbnail_path?: string | null
@@ -2646,20 +2660,27 @@ export type Database = {
         }
         Update: {
           asset_type?: string
+          character_id?: string | null
           collection_id?: string | null
           content_category?: string | null
           created_at?: string | null
           custom_title?: string | null
           duration_seconds?: number | null
           file_size_bytes?: number
+          generation_metadata?: Json
           generation_seed?: number | null
           height?: number | null
           id?: string
           is_favorite?: boolean | null
+          is_pinned?: boolean
+          is_primary?: boolean
+          label?: string | null
           mime_type?: string
           model_used?: string
           original_prompt?: string
+          output_type?: string | null
           roleplay_metadata?: Json | null
+          sort_order?: number
           storage_path?: string
           tags?: string[] | null
           thumbnail_path?: string | null
@@ -2669,6 +2690,13 @@ export type Database = {
           width?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "user_library_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_library_collection_id_fkey"
             columns: ["collection_id"]
