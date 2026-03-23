@@ -20,6 +20,8 @@ import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SaveToCanonModal } from '@/components/shared/SaveToCanonModal';
+import { TagEditorDrawer } from '@/components/shared/TagEditorDrawer';
+import { ROLE_TAG_PREFIX } from '@/types/slotRoles';
 
 export const UpdatedOptimizedLibrary: React.FC = () => {
   const navigate = useNavigate();
@@ -33,6 +35,10 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [lastLightboxClose, setLastLightboxClose] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<'all' | 'characters' | 'scenes' | 'videos'>('all');
   const [saveToCanonPath, setSaveToCanonPath] = useState<string | null>(null);
+
+  // Tag editor drawer state (lifted for mobile stability)
+  const [tagEditorAssetId, setTagEditorAssetId] = useState<string | null>(null);
+  const [tagEditorDraft, setTagEditorDraft] = useState<string[]>([]);
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -237,6 +243,33 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
       console.error('Failed to update tag:', err);
       toast.error('Failed to update tag');
     }
+  }, [refetch]);
+
+  // Open tag editor drawer for an asset
+  const handleOpenTagEditor = useCallback((asset: any) => {
+    const currentTags: string[] = asset.metadata?.tags || [];
+    setTagEditorAssetId(asset.id);
+    setTagEditorDraft(currentTags);
+  }, []);
+
+  // Save tags from drawer on change
+  const handleTagEditorChange = useCallback(async (newTags: string[]) => {
+    setTagEditorDraft(newTags);
+    if (!tagEditorAssetId) return;
+    try {
+      await supabase
+        .from('user_library')
+        .update({ tags: newTags })
+        .eq('id', tagEditorAssetId);
+    } catch (err) {
+      console.error('Failed to save tags:', err);
+    }
+  }, [tagEditorAssetId]);
+
+  const handleCloseTagEditor = useCallback(() => {
+    setTagEditorAssetId(null);
+    setTagEditorDraft([]);
+    refetch();
   }, [refetch]);
 
   const handleUseAsReference = useCallback(async (asset: any) => {
@@ -515,8 +548,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 onDelete={() => handleDelete(asset as any)}
                 onDownload={() => handleDownload(asset as any)}
                 onUseAsReference={() => handleUseAsReference(asset as any)}
-                onRoleTagToggle={(role) => handleRoleTagToggle(asset, role)}
-                onTagToggle={(tag) => handleDescriptiveTagToggle(asset, tag)}
+                onOpenTagEditor={() => handleOpenTagEditor(asset)}
                 onSaveToCanon={() => {
                   const storagePath = (asset as any).originalPath;
                   if (storagePath) setSaveToCanonPath(storagePath);
@@ -528,6 +560,25 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
           }}
         />
       )}
+
+      {/* Tag Editor Drawer (shared component, rendered outside lightbox) */}
+      <TagEditorDrawer
+        open={!!tagEditorAssetId}
+        onOpenChange={(open) => { if (!open) handleCloseTagEditor(); }}
+        tags={tagEditorDraft}
+        onTagsChange={handleTagEditorChange}
+        categoryHint={
+          tagEditorAssetId
+            ? (filteredAssets.find((a: any) => a.id === tagEditorAssetId) as any)?.metadata?.content_category
+            : undefined
+        }
+        title="Edit Tags"
+        categoryBadge={
+          tagEditorAssetId
+            ? (filteredAssets.find((a: any) => a.id === tagEditorAssetId) as any)?.metadata?.content_category
+            : undefined
+        }
+      />
       
       {/* Save to Canon Modal */}
       {saveToCanonPath && (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Save, ChevronRight, Trash2, Download, Copy, Shuffle, BookmarkPlus } from 'lucide-react';
+import { Save, ChevronRight, Trash2, Download, Copy, Shuffle, BookmarkPlus, Tag } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import { RoleTagButton } from './RoleTagButton';
 import type { SlotRole } from '@/types/slotRoles';
@@ -58,8 +58,9 @@ export const LibraryAssetActions: React.FC<{
   onRoleTagToggle?: (role: SlotRole) => void;
   onTagToggle?: (tag: string) => void;
   onSaveToCanon?: () => void;
+  onOpenTagEditor?: () => void;
   tags?: string[];
-}> = ({ asset, onDelete, onDownload, onUseAsReference, onRoleTagToggle, onTagToggle, onSaveToCanon, tags }) => (
+}> = ({ asset, onDelete, onDownload, onUseAsReference, onRoleTagToggle, onTagToggle, onSaveToCanon, onOpenTagEditor, tags }) => (
   <>
     {onUseAsReference && (
       <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Use as Reference">
@@ -71,9 +72,13 @@ export const LibraryAssetActions: React.FC<{
         <Download className="w-3 h-3" />
       </Button>
     )}
-    {onRoleTagToggle && tags && (
+    {onOpenTagEditor ? (
+      <Button size="sm" variant={tags?.length ? 'default' : 'secondary'} onClick={onOpenTagEditor} className="h-7 w-7 p-0" title="Edit Tags">
+        <Tag className="w-3 h-3" />
+      </Button>
+    ) : onRoleTagToggle && tags ? (
       <RoleTagButton tags={tags} onToggle={onRoleTagToggle} onTagToggle={onTagToggle} />
-    )}
+    ) : null}
     {onSaveToCanon && (
       <Button size="sm" variant="outline" onClick={onSaveToCanon} className="h-7 w-7 p-0" title="Save to Character Canon">
         <BookmarkPlus className="w-3 h-3" />
