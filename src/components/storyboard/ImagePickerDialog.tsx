@@ -173,9 +173,9 @@ export const ImagePickerDialog: React.FC<ImagePickerDialogProps> = ({
           .order('name');
         if (data && data.length > 0) {
           setCharacters(data);
-          // Auto-select first character if none selected
-          if (!selectedCharacterId) {
-            setSelectedCharacterId(data[0].id);
+          // Default to "All" (null) — don't auto-select first character
+          if (selectedCharacterId === undefined) {
+            setSelectedCharacterId(null);
           }
         }
       };
