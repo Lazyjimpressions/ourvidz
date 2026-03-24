@@ -931,6 +931,17 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               >
                 <X className="w-2 h-2 text-white" />
               </button>
+              {onCopyVideoToWorkspace && (
+                <button
+                  type="button"
+                  onClick={() => onCopyVideoToWorkspace?.()}
+                  disabled={isCopyingVideo}
+                  className="absolute bottom-0 right-0 bg-black/60 rounded-tl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                  title="Copy to Workspace"
+                >
+                  <Copy className="w-2 h-2 text-white" />
+                </button>
+              )}
             </div>
           ) : (
             <DropdownMenu>
