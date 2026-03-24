@@ -474,6 +474,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                     onAddToWorkspace: async (asset) => {
                       try {
                         await LibraryAssetService.addToWorkspace(asset.id);
+                        queryClient.invalidateQueries({ queryKey: ['assets', true] });
                         toast.success('Asset added to workspace');
                       } catch (error) {
                         console.error('Failed to add asset to workspace:', error);
