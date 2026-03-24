@@ -126,6 +126,13 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Eagerly fetch page 2 after initial load
+  React.useEffect(() => {
+    if (!isLoading && hasNextPage && !isFetchingNextPage && rawAssets.length <= PAGE_SIZE) {
+      fetchNextPage();
+    }
+  }, [isLoading, hasNextPage, isFetchingNextPage, rawAssets.length, fetchNextPage]);
+
   // Selection handlers
   const handleToggleSelection = useCallback((assetId: string) => {
     setSelectedAssets(prev => {
