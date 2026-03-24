@@ -26,6 +26,7 @@ import { ROLE_TAG_PREFIX } from '@/types/slotRoles';
 
 export const UpdatedOptimizedLibrary: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { isMobile } = useMobileDetection();
   
   // State
