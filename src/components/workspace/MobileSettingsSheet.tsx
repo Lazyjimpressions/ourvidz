@@ -400,6 +400,9 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onMotionVideoStrengthChange,
   // Character-swap mode detection
   isCharacterSwapMode = false,
+  // Copy video to workspace
+  onCopyVideoToWorkspace,
+  isCopyingVideo = false,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const refFileInputRef = useRef<HTMLInputElement>(null);
