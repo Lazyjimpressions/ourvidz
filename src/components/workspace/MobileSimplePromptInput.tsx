@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import type { SlotRole } from '@/types/slotRoles';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Loader2, X, Send, Upload, Camera, Library } from 'lucide-react';
+import { Sparkles, Loader2, X, Send, Upload, Camera, Library, Copy } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
