@@ -235,8 +235,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   const [pickerSlotIndex, setPickerSlotIndex] = useState(0);
   
   // Motion ref video file input
-  const motionVideoInputRef = useRef<HTMLInputElement>(null);
-  const [motionPickerOpen, setMotionPickerOpen] = useState(false);
+   const motionVideoInputRef = useRef<HTMLInputElement>(null);
+   const motionVideoCaptureRef = useRef<HTMLInputElement>(null);
+   const [motionPickerOpen, setMotionPickerOpen] = useState(false);
+   const [motionPickerSource, setMotionPickerSource] = useState<'library' | 'workspace'>('library');
   
   // Map slot index to a library filter tag
   const SLOT_FILTER_TAGS = ['character', 'character', 'position', 'scene', 'clothing'] as const;
