@@ -1125,7 +1125,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         motionRefVideoUrl={motionRefVideoUrl}
         motionRefThumbnailUrl={motionRefThumbnailUrl}
         onMotionRefVideoUrlRemove={() => onMotionRefVideoUrlChange?.(null)}
-        onMotionRefVideoUrlAdd={() => setMotionPickerOpen(true)}
+        onMotionRefVideoUrlAdd={(source) => { setMotionPickerSource(source || 'library'); setMotionPickerOpen(true); }}
         onMotionRefVideoFileDrop={async (file) => {
           if (!file.type.startsWith('video/')) return;
           try {
