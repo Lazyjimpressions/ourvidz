@@ -210,6 +210,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onMotionVideoPreprocessChange,
   motionConditioningType = 'default',
   onMotionConditioningTypeChange,
+  onCopyVideoToWorkspace,
+  isCopyingVideo = false,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
