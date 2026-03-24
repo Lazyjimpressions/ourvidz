@@ -1179,7 +1179,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           setMotionPickerOpen(false);
         }}
         title="Select Motion Reference Video"
-        source="library"
+        source={motionPickerSource}
         mediaType="video"
       />
     </div>
