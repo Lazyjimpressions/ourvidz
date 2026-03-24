@@ -1173,6 +1173,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         motionVideoStrength={motionVideoStrength}
         onMotionVideoStrengthChange={onMotionVideoStrengthChange}
         isCharacterSwapMode={isCharacterSwapMode}
+        onCopyVideoToWorkspace={onCopyVideoToWorkspace}
+        isCopyingVideo={isCopyingVideo}
       />
 
       {/* Image Picker Dialog for library/workspace browsing */}
