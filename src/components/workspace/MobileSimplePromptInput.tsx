@@ -956,18 +956,18 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                   <span className="text-[8px] text-muted-foreground/50">+ Video</span>
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-36">
+              <DropdownMenuContent align="start" className="w-40">
                 <DropdownMenuItem onClick={() => motionVideoInputRef.current?.click()}>
                   <Upload className="w-3 h-3 mr-2" /> Upload file
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  // Use the same file input but with video accept
-                  motionVideoInputRef.current?.click();
-                }}>
+                <DropdownMenuItem onClick={() => motionVideoCaptureRef.current?.click()}>
                   <Camera className="w-3 h-3 mr-2" /> Photo Library
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setMotionPickerOpen(true)}>
+                <DropdownMenuItem onClick={() => { setMotionPickerSource('library'); setMotionPickerOpen(true); }}>
                   <Library className="w-3 h-3 mr-2" /> From Library
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setMotionPickerSource('workspace'); setMotionPickerOpen(true); }}>
+                  <Library className="w-3 h-3 mr-2" /> From Workspace
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
