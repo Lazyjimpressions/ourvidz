@@ -128,6 +128,8 @@ const MobileSimplifiedWorkspace = () => {
   const [motionVideoPreprocess, setMotionVideoPreprocess] = useState(false);
   /** Conditioning type for motion video (default, rgb, depth, pose, canny) */
   const [motionConditioningType, setMotionConditioningType] = useState<'default' | 'rgb' | 'depth' | 'pose' | 'canny'>('default');
+  // Copy video to workspace state
+  const [isCopyingVideo, setIsCopyingVideo] = useState(false);
   // Track the job_id for the pose slot (index 2) so we can look up pose_description
   const [poseSlotJobId, setPoseSlotJobId] = useState<string | null>(null);
 
@@ -500,6 +502,55 @@ const MobileSimplifiedWorkspace = () => {
       applySmartDefault('multi');
     }
   }, [motionRefVideoUrl, beginningRefImageUrl, mode, applySmartDefault]);
+
+  // Copy motion reference video to workspace as a tile
+  const handleCopyVideoToWorkspace = useCallback(async () => {
+    if (!motionRefVideoUrl || isCopyingVideo) return;
+    setIsCopyingVideo(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Fetch the video blob
+      const res = await fetch(motionRefVideoUrl);
+      if (!res.ok) throw new Error('Failed to fetch video');
+      const blob = await res.blob();
+      const mimeType = blob.type || 'video/mp4';
+      const ext = mimeType.includes('quicktime') ? 'mov' : mimeType.includes('webm') ? 'webm' : 'mp4';
+
+      // Upload to workspace-temp bucket
+      const jobId = crypto.randomUUID();
+      const storagePath = `${user.id}/${jobId}/motion_ref.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('workspace-temp')
+        .upload(storagePath, blob, { contentType: mimeType, upsert: false });
+      if (uploadError) throw uploadError;
+
+      // Insert workspace_assets row
+      const { error: insertError } = await supabase
+        .from('workspace_assets')
+        .insert({
+          user_id: user.id,
+          job_id: jobId,
+          asset_type: 'video',
+          temp_storage_path: storagePath,
+          file_size_bytes: blob.size,
+          mime_type: mimeType,
+          asset_index: 0,
+          generation_seed: 0,
+          original_prompt: 'Motion reference upload',
+          model_used: 'user_upload',
+        });
+      if (insertError) throw insertError;
+
+      toast.success('Video copied to workspace');
+    } catch (err: any) {
+      console.error('❌ Failed to copy video to workspace:', err);
+      toast.error(err?.message || 'Failed to copy video to workspace');
+    } finally {
+      setIsCopyingVideo(false);
+    }
+  }, [motionRefVideoUrl, isCopyingVideo]);
 
   const mappedAssets = useMemo(() => {
     return workspaceAssets.map(toSharedFromWorkspace);
@@ -887,6 +938,8 @@ const MobileSimplifiedWorkspace = () => {
            motionConditioningType={motionConditioningType}
            onMotionConditioningTypeChange={setMotionConditioningType}
            isCharacterSwapMode={mode === 'video' && !!motionRefVideoUrl && !!beginningRefImageUrl}
+           onCopyVideoToWorkspace={handleCopyVideoToWorkspace}
+           isCopyingVideo={isCopyingVideo}
          />
 
         {/* Lightbox */}

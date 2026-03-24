@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useMemo } from 'react';
 import type { SlotRole } from '@/types/slotRoles';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Sparkles, Loader2, X, Send, Upload, Camera, Library } from 'lucide-react';
+import { Sparkles, Loader2, X, Send, Upload, Camera, Library, Copy } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import heic2any from 'heic2any';
@@ -120,6 +120,9 @@ export interface MobileSimplePromptInputProps {
   onMotionVideoStrengthChange?: (strength: number) => void;
   // Character-swap mode detection (greys out Key2 and Key4 slots)
   isCharacterSwapMode?: boolean;
+  // Copy video to workspace
+  onCopyVideoToWorkspace?: () => void;
+  isCopyingVideo?: boolean;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -207,6 +210,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onMotionVideoPreprocessChange,
   motionConditioningType = 'default',
   onMotionConditioningTypeChange,
+  onCopyVideoToWorkspace,
+  isCopyingVideo = false,
 }) => {
   const hasReferenceImage = !!referenceImage || !!referenceImageUrl;
   const { imageModels = [], isLoading: modelsLoading } = useImageModels(hasReferenceImage);
@@ -926,6 +931,17 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               >
                 <X className="w-2 h-2 text-white" />
               </button>
+              {onCopyVideoToWorkspace && (
+                <button
+                  type="button"
+                  onClick={() => onCopyVideoToWorkspace?.()}
+                  disabled={isCopyingVideo}
+                  className="absolute bottom-0 right-0 bg-black/60 rounded-tl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                  title="Copy to Workspace"
+                >
+                  <Copy className="w-2 h-2 text-white" />
+                </button>
+              )}
             </div>
           ) : (
             <DropdownMenu>
@@ -1157,6 +1173,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         motionVideoStrength={motionVideoStrength}
         onMotionVideoStrengthChange={onMotionVideoStrengthChange}
         isCharacterSwapMode={isCharacterSwapMode}
+        onCopyVideoToWorkspace={onCopyVideoToWorkspace}
+        isCopyingVideo={isCopyingVideo}
       />
 
       {/* Image Picker Dialog for library/workspace browsing */}

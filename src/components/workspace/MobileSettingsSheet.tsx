@@ -133,6 +133,10 @@ export interface MobileSettingsSheetProps {
 
   // Character-swap mode detection (greys out Key2 and Key4 slots)
   isCharacterSwapMode?: boolean;
+
+  // Copy video to workspace
+  onCopyVideoToWorkspace?: () => void;
+  isCopyingVideo?: boolean;
 }
 
 const STYLE_PRESETS = [
@@ -396,6 +400,9 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
   onMotionVideoStrengthChange,
   // Character-swap mode detection
   isCharacterSwapMode = false,
+  // Copy video to workspace
+  onCopyVideoToWorkspace,
+  isCopyingVideo = false,
 }) => {
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const refFileInputRef = useRef<HTMLInputElement>(null);
@@ -720,6 +727,15 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       className="absolute top-0 right-0 bg-black/60 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X className="w-2.5 h-2.5 text-white" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onCopyVideoToWorkspace?.()}
+                      disabled={isCopyingVideo}
+                      className="absolute bottom-0 right-0 bg-black/60 rounded-tl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      title="Copy to Workspace"
+                    >
+                      <Copy className="w-2.5 h-2.5 text-white" />
                     </button>
                   </div>
                   {/* Inline strength slider for motion video */}
