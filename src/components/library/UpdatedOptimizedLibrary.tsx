@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
 import { toSharedFromLibrary } from '@/lib/services/AssetMappers';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
@@ -25,6 +26,7 @@ import { ROLE_TAG_PREFIX } from '@/types/slotRoles';
 
 export const UpdatedOptimizedLibrary: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { isMobile } = useMobileDetection();
   
   // State
@@ -425,11 +427,13 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 
                 if (failures === 0) {
                   toast.success(`Added ${successes} assets to workspace`);
+                  queryClient.invalidateQueries({ queryKey: ['assets', true] });
                 } else if (successes === 0) {
                   const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
                   toast.error(`Failed to add assets: ${firstError?.reason?.message || 'Unknown error'}`);
                 } else {
                   toast.success(`Added ${successes} · Failed ${failures}`);
+                  queryClient.invalidateQueries({ queryKey: ['assets', true] });
                 }
                 handleClearSelection();
               } catch (error) {
@@ -470,6 +474,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                     onAddToWorkspace: async (asset) => {
                       try {
                         await LibraryAssetService.addToWorkspace(asset.id);
+                        queryClient.invalidateQueries({ queryKey: ['assets', true] });
                         toast.success('Asset added to workspace');
                       } catch (error) {
                         console.error('Failed to add asset to workspace:', error);
