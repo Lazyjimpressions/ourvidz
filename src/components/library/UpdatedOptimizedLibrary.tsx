@@ -128,7 +128,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
 
   // Eagerly fetch page 2 after initial load
   React.useEffect(() => {
-    if (!isLoading && hasNextPage && !isFetchingNextPage && rawAssets.length <= PAGE_SIZE) {
+    if (!isLoading && hasNextPage && !isFetchingNextPage && rawAssets.length <= 40) {
       fetchNextPage();
     }
   }, [isLoading, hasNextPage, isFetchingNextPage, rawAssets.length, fetchNextPage]);
