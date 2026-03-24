@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLibraryAssets } from '@/hooks/useLibraryAssets';
 import { toSharedFromLibrary } from '@/lib/services/AssetMappers';
 import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
