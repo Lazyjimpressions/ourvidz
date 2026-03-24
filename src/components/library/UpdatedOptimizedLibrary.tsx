@@ -433,6 +433,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                   toast.error(`Failed to add assets: ${firstError?.reason?.message || 'Unknown error'}`);
                 } else {
                   toast.success(`Added ${successes} · Failed ${failures}`);
+                  queryClient.invalidateQueries({ queryKey: ['assets', true] });
                 }
                 handleClearSelection();
               } catch (error) {
