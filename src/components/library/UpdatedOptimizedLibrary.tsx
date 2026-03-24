@@ -45,7 +45,15 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Fetch library assets with pagination
+  // Derive server-side filter from active tab
+  const libraryFilter = useMemo(() => {
+    if (activeTab === 'videos') return { assetType: 'video' };
+    if (activeTab === 'characters') return { contentCategory: 'character' };
+    if (activeTab === 'scenes') return { contentCategory: 'scene' };
+    return undefined;
+  }, [activeTab]);
+
+  // Fetch library assets with pagination + server-side filtering
   const {
     data: paginatedData,
     isLoading,
@@ -54,7 +62,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useLibraryAssets();
+  } = useLibraryAssets(libraryFilter);
 
   // Flatten paginated data
   const rawAssets = useMemo(() => {
@@ -64,32 +72,10 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
 
   const totalAssets = paginatedData?.pages?.[0]?.total ?? 0;
 
-  // Convert to shared asset format and filter by tab
+  // Convert to shared asset format (no client-side tab filtering needed)
   const sharedAssets = useMemo(() => {
-    const allAssets = rawAssets.map(toSharedFromLibrary);
-    
-    if (activeTab === 'characters') {
-      return allAssets.filter(asset => 
-        asset.metadata?.roleplay_metadata?.type === 'character_portrait' ||
-        asset.metadata?.tags?.includes('character') ||
-        asset.metadata?.content_category === 'character'
-      );
-    }
-
-    if (activeTab === 'scenes') {
-      return allAssets.filter(asset => 
-        asset.metadata?.roleplay_metadata?.type === 'roleplay_scene' ||
-        asset.metadata?.tags?.includes('scene') ||
-        asset.metadata?.content_category === 'scene'
-      );
-    }
-
-    if (activeTab === 'videos') {
-      return allAssets.filter(asset => asset.type === 'video');
-    }
-    
-    return allAssets;
-  }, [rawAssets, activeTab]);
+    return rawAssets.map(toSharedFromLibrary);
+  }, [rawAssets]);
 
   // Get signed URLs for thumbnails - no loading gate
   const { signedAssets } = useSignedAssets(sharedAssets, 'user-library', {
@@ -139,6 +125,13 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Eagerly fetch page 2 after initial load
+  React.useEffect(() => {
+    if (!isLoading && hasNextPage && !isFetchingNextPage && rawAssets.length <= 40) {
+      fetchNextPage();
+    }
+  }, [isLoading, hasNextPage, isFetchingNextPage, rawAssets.length, fetchNextPage]);
 
   // Selection handlers
   const handleToggleSelection = useCallback((assetId: string) => {

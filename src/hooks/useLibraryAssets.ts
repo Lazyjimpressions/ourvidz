@@ -8,14 +8,19 @@ const COLLECTIONS_QUERY_KEY = ['user-collections'];
 
 const PAGE_SIZE = 40;
 
+export interface LibraryAssetsFilter {
+  assetType?: string;
+  contentCategory?: string;
+}
+
 /**
  * Hook for fetching library assets with infinite scroll pagination
  */
-export function useLibraryAssets() {
+export function useLibraryAssets(filter?: LibraryAssetsFilter) {
   return useInfiniteQuery({
-    queryKey: LIBRARY_ASSETS_QUERY_KEY,
+    queryKey: [...LIBRARY_ASSETS_QUERY_KEY, filter ?? null],
     queryFn: ({ pageParam = 0 }) =>
-      LibraryAssetService.getUserLibraryAssets(PAGE_SIZE, pageParam),
+      LibraryAssetService.getUserLibraryAssets(PAGE_SIZE, pageParam, filter),
     getNextPageParam: (lastPage, allPages) => {
       const loaded = allPages.reduce((n, p) => n + p.assets.length, 0);
       return loaded < lastPage.total ? loaded : undefined;
