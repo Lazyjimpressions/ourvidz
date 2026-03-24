@@ -938,6 +938,8 @@ const MobileSimplifiedWorkspace = () => {
            motionConditioningType={motionConditioningType}
            onMotionConditioningTypeChange={setMotionConditioningType}
            isCharacterSwapMode={mode === 'video' && !!motionRefVideoUrl && !!beginningRefImageUrl}
+           onCopyVideoToWorkspace={handleCopyVideoToWorkspace}
+           isCopyingVideo={isCopyingVideo}
          />
 
         {/* Lightbox */}
