@@ -427,6 +427,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                 
                 if (failures === 0) {
                   toast.success(`Added ${successes} assets to workspace`);
+                  queryClient.invalidateQueries({ queryKey: ['assets', true] });
                 } else if (successes === 0) {
                   const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
                   toast.error(`Failed to add assets: ${firstError?.reason?.message || 'Unknown error'}`);
