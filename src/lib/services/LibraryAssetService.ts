@@ -61,13 +61,22 @@ export class LibraryAssetService {
    */
   static async getUserLibraryAssets(
     limit = 40,
-    offset = 0
+    offset = 0,
+    filter?: { assetType?: string; contentCategory?: string }
   ): Promise<{ assets: UnifiedLibraryAsset[]; total: number }> {
-    const { data, error, count } = await supabase
+    let query = supabase
       .from('user_library')
       .select('*', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
+
+    if (filter?.assetType) {
+      query = query.eq('asset_type', filter.assetType);
+    }
+    if (filter?.contentCategory) {
+      query = query.eq('content_category', filter.contentCategory);
+    }
+
+    const { data, error, count } = await query.range(offset, offset + limit - 1);
 
     if (error) {
       console.error('Error fetching library assets:', error);
