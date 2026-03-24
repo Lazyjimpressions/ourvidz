@@ -1,26 +1,47 @@
 
 
-## Plan: Wire Up Motion Video Picker to 4-Source Standard
+## Fix: Video Upload Fails with "mime type not supported"
 
-### Problem
-The motion reference video picker (both quick bar and settings modal) only has 3 dropdown options, and "Photo Library" duplicates "Upload file". It should match the 4-source standard used by image reference slots: Upload File, Photo Library (camera/native), From Library, From Workspace.
+### Root Cause
 
-### Changes
+The `user-library` storage bucket does not have `video/quicktime` in its `allowed_mime_types`. iPhones record `.MOV` files with MIME type `video/quicktime`. The only MIME type migration (Feb 2026) updated the `reference_images` bucket -- `user-library` was never configured.
 
-**File: `src/components/workspace/MobileSimplePromptInput.tsx`** (quick bar motion ref dropdown, ~lines 937-950)
-- Keep "Upload file" as-is (triggers `motionVideoInputRef`)
-- Fix "Photo Library" to use a separate file input with `capture="environment"` for native device gallery
-- Keep "From Library" opening `ImagePickerDialog` with `source="library"` and `mediaType="video"`
-- Add "From Workspace" opening `ImagePickerDialog` with `source="workspace"` and `mediaType="video"`
-- Add state `motionPickerSource` to track which source to pass to the picker dialog
+Console error confirms: `mime type video/quicktime is not supported` when uploading a `.MOV` from an iPhone.
 
-**File: `src/components/workspace/MobileSettingsSheet.tsx`** (settings modal motion ref dropdown, ~lines 758-788)
-- Same 4-option pattern: Upload File, Photo Library (with capture), From Library, From Workspace
-- "From Library" calls `onMotionRefVideoUrlAdd` with a source parameter, or add a new `onMotionRefVideoUrlAddFromWorkspace` callback
-- Simplest approach: add a new prop `onMotionRefVideoUrlAddFromWorkspace` that opens the picker with `source="workspace"`, or pass source as argument to `onMotionRefVideoUrlAdd`
+### Fix
 
-### Execution
-1. Update quick bar dropdown to 4 options with workspace picker support
-2. Update settings sheet dropdown to 4 options with workspace picker support
-3. Wire the `ImagePickerDialog` for workspace source in both locations
+**1. SQL Migration — Update `user-library` bucket MIME types and size limit**
+
+Add `video/quicktime` (and ensure all video types) to the `user-library` bucket:
+
+```sql
+UPDATE storage.buckets
+SET allowed_mime_types = ARRAY[
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic',
+  'video/mp4', 'video/webm', 'video/quicktime'
+],
+file_size_limit = 209715200  -- 200MB
+WHERE id = 'user-library';
+```
+
+**2. Client-side: normalize `.MOV` extension in `uploadReferenceImage`**
+
+In `src/lib/storage.ts`, the `uploadReferenceImage` function builds filenames using the original extension. `.MOV` files should be kept as-is (the bucket will now accept them), but we should normalize the extension to lowercase for consistency:
+
+```typescript
+const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'png';
+```
+
+This is already the case — no code change needed here.
+
+**3. Improve error messaging in upload handlers**
+
+In `MobileSimplePromptInput.tsx`, the toast just says "Failed to upload motion video". Update the catch blocks to surface the actual error message so users see what went wrong (e.g., "File type not supported" instead of generic failure).
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| SQL migration | Add video MIME types + size limit to `user-library` bucket |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Surface actual error message in video upload toast notifications |
 
