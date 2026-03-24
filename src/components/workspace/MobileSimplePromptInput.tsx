@@ -824,8 +824,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             const signedUrl = await uploadAndSignReferenceImage(file);
             onMotionRefVideoUrlChange?.(signedUrl);
             toast.success('Motion reference video uploaded');
-          } catch {
-            toast.error('Failed to upload motion video');
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to upload motion video');
           }
         }}
         className="hidden"
@@ -845,8 +845,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             const signedUrl = await uploadAndSignReferenceImage(file);
             onMotionRefVideoUrlChange?.(signedUrl);
             toast.success('Motion reference video uploaded');
-          } catch {
-            toast.error('Failed to upload motion video');
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to upload motion video');
           }
         }}
         className="hidden"
@@ -949,7 +949,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                     if (file && file.type.startsWith('video/')) {
                       uploadAndSignReferenceImage(file).then(signedUrl => {
                         onMotionRefVideoUrlChange?.(signedUrl);
-                      }).catch(() => toast.error('Failed to upload motion video'));
+                      }).catch((err: any) => toast.error(err?.message || 'Failed to upload motion video'));
                     }
                   }}
                 >
@@ -1132,8 +1132,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             const signedUrl = await uploadAndSignReferenceImage(file);
             onMotionRefVideoUrlChange?.(signedUrl);
             toast.success('Motion reference video uploaded');
-          } catch {
-            toast.error('Failed to upload motion video');
+          } catch (err: any) {
+            toast.error(err?.message || 'Failed to upload motion video');
           }
         }}
         keyframeStrengths={keyframeStrengths}
