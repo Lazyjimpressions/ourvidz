@@ -831,7 +831,27 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         className="hidden"
         aria-hidden="true"
       />
-      
+      {/* Hidden file input for motion ref video (Photo Library / capture) */}
+      <input
+        ref={motionVideoCaptureRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime"
+        capture="environment"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (motionVideoCaptureRef.current) motionVideoCaptureRef.current.value = '';
+          if (!file || !file.type.startsWith('video/')) return;
+          try {
+            const signedUrl = await uploadAndSignReferenceImage(file);
+            onMotionRefVideoUrlChange?.(signedUrl);
+            toast.success('Motion reference video uploaded');
+          } catch {
+            toast.error('Failed to upload motion video');
+          }
+        }}
+        className="hidden"
+        aria-hidden="true"
+      />
       {/* Quick Bar */}
       <MobileQuickBar
         currentMode={currentMode}
