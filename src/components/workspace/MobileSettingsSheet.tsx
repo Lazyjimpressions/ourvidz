@@ -133,6 +133,10 @@ export interface MobileSettingsSheetProps {
 
   // Character-swap mode detection (greys out Key2 and Key4 slots)
   isCharacterSwapMode?: boolean;
+
+  // Copy video to workspace
+  onCopyVideoToWorkspace?: () => void;
+  isCopyingVideo?: boolean;
 }
 
 const STYLE_PRESETS = [
