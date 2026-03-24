@@ -128,6 +128,8 @@ const MobileSimplifiedWorkspace = () => {
   const [motionVideoPreprocess, setMotionVideoPreprocess] = useState(false);
   /** Conditioning type for motion video (default, rgb, depth, pose, canny) */
   const [motionConditioningType, setMotionConditioningType] = useState<'default' | 'rgb' | 'depth' | 'pose' | 'canny'>('default');
+  // Copy video to workspace state
+  const [isCopyingVideo, setIsCopyingVideo] = useState(false);
   // Track the job_id for the pose slot (index 2) so we can look up pose_description
   const [poseSlotJobId, setPoseSlotJobId] = useState<string | null>(null);
 
