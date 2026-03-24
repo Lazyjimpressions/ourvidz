@@ -235,8 +235,10 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   const [pickerSlotIndex, setPickerSlotIndex] = useState(0);
   
   // Motion ref video file input
-  const motionVideoInputRef = useRef<HTMLInputElement>(null);
-  const [motionPickerOpen, setMotionPickerOpen] = useState(false);
+   const motionVideoInputRef = useRef<HTMLInputElement>(null);
+   const motionVideoCaptureRef = useRef<HTMLInputElement>(null);
+   const [motionPickerOpen, setMotionPickerOpen] = useState(false);
+   const [motionPickerSource, setMotionPickerSource] = useState<'library' | 'workspace'>('library');
   
   // Map slot index to a library filter tag
   const SLOT_FILTER_TAGS = ['character', 'character', 'position', 'scene', 'clothing'] as const;
@@ -829,7 +831,27 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         className="hidden"
         aria-hidden="true"
       />
-      
+      {/* Hidden file input for motion ref video (Photo Library / capture) */}
+      <input
+        ref={motionVideoCaptureRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime"
+        capture="environment"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (motionVideoCaptureRef.current) motionVideoCaptureRef.current.value = '';
+          if (!file || !file.type.startsWith('video/')) return;
+          try {
+            const signedUrl = await uploadAndSignReferenceImage(file);
+            onMotionRefVideoUrlChange?.(signedUrl);
+            toast.success('Motion reference video uploaded');
+          } catch {
+            toast.error('Failed to upload motion video');
+          }
+        }}
+        className="hidden"
+        aria-hidden="true"
+      />
       {/* Quick Bar */}
       <MobileQuickBar
         currentMode={currentMode}
@@ -934,18 +956,18 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                   <span className="text-[8px] text-muted-foreground/50">+ Video</span>
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-36">
+              <DropdownMenuContent align="start" className="w-40">
                 <DropdownMenuItem onClick={() => motionVideoInputRef.current?.click()}>
                   <Upload className="w-3 h-3 mr-2" /> Upload file
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => {
-                  // Use the same file input but with video accept
-                  motionVideoInputRef.current?.click();
-                }}>
+                <DropdownMenuItem onClick={() => motionVideoCaptureRef.current?.click()}>
                   <Camera className="w-3 h-3 mr-2" /> Photo Library
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setMotionPickerOpen(true)}>
+                <DropdownMenuItem onClick={() => { setMotionPickerSource('library'); setMotionPickerOpen(true); }}>
                   <Library className="w-3 h-3 mr-2" /> From Library
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setMotionPickerSource('workspace'); setMotionPickerOpen(true); }}>
+                  <Library className="w-3 h-3 mr-2" /> From Workspace
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1103,7 +1125,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         motionRefVideoUrl={motionRefVideoUrl}
         motionRefThumbnailUrl={motionRefThumbnailUrl}
         onMotionRefVideoUrlRemove={() => onMotionRefVideoUrlChange?.(null)}
-        onMotionRefVideoUrlAdd={() => setMotionPickerOpen(true)}
+        onMotionRefVideoUrlAdd={(source) => { setMotionPickerSource(source || 'library'); setMotionPickerOpen(true); }}
         onMotionRefVideoFileDrop={async (file) => {
           if (!file.type.startsWith('video/')) return;
           try {
@@ -1157,7 +1179,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           setMotionPickerOpen(false);
         }}
         title="Select Motion Reference Video"
-        source="library"
+        source={motionPickerSource}
         mediaType="video"
       />
     </div>
