@@ -755,7 +755,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       <span className="text-[8px] text-muted-foreground/50">Add Video</span>
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-36">
+                  <DropdownMenuContent align="start" className="w-40">
                     <DropdownMenuItem onClick={() => {
                       const input = document.createElement('input');
                       input.type = 'file';
@@ -773,6 +773,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       const input = document.createElement('input');
                       input.type = 'file';
                       input.accept = 'video/mp4,video/webm,video/quicktime';
+                      input.setAttribute('capture', 'environment');
                       input.onchange = (e) => {
                         const file = (e.target as HTMLInputElement).files?.[0];
                         if (file && onMotionRefVideoFileDrop) onMotionRefVideoFileDrop(file);
@@ -782,9 +783,13 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                       <Camera className="w-3.5 h-3.5 mr-2" />
                       Photo Library
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onMotionRefVideoUrlAdd?.()}>
+                    <DropdownMenuItem onClick={() => onMotionRefVideoUrlAdd?.('library')}>
                       <Library className="w-3.5 h-3.5 mr-2" />
                       From Library
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onMotionRefVideoUrlAdd?.('workspace')}>
+                      <Library className="w-3.5 h-3.5 mr-2" />
+                      From Workspace
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
