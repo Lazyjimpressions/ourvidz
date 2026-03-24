@@ -120,6 +120,9 @@ export interface MobileSimplePromptInputProps {
   onMotionVideoStrengthChange?: (strength: number) => void;
   // Character-swap mode detection (greys out Key2 and Key4 slots)
   isCharacterSwapMode?: boolean;
+  // Copy video to workspace
+  onCopyVideoToWorkspace?: () => void;
+  isCopyingVideo?: boolean;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
