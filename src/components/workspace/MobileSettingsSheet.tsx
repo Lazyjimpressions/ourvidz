@@ -59,7 +59,7 @@ export interface MobileSettingsSheetProps {
   motionRefVideoUrl?: string | null;
   motionRefThumbnailUrl?: string | null;
   onMotionRefVideoUrlRemove?: () => void;
-  onMotionRefVideoUrlAdd?: () => void;
+  onMotionRefVideoUrlAdd?: (source?: 'library' | 'workspace') => void;
   onMotionRefVideoFileDrop?: (file: File) => void;
   onRefSlotAdd?: (index: number) => void;
   onRefSlotRemove?: (index: number) => void;
