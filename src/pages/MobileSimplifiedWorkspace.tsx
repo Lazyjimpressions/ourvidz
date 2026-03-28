@@ -704,7 +704,30 @@ const MobileSimplifiedWorkspace = () => {
       console.error('❌ MOBILE: Failed to use asset as reference:', error);
       toast.error('Failed to use as reference');
     }
-  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url, referenceImage2Url, additionalRefUrls, setAdditionalRefUrls]);
+  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url, referenceImage2Url, additionalRefUrls, setAdditionalRefUrls, motionRefVideoUrl]);
+
+  // Explicit "Use as Motion Ref" for video tiles
+  const handleUseAsMotionRef = useCallback(async (asset: any) => {
+    try {
+      let videoUrl: string | null = null;
+      if (asset.url) videoUrl = asset.url;
+      else if (typeof asset.signOriginal === 'function') videoUrl = await asset.signOriginal();
+      else if (asset.thumbUrl) videoUrl = asset.thumbUrl;
+      
+      if (!videoUrl) {
+        toast.error('Could not get URL for this video');
+        return;
+      }
+      
+      if (mode !== 'video') updateMode('video');
+      setMotionRefVideoUrl(videoUrl);
+      setMotionRefThumbnailUrl(null);
+      toast.success('Video set as motion reference');
+    } catch (error) {
+      console.error('❌ Failed to set motion ref:', error);
+      toast.error('Failed to set motion reference');
+    }
+  }, [mode, updateMode, setMotionRefVideoUrl, setMotionRefThumbnailUrl]);
 
   // Workspace actions - Save to library WITHOUT removing from workspace
   // Auto-carries the workspace slot role as a tag so library assets retain context
