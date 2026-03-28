@@ -2344,7 +2344,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setExtendReverseVideo: (r: boolean) => setExtendReverseVideo(r),
     setSourceVideoDuration: (d: number) => setSourceVideoDuration(d),
     // Per-keyframe strengths
-    setKeyframeStrengths,
+    setKeyframeStrengths: handleSetKeyframeStrengths,
+    applyCharSwapStrengthGradient,
     getJobStats,
     getActiveJob,
     getJobById,
