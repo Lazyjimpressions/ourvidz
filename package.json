@@ -22,7 +22,8 @@
     "test:roleplay:character": "npx tsx scripts/test-roleplay/test-character-selection.ts",
     "test:roleplay:chat": "npx tsx scripts/test-roleplay/test-chat-interactions.ts",
     "test:roleplay:prompts": "npx tsx scripts/test-roleplay/test-system-prompts.ts",
-    "test:roleplay:database": "npx tsx scripts/test-roleplay/test-database-state.ts"
+    "test:roleplay:database": "npx tsx scripts/test-roleplay/test-database-state.ts",
+    "test:workspace:mapping": "npx tsx scripts/test-workspace/test-multi-condition-ref-mapping.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.4",

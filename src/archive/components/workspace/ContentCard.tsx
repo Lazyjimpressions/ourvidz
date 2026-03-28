@@ -127,7 +127,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   // Get video poster/thumbnail
   const getVideoPoster = (): string | undefined => {
     // Prefer explicit thumbnail (could be generated client-side); fallback to proper placeholder for videos
-    return item.thumbnailUrl || '/system_assets/video-thumbnail-placeholder.png';
+    return item.thumbnailUrl || '/video-thumbnail-placeholder.svg';
   };
   const sizeClasses = {
     sm: 'w-32 h-32',

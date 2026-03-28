@@ -13,6 +13,7 @@ import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } fro
 import { useVideoModelSettings } from './useVideoModelSettings';
 import { SlotRole, buildFigurePrefix, buildQuickScenePrompt, QUICK_SCENE_SLOTS } from '@/types/slotRoles';
 import { stripToStoragePath } from '@/lib/utils/stripToStoragePath';
+import { buildMultiConditionFilledEntries } from '@/lib/workspace/buildMultiConditionFilledEntries';
 
 // STAGING-FIRST: Simplified workspace state using staging assets
 export interface LibraryFirstWorkspaceState {
@@ -1488,16 +1489,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             };
 
             // Gather all image ref URLs: start (slot 0), additionalRefs (slots 1-3), end (slot 4)
-            const filledEntries: { url: string; slotIndex: number }[] = [];
-            if (refImageUrl) filledEntries.push({ url: stripToStoragePath(refImageUrl), slotIndex: 0 });
-            if (additionalImageUrls) {
-              additionalImageUrls.forEach((url, i) => {
-                if (url && typeof url === 'string' && url.trim() !== '') {
-                  filledEntries.push({ url: stripToStoragePath(url), slotIndex: i + 1 });
-                }
-              });
-            }
-            if (endRefUrl) filledEntries.push({ url: stripToStoragePath(endRefUrl), slotIndex: 4 });
+            const filledEntries = buildMultiConditionFilledEntries({
+              refImageUrl,
+              additionalImageUrls,
+              endRefUrl,
+            }).map((e) => ({ url: stripToStoragePath(e.url), slotIndex: e.slotIndex }));
 
             // fal.ai MultiCondition uses actual video frame indices (0 to num_frames-1)
             console.log(`🎬 MultiCondition: ${filledEntries.length} images, num_frames=${numFrames}, frame range 0-${lastFrame}`);

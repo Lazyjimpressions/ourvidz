@@ -379,11 +379,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         const signedUrl = await uploadRef(file);
         const slotIndex = pendingSlotIndexRef.current;
         if (currentMode === 'video') {
-          // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+          // Video mode: slot 0=Start, 4=End (hook endingRefImageUrl), 1-3=additionalRefUrls[0-2]
           if (slotIndex === 0) {
             onReferenceImageUrlSet?.(signedUrl, 'start');
           } else if (slotIndex === 4) {
-            onReferenceImage2UrlSet?.(signedUrl);
+            onReferenceImageUrlSet?.(signedUrl, 'end');
           } else {
             const additionalIndex = slotIndex - 1;
             const newAdditional = [...additionalRefUrls];
@@ -515,11 +515,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         const slotIndex = pendingSlotIndexRef.current;
         
         if (currentMode === 'video') {
-          // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+          // Video mode: slot 0=Start, 4=End (hook endingRefImageUrl), 1-3=additionalRefUrls[0-2]
           if (slotIndex === 0) {
             onReferenceImageUrlSet?.(signedUrl, 'start');
           } else if (slotIndex === 4) {
-            onReferenceImage2UrlSet?.(signedUrl);
+            onReferenceImageUrlSet?.(signedUrl, 'end');
           } else {
             const additionalIndex = slotIndex - 1;
             const newAdditional = [...additionalRefUrls];
@@ -746,11 +746,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     const index = pickerSlotIndex;
     
     if (currentMode === 'video') {
-      // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+      // Video mode: slot 0=Start, 4=End (hook endingRefImageUrl), 1-3=additionalRefUrls[0-2]
       if (index === 0) {
         onReferenceImageUrlSet?.(imageUrl, 'start');
       } else if (index === 4) {
-        onReferenceImage2UrlSet?.(imageUrl);
+        onReferenceImageUrlSet?.(imageUrl, 'end');
       } else {
         const additionalIndex = index - 1;
         const newAdditional = [...additionalRefUrls];
@@ -827,13 +827,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   // Handle file drop for a specific slot index
   const handleDropSlot = (index: number, file: File) => {
-    if (currentMode === 'video') {
-      // Video: slot 0=Start(ref1), 4=End(ref2), 1-3=additional[0-2]
-      if (index === 0) pendingSlotIndexRef.current = 0;
-      else if (index === 4) pendingSlotIndexRef.current = 1;
-      else pendingSlotIndexRef.current = index + 1; // mid slots → additionalRefUrls
-    } else {
-      pendingSlotIndexRef.current = index;
+    pendingSlotIndexRef.current = index;
+    // Image mode: mirror handleFileUploadForSlot so handleFileInputChange gets correct ref2 vs single
+    if (currentMode === 'image') {
+      if (index === 1) pendingFileTypeRef.current = 'ref2';
+      else if (index === 0) pendingFileTypeRef.current = 'single';
+      else pendingFileTypeRef.current = 'single';
     }
     const dt = new DataTransfer();
     dt.items.add(file);
