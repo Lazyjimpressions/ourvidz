@@ -619,21 +619,26 @@ const MobileSimplifiedWorkspace = () => {
       console.log('✅ MOBILE: File created:', { fileName: file.name, fileSize: file.size, fileType: file.type });
       
       if (isVideo) {
-        // Video → set as start frame ref, switch to video mode + extend model
-        if (mode !== 'video') {
-          updateMode('video');
-        }
-        // Auto-overflow: if start ref is filled, put in end ref
-        if (beginningRefImageUrl) {
-          setEndingRefImage(file);
-          setEndingRefImageUrl(referenceUrl);
-          applySmartDefault('multi');
-          toast.success('Video set as second reference');
-        } else {
+        // Video → default to motion reference for character swap; extend as fallback
+        if (!motionRefVideoUrl) {
+          // Primary: set as motion reference for character swap
+          if (mode !== 'video') updateMode('video');
+          setMotionRefVideoUrl(referenceUrl);
+          setMotionRefThumbnailUrl(null);
+          toast.success('Video set as motion reference');
+        } else if (!beginningRefImageUrl) {
+          // Motion ref already set, use for extend (start slot)
+          if (mode !== 'video') updateMode('video');
           setBeginningRefImage(file);
           setBeginningRefImageUrl(referenceUrl);
           applySmartDefault('extend');
           toast.success('Video set as reference for extension');
+        } else {
+          // Both filled, overflow to end slot
+          setEndingRefImage(file);
+          setEndingRefImageUrl(referenceUrl);
+          applySmartDefault('multi');
+          toast.success('Video set as second reference');
         }
         // Probe video duration from URL for tail-conditioning
         probeVideoDurationFromUrl(referenceUrl).then((dur) => {
