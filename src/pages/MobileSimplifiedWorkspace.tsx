@@ -1017,6 +1017,7 @@ const MobileSimplifiedWorkspace = () => {
                   onSave={() => handleSaveToLibrary(asset)}
                   onDiscard={() => handleDiscard(asset)}
                   onUseAsReference={() => handleUseAsReference(asset)}
+                  onUseAsMotionRef={asset.type === 'video' ? () => handleUseAsMotionRef(asset) : undefined}
                   onDownload={async () => {
                     try {
                       let url: string;
