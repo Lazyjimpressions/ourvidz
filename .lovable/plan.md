@@ -1,97 +1,57 @@
 
 
-## Plan: Fix LTX MultiCondition Keyframe + Motion Video Settings
+## Audit: Character-Swap Strength Gradient Not Applied
 
-### Research Findings
+### Bug Found
 
-After reviewing the fal.ai schema for `VideoConditioningInput`, here are the confirmed facts:
+The plan called for default strengths of `[1.0, 0.6, 0.3]` in character-swap mode, but this is **not working**. Here's why:
 
-**`conditioning_type` enum:** `rgb`, `depth`, `pose`, `canny` (default: `rgb`)
+- `keyframeStrengths` state initializes as `[1.0, 1.0, 1.0, 1.0, 1.0]` (line 432 of useLibraryFirstWorkspace.ts)
+- The generate function uses `keyframeStrengths[2] ?? 0.6` — the `?? 0.6` fallback only triggers if the value is `undefined` or `null`, but it's `1.0`, so the fallback never fires
+- **Result**: All anchors are sent at strength 1.0 regardless of the plan's intent
 
-**`preprocess` field:** "Whether to preprocess the video. If True, the video will be preprocessed to match the conditioning type. **This is a no-op for RGB conditioning.**"
+### Mobile UI Consistency Issue
 
-This means:
-- `pose` + `preprocess: true` = fal.ai extracts a stick-figure skeleton from the video, then uses that skeleton as motion guidance. **This is what causes the visible animation frames / stick figure artifacts.**
-- `pose` + `preprocess: false` = fal.ai treats the raw RGB video as if it were pose data, which produces garbage.
-- `rgb` (default) = fal.ai uses the video's full visual appearance as conditioning. At high strength this overpowers keyframe images. At lower strength, keyframe images can dominate appearance while the video provides motion context.
+The slider UI (line 1076 of MobileSettingsSheet.tsx) uses `keyframeStrengths?.[i] ?? 1` — also defaults to 1.0. So the UI and backend are consistent (both 1.0), but neither reflects the intended gradient.
 
-### Best Practice for Character Swap
+### All Other Changes Are Mobile-Conformant
 
-**Use `conditioning_type: "rgb"` (default) with reduced video strength (0.3-0.5).** The model extracts both motion AND appearance from the video, but at low strength the keyframe images win on appearance while the video's motion patterns still guide choreography. This avoids the stick-figure artifacts that `pose` introduces.
+- Conditioning type selector uses `CreativeChipPopover` with proper `text-[9px]` labels — fits mobile layout
+- `✦` badge on Default/RGB in char-swap mode is lightweight, no layout overflow
+- Tooltip max-widths (`max-w-[260px]`) fit within 402px viewport
+- Disabled slots use `opacity-30 pointer-events-none` — touch-safe
+- Slider thumb sizes (2.5 × 2.5) meet minimum touch targets for secondary controls
+- `{ download: false }` on signed URLs is backend-only, no UI impact
 
-**Do NOT use `pose`** unless the user explicitly wants skeleton-based motion extraction (and accepts the visual artifacts). `depth` is a reasonable middle ground — it extracts spatial structure without stick figures — but `rgb` at low strength is the cleanest approach.
+### Fix Required
 
-### Slots: 3 vs 5 Images
+**File: `src/hooks/useLibraryFirstWorkspace.ts`**
 
-For smoother transitions, **3 images at slots 1, 3, 5 is optimal.** The LTX model handles interpolation between anchor points well. Using 5 anchors can over-constrain the model and reduce motion fluidity. The current grayed-out slots (2 and 4) are correct for the character-swap use case.
+When character-swap mode is detected (motion video + images loaded), auto-set `keyframeStrengths` to the gradient `[1.0, 1.0, 0.6, 1.0, 0.3]` (slots 0, 2, 4 = active; slots 1, 3 = greyed out, value irrelevant). This should happen via a `useEffect` that triggers when `isCharacterSwapMode` becomes true, but only if the user hasn't manually adjusted strengths.
 
-Recommended strength gradient for character swap:
-- Slot 0 (Start): **1.0** — strong identity lock at opening
-- Slot 2 (Mid): **0.6** — reinforce identity without over-constraining
-- Slot 4 (End): **0.3** — allow natural motion to dominate toward the end
+Additionally, update the generate function to use the actual state values directly instead of `??` fallbacks:
 
-### Changes
+```typescript
+// Before (fallback never fires):
+const s1 = keyframeStrengths[2] ?? 0.6;
+const s2 = keyframeStrengths[4] ?? 0.3;
 
-**1. Default conditioning to `rgb` (not `pose`) for character-swap mode**
-
-File: `src/hooks/useLibraryFirstWorkspace.ts` (~line 1540)
-
-When `isCharSwap` is true and the user hasn't explicitly changed the conditioning type from `default`, keep it as `rgb` (the API default). Remove any logic that would auto-switch to `pose`.
-
-Currently: `const conditioningType = multiAdvancedParams?.motionConditioningType ?? 'default'` — this already resolves to `rgb` at the API level since `default` means "omit the field" and fal.ai defaults to `rgb`. No code change needed here unless we want to be explicit.
-
-**2. Update default strengths for character-swap preset**
-
-File: `src/hooks/useLibraryFirstWorkspace.ts` (~line 1521-1528)
-
-When character-swap mode is detected (single identity image + motion video), update the default strength gradient:
-- Slot 0: 1.0 (unchanged)
-- Slot 2: 0.6 (was 1.0)
-- Slot 4: 0.3 (was 1.0)
-
-These are only defaults — the user can still adjust via sliders.
-
-**3. Lower default motion video strength for character-swap**
-
-File: `src/hooks/useLibraryFirstWorkspace.ts` (~line 1509)
-
-Change default `motionVideoStrength` from `0.55` to `0.4` when in character-swap mode. This lets keyframe images dominate appearance while still following the reference video's choreography.
-
-**4. Update conditioning type tooltips**
-
-File: `src/components/workspace/MobileSettingsSheet.tsx` (~line 147-153)
-
-Update the tooltip for `pose` to warn about stick-figure artifacts:
-
-```text
-Pose: "Skeletal pose extraction. Warning: may introduce visible stick-figure frames. Best with preprocess ON."
-RGB: "Uses full video appearance at the specified strength. Recommended for character swap."
+// After (use state directly):
+const s0 = keyframeStrengths[0];
+const s1 = keyframeStrengths[2];
+const s2 = keyframeStrengths[4];
 ```
 
-**5. Add "Recommended" badge to RGB option**
-
-In the conditioning type dropdown, mark RGB as "(Recommended)" when character-swap mode is active, so users understand the best practice.
-
-**6. Fix `{ download: false }` for signed URLs**
-
-File: `supabase/functions/fal-image/index.ts` — `signIfStoragePath`
-
-Add `{ download: false }` to `createSignedUrl()` calls so signed URLs serve inline rather than as downloads. This ensures fal.ai can reliably fetch reference images.
+**File: `src/components/workspace/MobileSettingsSheet.tsx`** — No changes needed. The UI correctly reads from `keyframeStrengths` state.
 
 ### Summary
 
-| File | Change |
+| Item | Status |
 |------|--------|
-| `useLibraryFirstWorkspace.ts` | Default char-swap strengths to [1.0, 0.6, 0.3]; lower motion video default to 0.4 |
-| `MobileSettingsSheet.tsx` | Update conditioning type descriptions; add "Recommended" badge for RGB in char-swap mode |
-| `fal-image/index.ts` | Add `{ download: false }` to `createSignedUrl` calls |
-
-### Technical Detail
-
-The key insight is that `conditioning_type` controls how fal.ai **interprets** the video data, not just what it extracts:
-- `rgb` = "this video is normal footage, use it as visual reference"
-- `pose` = "this video is a skeleton/pose sequence" (with `preprocess: true`, fal.ai converts RGB to skeleton first)
-- `depth` = "this video is a depth map" (with `preprocess: true`, fal.ai converts RGB to depth first)
-
-For character swap, the video IS normal footage — we want the model to follow its motion patterns while overriding appearance with the keyframe images. The correct lever is **video strength** (lower = less appearance transfer from video, more from images) rather than conditioning type.
+| Conditioning tooltips & ✦ badge | Correct, mobile-safe |
+| Disabled slots (1, 3) | Correct, touch-safe |
+| Strength sliders | Mobile-conformant (thumb sizes, layout) |
+| `{ download: false }` signed URLs | Correct, backend-only |
+| **Strength gradient defaults** | **Bug — not applied, needs useEffect** |
+| Motion video default strength (0.4) | Correct |
 
