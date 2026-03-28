@@ -178,9 +178,7 @@ export function useSignedAssets(
       let thumbUrl = signedUrls[asset.id]?.thumbUrl || null;
       const failed = failedIds.has(asset.id);
       
-      if (asset.type === 'video' && !thumbUrl && !asset.thumbPath) {
-        thumbUrl = '/video-thumbnail-placeholder.svg';
-      }
+      // Video thumbnails: leave null so SharedGridCard's client-side canvas-capture can trigger
       // If signing failed, use a sentinel value so the UI can show a fallback
       if (failed && !thumbUrl) {
         thumbUrl = 'SIGNING_FAILED';

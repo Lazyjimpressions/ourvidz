@@ -52,7 +52,7 @@ export const useRecentScenes = (limit: number = 12) => {
           // Note: imageMap is defined above when characters exist
           // @ts-ignore - imageMap defined conditionally
           const charImg = charId ? (imageMap?.[charId] as string | undefined) : undefined;
-          return r.image_url || charImg || '/video-thumbnail-placeholder.svg';
+          return r.image_url || charImg || '/system_assets/video-thumbnail-placeholder.png';
         })();
         return {
           id: r.id,
