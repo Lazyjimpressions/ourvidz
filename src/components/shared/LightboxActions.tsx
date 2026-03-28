@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Save, ChevronRight, Trash2, Download, Copy, Shuffle, BookmarkPlus, Tag } from 'lucide-react';
+import { Save, ChevronRight, Trash2, Download, Copy, Shuffle, BookmarkPlus, Tag, Film } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import { RoleTagButton } from './RoleTagButton';
 import type { SlotRole } from '@/types/slotRoles';
@@ -13,10 +13,11 @@ export const WorkspaceAssetActions: React.FC<{
   onDiscard?: () => void;
   onDownload?: () => void;
   onUseAsReference?: () => void;
+  onUseAsMotionRef?: () => void;
   onRoleTagToggle?: (role: SlotRole) => void;
   onTagToggle?: (tag: string) => void;
   tags?: string[];
-}> = ({ asset, onSave, onClear, onDiscard, onDownload, onUseAsReference, onRoleTagToggle, onTagToggle, tags }) => (
+}> = ({ asset, onSave, onClear, onDiscard, onDownload, onUseAsReference, onUseAsMotionRef, onRoleTagToggle, onTagToggle, tags }) => (
   <>
     {onSave && (
       <Button size="sm" variant="secondary" onClick={onSave} className="h-7 w-7 p-0" title="Save to Library">
@@ -41,6 +42,11 @@ export const WorkspaceAssetActions: React.FC<{
     {onUseAsReference && (
       <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Add to REF (Modify)">
         <Copy className="w-3 h-3" />
+      </Button>
+    )}
+    {onUseAsMotionRef && asset.type === 'video' && (
+      <Button size="sm" variant="secondary" onClick={onUseAsMotionRef} className="h-7 w-7 p-0" title="Use as Motion Ref">
+        <Film className="w-3 h-3" />
       </Button>
     )}
     {onRoleTagToggle && tags && (

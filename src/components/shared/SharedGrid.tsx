@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video, Loader2, ImagePlus } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video, Loader2, ImagePlus, Film } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -68,6 +68,7 @@ export type SharedGridProps = {
     onClear?: (asset: SharedAsset) => void;
     onDiscard?: (asset: SharedAsset) => void;
     onSendToRef?: (asset: SharedAsset) => void;
+    onUseAsMotionRef?: (asset: SharedAsset) => void;
     // For Library
     onDelete?: (asset: SharedAsset) => void;
     onDownload?: (asset: SharedAsset) => void;
@@ -475,6 +476,9 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
         {isWorkspace && actions?.onSendToRef && (
           <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onSendToRef!(asset); }} title="Use as reference"><ImagePlus className="w-2.5 h-2.5" /></Button>
+        )}
+        {isWorkspace && asset.type === 'video' && actions?.onUseAsMotionRef && (
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onUseAsMotionRef!(asset); }} title="Use as Motion Ref"><Film className="w-2.5 h-2.5" /></Button>
         )}
         {isWorkspace && actions?.onSaveToLibrary && (
           <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onSaveToLibrary!(asset); }} title="Save to Library"><Save className="w-2.5 h-2.5" /></Button>

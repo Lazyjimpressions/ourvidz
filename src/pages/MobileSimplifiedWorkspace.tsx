@@ -619,21 +619,26 @@ const MobileSimplifiedWorkspace = () => {
       console.log('✅ MOBILE: File created:', { fileName: file.name, fileSize: file.size, fileType: file.type });
       
       if (isVideo) {
-        // Video → set as start frame ref, switch to video mode + extend model
-        if (mode !== 'video') {
-          updateMode('video');
-        }
-        // Auto-overflow: if start ref is filled, put in end ref
-        if (beginningRefImageUrl) {
-          setEndingRefImage(file);
-          setEndingRefImageUrl(referenceUrl);
-          applySmartDefault('multi');
-          toast.success('Video set as second reference');
-        } else {
+        // Video → default to motion reference for character swap; extend as fallback
+        if (!motionRefVideoUrl) {
+          // Primary: set as motion reference for character swap
+          if (mode !== 'video') updateMode('video');
+          setMotionRefVideoUrl(referenceUrl);
+          setMotionRefThumbnailUrl(null);
+          toast.success('Video set as motion reference');
+        } else if (!beginningRefImageUrl) {
+          // Motion ref already set, use for extend (start slot)
+          if (mode !== 'video') updateMode('video');
           setBeginningRefImage(file);
           setBeginningRefImageUrl(referenceUrl);
           applySmartDefault('extend');
           toast.success('Video set as reference for extension');
+        } else {
+          // Both filled, overflow to end slot
+          setEndingRefImage(file);
+          setEndingRefImageUrl(referenceUrl);
+          applySmartDefault('multi');
+          toast.success('Video set as second reference');
         }
         // Probe video duration from URL for tail-conditioning
         probeVideoDurationFromUrl(referenceUrl).then((dur) => {
@@ -699,7 +704,30 @@ const MobileSimplifiedWorkspace = () => {
       console.error('❌ MOBILE: Failed to use asset as reference:', error);
       toast.error('Failed to use as reference');
     }
-  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url, referenceImage2Url, additionalRefUrls, setAdditionalRefUrls]);
+  }, [setReferenceImage, setReferenceImageUrl, setPrompt, setBeginningRefImage, setBeginningRefImageUrl, setEndingRefImage, setEndingRefImageUrl, mode, updateMode, applySmartDefault, setReferenceMetadata, setExactCopyMode, referenceImageUrl, beginningRefImageUrl, setReferenceImage2, setReferenceImage2Url, referenceImage2Url, additionalRefUrls, setAdditionalRefUrls, motionRefVideoUrl]);
+
+  // Explicit "Use as Motion Ref" for video tiles
+  const handleUseAsMotionRef = useCallback(async (asset: any) => {
+    try {
+      let videoUrl: string | null = null;
+      if (asset.url) videoUrl = asset.url;
+      else if (typeof asset.signOriginal === 'function') videoUrl = await asset.signOriginal();
+      else if (asset.thumbUrl) videoUrl = asset.thumbUrl;
+      
+      if (!videoUrl) {
+        toast.error('Could not get URL for this video');
+        return;
+      }
+      
+      if (mode !== 'video') updateMode('video');
+      setMotionRefVideoUrl(videoUrl);
+      setMotionRefThumbnailUrl(null);
+      toast.success('Video set as motion reference');
+    } catch (error) {
+      console.error('❌ Failed to set motion ref:', error);
+      toast.error('Failed to set motion reference');
+    }
+  }, [mode, updateMode, setMotionRefVideoUrl, setMotionRefThumbnailUrl]);
 
   // Workspace actions - Save to library WITHOUT removing from workspace
   // Auto-carries the workspace slot role as a tag so library assets retain context
@@ -805,7 +833,12 @@ const MobileSimplifiedWorkspace = () => {
                 } else {
                   toast.error('Only images and videos can be used as reference');
                 }
-              }
+              },
+              onUseAsMotionRef: (asset) => {
+                if (asset.type === 'video') {
+                  handleUseAsMotionRef(asset);
+                }
+              },
             }}
             isLoading={isGenerating && sharedAssets.length === 0}
           />
@@ -984,6 +1017,7 @@ const MobileSimplifiedWorkspace = () => {
                   onSave={() => handleSaveToLibrary(asset)}
                   onDiscard={() => handleDiscard(asset)}
                   onUseAsReference={() => handleUseAsReference(asset)}
+                  onUseAsMotionRef={asset.type === 'video' ? () => handleUseAsMotionRef(asset) : undefined}
                   onDownload={async () => {
                     try {
                       let url: string;
