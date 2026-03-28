@@ -309,11 +309,11 @@ export class UnifiedUrlService {
                 if (thumbData?.signedUrl) {
                   thumbnailUrl = thumbData.signedUrl;
                 } else {
-                  thumbnailUrl = '/video-thumbnail-placeholder.svg';
-                }
-              } catch (thumbError) {
-                console.warn(`Failed to generate thumbnail for video ${asset.id}:`, thumbError);
-                thumbnailUrl = '/video-thumbnail-placeholder.svg';
+                thumbnailUrl = data.signedUrl; // fallback to video URL
+              }
+            } catch (thumbError) {
+              console.warn(`Failed to generate thumbnail for video ${asset.id}:`, thumbError);
+              thumbnailUrl = data.signedUrl; // fallback to video URL
               }
             } else {
               // No thumbnail available, use placeholder instead of video URL
