@@ -504,6 +504,13 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [motionRefVideoUrl, beginningRefImageUrl, mode, applySmartDefault]);
 
+  // Auto-apply character-swap strength gradient when entering char-swap mode
+  useEffect(() => {
+    if (mode === 'video' && !!motionRefVideoUrl && !!beginningRefImageUrl) {
+      applyCharSwapStrengthGradient();
+    }
+  }, [mode, motionRefVideoUrl, beginningRefImageUrl, applyCharSwapStrengthGradient]);
+
   // Copy motion reference video to workspace as a tile
   const handleCopyVideoToWorkspace = useCallback(async () => {
     if (!motionRefVideoUrl || isCopyingVideo) return;
