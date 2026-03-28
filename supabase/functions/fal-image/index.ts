@@ -169,11 +169,11 @@ async function signIfStoragePath(
       const bucket = signMatch[1];
       const path = decodeURIComponent(signMatch[2]);
       console.log(`🔄 Re-signing Supabase URL for external access: bucket="${bucket}", path="${path.substring(0, 40)}..."`);
-      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600, { download: false });
       if (!error && data?.signedUrl) {
-        // Ensure absolute URL
+        // Ensure absolute URL — { download: false } ensures Content-Disposition: inline
         const signed = data.signedUrl.startsWith('/') ? `${SUPABASE_URL}/storage/v1${data.signedUrl}` : data.signedUrl;
-        console.log(`🔏 Re-signed URL for bucket "${bucket}": ${path.substring(0, 40)}...`);
+        console.log(`🔏 Re-signed URL (inline) for bucket "${bucket}": ${path.substring(0, 40)}...`);
         return signed;
       }
       console.warn(`⚠️ Re-sign failed for bucket "${bucket}":`, error?.message, '— using original URL');
