@@ -316,8 +316,8 @@ export class UnifiedUrlService {
               thumbnailUrl = data.signedUrl; // fallback to video URL
               }
             } else {
-              // No thumbnail available, use placeholder instead of video URL
-              thumbnailUrl = '/video-thumbnail-placeholder.svg';
+              // No thumbnail available, use video URL as fallback
+              thumbnailUrl = data.signedUrl;
             }
           }
           
