@@ -153,6 +153,7 @@ export interface LibraryFirstWorkspaceActions {
   setSourceVideoDuration: (duration: number) => void;
   // Per-keyframe strengths
   setKeyframeStrengths: (strengths: number[]) => void;
+  applyCharSwapStrengthGradient: () => void;
   
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
