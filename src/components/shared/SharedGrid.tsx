@@ -68,6 +68,7 @@ export type SharedGridProps = {
     onClear?: (asset: SharedAsset) => void;
     onDiscard?: (asset: SharedAsset) => void;
     onSendToRef?: (asset: SharedAsset) => void;
+    onUseAsMotionRef?: (asset: SharedAsset) => void;
     // For Library
     onDelete?: (asset: SharedAsset) => void;
     onDownload?: (asset: SharedAsset) => void;
