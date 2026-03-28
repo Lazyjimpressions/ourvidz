@@ -1,68 +1,82 @@
 
 
-## Fix: Blank Video Tiles in Workspace and Library
+## Fix: Video Ref Slot 3 (Key 3) Cannot Load Images
 
 ### Root Cause
 
-Two interacting bugs prevent video thumbnails from displaying:
+There's an index mapping mismatch in `MobileSimplePromptInput.tsx` between how video slots **display** data vs how **upload/picker handlers write** data.
 
-**Bug 1: Placeholder SVG blocks client-side thumbnail generation**
-
-In `useSignedAssets.ts` (line 181-183), when a video has no `thumbPath`, the code sets:
-```typescript
-thumbUrl = '/video-thumbnail-placeholder.svg';
+**Video slot display** (`videoRefSlots`, line 647-654):
+```
+Slot 0 (Start)  → beginningRefImageUrl
+Slot 1 (Key 2)  → additionalRefUrls[0]
+Slot 2 (Key 3)  → additionalRefUrls[1]
+Slot 3 (Key 4)  → additionalRefUrls[2]
+Slot 4 (End)    → endingRefImageUrl
 ```
 
-Then in `SharedGridCard` (line 330-334), the client-side video thumbnail generator checks:
-```typescript
-if (asset.type === 'video' && !asset.thumbUrl && ...)
+**Upload handlers** (`handleFileUploadForSlot` / `handlePhotoForSlot`, lines 669-684):
+```
+index 0 → pendingSlotIndex=0, type='single'  → referenceImageUrl (WRONG for video)
+index 1 → pendingSlotIndex=1, type='ref2'     → referenceImage2Url (WRONG for video)
+index 2 → pendingSlotIndex=2, type='single'   → additionalRefUrls[0] (WRONG — should be [1])
+index 3 → pendingSlotIndex=3                  → additionalRefUrls[1] (WRONG — should be [2])
+index 4 → pendingSlotIndex=4                  → additionalRefUrls[2] (WRONG — should be endingRefImageUrl)
 ```
 
-Since `thumbUrl` is already set to the placeholder SVG, this condition is **always false** — the client-side canvas-capture thumbnail generation never runs.
+**Library picker** (`handlePickerSelect`, line 700-736): Same problem — uses `index - 2` for additionalRefUrls offset, but video mode needs `index - 1`.
 
-**Bug 2: The placeholder SVG file doesn't exist**
+So when you click slot 3 (Key 3, index 2) and pick an image:
+- It writes to `additionalRefUrls[0]`
+- But slot 3 displays `additionalRefUrls[1]`
+- The image appears in slot 2 (Key 2) instead
 
-The code references `/video-thumbnail-placeholder.svg` but the actual file in `public/system_assets/` is `video-thumbnail-placeholder.png`. So even the placeholder itself shows a broken image (blank tile).
+Only `handleDropSlot` and `handleDropSlotUrl` (lines 772-806) have the correct video-mode mapping. The other handlers don't.
 
 ### Fix
 
-**File: `src/lib/hooks/useSignedAssets.ts`** (line 181-183)
+**File: `src/components/workspace/MobileSimplePromptInput.tsx`**
 
-Remove the placeholder fallback for videos. Instead of assigning a fake SVG path, leave `thumbUrl` as `null` so `SharedGridCard`'s client-side thumbnail generation can trigger:
+1. **`handleFileUploadForSlot`** and **`handlePhotoForSlot`** (lines 668-684): Add video mode branching to map slot indices correctly:
+   - index 0 → pendingSlotIndex=0, type='start'
+   - index 1-3 → pendingSlotIndex=index+1 (to offset into additionalRefUrls correctly), type='single'
+   - index 4 → pendingSlotIndex=1, type='end'
 
-```typescript
-// REMOVE this block:
-if (asset.type === 'video' && !thumbUrl && !asset.thumbPath) {
-  thumbUrl = '/video-thumbnail-placeholder.svg';
-}
-```
+   Actually, the cleaner fix: make the upload handler video-mode-aware rather than remapping indices. When `slotIndex` is received in the upload handler and we're in video mode:
+   - index 0 → call `onReferenceImageUrlSet(url, 'start')`
+   - index 1,2,3 → set `additionalRefUrls[index - 1]`
+   - index 4 → call `onReferenceImageUrlSet(url, 'end')` (or set via ref2)
 
-This allows the existing `SharedGridCard` useEffect (lines 330-364) to:
-1. Sign the video's `originalPath`
-2. Create an off-screen `<video>` element
-3. Capture a canvas frame at 10% of duration
-4. Set the data URL as the thumbnail
+2. **`handlePickerSelect`** (line 700-736): Add video mode check:
+   ```typescript
+   if (currentMode === 'video') {
+     if (index === 0) onReferenceImageUrlSet?.(imageUrl, 'start');
+     else if (index === 4) onReferenceImage2UrlSet?.(imageUrl); // or 'end'
+     else {
+       const additionalIndex = index - 1;
+       const newAdditional = [...additionalRefUrls];
+       while (newAdditional.length <= additionalIndex) newAdditional.push('');
+       newAdditional[additionalIndex] = imageUrl;
+       onAdditionalRefsChange?.(newAdditional);
+     }
+   } else {
+     // existing image-mode logic
+   }
+   ```
 
-**File: `src/components/shared/SharedGrid.tsx`** (line 434)
+3. **Upload handler** (lines 380-391 and 500-518): Add the same video-mode branching when processing `pendingSlotIndexRef.current`, so the file upload path correctly routes to `beginningRefImageUrl` / `additionalRefUrls[index-1]` / `endingRefImageUrl`.
 
-Update the display URL logic to also use `generatedVideoThumbnail` for videos (already works, no change needed — just confirming the fallback chain is correct once the placeholder is removed).
-
-**File: `src/lib/services/UnifiedUrlService.ts`** (lines 146-149, 312, 316, 320)
-
-Replace all references to `/video-thumbnail-placeholder.svg` with `null` so downstream consumers can trigger client-side generation instead of showing a broken image.
-
-**File: `src/archive/components/workspace/ContentCard.tsx`** and **`src/hooks/useRecentScenes.ts`**
-
-Update remaining SVG references to either `null` or the correct PNG path if a static fallback is needed.
-
-### Summary
+### Files Changed
 
 | File | Change |
 |------|--------|
-| `useSignedAssets.ts` | Remove placeholder SVG assignment for videos (return `null` instead) |
-| `UnifiedUrlService.ts` | Replace SVG placeholder refs with `null` |
-| `useRecentScenes.ts` | Fix placeholder path |
-| Archive files | Fix placeholder path (low priority) |
+| `src/components/workspace/MobileSimplePromptInput.tsx` | Add video-mode index mapping to `handleFileUploadForSlot`, `handlePhotoForSlot`, `handlePickerSelect`, and the file upload handlers |
 
-The core fix is a single 3-line deletion in `useSignedAssets.ts`. Once `thumbUrl` is `null` for videos, the existing client-side thumbnail generator in `SharedGridCard` kicks in automatically.
+### Why Slots 1, 2, 4 Appear to Work
+
+- Slot 1 (Start, index 0): Maps to `referenceImageUrl` via 'single' — which may be synced with `beginningRefImageUrl` upstream
+- Slot 2 (Key 2, index 1): Writes to `referenceImage2Url` but the image "leaks" into display via a different path
+- Slot 4 (Key 4, index 3): Writes to `additionalRefUrls[1]` which happens to be what Slot 3 (Key 3) reads — so it shows in a shifted position
+
+The underlying issue is that every handler except `handleDropSlot`/`handleDropSlotUrl` uses image-mode index math for video slots.
 
