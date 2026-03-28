@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Save, ChevronRight, Trash2, Download, Copy, Shuffle, BookmarkPlus, Tag } from 'lucide-react';
+import { Save, ChevronRight, Trash2, Download, Copy, Shuffle, BookmarkPlus, Tag, Film } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import { RoleTagButton } from './RoleTagButton';
 import type { SlotRole } from '@/types/slotRoles';
