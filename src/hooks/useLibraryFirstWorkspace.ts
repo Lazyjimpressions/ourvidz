@@ -1505,8 +1505,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             const hasMotionVideo = !!(motionRefVideoUrl && !motionRefVideoUrl.includes('placeholder'));
             const isCharSwap = hasMotionVideo && !!(inputObj.images && inputObj.images.length > 0);
 
-            // Use keyframeStrengths directly from sliders (default 1.0 for all)
-            const motionStrength = multiAdvancedParams?.motionVideoStrength ?? 0.55;
+            // Use keyframeStrengths directly from sliders
+            // For character-swap: lower motion video strength so keyframe images dominate appearance
+            const defaultMotionStrength = (inputObj.images && inputObj.images.length > 0 && motionRefVideoUrl) ? 0.4 : 0.55;
+            const motionStrength = multiAdvancedParams?.motionVideoStrength ?? defaultMotionStrength;
 
             // For character-swap with duplicate images, create canonical start/mid/end anchors
             if (isCharSwap && inputObj.images && inputObj.images.length > 0) {
