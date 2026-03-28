@@ -107,19 +107,20 @@ if (uniqueImageUrls.size === 1) {
 
 Each anchor has an independent strength value controlled via UI sliders:
 
-| Anchor | UI Slot | Typical Value | Effect |
+| Anchor | UI Slot | Default Value | Effect |
 |--------|---------|---------------|--------|
 | Start | Slot 0 | 1.0 | Strong identity lock at beginning |
-| Mid | Slot 2 | 0.75 | Moderate identity reinforcement |
-| End | Slot 4 | 0.5 | Allow more motion influence |
+| Mid | Slot 2 | 0.6 | Moderate identity reinforcement |
+| End | Slot 4 | 0.3 | Allow motion to dominate toward end |
 
 ### Motion Video Strength
 
 The motion reference video has its own strength control:
 
-- **Default:** 0.55
+- **Default (char-swap):** 0.4
+- **Default (non char-swap):** 0.55
 - **Range:** 0.0 - 1.0
-- **Lower values:** Less appearance bleed from source video
+- **Lower values:** Less appearance bleed from source video (recommended for character swap)
 - **Higher values:** More motion fidelity, but may transfer source appearance
 
 ---

@@ -145,11 +145,11 @@ const STYLE_PRESETS = [
 ];
 
 const CONDITIONING_TYPES = [
-  { value: 'default', label: 'Default', description: 'Model default (typically RGB)' },
-  { value: 'rgb', label: 'RGB', description: 'Standard color-based conditioning' },
-  { value: 'depth', label: 'Depth', description: 'Depth map for spatial structure' },
-  { value: 'pose', label: 'Pose', description: 'Skeletal pose for motion guidance' },
-  { value: 'canny', label: 'Canny', description: 'Edge detection for structure' },
+  { value: 'default', label: 'Default', description: 'Model default (RGB). Recommended for character swap — lower video strength to let keyframes define appearance.' },
+  { value: 'rgb', label: 'RGB', description: 'Full video appearance as conditioning. Best for character swap at low strength (0.3-0.5).' },
+  { value: 'depth', label: 'Depth', description: 'Depth map for spatial structure. Good middle ground — no stick-figure artifacts.' },
+  { value: 'pose', label: 'Pose', description: 'Skeletal pose extraction. ⚠️ May introduce visible stick-figure frames. Use with preprocess ON.' },
+  { value: 'canny', label: 'Canny', description: 'Edge detection for structure preservation.' },
 ] as const;
 
 /** Model selector popover chip */
@@ -886,7 +886,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                     <CreativeChipPopover
                       label=""
                       value={CONDITIONING_TYPES.find(ct => ct.value === motionConditioningType)?.label || 'Default'}
-                      options={CONDITIONING_TYPES.map(ct => ({ value: ct.value, label: ct.label }))}
+                      options={CONDITIONING_TYPES.map(ct => ({ value: ct.value, label: (ct.value === 'default' || ct.value === 'rgb') && isCharacterSwapMode ? `${ct.label} ✦` : ct.label }))}
                       selected={motionConditioningType || 'default'}
                       onSelect={(v) => onMotionConditioningTypeChange?.(v as typeof motionConditioningType)}
                     />
