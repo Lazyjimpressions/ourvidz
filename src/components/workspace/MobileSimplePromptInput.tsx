@@ -378,7 +378,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         const { uploadAndSignReferenceImage: uploadRef } = await import('@/lib/storage');
         const signedUrl = await uploadRef(file);
         const slotIndex = pendingSlotIndexRef.current;
-        if (slotIndex >= 2) {
+        if (currentMode === 'video') {
+          // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+          if (slotIndex === 0) {
+            onReferenceImageUrlSet?.(signedUrl, 'start');
+          } else if (slotIndex === 4) {
+            onReferenceImage2UrlSet?.(signedUrl);
+          } else {
+            const additionalIndex = slotIndex - 1;
+            const newAdditional = [...additionalRefUrls];
+            while (newAdditional.length <= additionalIndex) newAdditional.push('');
+            newAdditional[additionalIndex] = signedUrl;
+            onAdditionalRefsChange?.(newAdditional);
+          }
+        } else if (slotIndex >= 2) {
           const additionalIndex = slotIndex - 2;
           const newAdditional = [...additionalRefUrls];
           while (newAdditional.length <= additionalIndex) newAdditional.push('');
