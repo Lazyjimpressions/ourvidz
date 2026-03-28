@@ -886,7 +886,7 @@ export const MobileSettingsSheet: React.FC<MobileSettingsSheetProps> = ({
                     <CreativeChipPopover
                       label=""
                       value={CONDITIONING_TYPES.find(ct => ct.value === motionConditioningType)?.label || 'Default'}
-                      options={CONDITIONING_TYPES.map(ct => ({ value: ct.value, label: ct.label }))}
+                      options={CONDITIONING_TYPES.map(ct => ({ value: ct.value, label: (ct.value === 'default' || ct.value === 'rgb') && isCharacterSwapMode ? `${ct.label} ✦` : ct.label }))}
                       selected={motionConditioningType || 'default'}
                       onSelect={(v) => onMotionConditioningTypeChange?.(v as typeof motionConditioningType)}
                     />
