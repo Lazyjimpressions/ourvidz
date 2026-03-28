@@ -44,6 +44,11 @@ export const WorkspaceAssetActions: React.FC<{
         <Copy className="w-3 h-3" />
       </Button>
     )}
+    {onUseAsMotionRef && asset.type === 'video' && (
+      <Button size="sm" variant="secondary" onClick={onUseAsMotionRef} className="h-7 w-7 p-0" title="Use as Motion Ref">
+        <Film className="w-3 h-3" />
+      </Button>
+    )}
     {onRoleTagToggle && tags && (
       <RoleTagButton tags={tags} onToggle={onRoleTagToggle} onTagToggle={onTagToggle} />
     )}

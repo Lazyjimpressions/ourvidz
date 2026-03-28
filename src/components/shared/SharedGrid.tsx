@@ -477,6 +477,9 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
         {isWorkspace && actions?.onSendToRef && (
           <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onSendToRef!(asset); }} title="Use as reference"><ImagePlus className="w-2.5 h-2.5" /></Button>
         )}
+        {isWorkspace && asset.type === 'video' && actions?.onUseAsMotionRef && (
+          <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onUseAsMotionRef!(asset); }} title="Use as Motion Ref"><Film className="w-2.5 h-2.5" /></Button>
+        )}
         {isWorkspace && actions?.onSaveToLibrary && (
           <Button size="sm" variant="outline" className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background" onClick={(e) => { e.stopPropagation(); actions.onSaveToLibrary!(asset); }} title="Save to Library"><Save className="w-2.5 h-2.5" /></Button>
         )}
