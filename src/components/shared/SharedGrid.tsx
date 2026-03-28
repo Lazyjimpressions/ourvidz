@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video, Loader2, ImagePlus } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video, Loader2, ImagePlus, Film } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
