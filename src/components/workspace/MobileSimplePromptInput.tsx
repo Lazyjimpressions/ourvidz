@@ -378,7 +378,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         const { uploadAndSignReferenceImage: uploadRef } = await import('@/lib/storage');
         const signedUrl = await uploadRef(file);
         const slotIndex = pendingSlotIndexRef.current;
-        if (slotIndex >= 2) {
+        if (currentMode === 'video') {
+          // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+          if (slotIndex === 0) {
+            onReferenceImageUrlSet?.(signedUrl, 'start');
+          } else if (slotIndex === 4) {
+            onReferenceImage2UrlSet?.(signedUrl);
+          } else {
+            const additionalIndex = slotIndex - 1;
+            const newAdditional = [...additionalRefUrls];
+            while (newAdditional.length <= additionalIndex) newAdditional.push('');
+            newAdditional[additionalIndex] = signedUrl;
+            onAdditionalRefsChange?.(newAdditional);
+          }
+        } else if (slotIndex >= 2) {
           const additionalIndex = slotIndex - 2;
           const newAdditional = [...additionalRefUrls];
           while (newAdditional.length <= additionalIndex) newAdditional.push('');
@@ -501,11 +514,23 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         const signedUrl = await uploadAndSignReferenceImage(persistedFile);
         const slotIndex = pendingSlotIndexRef.current;
         
-        if (slotIndex >= 2) {
-          // Additional refs (slot 3+)
+        if (currentMode === 'video') {
+          // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+          if (slotIndex === 0) {
+            onReferenceImageUrlSet?.(signedUrl, 'start');
+          } else if (slotIndex === 4) {
+            onReferenceImage2UrlSet?.(signedUrl);
+          } else {
+            const additionalIndex = slotIndex - 1;
+            const newAdditional = [...additionalRefUrls];
+            while (newAdditional.length <= additionalIndex) newAdditional.push('');
+            newAdditional[additionalIndex] = signedUrl;
+            onAdditionalRefsChange?.(newAdditional);
+          }
+        } else if (slotIndex >= 2) {
+          // Image mode: additional refs (slot 3+)
           const additionalIndex = slotIndex - 2;
           const newAdditional = [...additionalRefUrls];
-          // Expand array if needed
           while (newAdditional.length <= additionalIndex) newAdditional.push('');
           newAdditional[additionalIndex] = signedUrl;
           onAdditionalRefsChange?.(newAdditional);
@@ -667,19 +692,34 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   // Open native file picker for a slot (no capture)
   const handleFileUploadForSlot = (index: number) => {
-    pendingSlotIndexRef.current = index;
-    if (index === 1) pendingFileTypeRef.current = 'ref2';
-    else if (index === 0) pendingFileTypeRef.current = 'single';
-    else pendingFileTypeRef.current = 'single';
+    if (currentMode === 'video') {
+      // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+      pendingSlotIndexRef.current = index;
+      if (index === 0) pendingFileTypeRef.current = 'start';
+      else if (index === 4) pendingFileTypeRef.current = 'end';
+      else pendingFileTypeRef.current = 'single'; // mid slots handled by index
+    } else {
+      pendingSlotIndexRef.current = index;
+      if (index === 1) pendingFileTypeRef.current = 'ref2';
+      else if (index === 0) pendingFileTypeRef.current = 'single';
+      else pendingFileTypeRef.current = 'single';
+    }
     fileInputRef.current?.click();
   };
 
   // Open native photo library picker for a slot (no camera capture)
   const handlePhotoForSlot = (index: number) => {
-    pendingSlotIndexRef.current = index;
-    if (index === 1) pendingFileTypeRef.current = 'ref2';
-    else if (index === 0) pendingFileTypeRef.current = 'single';
-    else pendingFileTypeRef.current = 'single';
+    if (currentMode === 'video') {
+      pendingSlotIndexRef.current = index;
+      if (index === 0) pendingFileTypeRef.current = 'start';
+      else if (index === 4) pendingFileTypeRef.current = 'end';
+      else pendingFileTypeRef.current = 'single';
+    } else {
+      pendingSlotIndexRef.current = index;
+      if (index === 1) pendingFileTypeRef.current = 'ref2';
+      else if (index === 0) pendingFileTypeRef.current = 'single';
+      else pendingFileTypeRef.current = 'single';
+    }
     fileInputRef.current?.click();
   };
 
@@ -704,16 +744,33 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     tags: string[];
   }) => {
     const index = pickerSlotIndex;
-    if (index === 0) {
-      onReferenceImageUrlSet?.(imageUrl, 'single');
-    } else if (index === 1) {
-      onReferenceImage2UrlSet?.(imageUrl);
+    
+    if (currentMode === 'video') {
+      // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+      if (index === 0) {
+        onReferenceImageUrlSet?.(imageUrl, 'start');
+      } else if (index === 4) {
+        onReferenceImage2UrlSet?.(imageUrl);
+      } else {
+        const additionalIndex = index - 1;
+        const newAdditional = [...additionalRefUrls];
+        while (newAdditional.length <= additionalIndex) newAdditional.push('');
+        newAdditional[additionalIndex] = imageUrl;
+        onAdditionalRefsChange?.(newAdditional);
+      }
     } else {
-      const additionalIndex = index - 2;
-      const newAdditional = [...additionalRefUrls];
-      while (newAdditional.length <= additionalIndex) newAdditional.push('');
-      newAdditional[additionalIndex] = imageUrl;
-      onAdditionalRefsChange?.(newAdditional);
+      // Image mode: slot 0=ref1, 1=ref2, 2+=additionalRefUrls[index-2]
+      if (index === 0) {
+        onReferenceImageUrlSet?.(imageUrl, 'single');
+      } else if (index === 1) {
+        onReferenceImage2UrlSet?.(imageUrl);
+      } else {
+        const additionalIndex = index - 2;
+        const newAdditional = [...additionalRefUrls];
+        while (newAdditional.length <= additionalIndex) newAdditional.push('');
+        newAdditional[additionalIndex] = imageUrl;
+        onAdditionalRefsChange?.(newAdditional);
+      }
     }
 
     // Auto-assign role tag when a character asset is selected
@@ -733,7 +790,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onSlotRoleChange(index, mappedRole);
       }
     }
-  }, [pickerSlotIndex, onReferenceImageUrlSet, onReferenceImage2UrlSet, additionalRefUrls, onAdditionalRefsChange, onSlotRoleChange]);
+  }, [pickerSlotIndex, currentMode, onReferenceImageUrlSet, onReferenceImage2UrlSet, additionalRefUrls, onAdditionalRefsChange, onSlotRoleChange]);
 
   // Handle remove for a specific slot index
   const handleRemoveSlot = (index: number) => {
