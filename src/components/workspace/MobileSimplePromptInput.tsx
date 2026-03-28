@@ -975,7 +975,19 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         <div className="px-3 py-1 flex items-center gap-2">
           <span className="text-[9px] text-muted-foreground whitespace-nowrap">Motion Ref:</span>
           {motionRefVideoUrl ? (
-            <div className="relative group h-8 w-12 rounded overflow-hidden border border-border flex-shrink-0">
+            <div
+              className="relative group h-8 w-12 rounded overflow-hidden border border-border flex-shrink-0 cursor-grab active:cursor-grabbing"
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/x-ref-image', JSON.stringify({
+                  url: motionRefVideoUrl || '',
+                  originalPath: '',
+                  assetId: 'motion-ref',
+                  type: 'video',
+                }));
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
+            >
               <video src={motionRefVideoUrl} className="w-full h-full object-cover" muted />
               <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                 <span className="text-white text-[8px]">🎬</span>
