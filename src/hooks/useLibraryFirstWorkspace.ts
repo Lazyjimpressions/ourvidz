@@ -430,6 +430,21 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [sourceVideoDuration, setSourceVideoDuration] = useState(0);
   // Per-keyframe strengths for video multi mode (5 slots)
   const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1.0, 1.0, 1.0, 1.0, 1.0]);
+  const [hasManuallyAdjustedStrengths, setHasManuallyAdjustedStrengths] = useState(false);
+
+  // Auto-apply character-swap strength gradient [1.0, _, 0.6, _, 0.3] when entering char-swap mode
+  const isCharSwapMode = mode === 'video' && !!motionRefVideoUrl && videoRefSlots.some(s => !!s.url);
+  useEffect(() => {
+    if (isCharSwapMode && !hasManuallyAdjustedStrengths) {
+      setKeyframeStrengths([1.0, 1.0, 0.6, 1.0, 0.3]);
+    }
+  }, [isCharSwapMode, hasManuallyAdjustedStrengths]);
+
+  // Wrap setKeyframeStrengths to track manual adjustments
+  const handleSetKeyframeStrengths = useCallback((strengths: number[]) => {
+    setHasManuallyAdjustedStrengths(true);
+    setKeyframeStrengths(strengths);
+  }, []);
 
   // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
