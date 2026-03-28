@@ -143,9 +143,9 @@ export class UnifiedUrlService {
         return asset.url;
       }
 
-      // For videos without thumbnails, use placeholder
+      // For videos without thumbnails, return null so client-side generation can trigger
       if (asset.type === 'video') {
-        return '/video-thumbnail-placeholder.svg';
+        return null;
       }
 
       return null;
