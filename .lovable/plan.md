@@ -1,57 +1,68 @@
 
 
-## Audit: Character-Swap Strength Gradient Not Applied
+## Fix: Blank Video Tiles in Workspace and Library
 
-### Bug Found
+### Root Cause
 
-The plan called for default strengths of `[1.0, 0.6, 0.3]` in character-swap mode, but this is **not working**. Here's why:
+Two interacting bugs prevent video thumbnails from displaying:
 
-- `keyframeStrengths` state initializes as `[1.0, 1.0, 1.0, 1.0, 1.0]` (line 432 of useLibraryFirstWorkspace.ts)
-- The generate function uses `keyframeStrengths[2] ?? 0.6` — the `?? 0.6` fallback only triggers if the value is `undefined` or `null`, but it's `1.0`, so the fallback never fires
-- **Result**: All anchors are sent at strength 1.0 regardless of the plan's intent
+**Bug 1: Placeholder SVG blocks client-side thumbnail generation**
 
-### Mobile UI Consistency Issue
-
-The slider UI (line 1076 of MobileSettingsSheet.tsx) uses `keyframeStrengths?.[i] ?? 1` — also defaults to 1.0. So the UI and backend are consistent (both 1.0), but neither reflects the intended gradient.
-
-### All Other Changes Are Mobile-Conformant
-
-- Conditioning type selector uses `CreativeChipPopover` with proper `text-[9px]` labels — fits mobile layout
-- `✦` badge on Default/RGB in char-swap mode is lightweight, no layout overflow
-- Tooltip max-widths (`max-w-[260px]`) fit within 402px viewport
-- Disabled slots use `opacity-30 pointer-events-none` — touch-safe
-- Slider thumb sizes (2.5 × 2.5) meet minimum touch targets for secondary controls
-- `{ download: false }` on signed URLs is backend-only, no UI impact
-
-### Fix Required
-
-**File: `src/hooks/useLibraryFirstWorkspace.ts`**
-
-When character-swap mode is detected (motion video + images loaded), auto-set `keyframeStrengths` to the gradient `[1.0, 1.0, 0.6, 1.0, 0.3]` (slots 0, 2, 4 = active; slots 1, 3 = greyed out, value irrelevant). This should happen via a `useEffect` that triggers when `isCharacterSwapMode` becomes true, but only if the user hasn't manually adjusted strengths.
-
-Additionally, update the generate function to use the actual state values directly instead of `??` fallbacks:
-
+In `useSignedAssets.ts` (line 181-183), when a video has no `thumbPath`, the code sets:
 ```typescript
-// Before (fallback never fires):
-const s1 = keyframeStrengths[2] ?? 0.6;
-const s2 = keyframeStrengths[4] ?? 0.3;
-
-// After (use state directly):
-const s0 = keyframeStrengths[0];
-const s1 = keyframeStrengths[2];
-const s2 = keyframeStrengths[4];
+thumbUrl = '/video-thumbnail-placeholder.svg';
 ```
 
-**File: `src/components/workspace/MobileSettingsSheet.tsx`** — No changes needed. The UI correctly reads from `keyframeStrengths` state.
+Then in `SharedGridCard` (line 330-334), the client-side video thumbnail generator checks:
+```typescript
+if (asset.type === 'video' && !asset.thumbUrl && ...)
+```
+
+Since `thumbUrl` is already set to the placeholder SVG, this condition is **always false** — the client-side canvas-capture thumbnail generation never runs.
+
+**Bug 2: The placeholder SVG file doesn't exist**
+
+The code references `/video-thumbnail-placeholder.svg` but the actual file in `public/system_assets/` is `video-thumbnail-placeholder.png`. So even the placeholder itself shows a broken image (blank tile).
+
+### Fix
+
+**File: `src/lib/hooks/useSignedAssets.ts`** (line 181-183)
+
+Remove the placeholder fallback for videos. Instead of assigning a fake SVG path, leave `thumbUrl` as `null` so `SharedGridCard`'s client-side thumbnail generation can trigger:
+
+```typescript
+// REMOVE this block:
+if (asset.type === 'video' && !thumbUrl && !asset.thumbPath) {
+  thumbUrl = '/video-thumbnail-placeholder.svg';
+}
+```
+
+This allows the existing `SharedGridCard` useEffect (lines 330-364) to:
+1. Sign the video's `originalPath`
+2. Create an off-screen `<video>` element
+3. Capture a canvas frame at 10% of duration
+4. Set the data URL as the thumbnail
+
+**File: `src/components/shared/SharedGrid.tsx`** (line 434)
+
+Update the display URL logic to also use `generatedVideoThumbnail` for videos (already works, no change needed — just confirming the fallback chain is correct once the placeholder is removed).
+
+**File: `src/lib/services/UnifiedUrlService.ts`** (lines 146-149, 312, 316, 320)
+
+Replace all references to `/video-thumbnail-placeholder.svg` with `null` so downstream consumers can trigger client-side generation instead of showing a broken image.
+
+**File: `src/archive/components/workspace/ContentCard.tsx`** and **`src/hooks/useRecentScenes.ts`**
+
+Update remaining SVG references to either `null` or the correct PNG path if a static fallback is needed.
 
 ### Summary
 
-| Item | Status |
+| File | Change |
 |------|--------|
-| Conditioning tooltips & ✦ badge | Correct, mobile-safe |
-| Disabled slots (1, 3) | Correct, touch-safe |
-| Strength sliders | Mobile-conformant (thumb sizes, layout) |
-| `{ download: false }` signed URLs | Correct, backend-only |
-| **Strength gradient defaults** | **Bug — not applied, needs useEffect** |
-| Motion video default strength (0.4) | Correct |
+| `useSignedAssets.ts` | Remove placeholder SVG assignment for videos (return `null` instead) |
+| `UnifiedUrlService.ts` | Replace SVG placeholder refs with `null` |
+| `useRecentScenes.ts` | Fix placeholder path |
+| Archive files | Fix placeholder path (low priority) |
+
+The core fix is a single 3-line deletion in `useSignedAssets.ts`. Once `thumbUrl` is `null` for videos, the existing client-side thumbnail generator in `SharedGridCard` kicks in automatically.
 
