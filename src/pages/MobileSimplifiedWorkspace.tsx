@@ -103,6 +103,7 @@ const MobileSimplifiedWorkspace = () => {
     // Per-keyframe strengths
     keyframeStrengths,
     setKeyframeStrengths,
+    applyCharSwapStrengthGradient,
     // URL Management (not used - we use useSignedAssets instead for immediate signing)
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
