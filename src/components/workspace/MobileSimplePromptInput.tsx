@@ -719,16 +719,33 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     tags: string[];
   }) => {
     const index = pickerSlotIndex;
-    if (index === 0) {
-      onReferenceImageUrlSet?.(imageUrl, 'single');
-    } else if (index === 1) {
-      onReferenceImage2UrlSet?.(imageUrl);
+    
+    if (currentMode === 'video') {
+      // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+      if (index === 0) {
+        onReferenceImageUrlSet?.(imageUrl, 'start');
+      } else if (index === 4) {
+        onReferenceImage2UrlSet?.(imageUrl);
+      } else {
+        const additionalIndex = index - 1;
+        const newAdditional = [...additionalRefUrls];
+        while (newAdditional.length <= additionalIndex) newAdditional.push('');
+        newAdditional[additionalIndex] = imageUrl;
+        onAdditionalRefsChange?.(newAdditional);
+      }
     } else {
-      const additionalIndex = index - 2;
-      const newAdditional = [...additionalRefUrls];
-      while (newAdditional.length <= additionalIndex) newAdditional.push('');
-      newAdditional[additionalIndex] = imageUrl;
-      onAdditionalRefsChange?.(newAdditional);
+      // Image mode: slot 0=ref1, 1=ref2, 2+=additionalRefUrls[index-2]
+      if (index === 0) {
+        onReferenceImageUrlSet?.(imageUrl, 'single');
+      } else if (index === 1) {
+        onReferenceImage2UrlSet?.(imageUrl);
+      } else {
+        const additionalIndex = index - 2;
+        const newAdditional = [...additionalRefUrls];
+        while (newAdditional.length <= additionalIndex) newAdditional.push('');
+        newAdditional[additionalIndex] = imageUrl;
+        onAdditionalRefsChange?.(newAdditional);
+      }
     }
 
     // Auto-assign role tag when a character asset is selected
@@ -748,7 +765,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         onSlotRoleChange(index, mappedRole);
       }
     }
-  }, [pickerSlotIndex, onReferenceImageUrlSet, onReferenceImage2UrlSet, additionalRefUrls, onAdditionalRefsChange, onSlotRoleChange]);
+  }, [pickerSlotIndex, currentMode, onReferenceImageUrlSet, onReferenceImage2UrlSet, additionalRefUrls, onAdditionalRefsChange, onSlotRoleChange]);
 
   // Handle remove for a specific slot index
   const handleRemoveSlot = (index: number) => {
