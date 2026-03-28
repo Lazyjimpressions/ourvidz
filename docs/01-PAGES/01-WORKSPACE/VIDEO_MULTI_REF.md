@@ -117,9 +117,10 @@ Each anchor has an independent strength value controlled via UI sliders:
 
 The motion reference video has its own strength control:
 
-- **Default:** 0.55
+- **Default (char-swap):** 0.4
+- **Default (non char-swap):** 0.55
 - **Range:** 0.0 - 1.0
-- **Lower values:** Less appearance bleed from source video
+- **Lower values:** Less appearance bleed from source video (recommended for character swap)
 - **Higher values:** More motion fidelity, but may transfer source appearance
 
 ---
