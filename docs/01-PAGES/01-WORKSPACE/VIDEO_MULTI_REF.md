@@ -107,11 +107,11 @@ if (uniqueImageUrls.size === 1) {
 
 Each anchor has an independent strength value controlled via UI sliders:
 
-| Anchor | UI Slot | Typical Value | Effect |
+| Anchor | UI Slot | Default Value | Effect |
 |--------|---------|---------------|--------|
 | Start | Slot 0 | 1.0 | Strong identity lock at beginning |
-| Mid | Slot 2 | 0.75 | Moderate identity reinforcement |
-| End | Slot 4 | 0.5 | Allow more motion influence |
+| Mid | Slot 2 | 0.6 | Moderate identity reinforcement |
+| End | Slot 4 | 0.3 | Allow motion to dominate toward end |
 
 ### Motion Video Strength
 
