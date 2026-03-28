@@ -153,6 +153,7 @@ export interface LibraryFirstWorkspaceActions {
   setSourceVideoDuration: (duration: number) => void;
   // Per-keyframe strengths
   setKeyframeStrengths: (strengths: number[]) => void;
+  applyCharSwapStrengthGradient: () => void;
   
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
@@ -430,6 +431,19 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [sourceVideoDuration, setSourceVideoDuration] = useState(0);
   // Per-keyframe strengths for video multi mode (5 slots)
   const [keyframeStrengths, setKeyframeStrengths] = useState<number[]>([1.0, 1.0, 1.0, 1.0, 1.0]);
+
+  // Wrap setKeyframeStrengths to track manual adjustments for char-swap gradient
+  const [hasManuallyAdjustedStrengths, setHasManuallyAdjustedStrengths] = useState(false);
+  const handleSetKeyframeStrengths = useCallback((strengths: number[]) => {
+    setHasManuallyAdjustedStrengths(true);
+    setKeyframeStrengths(strengths);
+  }, []);
+  // Allow external callers to apply char-swap gradient defaults
+  const applyCharSwapStrengthGradient = useCallback(() => {
+    if (!hasManuallyAdjustedStrengths) {
+      setKeyframeStrengths([1.0, 1.0, 0.6, 1.0, 0.3]);
+    }
+  }, [hasManuallyAdjustedStrengths]);
 
   // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -1521,9 +1535,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 // Use actual video frame positions: 0, midpoint, last frame
                 // Map UI slots to 3 anchors: Start(0) → frame 0, Key3(2) → mid, End(4) → end
                 // Character-swap strength gradient: strong identity lock → gradual motion dominance
-                const s0 = keyframeStrengths[0] ?? 1.0;   // Start slot → frame 0 (strong identity lock)
-                const s1 = keyframeStrengths[2] ?? 0.6;   // Key 3 slot → mid frame (moderate reinforcement)
-                const s2 = keyframeStrengths[4] ?? 0.3;   // End slot → last frame (allow motion to dominate)
+                const s0 = keyframeStrengths[0];  // Start slot → frame 0
+                const s1 = keyframeStrengths[2];  // Key 3 slot → mid frame
+                const s2 = keyframeStrengths[4];  // End slot → last frame
                 inputObj.images = [
                   { image_url: canonicalUrl, start_frame_num: 0, strength: s0 },
                   { image_url: canonicalUrl, start_frame_num: midFrame, strength: s1 },
@@ -2331,7 +2345,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setExtendReverseVideo: (r: boolean) => setExtendReverseVideo(r),
     setSourceVideoDuration: (d: number) => setSourceVideoDuration(d),
     // Per-keyframe strengths
-    setKeyframeStrengths,
+    setKeyframeStrengths: handleSetKeyframeStrengths,
+    applyCharSwapStrengthGradient,
     getJobStats,
     getActiveJob,
     getJobById,

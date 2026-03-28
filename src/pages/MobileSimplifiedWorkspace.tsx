@@ -103,6 +103,7 @@ const MobileSimplifiedWorkspace = () => {
     // Per-keyframe strengths
     keyframeStrengths,
     setKeyframeStrengths,
+    applyCharSwapStrengthGradient,
     // URL Management (not used - we use useSignedAssets instead for immediate signing)
     // signedUrls, isUrlLoading, registerAssetRef - removed to avoid lazy loading overhead
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
@@ -502,6 +503,13 @@ const MobileSimplifiedWorkspace = () => {
       applySmartDefault('multi');
     }
   }, [motionRefVideoUrl, beginningRefImageUrl, mode, applySmartDefault]);
+
+  // Auto-apply character-swap strength gradient when entering char-swap mode
+  useEffect(() => {
+    if (mode === 'video' && !!motionRefVideoUrl && !!beginningRefImageUrl) {
+      applyCharSwapStrengthGradient();
+    }
+  }, [mode, motionRefVideoUrl, beginningRefImageUrl, applyCharSwapStrengthGradient]);
 
   // Copy motion reference video to workspace as a tile
   const handleCopyVideoToWorkspace = useCallback(async () => {
