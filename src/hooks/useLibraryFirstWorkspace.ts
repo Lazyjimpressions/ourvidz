@@ -1520,9 +1520,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
                 const canonicalUrl = inputObj.images[0].image_url;
                 // Use actual video frame positions: 0, midpoint, last frame
                 // Map UI slots to 3 anchors: Start(0) → frame 0, Key3(2) → mid, End(4) → end
-                const s0 = keyframeStrengths[0] ?? 1.0;  // Start slot → frame 0
-                const s1 = keyframeStrengths[2] ?? 1.0;  // Key 3 slot → mid frame
-                const s2 = keyframeStrengths[4] ?? 1.0;  // End slot → last frame
+                // Character-swap strength gradient: strong identity lock → gradual motion dominance
+                const s0 = keyframeStrengths[0] ?? 1.0;   // Start slot → frame 0 (strong identity lock)
+                const s1 = keyframeStrengths[2] ?? 0.6;   // Key 3 slot → mid frame (moderate reinforcement)
+                const s2 = keyframeStrengths[4] ?? 0.3;   // End slot → last frame (allow motion to dominate)
                 inputObj.images = [
                   { image_url: canonicalUrl, start_frame_num: 0, strength: s0 },
                   { image_url: canonicalUrl, start_frame_num: midFrame, strength: s1 },

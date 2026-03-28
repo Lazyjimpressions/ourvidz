@@ -193,10 +193,10 @@ async function signIfStoragePath(
     : Array.from(new Set([defaultBucket, 'user-library', 'workspace-temp', 'reference_images', ...knownBuckets]));
 
   for (const bucket of candidateBuckets) {
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600, { download: false });
     if (!error && data?.signedUrl) {
       const signed = data.signedUrl.startsWith('/') ? `${SUPABASE_URL}/storage/v1${data.signedUrl}` : data.signedUrl;
-      console.log(`🔏 Signed URL for bucket "${bucket}": ${path.substring(0, 40)}...`);
+      console.log(`🔏 Signed URL (inline) for bucket "${bucket}": ${path.substring(0, 40)}...`);
       return signed;
     }
   }
