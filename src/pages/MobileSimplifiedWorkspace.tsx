@@ -833,7 +833,12 @@ const MobileSimplifiedWorkspace = () => {
                 } else {
                   toast.error('Only images and videos can be used as reference');
                 }
-              }
+              },
+              onUseAsMotionRef: (asset) => {
+                if (asset.type === 'video') {
+                  handleUseAsMotionRef(asset);
+                }
+              },
             }}
             isLoading={isGenerating && sharedAssets.length === 0}
           />
