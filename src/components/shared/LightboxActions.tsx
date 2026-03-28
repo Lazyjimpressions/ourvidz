@@ -13,10 +13,11 @@ export const WorkspaceAssetActions: React.FC<{
   onDiscard?: () => void;
   onDownload?: () => void;
   onUseAsReference?: () => void;
+  onUseAsMotionRef?: () => void;
   onRoleTagToggle?: (role: SlotRole) => void;
   onTagToggle?: (tag: string) => void;
   tags?: string[];
-}> = ({ asset, onSave, onClear, onDiscard, onDownload, onUseAsReference, onRoleTagToggle, onTagToggle, tags }) => (
+}> = ({ asset, onSave, onClear, onDiscard, onDownload, onUseAsReference, onUseAsMotionRef, onRoleTagToggle, onTagToggle, tags }) => (
   <>
     {onSave && (
       <Button size="sm" variant="secondary" onClick={onSave} className="h-7 w-7 p-0" title="Save to Library">
