@@ -667,19 +667,34 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   // Open native file picker for a slot (no capture)
   const handleFileUploadForSlot = (index: number) => {
-    pendingSlotIndexRef.current = index;
-    if (index === 1) pendingFileTypeRef.current = 'ref2';
-    else if (index === 0) pendingFileTypeRef.current = 'single';
-    else pendingFileTypeRef.current = 'single';
+    if (currentMode === 'video') {
+      // Video mode: slot 0=Start, 4=End, 1-3=additionalRefUrls[0-2]
+      pendingSlotIndexRef.current = index;
+      if (index === 0) pendingFileTypeRef.current = 'start';
+      else if (index === 4) pendingFileTypeRef.current = 'end';
+      else pendingFileTypeRef.current = 'single'; // mid slots handled by index
+    } else {
+      pendingSlotIndexRef.current = index;
+      if (index === 1) pendingFileTypeRef.current = 'ref2';
+      else if (index === 0) pendingFileTypeRef.current = 'single';
+      else pendingFileTypeRef.current = 'single';
+    }
     fileInputRef.current?.click();
   };
 
   // Open native photo library picker for a slot (no camera capture)
   const handlePhotoForSlot = (index: number) => {
-    pendingSlotIndexRef.current = index;
-    if (index === 1) pendingFileTypeRef.current = 'ref2';
-    else if (index === 0) pendingFileTypeRef.current = 'single';
-    else pendingFileTypeRef.current = 'single';
+    if (currentMode === 'video') {
+      pendingSlotIndexRef.current = index;
+      if (index === 0) pendingFileTypeRef.current = 'start';
+      else if (index === 4) pendingFileTypeRef.current = 'end';
+      else pendingFileTypeRef.current = 'single';
+    } else {
+      pendingSlotIndexRef.current = index;
+      if (index === 1) pendingFileTypeRef.current = 'ref2';
+      else if (index === 0) pendingFileTypeRef.current = 'single';
+      else pendingFileTypeRef.current = 'single';
+    }
     fileInputRef.current?.click();
   };
 
