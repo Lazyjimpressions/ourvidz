@@ -56,7 +56,8 @@ serve(async (req) => {
       
       console.log('✅ Webhook signature verified')
     } else {
-      console.log('⚠️ Webhook verification disabled (no secret configured)')
+      console.error('❌ REPLICATE_WEBHOOK_SECRET not configured')
+      return new Response('Server misconfigured', { status: 500, headers: corsHeaders })
     }
 
     const webhookPayload = await req.json()
@@ -87,6 +88,14 @@ serve(async (req) => {
     }
 
     console.log('✅ Found job for webhook:', job.id)
+
+    // Terminal-state guard: ignore duplicate callbacks for completed/cancelled jobs
+    if (job.status === 'completed' || job.status === 'cancelled') {
+      console.log('⏭️ Job already terminal, ignoring duplicate webhook:', job.id)
+      return new Response(JSON.stringify({ ok: true, skipped: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     if (status === 'succeeded' && webhookPayload.output) {
       console.log('🎉 Prediction succeeded, processing output')
@@ -202,17 +211,18 @@ serve(async (req) => {
 
       console.log('📁 Image uploaded to storage:', uploadData.path)
 
-      // Create workspace asset
+      // Create workspace asset (upsert for idempotency — duplicate webhooks won't fail)
       const { data: workspaceAsset, error: assetError } = await supabase
         .from('workspace_assets')
-        .insert({
+        .upsert({
           user_id: job.user_id,
           job_id: job.id,
+          asset_index: 0,
           asset_type: 'image',
           temp_storage_path: uploadData.path,
           file_size_bytes: imageBuffer.byteLength,
           mime_type: 'image/png',
-          width: null, // Could extract from image if needed
+          width: null,
           height: null,
           original_prompt: job.original_prompt || job.metadata?.prompt || '',
           model_used: job.metadata?.actual_model || 'unknown',
@@ -222,16 +232,19 @@ serve(async (req) => {
             quality: job.quality,
             provider: 'replicate'
           }
-        })
+        }, { onConflict: 'job_id,asset_index' })
         .select()
         .single()
 
       if (assetError) {
-        console.error('❌ Failed to create workspace asset:', assetError)
-        
+        console.error('❌ Failed to upsert workspace asset:', assetError)
+
+        // Clean up the uploaded blob to avoid orphaned storage objects
+        await supabase.storage.from('workspace-temp').remove([uploadData.path])
+
         await supabase
           .from('jobs')
-          .update({ 
+          .update({
             status: 'failed',
             error_message: `Failed to create asset: ${assetError.message}`
           })

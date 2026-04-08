@@ -115,56 +115,78 @@ serve(async (req) => {
   let startRefUrl = userMetadata.start_reference_url || null;
   let endRefUrl = userMetadata.end_reference_url || null;
   
+  // ── Ownership-validated URL signing helper ──
+  // Only signs paths that belong to the authenticated user.
+  // Returns null for non-storage URLs (already signed / external).
+  // Throws with { status: 403, code: 'CROSS_USER_REFERENCE' } on ownership mismatch.
+  const validateAndSignRef = async (rawPath: string): Promise<string> => {
+    if (!rawPath.startsWith('user-library/') && !rawPath.startsWith('workspace-temp/')) {
+      // Already a full URL — pass through unchanged
+      return rawPath;
+    }
+    const bucketName = rawPath.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
+    const objectPath = rawPath.replace(`${bucketName}/`, '');
+
+    // Enforce ownership: path must start with the authenticated user's ID
+    if (!objectPath.startsWith(`${user.id}/`)) {
+      console.error('❌ Cross-user reference path rejected:', { userId: user.id, path: rawPath });
+      throw { status: 403, code: 'CROSS_USER_REFERENCE' };
+    }
+
+    const { data: signedData, error: signError } = await supabaseClient.storage
+      .from(bucketName)
+      .createSignedUrl(objectPath, 3600);
+
+    if (signError || !signedData?.signedUrl) {
+      console.warn('⚠️ Reference URL signing failed:', signError);
+      return rawPath; // Fall back to raw path; worker may still resolve it
+    }
+    return signedData.signedUrl;
+  };
+
   // Sign video reference URLs if they're storage paths
   if (isVideoJob) {
-    if (startRefUrl && (startRefUrl.startsWith('user-library/') || startRefUrl.startsWith('workspace-temp/'))) {
+    if (startRefUrl) {
       try {
-        const bucketName = startRefUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
-        const { data: signedData, error: signError } = await supabaseClient.storage
-          .from(bucketName)
-          .createSignedUrl(startRefUrl.replace(`${bucketName}/`, ''), 3600);
-        if (!signError && signedData?.signedUrl) {
-          startRefUrl = signedData.signedUrl;
-          console.log('✅ Queue-time START reference URL signed:', { originalPath: startRefUrl, bucket: bucketName });
+        startRefUrl = await validateAndSignRef(startRefUrl);
+        console.log('✅ Queue-time START reference URL signed');
+      } catch (err: any) {
+        if (err?.status === 403) {
+          return new Response(JSON.stringify({ success: false, code: 'CROSS_USER_REFERENCE' }), {
+            status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
-      } catch (error) {
-        console.warn('⚠️ Start reference URL signing failed:', error);
+        console.warn('⚠️ Start reference URL signing failed:', err);
       }
     }
-    
-    if (endRefUrl && (endRefUrl.startsWith('user-library/') || endRefUrl.startsWith('workspace-temp/'))) {
+
+    if (endRefUrl) {
       try {
-        const bucketName = endRefUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
-        const { data: signedData, error: signError } = await supabaseClient.storage
-          .from(bucketName)
-          .createSignedUrl(endRefUrl.replace(`${bucketName}/`, ''), 3600);
-        if (!signError && signedData?.signedUrl) {
-          endRefUrl = signedData.signedUrl;
-          console.log('✅ Queue-time END reference URL signed:', { originalPath: endRefUrl, bucket: bucketName });
+        endRefUrl = await validateAndSignRef(endRefUrl);
+        console.log('✅ Queue-time END reference URL signed');
+      } catch (err: any) {
+        if (err?.status === 403) {
+          return new Response(JSON.stringify({ success: false, code: 'CROSS_USER_REFERENCE' }), {
+            status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
-      } catch (error) {
-        console.warn('⚠️ End reference URL signing failed:', error);
+        console.warn('⚠️ End reference URL signing failed:', err);
       }
     }
   }
 
-    // Queue-time signing optimization: sign storage path reference URLs
-    if (referenceUrl && (referenceUrl.startsWith('user-library/') || referenceUrl.startsWith('workspace-temp/'))) {
+    // Queue-time signing: sign storage path reference URLs with ownership check
+    if (referenceUrl) {
       try {
-        const bucketName = referenceUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
-        const { data: signedData, error: signError } = await supabaseClient.storage
-          .from(bucketName)
-          .createSignedUrl(referenceUrl.replace(`${bucketName}/`, ''), 3600); // 1 hour TTL
-
-        if (!signError && signedData?.signedUrl) {
-          referenceUrl = signedData.signedUrl;
-          console.log('✅ Queue-time reference URL signed:', { originalPath: referenceUrl, bucket: bucketName });
-        } else {
-          console.warn('⚠️ Failed to sign reference URL:', signError);
+        referenceUrl = await validateAndSignRef(referenceUrl);
+        console.log('✅ Queue-time reference URL signed');
+      } catch (err: any) {
+        if (err?.status === 403) {
+          return new Response(JSON.stringify({ success: false, code: 'CROSS_USER_REFERENCE' }), {
+            status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
         }
-      } catch (error) {
-        console.warn('⚠️ Reference URL signing failed:', error);
-        // Continue with original URL
+        console.warn('⚠️ Reference URL signing failed:', err);
       }
     }
     const userPromptTrim = (originalPrompt || '').trim();

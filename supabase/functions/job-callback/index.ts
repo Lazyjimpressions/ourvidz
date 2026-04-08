@@ -10,7 +10,6 @@ const corsHeaders = {
 interface CallbackPayload {
   // Legacy format support
   jobId?: string;
-  userId?: string;
   status: 'completed' | 'failed' | 'processing';
   results?: {
     assets: Array<{
@@ -65,13 +64,41 @@ serve(async (req) => {
   }
 
   try {
+    // ── Verify HMAC-SHA256 signature from worker ──
+    const callbackSecret = Deno.env.get('JOB_CALLBACK_SECRET')
+    if (!callbackSecret) {
+      console.error('❌ JOB_CALLBACK_SECRET not configured')
+      return new Response('Server misconfigured', { status: 500, headers: corsHeaders })
+    }
+
+    const rawBody = await req.text()
+    const sigHeader = req.headers.get('X-Callback-Signature')
+    if (!sigHeader) {
+      console.error('❌ Missing X-Callback-Signature header')
+      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+    }
+
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      'raw', encoder.encode(callbackSecret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+    )
+    const signatureBytes = await crypto.subtle.sign('HMAC', key, encoder.encode(rawBody))
+    const expectedSig = 'sha256=' + Array.from(new Uint8Array(signatureBytes))
+      .map(b => b.toString(16).padStart(2, '0')).join('')
+
+    if (sigHeader !== expectedSig) {
+      console.error('❌ Invalid callback signature')
+      return new Response('Unauthorized', { status: 401, headers: corsHeaders })
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const payload: CallbackPayload = await req.json()
-    
+    const payload: CallbackPayload = JSON.parse(rawBody)
+
     // Log the incoming payload for debugging
     console.log(`🔍 Callback received for job: ${payload.job_id || payload.jobId}`, {
       status: payload.status,
@@ -82,8 +109,7 @@ serve(async (req) => {
 
     // Normalize payload fields (support both legacy and new formats)
     const jobId = payload.job_id || payload.jobId;
-    const userId = payload.userId; // Extract from job if not provided
-    
+
     // Normalize error message from various possible keys
     const errorMessage = payload.errorMessage || payload.error_message || payload.error || 
                         (payload.metadata?.error_type ? `${payload.metadata.error_type}: Internal processing error` : null);
@@ -105,11 +131,22 @@ serve(async (req) => {
 
     if (jobError || !job) {
       console.error('Job not found:', jobError)
-      return new Response('Job not found', { status: 404, headers: corsHeaders })
+      // Return 200 to avoid timing-based enumeration
+      return new Response(JSON.stringify({ success: true, skipped: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
 
-    // Use job's user_id if not provided in payload
-    const finalUserId = userId || job.user_id;
+    // Ownership always comes from the stored job — never from the payload
+    const finalUserId = job.user_id;
+
+    // Terminal-state guard: ignore callbacks for already-finished jobs
+    if (job.status === 'completed' || job.status === 'cancelled') {
+      console.log(`⏭️ Job ${jobId} already terminal (${job.status}), ignoring duplicate callback`)
+      return new Response(JSON.stringify({ success: true, skipped: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     const completedAt = payload.completedAt || new Date().toISOString()
 

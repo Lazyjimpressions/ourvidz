@@ -62,6 +62,14 @@ serve(async (req) => {
 
     console.log("✅ Found job:", job.id, "status:", job.status);
 
+    // ── 3b. Terminal-state guard ──
+    if (job.status === "completed" || job.status === "cancelled") {
+      console.log("⏭️ Job already terminal, ignoring duplicate webhook:", job.id);
+      return new Response(JSON.stringify({ ok: true, skipped: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── 4. Handle failure ──
     // fal.ai sends status "COMPLETED" on success; anything else is a failure
     const falStatus = payload.status;
@@ -212,9 +220,10 @@ serve(async (req) => {
     const modelKey = job.metadata?.model_key || "unknown";
     const generationMode = job.metadata?.generation_mode || (resultType === "video" ? "txt2vid" : "txt2img");
 
-    const { error: assetError } = await supabase.from("workspace_assets").insert({
+    const { error: assetError } = await supabase.from("workspace_assets").upsert({
       user_id: job.user_id,
       job_id: job.id,
+      asset_index: 0,
       asset_type: resultType,
       temp_storage_path: storagePath,
       thumbnail_path: thumbnailPath,
@@ -223,7 +232,7 @@ serve(async (req) => {
       original_prompt: job.original_prompt || "",
       model_used: modelKey,
       generation_seed: generationSeed,
-    generation_settings: {
+      generation_settings: {
         model_key: modelKey,
         provider: job.metadata?.provider_name || "fal",
         content_mode: job.metadata?.content_mode || "nsfw",
@@ -244,10 +253,12 @@ serve(async (req) => {
           },
         }),
       },
-    });
+    }, { onConflict: 'job_id,asset_index' });
 
     if (assetError) {
-      console.warn("⚠️ Failed to create workspace asset:", assetError);
+      console.warn("⚠️ Failed to upsert workspace asset:", assetError);
+      // Clean up uploaded blob to avoid orphaned storage objects
+      await supabase.storage.from("workspace-temp").remove([storagePath]);
     } else {
       console.log("✅ Workspace asset created");
     }

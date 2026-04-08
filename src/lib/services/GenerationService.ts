@@ -299,10 +299,12 @@ export class GenerationService {
   }
 
   static async cancelGeneration(jobId: string) {
+    // Only transition jobs that are still active; RLS enforces user ownership
     const { error } = await supabase
       .from('jobs')
       .update({ status: 'cancelled' })
-      .eq('id', jobId);
+      .eq('id', jobId)
+      .in('status', ['queued', 'processing']);
 
     if (error) {
       throw new Error(`Failed to cancel generation: ${error.message}`);
