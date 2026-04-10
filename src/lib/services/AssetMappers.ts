@@ -53,6 +53,22 @@ function deriveThumbnailPath(originalPath: string | null | undefined): string | 
   return `${pathWithoutExt}.thumb.webp`;
 }
 
+/**
+ * Resolve a proper file extension from format, mimeType, and type fields.
+ * Prevents raw type strings like "image" or "video" from being used as extensions.
+ */
+function resolveFileExtension(format: string | undefined, mimeType: string | undefined, type: 'image' | 'video'): string {
+  // If format is a real extension (not just the type name), use it
+  if (format && !['image', 'video'].includes(format)) return format;
+  // Extract from mime type: "image/png" → "png"
+  if (mimeType) {
+    const ext = mimeType.split('/').pop();
+    if (ext && !['octet-stream', '*'].includes(ext)) return ext;
+  }
+  // Sensible defaults
+  return type === 'video' ? 'mp4' : 'png';
+}
+
 // Robust type detection based on mime type and file extension
 function detectAssetType(assetType: string | null, mimeType: string | null, path: string | null): 'image' | 'video' {
   // First check mime type (most reliable)
