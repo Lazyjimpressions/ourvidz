@@ -143,7 +143,7 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
     title: customTitle || `Generated ${type}`,
     prompt: originalPrompt,
     createdAt: new Date(createdAt),
-    format: type,
+    format: resolveFileExtension(type, mimeType, type),
     modelType: modelUsed,
     metadata: {
       source: 'workspace',
@@ -208,7 +208,7 @@ export function toSharedFromLibrary(row: any): SharedAsset {
     title: customTitle || `Saved ${type}`,
     prompt: originalPrompt,
     createdAt: new Date(createdAt),
-    format: type,
+    format: resolveFileExtension(type, mimeType, type),
     modelType: modelUsed,
     metadata: {
     source: 'library',
@@ -260,7 +260,7 @@ export function toSharedFromLegacy(asset: any): SharedAsset {
     title: asset.title || asset.customTitle || `${asset.type} asset`,
     prompt: asset.prompt || asset.originalPrompt,
     createdAt: asset.createdAt || new Date(asset.timestamp || asset.created_at || Date.now()),
-    format: asset.format || asset.type,
+    format: resolveFileExtension(asset.format || asset.type, asset.mimeType || asset.mime_type, asset.type === 'video' ? 'video' : 'image'),
     modelType: asset.modelType || asset.model_used,
     metadata: {
       source: isLibrary ? 'library' : 'workspace',
@@ -303,7 +303,7 @@ export function toSharedFromCanon(row: any): SharedAsset {
     title: title.trim(),
     prompt: '',
     createdAt: new Date(row.created_at),
-    format: type,
+    format: resolveFileExtension(type, undefined, type),
     modelType: '',
     metadata: {
       source: 'user_library',
