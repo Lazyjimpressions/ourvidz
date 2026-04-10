@@ -53,6 +53,22 @@ function deriveThumbnailPath(originalPath: string | null | undefined): string | 
   return `${pathWithoutExt}.thumb.webp`;
 }
 
+/**
+ * Resolve a proper file extension from format, mimeType, and type fields.
+ * Prevents raw type strings like "image" or "video" from being used as extensions.
+ */
+function resolveFileExtension(format: string | undefined, mimeType: string | undefined, type: 'image' | 'video'): string {
+  // If format is a real extension (not just the type name), use it
+  if (format && !['image', 'video'].includes(format)) return format;
+  // Extract from mime type: "image/png" → "png"
+  if (mimeType) {
+    const ext = mimeType.split('/').pop();
+    if (ext && !['octet-stream', '*'].includes(ext)) return ext;
+  }
+  // Sensible defaults
+  return type === 'video' ? 'mp4' : 'png';
+}
+
 // Robust type detection based on mime type and file extension
 function detectAssetType(assetType: string | null, mimeType: string | null, path: string | null): 'image' | 'video' {
   // First check mime type (most reliable)
@@ -127,7 +143,7 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
     title: customTitle || `Generated ${type}`,
     prompt: originalPrompt,
     createdAt: new Date(createdAt),
-    format: type,
+    format: resolveFileExtension(type, mimeType, type),
     modelType: modelUsed,
     metadata: {
       source: 'workspace',
@@ -192,7 +208,7 @@ export function toSharedFromLibrary(row: any): SharedAsset {
     title: customTitle || `Saved ${type}`,
     prompt: originalPrompt,
     createdAt: new Date(createdAt),
-    format: type,
+    format: resolveFileExtension(type, mimeType, type),
     modelType: modelUsed,
     metadata: {
     source: 'library',
@@ -244,7 +260,7 @@ export function toSharedFromLegacy(asset: any): SharedAsset {
     title: asset.title || asset.customTitle || `${asset.type} asset`,
     prompt: asset.prompt || asset.originalPrompt,
     createdAt: asset.createdAt || new Date(asset.timestamp || asset.created_at || Date.now()),
-    format: asset.format || asset.type,
+    format: resolveFileExtension(asset.format || asset.type, asset.mimeType || asset.mime_type, asset.type === 'video' ? 'video' : 'image'),
     modelType: asset.modelType || asset.model_used,
     metadata: {
       source: isLibrary ? 'library' : 'workspace',
@@ -287,7 +303,7 @@ export function toSharedFromCanon(row: any): SharedAsset {
     title: title.trim(),
     prompt: '',
     createdAt: new Date(row.created_at),
-    format: type,
+    format: resolveFileExtension(type, undefined, type),
     modelType: '',
     metadata: {
       source: 'user_library',

@@ -181,7 +181,13 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
       
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${asset.title || asset.id}.${asset.format || (asset.type === 'image' ? 'jpg' : 'mp4')}`;
+      const ext = (() => {
+        const fmt = asset.format;
+        if (fmt && !['image', 'video'].includes(fmt)) return fmt;
+        if (asset.mimeType) { const e = asset.mimeType.split('/').pop(); if (e && e !== 'octet-stream') return e; }
+        return asset.type === 'video' ? 'mp4' : 'png';
+      })();
+      a.download = `${asset.title || asset.id}.${ext}`;
       document.body.appendChild(a);
       a.click();
       
