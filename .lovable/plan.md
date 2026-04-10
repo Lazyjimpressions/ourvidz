@@ -1,46 +1,55 @@
 
 
-## Plan: T2V → Motion Reference Pipeline + Draggable Motion Ref
+## Fix: Images Downloading as `.image`
 
-### What Was Implemented
+### Root Cause
 
-#### 1. "Use as Motion Ref" action button (Film icon)
-- **SharedGrid.tsx**: Added `onUseAsMotionRef` to actions interface; renders a Film icon button on workspace video tiles
-- **LightboxActions.tsx**: Added `onUseAsMotionRef` prop to `WorkspaceAssetActions`; renders Film button when asset is video
+In `src/lib/services/AssetMappers.ts` line 247, the `format` field falls back to `asset.type`:
 
-#### 2. Smart video routing in "Use as Reference"
-- **MobileSimplifiedWorkspace.tsx** `handleUseAsReference` video branch updated:
-  - **Priority 1**: If no motion ref set → routes to `motionRefVideoUrl` (character swap)
-  - **Priority 2**: If motion ref set but no start image → routes to `beginningRefImageUrl` (extend)
-  - **Priority 3**: Both filled → overflows to `endingRefImageUrl`
+```typescript
+format: asset.format || asset.type,  // asset.type = "image" → format = "image"
+```
 
-#### 3. Dedicated `handleUseAsMotionRef` callback
-- Explicit handler that always sets video as `motionRefVideoUrl`
-- Wired into SharedGrid's `onUseAsMotionRef` action and lightbox's `WorkspaceAssetActions`
+Then in `UpdatedOptimizedLibrary.tsx` line 184, the download filename uses `format` as the extension:
 
-#### 4. Draggable motion ref thumbnail
-- **MobileSimplePromptInput.tsx**: Motion ref thumbnail is now `draggable` with `cursor-grab`
-- Sets `application/x-ref-image` data transfer (same format as workspace grid tiles)
-- Users can drag the motion ref video and drop it into image ref slot 1 for Video Extend workflow
+```typescript
+a.download = `${asset.title || asset.id}.${asset.format || ...}`;
+// Result: "my-photo.image" instead of "my-photo.jpg"
+```
 
-### User Flows
+The `format` field contains `"image"` (the asset type) instead of a proper file extension like `"png"` or `"jpg"`.
 
-**T2V → Character Swap:**
-1. Generate T2V video (no refs, video mode)
-2. Click Film icon or "Use as Reference" on the video tile
-3. Video auto-routes to Motion Reference slot
-4. Add identity image to Slot 1 → auto-switches to MultiCondition model
+### Fix
 
-**Motion Ref → Video Extend:**
-1. Motion ref is populated with a video
-2. Drag the motion ref thumbnail → drop on image ref Slot 1 (Start)
-3. Video routes to `beginningRefImageUrl`, model switches to Extend
+#### 1. AssetMappers.ts — Sanitize `format` to a real extension
+
+Add a helper that extracts a proper file extension from the `format`, `mimeType`, or `type` fields. If `format` equals `"image"` or `"video"` (i.e., it's just the type, not a real format), fall back to the mime type or sensible defaults (`png` for images, `mp4` for videos).
+
+#### 2. UpdatedOptimizedLibrary.tsx — Defensive extension logic in download
+
+Add a small utility at the download call site that ensures the extension is never `"image"` or `"video"`:
+
+```typescript
+const getExtension = (asset: any) => {
+  const fmt = asset.format;
+  if (fmt && !['image', 'video'].includes(fmt)) return fmt;
+  if (asset.mimeType) return asset.mimeType.split('/').pop(); // "image/png" → "png"
+  return asset.type === 'video' ? 'mp4' : 'png';
+};
+```
+
+#### 3. Audit other download locations
+
+Apply the same fix to:
+- `GeneratedImagesDisplay.tsx` (hardcoded `.jpg` — acceptable but could use mime)
+- `GeneratedImageGallery.tsx` (hardcoded `.png` — fine)
+- `MessageActions.tsx` / `ChatMessage.tsx` (hardcoded `.png` — fine)
+- `PortraitGallery.tsx` — check if it has the same issue
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/shared/SharedGrid.tsx` | Added `onUseAsMotionRef` action + Film icon for video tiles |
-| `src/components/shared/LightboxActions.tsx` | Added `onUseAsMotionRef` prop + Film button for videos |
-| `src/pages/MobileSimplifiedWorkspace.tsx` | Smart video routing, `handleUseAsMotionRef`, wired into grid + lightbox |
-| `src/components/workspace/MobileSimplePromptInput.tsx` | Motion ref thumbnail now draggable with `application/x-ref-image` data |
+| `src/lib/services/AssetMappers.ts` | Sanitize `format` so it never stores raw type strings like `"image"` |
+| `src/components/library/UpdatedOptimizedLibrary.tsx` | Add defensive extension resolution in `handleDownload` |
+
