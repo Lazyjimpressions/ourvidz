@@ -1,55 +1,47 @@
 
 
-## Fix: Images Downloading as `.image`
+## Fix: Videos Downloading as QuickTime
 
-### Root Cause
+### Problem
 
-In `src/lib/services/AssetMappers.ts` line 247, the `format` field falls back to `asset.type`:
-
+Line 187 in `UpdatedOptimizedLibrary.tsx` extracts the extension from `mimeType` by splitting on `/`:
 ```typescript
-format: asset.format || asset.type,  // asset.type = "image" → format = "image"
+asset.mimeType.split('/').pop()  // "video/quicktime" → "quicktime"
 ```
 
-Then in `UpdatedOptimizedLibrary.tsx` line 184, the download filename uses `format` as the extension:
+This produces a `.quicktime` extension. The browser associates this with QuickTime Player instead of treating it as a standard `.mp4` or `.mov` file.
 
-```typescript
-a.download = `${asset.title || asset.id}.${asset.format || ...}`;
-// Result: "my-photo.image" instead of "my-photo.jpg"
-```
-
-The `format` field contains `"image"` (the asset type) instead of a proper file extension like `"png"` or `"jpg"`.
+The same issue exists in `AssetMappers.ts`'s `resolveFileExtension` helper — it would pass through `"quicktime"` as a valid extension.
 
 ### Fix
 
-#### 1. AssetMappers.ts — Sanitize `format` to a real extension
+#### 1. `src/lib/services/AssetMappers.ts` — Add MIME-to-extension normalization
 
-Add a helper that extracts a proper file extension from the `format`, `mimeType`, or `type` fields. If `format` equals `"image"` or `"video"` (i.e., it's just the type, not a real format), fall back to the mime type or sensible defaults (`png` for images, `mp4` for videos).
-
-#### 2. UpdatedOptimizedLibrary.tsx — Defensive extension logic in download
-
-Add a small utility at the download call site that ensures the extension is never `"image"` or `"video"`:
-
+Add a mapping for non-standard MIME suffixes in `resolveFileExtension`:
 ```typescript
-const getExtension = (asset: any) => {
-  const fmt = asset.format;
-  if (fmt && !['image', 'video'].includes(fmt)) return fmt;
-  if (asset.mimeType) return asset.mimeType.split('/').pop(); // "image/png" → "png"
-  return asset.type === 'video' ? 'mp4' : 'png';
+const mimeExtMap: Record<string, string> = {
+  quicktime: 'mov',
+  'x-matroska': 'mkv',
+  'x-msvideo': 'avi',
+  'x-ms-wmv': 'wmv',
 };
 ```
 
-#### 3. Audit other download locations
+When extracting from MIME type, look up the map before returning raw suffix.
 
-Apply the same fix to:
-- `GeneratedImagesDisplay.tsx` (hardcoded `.jpg` — acceptable but could use mime)
-- `GeneratedImageGallery.tsx` (hardcoded `.png` — fine)
-- `MessageActions.tsx` / `ChatMessage.tsx` (hardcoded `.png` — fine)
-- `PortraitGallery.tsx` — check if it has the same issue
+#### 2. `src/components/library/UpdatedOptimizedLibrary.tsx` — Same normalization in download
+
+Apply the same mapping in the inline `ext` resolution on line 187 so `"quicktime"` becomes `"mov"`.
+
+#### 3. `src/pages/MobileSimplifiedWorkspace.tsx` — Same fix on line 1034
+
+The workspace download also needs the normalization for consistency.
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/lib/services/AssetMappers.ts` | Sanitize `format` so it never stores raw type strings like `"image"` |
-| `src/components/library/UpdatedOptimizedLibrary.tsx` | Add defensive extension resolution in `handleDownload` |
+| `src/lib/services/AssetMappers.ts` | Add MIME suffix normalization map in `resolveFileExtension` |
+| `src/components/library/UpdatedOptimizedLibrary.tsx` | Normalize MIME suffix in download extension logic |
+| `src/pages/MobileSimplifiedWorkspace.tsx` | Normalize MIME suffix in workspace download |
 
