@@ -57,13 +57,26 @@ function deriveThumbnailPath(originalPath: string | null | undefined): string | 
  * Resolve a proper file extension from format, mimeType, and type fields.
  * Prevents raw type strings like "image" or "video" from being used as extensions.
  */
+// Map non-standard MIME suffixes to proper file extensions
+const mimeExtMap: Record<string, string> = {
+  quicktime: 'mov',
+  'x-matroska': 'mkv',
+  'x-msvideo': 'avi',
+  'x-ms-wmv': 'wmv',
+  'x-flv': 'flv',
+};
+
+function normalizeMimeExt(ext: string): string {
+  return mimeExtMap[ext] || ext;
+}
+
 function resolveFileExtension(format: string | undefined, mimeType: string | undefined, type: 'image' | 'video'): string {
   // If format is a real extension (not just the type name), use it
   if (format && !['image', 'video'].includes(format)) return format;
-  // Extract from mime type: "image/png" → "png"
+  // Extract from mime type: "image/png" → "png", "video/quicktime" → "mov"
   if (mimeType) {
     const ext = mimeType.split('/').pop();
-    if (ext && !['octet-stream', '*'].includes(ext)) return ext;
+    if (ext && !['octet-stream', '*'].includes(ext)) return normalizeMimeExt(ext);
   }
   // Sensible defaults
   return type === 'video' ? 'mp4' : 'png';

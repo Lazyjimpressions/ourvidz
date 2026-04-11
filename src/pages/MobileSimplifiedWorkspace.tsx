@@ -1031,7 +1031,14 @@ const MobileSimplifiedWorkspace = () => {
                       const objectUrl = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = objectUrl;
-                      a.download = `${asset.title || asset.id}.${asset.format === 'video' ? 'mp4' : 'jpg'}`;
+                      const mimeExtMap: Record<string, string> = { quicktime: 'mov', 'x-matroska': 'mkv', 'x-msvideo': 'avi' };
+                      const dlExt = (() => {
+                        const fmt = asset.format;
+                        if (fmt && !['image', 'video'].includes(fmt)) return fmt;
+                        if (asset.mimeType) { const e = asset.mimeType.split('/').pop(); if (e && e !== 'octet-stream') return mimeExtMap[e] || e; }
+                        return asset.type === 'video' ? 'mp4' : 'jpg';
+                      })();
+                      a.download = `${asset.title || asset.id}.${dlExt}`;
                       document.body.appendChild(a);
                       a.click();
                       URL.revokeObjectURL(objectUrl);
